@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1️⃣  GEOGRAPHICAL HIERARCHY
+
+model Country {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  states    State[]
+  createdAt DateTime @default(now())
+}
+
+model State {
+  id        String     @id @default(uuid())
+  name      String
+  countryId String
+  country   Country    @relation(fields: [countryId], references: [id])
+  districts District[]
+  createdAt DateTime   @default(now())
+}
+
+model District {
+  id        String   @id @default(uuid())
+  name      String
+  stateId   String
+  state     State    @relation(fields: [stateId], references: [id])
+  cities    City[]
+  createdAt DateTime @default(now())
+}
+
+model City {
+  id         String   @id @default(uuid())
+  name       String
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+  zones      Zone[]
+  createdAt  DateTime @default(now())
+}
+
+model Zone {
+  id        String   @id @default(uuid())
+  name      String
+  cityId    String
+  city      City     @relation(fields: [cityId], references: [id])
+  areas     Area[]
+  createdAt DateTime @default(now())
+}
+
+model Area {
+  id            String         @id @default(uuid())
+  name          String
+  zoneId        String
+  zone          Zone           @relation(fields: [zoneId], references: [id])
+  accounts      Account[]
+  employeeAreas EmployeeArea[]
+  createdAt     DateTime       @default(now())
+}
+
+// 2️⃣  ROLE HIERARCHY (For Sales Chain)
+
+model Role {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  level     Int
+  reportsTo String?
+  createdAt DateTime @default(now())
+
+  parentRole Role?  @relation("RoleHierarchy", fields: [reportsTo], references: [id])
+  childRoles Role[] @relation("RoleHierarchy")
+  users      User[]
+}
+
+// 3️⃣  DEPARTMENT & FUNCTIONAL ROLES (Non-Geographical)
+
+model Department {
+  id        String           @id @default(uuid())
+  name      String           @unique
+  createdAt DateTime         @default(now())
+  roles     FunctionalRole[]
+  users     User[]
+}
+
+model FunctionalRole {
+  id           String   @id @default(uuid())
+  name         String
+  level        Int?
+  departmentId String
+  reportsToId  String?
+  createdAt    DateTime @default(now())
+
+  department Department       @relation(fields: [departmentId], references: [id])
+  parentRole FunctionalRole?  @relation("FunctionalRoleHierarchy", fields: [reportsToId], references: [id])
+  subRoles   FunctionalRole[] @relation("FunctionalRoleHierarchy")
+  users      User[]
+}
+
+// 4️⃣  USER MODEL (Covers all types of employees)
+
+model User {
+  id               String  @id @default(uuid())
+  name             String
+  email            String  @unique
+  contactNumber    String  @unique
+  roleId           String? // For sales hierarchy
+  functionalRoleId String? // For non-sales departments
+  departmentId     String?
+  managerId        String? // Reports-to relationship
+
+  otp       String? // OTP for login
+  otpExpiry DateTime? // Expiration timestamp
+  lastLogin DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // RELATIONS
+  role           Role?           @relation(fields: [roleId], references: [id])
+  functionalRole FunctionalRole? @relation(fields: [functionalRoleId], references: [id])
+  department     Department?     @relation(fields: [departmentId], references: [id])
+  manager        User?           @relation("UserManager", fields: [managerId], references: [id])
+  subordinates   User[]          @relation("UserManager")
+
+  // AREA & ACCOUNT CONNECTIONS
+  employeeAreas EmployeeArea[]
+  accounts      Account[]
+}
+
+// 5️⃣  AREA–EMPLOYEE MAPPING
+
+model EmployeeArea {
+  id     String @id @default(uuid())
+  userId String
+  areaId String
+
+  user User @relation(fields: [userId], references: [id])
+  area Area @relation(fields: [areaId], references: [id])
+
+  @@unique([userId, areaId])
+}
+
+// 6️⃣  ACCOUNT / CUSTOMER DATA
+
+model Account {
+  id            String    @id @default(uuid())
+  accountCode   String    @unique
+  personName    String
+  dateOfBirth   DateTime?
+  contactNumber String
+  businessType  String?
+  customerStage String?
+  funnelStage   String?
+  assignedToId  String?
+  areaId        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedTo User? @relation(fields: [assignedToId], references: [id])
+  area       Area? @relation(fields: [areaId], references: [id])
+}
