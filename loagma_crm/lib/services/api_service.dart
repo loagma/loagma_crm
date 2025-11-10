@@ -1,109 +1,157 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform, SocketException;
+import 'dart:io' show Platform, SocketException, HttpException;
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:http/http.dart' as http;
 
+/// Handles all API interactions for OTP-based authentication.
+/// Automatically chooses correct base URL for emulator, web, or real device.
 class ApiService {
-  // If you're running on a real Android device, set this to your PC's LAN IP (e.g. 192.168.x.x).
-  // For Android emulator use 10.0.2.2, for Genymotion use 10.0.3.2. For iOS simulator and web use localhost.
-  // Default LAN IP for dev machine. You can override this at runtime using
-  // `ApiService.setHostIp('192.168.x.y')` (useful when testing on a real device).
+  /// Default local development host.
   static String _hostIp = '192.168.1.9';
 
-  /// Override the host IP used for non-Android/iOS simulator targets.
+  /// Override the host IP at runtime for testing on physical devices.
   static void setHostIp(String ip) => _hostIp = ip;
 
-  /// Read the current host IP (useful for debugging/testing).
+  /// Returns the current active host IP.
   static String get hostIp => _hostIp;
 
+  /// Constructs the appropriate base URL depending on platform.
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:5000';
     try {
-      if (Platform.isAndroid) {
-        // Android emulator maps host localhost to 10.0.2.2
-        return 'http://10.0.2.2:5000';
-      }
-      // iOS simulator / desktop will be able to access host via localhost or LAN IP
+      if (Platform.isAndroid) return 'http://10.0.2.2:5000';
       return 'http://$_hostIp:5000';
     } catch (_) {
-      // Fallback when Platform is not available (tests, other targets)
       return 'http://$_hostIp:5000';
     }
   }
 
-  static Future<Map<String, dynamic>> sendOtp(String contactNumber) async {
-    final url = Uri.parse('$baseUrl/auth/send-otp');
-    // Helpful debug log so you can see which baseUrl is used on the device/emulator
-    // Check logs for: "ApiService: sending OTP to <baseUrl>"
-    // This is useful when running on emulator (10.0.2.2) vs real device (LAN IP)
-    debugPrint('ApiService: sending OTP to $baseUrl');
+  // ---------------------------------------------------------------------------
+  // 🔹 Generic HTTP Request Handler
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final url = Uri.parse('$baseUrl$path');
+    debugPrint('📡 POST $url');
+    debugPrint('📦 Body: $body');
 
     try {
       final response = await http
           .post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"contactNumber": contactNumber}),
-      )
-          // increase timeout slightly to help with slow dev backends
-          .timeout(const Duration(seconds: 20));
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
 
+      debugPrint('✅ Response ${response.statusCode}: ${response.body}');
+
+      // Parse response body for both success and error cases
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return responseData;
+      } else {
+        // Return the error response so the UI can show the message
+        return responseData;
+      }
+    } on TimeoutException {
+      throw Exception(
+        '⏱️ Request to $url timed out after ${timeout.inSeconds}s',
+      );
+    } on SocketException catch (e) {
+      throw Exception('🌐 Network error: ${e.message}');
+    } on FormatException catch (e) {
+      throw Exception('📄 Invalid response format: ${e.message}');
+    } catch (e) {
+      throw Exception('❌ Unexpected error: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> _get(
+    String path, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final url = Uri.parse('$baseUrl$path');
+    debugPrint('📡 GET $url');
+    try {
+      final response = await http.get(url).timeout(timeout);
+      debugPrint('✅ Response ${response.statusCode}: ${response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        throw Exception("Failed to send OTP (status ${response.statusCode}): ${response.body}");
+        throw HttpException(
+          'Request failed: ${response.statusCode} ${response.reasonPhrase}',
+          uri: url,
+        );
       }
+    } on TimeoutException {
+      throw Exception('⏱️ GET request to $url timed out');
     } on SocketException catch (e) {
-      throw Exception('No network / connection refused when sending OTP: ${e.message}');
-    } on TimeoutException catch (_) {
-      throw Exception('API Timeout: request to $baseUrl/auth/send-otp timed out after 20s');
-    } on http.ClientException catch (e) {
-      // low-level HTTP client issue
-      throw Exception('Network error when sending OTP: ${e.message}');
+      throw Exception('🌐 Network error: ${e.message}');
+    } on FormatException catch (e) {
+      throw Exception('📄 Invalid JSON response: ${e.message}');
     } catch (e) {
-      // rethrow with helpful message
-      throw Exception('Unexpected error when sending OTP: $e');
+      throw Exception('❌ Unexpected error: $e');
     }
   }
 
-  /// Simple health check hitting [baseUrl]/health (timeout 5s).
-  /// Returns true when statusCode == 200, otherwise throws with message.
+  // ---------------------------------------------------------------------------
+  // 🔹 API Endpoints
+  // ---------------------------------------------------------------------------
+
+  /// Sends OTP to user's contact number.
+  static Future<Map<String, dynamic>> sendOtp(String contactNumber) {
+    return _post('/auth/send-otp', {'contactNumber': contactNumber});
+  }
+
+  /// Verifies OTP. Includes optional [name] and [email] for new users.
+  static Future<Map<String, dynamic>> verifyOtp(
+    String contactNumber,
+    String otp, {
+    String? name,
+    String? email,
+  }) {
+    final body = {
+      'contactNumber': contactNumber,
+      'otp': otp,
+      if (name != null) 'name': name,
+      if (email != null) 'email': email,
+    };
+    return _post('/auth/verify-otp', body);
+  }
+
+  /// Completes signup for new users.
+  static Future<Map<String, dynamic>> completeSignup(
+    String contactNumber,
+    String name,
+    String email,
+  ) {
+    return _post('/auth/complete-signup', {
+      'contactNumber': contactNumber,
+      'name': name,
+      'email': email,
+    });
+  }
+
+  /// Simple health check endpoint.
   static Future<bool> healthCheck() async {
     final url = Uri.parse('$baseUrl/health');
-    debugPrint('ApiService: healthCheck -> $url');
+    debugPrint('🔍 Health Check: $url');
     try {
-      final res = await http.get(url).timeout(const Duration(seconds: 5));
-      if (res.statusCode == 200) return true;
-      throw Exception('Health check failed: ${res.statusCode} ${res.body}');
-    } on TimeoutException catch (_) {
-      throw Exception('Health check timed out contacting $baseUrl');
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } on TimeoutException {
+      throw Exception('Health check timed out');
     } on SocketException catch (e) {
-      throw Exception('Network error on health check: ${e.message}');
+      throw Exception('Network error during health check: ${e.message}');
+    } catch (e) {
+      throw Exception('Unexpected error during health check: $e');
     }
   }
-
-  /// Wrapper around [sendOtp] that retries up to [retries] times on transient
-  /// network errors (SocketException, TimeoutException).
-  static Future<Map<String, dynamic>> sendOtpWithRetry(String contactNumber,
-      {int retries = 1}) async {
-    int attempt = 0;
-    while (true) {
-      attempt++;
-      try {
-        return await sendOtp(contactNumber);
-      } catch (e) {
-        final isLast = attempt > retries;
-        final msg = e.toString();
-        // Retry only on socket/timeout-like errors
-        if (!isLast && (msg.contains('Timeout') || msg.contains('No network') || msg.contains('connection refused'))) {
-          debugPrint('ApiService: sendOtp attempt $attempt failed with transient error, retrying... ($msg)');
-          await Future.delayed(const Duration(seconds: 1));
-          continue;
-        }
-        rethrow;
-      }
-    }
-  }
-
 }

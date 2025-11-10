@@ -82,6 +82,11 @@ cd loagma_crm
 flutter pub get      # Install dependencies
 flutter run -d chrome    # Run on web
 flutter run -d windows   # Run on Windows (needs Visual Studio)
+
+flutter clean
+flutter pub get
+flutter run
+
 ```
 
 ## 🔗 Database Connection
