@@ -83,6 +83,83 @@ export const sendOtp = async (req, res) => {
 };
 
 /**
+ * @desc Complete signup for new users (add name and email)
+ * @route POST /auth/complete-signup
+ */
+export const completeSignup = async (req, res) => {
+  try {
+    let { contactNumber, name, email } = req.body;
+
+    console.log('📝 Complete Signup Request:');
+    console.log('  📞 Contact Number (raw):', contactNumber);
+    
+    // Clean the phone number
+    contactNumber = cleanPhoneNumber(contactNumber);
+    console.log('  🧹 Contact Number (cleaned):', contactNumber);
+    console.log('  👤 Name:', name);
+    console.log('  📧 Email:', email);
+
+    if (!contactNumber || !name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Contact number, name, and email are required',
+      });
+    }
+
+    // Find the user by contact number
+    const user = await prisma.user.findUnique({
+      where: { contactNumber },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'User not found. Please verify your phone number first.',
+      });
+    }
+
+    // Update user with name and email
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { name, email },
+      include: {
+        functionalRole: { select: { name: true } },
+        department: { select: { name: true } },
+      },
+    });
+
+    // Generate token
+    const token = generateToken({
+      id: updatedUser.id,
+      functionalRoleId: updatedUser.functionalRoleId,
+    });
+
+    console.log('  ✅ Signup completed successfully');
+    const response = {
+      success: true,
+      message: 'Signup completed successfully',
+      data: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        contactNumber: updatedUser.contactNumber,
+        role: updatedUser.functionalRole?.name,
+        department: updatedUser.department?.name,
+      },
+      token,
+    };
+    console.log('  📤 Sending response:', JSON.stringify(response, null, 2));
+    return res.json(response);
+  } catch (error) {
+    console.error('❌ Complete Signup Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during signup completion',
+    });
+  }
+};
+
+/**
  * @desc Step 2: Verify OTP - Login for both new and existing users
  * @route POST /auth/verify-otp
  */
