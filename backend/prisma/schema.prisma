@@ -106,8 +106,8 @@ model FunctionalRole {
 
 model User {
   id               String  @id @default(uuid())
-  name             String
-  email            String  @unique
+  name             String?
+  email            String?  @unique
   contactNumber    String  @unique
   roleId           String? // For sales hierarchy
   functionalRoleId String? // For non-sales departments

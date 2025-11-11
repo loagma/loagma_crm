@@ -113,31 +113,15 @@ class ApiService {
   /// Verifies OTP. Includes optional [name] and [email] for new users.
   static Future<Map<String, dynamic>> verifyOtp(
     String contactNumber,
-    String otp, {
-    String? name,
-    String? email,
-  }) {
+    String otp, 
+  ) {
     final body = {
       'contactNumber': contactNumber,
       'otp': otp,
-      if (name != null) 'name': name,
-      if (email != null) 'email': email,
     };
     return _post('/auth/verify-otp', body);
   }
 
-  /// Completes signup for new users.
-  static Future<Map<String, dynamic>> completeSignup(
-    String contactNumber,
-    String name,
-    String email,
-  ) {
-    return _post('/auth/complete-signup', {
-      'contactNumber': contactNumber,
-      'name': name,
-      'email': email,
-    });
-  }
 
   /// Simple health check endpoint.
   static Future<bool> healthCheck() async {

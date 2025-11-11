@@ -40,29 +40,12 @@ class _OtpScreenState extends State<OtpScreen> {
 
       // Debug logging
       print('🔍 OTP Verify Response: $data');
-      print('✅ Success: ${data['success']}');
-      print('👤 isNewUser: ${data['isNewUser']}');
 
       if (data['success'] == true) {
-        // Check if new user
-        final isNewUser = data['isNewUser'] == true;
-        print('🎯 Routing decision - isNewUser: $isNewUser');
-
-        if (isNewUser) {
-          // New user - go to signup
-          print('🆕 Redirecting to signup page...');
-          Fluttertoast.showToast(msg: "Please complete your signup");
-          Navigator.pushReplacementNamed(
-            context,
-            '/signup',
-            arguments: {'contactNumber': contactNumber},
-          );
-        } else {
-          // Existing user - go to dashboard
-          print('✅ Redirecting to dashboard...');
-          Fluttertoast.showToast(msg: "Login successful");
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
+        // Successful login for both new and existing users
+        print('✅ Redirecting to dashboard...');
+        Fluttertoast.showToast(msg: "Login successful");
+        Navigator.pushReplacementNamed(context, '/dashboard');
       } else {
         print('❌ Verification failed: ${data['message']}');
         Fluttertoast.showToast(msg: data['message'] ?? "Invalid OTP");
