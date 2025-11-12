@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "seed:locations": "node prisma/seedLocations.js"
   },
   "keywords": [],
   "author": "",

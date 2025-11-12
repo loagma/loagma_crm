@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import authRoutes from './routes/authRoutes.js'
-import userRoutes from './routes/userRoutes.js'
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import locationRoutes from './routes/locationRoutes.js';
+import accountRoutes from './routes/accountRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -19,7 +21,8 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
-// app.use('/accounts', accountRoutes);
+app.use('/locations', locationRoutes);
+app.use('/accounts', accountRoutes);
 
 const PORT = process.env.PORT || 5000;
 
