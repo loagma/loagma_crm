@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
+import 'package:loagma_crm/services/api_config.dart';
 import '../services/api_service.dart';
 
 class CreateUserScreen extends StatefulWidget {
@@ -32,7 +33,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
 
   Future<void> fetchRoles() async {
     try {
-      final url = Uri.parse('${ApiService.baseUrl}/roles'); // Get all roles API
+      final url = Uri.parse('${ApiConfig.baseUrl}/roles'); // Get all roles API
       if (kDebugMode) print('📡 Fetching roles from $url');
       final response = await http.get(url).timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
@@ -69,7 +70,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('${ApiService.baseUrl}/users');
+      final url = Uri.parse('${ApiConfig.baseUrl}/users');
       if (kDebugMode) print('📡 Creating user via $url');
       final response = await http
           .post(

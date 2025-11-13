@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/location_models.dart';
+import '../models/location_models.dart' as models;
 import '../services/location_service.dart';
 import '../services/account_service.dart';
+import 'employee_account_master_screen.dart';
+import 'employee_list_screen.dart';
 
 class DashboardScreenNew extends StatefulWidget {
   const DashboardScreenNew({super.key});
@@ -17,12 +19,12 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
   bool isLoading = false;
 
   // Location data
-  List<Country> countries = [];
-  List<State> states = [];
-  List<District> districts = [];
-  List<City> cities = [];
-  List<Zone> zones = [];
-  List<Area> areas = [];
+  List<models.Country> countries = [];
+  List<models.State> states = [];
+  List<models.District> districts = [];
+  List<models.City> cities = [];
+  List<models.Zone> zones = [];
+  List<models.Area> areas = [];
 
   // Selected IDs
   int? selectedCountryId;
@@ -165,19 +167,13 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
 
@@ -207,9 +203,7 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
         padding: EdgeInsets.zero,
         children: [
           const DrawerHeader(
-            decoration: BoxDecoration(
-              color: Color(0xFFD7BE69),
-            ),
+            decoration: BoxDecoration(color: Color(0xFFD7BE69)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
@@ -241,8 +235,11 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
             },
             children: masterOptions.map((option) {
               return ListTile(
-                leading:
-                    Icon(option['icon'], color: const Color(0xFFD7BE69), size: 20),
+                leading: Icon(
+                  option['icon'],
+                  color: const Color(0xFFD7BE69),
+                  size: 20,
+                ),
                 title: Text(option['name']),
                 selected: selectedMasterOption == option['name'],
                 selectedTileColor: const Color(0xFFD7BE69).withOpacity(0.1),
@@ -256,6 +253,20 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
               );
             }).toList(),
           ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
+            title: const Text('View Employees'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EmployeeListScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -267,11 +278,7 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.dashboard,
-              size: 100,
-              color: Colors.grey[300],
-            ),
+            Icon(Icons.dashboard, size: 100, color: Colors.grey[300]),
             const SizedBox(height: 20),
             Text(
               'Welcome to Loagma CRM',
@@ -284,10 +291,7 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
             const SizedBox(height: 10),
             Text(
               'Select an option from the menu',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -328,9 +332,9 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
           Row(
             children: [
               Icon(
-                masterOptions
-                    .firstWhere((opt) => opt['name'] == selectedMasterOption)[
-                        'icon'],
+                masterOptions.firstWhere(
+                  (opt) => opt['name'] == selectedMasterOption,
+                )['icon'],
                 color: const Color(0xFFD7BE69),
                 size: 30,
               ),
@@ -393,7 +397,9 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
               label: 'District',
               icon: Icons.location_city,
               value: selectedDistrictId,
-              items: districts.map((d) => {'id': d.id, 'name': d.name}).toList(),
+              items: districts
+                  .map((d) => {'id': d.id, 'name': d.name})
+                  .toList(),
               enabled: selectedStateId != null,
               onChanged: (v) {
                 setState(() {
@@ -466,8 +472,9 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
               icon: const Icon(Icons.arrow_forward),
               label: const Text('Next: Account Master Details'),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isComplete ? const Color(0xFFD7BE69) : Colors.grey,
+                backgroundColor: isComplete
+                    ? const Color(0xFFD7BE69)
+                    : Colors.grey,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
@@ -476,9 +483,13 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
               ),
               onPressed: isComplete
                   ? () {
-                      setState(() {
-                        showAccountMasterForm = true;
-                      });
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const EmployeeAccountMasterScreen(),
+                        ),
+                      );
                     }
                   : null,
             ),
@@ -549,16 +560,14 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
     bool enabled = true,
   }) {
     return DropdownButtonFormField<int>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(
           icon,
           color: enabled ? const Color(0xFFD7BE69) : Colors.grey,
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
@@ -632,9 +641,7 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFFD7BE69),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFFD7BE69)),
           ),
           child: child!,
         );
@@ -665,7 +672,8 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
         );
 
         widget.onSuccess(
-            'Account created successfully! Code: ${account.accountCode}');
+          'Account created successfully! Code: ${account.accountCode}',
+        );
       } catch (e) {
         widget.onError('Failed to create account: $e');
       } finally {
@@ -690,8 +698,11 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
                   icon: const Icon(Icons.arrow_back, color: Color(0xFFD7BE69)),
                   onPressed: widget.onBack,
                 ),
-                const Icon(Icons.account_box,
-                    color: Color(0xFFD7BE69), size: 30),
+                const Icon(
+                  Icons.account_box,
+                  color: Color(0xFFD7BE69),
+                  size: 30,
+                ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
@@ -853,7 +864,7 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
     required void Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),
@@ -892,9 +903,7 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
           date != null
               ? '${date.day}/${date.month}/${date.year}'
               : 'Select Date',
-          style: TextStyle(
-            color: date != null ? Colors.black : Colors.grey,
-          ),
+          style: TextStyle(color: date != null ? Colors.black : Colors.grey),
         ),
       ),
     );

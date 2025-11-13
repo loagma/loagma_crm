@@ -38,11 +38,9 @@ class _OtpScreenState extends State<OtpScreen> {
       if (!mounted) return;
       setState(() => isLoading = false);
 
-      // Debug logging
       print('🔍 OTP Verify Response: $data');
 
       if (data['success'] == true) {
-        // Successful login for both new and existing users
         print('✅ Redirecting to dashboard...');
         Fluttertoast.showToast(msg: "Login successful");
         Navigator.pushReplacementNamed(context, '/dashboard');
@@ -61,6 +59,21 @@ class _OtpScreenState extends State<OtpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFD7BE69),
+      appBar: AppBar(
+        backgroundColor: Colors.amber.shade700,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+        title: const Text(
+          'Verify OTP',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -68,17 +81,18 @@ class _OtpScreenState extends State<OtpScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset('assets/logo.png', height: 100),
                 const SizedBox(height: 30),
+                Image.asset('assets/logo.png', height: 100),
+                const SizedBox(height: 40),
                 const Text(
-                  "Verify OTP",
+                  "Enter the OTP sent to your phone",
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 50),
+                const SizedBox(height: 40),
                 TextField(
                   controller: _otpController,
                   keyboardType: TextInputType.number,
@@ -95,11 +109,17 @@ class _OtpScreenState extends State<OtpScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.amber,
                     minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: isLoading ? null : verifyOtp,
                   child: isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Verify"),
+                      : const Text(
+                          "Verify",
+                          style: TextStyle(fontSize: 16),
+                        ),
                 ),
               ],
             ),

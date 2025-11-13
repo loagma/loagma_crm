@@ -480,7 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool enabled = true,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(
@@ -832,14 +832,14 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
             SwitchListTile(
               title: const Text('Incharge (Yes/No)'),
               value: _isIncharge,
-              activeColor: const Color(0xFFD7BE69),
+              activeThumbColor: const Color(0xFFD7BE69),
               onChanged: (v) => setState(() => _isIncharge = v),
             ),
 
             SwitchListTile(
               title: const Text('Active Status'),
               value: _isActive,
-              activeColor: const Color(0xFFD7BE69),
+              activeThumbColor: const Color(0xFFD7BE69),
               onChanged: (v) => setState(() => _isActive = v),
             ),
 
@@ -938,7 +938,7 @@ class _AccountMasterFormState extends State<_AccountMasterForm> {
     String? Function(String?)? validator,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),

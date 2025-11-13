@@ -218,10 +218,11 @@ export const verifyOtp = async (req, res) => {
       data: { otp: null, otpExpiry: null, lastLogin: new Date() },
     });
 
-    console.log('  ✅ Login successful');
+    console.log('  ✅ EXISTING USER - Login successful, sending isNewUser: false');
     const response = {
       success: true,
       message: 'Login successful',
+      isNewUser: false,
       data: {
         id: user.id,
         name: user.name,

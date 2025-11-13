@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
+import 'package:loagma_crm/services/api_config.dart';
 import '../services/api_service.dart';
 
 class ViewUsersScreen extends StatefulWidget {
@@ -27,7 +28,7 @@ class _ViewUsersScreenState extends State<ViewUsersScreen> {
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('${ApiService.baseUrl}/users'); // Get all users API
+      final url = Uri.parse('${ApiConfig.baseUrl}/users'); // Get all users API
       if (kDebugMode) print('📡 Fetching users from $url');
       final response = await http.get(url).timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
@@ -54,7 +55,7 @@ class _ViewUsersScreenState extends State<ViewUsersScreen> {
 
   Future<void> deleteUser(String userId) async {
     try {
-      final url = Uri.parse('${ApiService.baseUrl}/users/$userId'); // Delete user API
+      final url = Uri.parse('${ApiConfig.baseUrl}/users/$userId'); // Delete user API
       if (kDebugMode) print('📡 Deleting user via $url');
       final response = await http.delete(url).timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
