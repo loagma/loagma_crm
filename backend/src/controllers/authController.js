@@ -125,7 +125,7 @@ export const completeSignup = async (req, res) => {
       where: { id: user.id },
       data: { name, email },
       include: {
-        functionalRole: { select: { name: true } },
+        role: { select: { name: true } },
         department: { select: { name: true } },
       },
     });
@@ -133,7 +133,7 @@ export const completeSignup = async (req, res) => {
     // Generate token
     const token = generateToken({
       id: updatedUser.id,
-      functionalRoleId: updatedUser.functionalRoleId,
+      roleId: updatedUser.roleId,
     });
 
     console.log('  ✅ Signup completed successfully');
@@ -145,7 +145,7 @@ export const completeSignup = async (req, res) => {
         name: updatedUser.name,
         email: updatedUser.email,
         contactNumber: updatedUser.contactNumber,
-        role: updatedUser.functionalRole?.name,
+        role: updatedUser.role?.name,
         department: updatedUser.department?.name,
       },
       token,
@@ -188,7 +188,7 @@ export const verifyOtp = async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { contactNumber },
       include: {
-        functionalRole: { select: { name: true } },
+        role: { select: { name: true } },
         department: { select: { name: true } },
       },
     });
@@ -211,7 +211,7 @@ export const verifyOtp = async (req, res) => {
     // Generate token
     const token = generateToken({
       id: user.id,
-      functionalRoleId: user.functionalRoleId,
+      roleId: user.roleId,
     });
 
     // Clear OTP and update last login
@@ -230,7 +230,7 @@ export const verifyOtp = async (req, res) => {
         name: user.name,
         email: user.email,
         contactNumber: user.contactNumber,
-        role: user.functionalRole?.name,
+        role: user.role?.name,
         department: user.department?.name,
       },
       token,

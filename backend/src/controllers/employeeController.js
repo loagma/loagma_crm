@@ -59,7 +59,7 @@ export const createEmployee = async (req, res) => {
       },
       include: {
         department: true,
-        functionalRole: true
+        role: true
       }
     });
 
@@ -112,7 +112,7 @@ export const getAllEmployees = async (req, res) => {
         orderBy: { createdAt: 'desc' },
         include: {
           department: true,
-          functionalRole: true,
+          role: true,
           manager: {
             select: {
               id: true,
@@ -150,7 +150,7 @@ export const getEmployeeById = async (req, res) => {
       where: { id },
       include: {
         department: true,
-        functionalRole: true,
+        role: true,
         manager: {
           select: {
             id: true,
@@ -158,7 +158,7 @@ export const getEmployeeById = async (req, res) => {
             employeeCode: true
           }
         },
-        subordinates: {
+        team: {
           select: {
             id: true,
             name: true,
@@ -198,7 +198,7 @@ export const updateEmployee = async (req, res) => {
       data: updateData,
       include: {
         department: true,
-        functionalRole: true
+        role: true
       }
     });
 
