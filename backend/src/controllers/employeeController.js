@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -37,6 +38,7 @@ export const createEmployee = async (req, res) => {
 
     const employee = await prisma.user.create({
       data: {
+        id: randomUUID(),
         employeeCode,
         name,
         email,
@@ -53,8 +55,6 @@ export const createEmployee = async (req, res) => {
         preferredLanguages: preferredLanguages || [],
         jobPostCode,
         jobPostName,
-        inchargeCode,
-        inchargeName,
         isActive: isActive ?? true
       },
       include: {

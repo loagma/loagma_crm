@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -160,6 +161,7 @@ export const createAccount = async (req, res) => {
 
     const account = await prisma.account.create({
       data: {
+        id: randomUUID(),
         accountCode,
         personName,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,

@@ -4,6 +4,7 @@ import { generateToken } from '../utils/jwtUtils.js';
 import { sendOtpSMS } from '../utils/smsService.js';
 import { storeOTP, getOTP, deleteOTP } from '../utils/otpStore.js';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
+import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -50,6 +51,7 @@ export const sendOtp = async (req, res) => {
       // New user: Create a new user with the contact number and OTP
       user = await prisma.user.create({
         data: {
+          id: randomUUID(),
           contactNumber,
           otp,
           otpExpiry: expiry,

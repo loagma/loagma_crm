@@ -1,10 +1,17 @@
 import prisma from '../config/db.js';
+import { randomUUID } from 'crypto';
 
 export const createUser = async (req, res) => {
   try {
     const { name, email, contactNumber, roleId } = req.body;
     const user = await prisma.user.create({
-      data: { name, email, contactNumber, roleId },
+      data: { 
+        id: randomUUID(),
+        name, 
+        email, 
+        contactNumber, 
+        roleId 
+      },
     });
     res.json({ success: true, message: 'User created successfully', data: user });
   } catch (error) {
