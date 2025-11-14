@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 export const getAllCountries = async (req, res) => {
   try {
     const countries = await prisma.country.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: { country_name: 'asc' },
       include: {
         _count: {
           select: { states: true }
@@ -22,13 +22,13 @@ export const getAllCountries = async (req, res) => {
 
 export const createCountry = async (req, res) => {
   try {
-    const { name } = req.body;
-    if (!name) {
+    const { country_name } = req.body;
+    if (!country_name) {
       return res.status(400).json({ success: false, message: 'Country name is required' });
     }
 
     const country = await prisma.country.create({
-      data: { name }
+      data: { country_name }
     });
     res.status(201).json({ success: true, data: country });
   } catch (error) {
@@ -42,11 +42,11 @@ export const createCountry = async (req, res) => {
 export const updateCountry = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { country_name } = req.body;
 
     const country = await prisma.country.update({
-      where: { id },
-      data: { name }
+      where: { country_id: parseInt(id) },
+      data: { country_name }
     });
     res.json({ success: true, data: country });
   } catch (error) {
@@ -57,7 +57,7 @@ export const updateCountry = async (req, res) => {
 export const deleteCountry = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.country.delete({ where: { id } });
+    await prisma.country.delete({ where: { country_id: parseInt(id) } });
     res.json({ success: true, message: 'Country deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -68,16 +68,16 @@ export const deleteCountry = async (req, res) => {
 
 export const getAllStates = async (req, res) => {
   try {
-    const { countryId } = req.query;
-    const where = countryId ? { countryId: parseInt(countryId) } : {};
+    const { country_id } = req.query;
+    const where = country_id ? { country_id: parseInt(country_id) } : {};
 
     const states = await prisma.state.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { state_name: 'asc' },
       include: {
         country: true,
         _count: {
-          select: { districts: true }
+          select: { regions: true }
         }
       }
     });
@@ -89,13 +89,13 @@ export const getAllStates = async (req, res) => {
 
 export const createState = async (req, res) => {
   try {
-    const { name, countryId } = req.body;
-    if (!name || !countryId) {
-      return res.status(400).json({ success: false, message: 'Name and countryId are required' });
+    const { state_name, country_id } = req.body;
+    if (!state_name || !country_id) {
+      return res.status(400).json({ success: false, message: 'State name and country_id are required' });
     }
 
     const state = await prisma.state.create({
-      data: { name, countryId },
+      data: { state_name, country_id },
       include: { country: true }
     });
     res.status(201).json({ success: true, data: state });
@@ -107,11 +107,11 @@ export const createState = async (req, res) => {
 export const updateState = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, countryId } = req.body;
+    const { state_name, country_id } = req.body;
 
     const state = await prisma.state.update({
-      where: { id },
-      data: { name, countryId },
+      where: { state_id: parseInt(id) },
+      data: { state_name, country_id },
       include: { country: true }
     });
     res.json({ success: true, data: state });
@@ -123,8 +123,76 @@ export const updateState = async (req, res) => {
 export const deleteState = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.state.delete({ where: { id } });
+    await prisma.state.delete({ where: { state_id: parseInt(id) } });
     res.json({ success: true, message: 'State deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== REGION ====================
+
+export const getAllRegions = async (req, res) => {
+  try {
+    const { state_id } = req.query;
+    const where = state_id ? { state_id: parseInt(state_id) } : {};
+
+    const regions = await prisma.region.findMany({
+      where,
+      orderBy: { region_name: 'asc' },
+      include: {
+        state: {
+          include: { country: true }
+        },
+        _count: {
+          select: { districts: true }
+        }
+      }
+    });
+    res.json({ success: true, data: regions });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const createRegion = async (req, res) => {
+  try {
+    const { region_name, state_id } = req.body;
+    if (!region_name || !state_id) {
+      return res.status(400).json({ success: false, message: 'Region name and state_id are required' });
+    }
+
+    const region = await prisma.region.create({
+      data: { region_name, state_id },
+      include: { state: true }
+    });
+    res.status(201).json({ success: true, data: region });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateRegion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { region_name, state_id } = req.body;
+
+    const region = await prisma.region.update({
+      where: { region_id: parseInt(id) },
+      data: { region_name, state_id },
+      include: { state: true }
+    });
+    res.json({ success: true, data: region });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteRegion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.region.delete({ where: { region_id: parseInt(id) } });
+    res.json({ success: true, message: 'Region deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -134,15 +202,19 @@ export const deleteState = async (req, res) => {
 
 export const getAllDistricts = async (req, res) => {
   try {
-    const { stateId } = req.query;
-    const where = stateId ? { stateId: parseInt(stateId) } : {};
+    const { region_id } = req.query;
+    const where = region_id ? { region_id: parseInt(region_id) } : {};
 
     const districts = await prisma.district.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { district_name: 'asc' },
       include: {
-        state: {
-          include: { country: true }
+        region: {
+          include: {
+            state: {
+              include: { country: true }
+            }
+          }
         },
         _count: {
           select: { cities: true }
@@ -157,14 +229,14 @@ export const getAllDistricts = async (req, res) => {
 
 export const createDistrict = async (req, res) => {
   try {
-    const { name, stateId } = req.body;
-    if (!name || !stateId) {
-      return res.status(400).json({ success: false, message: 'Name and stateId are required' });
+    const { district_name, region_id } = req.body;
+    if (!district_name || !region_id) {
+      return res.status(400).json({ success: false, message: 'District name and region_id are required' });
     }
 
     const district = await prisma.district.create({
-      data: { name, stateId },
-      include: { state: true }
+      data: { district_name, region_id },
+      include: { region: true }
     });
     res.status(201).json({ success: true, data: district });
   } catch (error) {
@@ -175,12 +247,12 @@ export const createDistrict = async (req, res) => {
 export const updateDistrict = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, stateId } = req.body;
+    const { district_name, region_id } = req.body;
 
     const district = await prisma.district.update({
-      where: { id },
-      data: { name, stateId },
-      include: { state: true }
+      where: { district_id: parseInt(id) },
+      data: { district_name, region_id },
+      include: { region: true }
     });
     res.json({ success: true, data: district });
   } catch (error) {
@@ -191,7 +263,7 @@ export const updateDistrict = async (req, res) => {
 export const deleteDistrict = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.district.delete({ where: { id } });
+    await prisma.district.delete({ where: { district_id: parseInt(id) } });
     res.json({ success: true, message: 'District deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -202,17 +274,21 @@ export const deleteDistrict = async (req, res) => {
 
 export const getAllCities = async (req, res) => {
   try {
-    const { districtId } = req.query;
-    const where = districtId ? { districtId: parseInt(districtId) } : {};
+    const { district_id } = req.query;
+    const where = district_id ? { district_id: parseInt(district_id) } : {};
 
     const cities = await prisma.city.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { city_name: 'asc' },
       include: {
         district: {
           include: {
-            state: {
-              include: { country: true }
+            region: {
+              include: {
+                state: {
+                  include: { country: true }
+                }
+              }
             }
           }
         },
@@ -229,13 +305,13 @@ export const getAllCities = async (req, res) => {
 
 export const createCity = async (req, res) => {
   try {
-    const { name, districtId } = req.body;
-    if (!name || !districtId) {
-      return res.status(400).json({ success: false, message: 'Name and districtId are required' });
+    const { city_name, district_id } = req.body;
+    if (!city_name || !district_id) {
+      return res.status(400).json({ success: false, message: 'City name and district_id are required' });
     }
 
     const city = await prisma.city.create({
-      data: { name, districtId },
+      data: { city_name, district_id },
       include: { district: true }
     });
     res.status(201).json({ success: true, data: city });
@@ -247,11 +323,11 @@ export const createCity = async (req, res) => {
 export const updateCity = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, districtId } = req.body;
+    const { city_name, district_id } = req.body;
 
     const city = await prisma.city.update({
-      where: { id },
-      data: { name, districtId },
+      where: { city_id: parseInt(id) },
+      data: { city_name, district_id },
       include: { district: true }
     });
     res.json({ success: true, data: city });
@@ -263,7 +339,7 @@ export const updateCity = async (req, res) => {
 export const deleteCity = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.city.delete({ where: { id } });
+    await prisma.city.delete({ where: { city_id: parseInt(id) } });
     res.json({ success: true, message: 'City deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -274,19 +350,23 @@ export const deleteCity = async (req, res) => {
 
 export const getAllZones = async (req, res) => {
   try {
-    const { cityId } = req.query;
-    const where = cityId ? { cityId: parseInt(cityId) } : {};
+    const { city_id } = req.query;
+    const where = city_id ? { city_id: parseInt(city_id) } : {};
 
     const zones = await prisma.zone.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { zone_name: 'asc' },
       include: {
         city: {
           include: {
             district: {
               include: {
-                state: {
-                  include: { country: true }
+                region: {
+                  include: {
+                    state: {
+                      include: { country: true }
+                    }
+                  }
                 }
               }
             }
@@ -305,13 +385,13 @@ export const getAllZones = async (req, res) => {
 
 export const createZone = async (req, res) => {
   try {
-    const { name, cityId } = req.body;
-    if (!name || !cityId) {
-      return res.status(400).json({ success: false, message: 'Name and cityId are required' });
+    const { zone_name, city_id } = req.body;
+    if (!zone_name || !city_id) {
+      return res.status(400).json({ success: false, message: 'Zone name and city_id are required' });
     }
 
     const zone = await prisma.zone.create({
-      data: { name, cityId },
+      data: { zone_name, city_id },
       include: { city: true }
     });
     res.status(201).json({ success: true, data: zone });
@@ -323,11 +403,11 @@ export const createZone = async (req, res) => {
 export const updateZone = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, cityId } = req.body;
+    const { zone_name, city_id } = req.body;
 
     const zone = await prisma.zone.update({
-      where: { id },
-      data: { name, cityId },
+      where: { zone_id: parseInt(id) },
+      data: { zone_name, city_id },
       include: { city: true }
     });
     res.json({ success: true, data: zone });
@@ -339,7 +419,7 @@ export const updateZone = async (req, res) => {
 export const deleteZone = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.zone.delete({ where: { id } });
+    await prisma.zone.delete({ where: { zone_id: parseInt(id) } });
     res.json({ success: true, message: 'Zone deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -350,12 +430,12 @@ export const deleteZone = async (req, res) => {
 
 export const getAllAreas = async (req, res) => {
   try {
-    const { zoneId } = req.query;
-    const where = zoneId ? { zoneId: parseInt(zoneId) } : {};
+    const { zone_id } = req.query;
+    const where = zone_id ? { zone_id: parseInt(zone_id) } : {};
 
     const areas = await prisma.area.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: { area_name: 'asc' },
       include: {
         zone: {
           include: {
@@ -363,8 +443,12 @@ export const getAllAreas = async (req, res) => {
               include: {
                 district: {
                   include: {
-                    state: {
-                      include: { country: true }
+                    region: {
+                      include: {
+                        state: {
+                          include: { country: true }
+                        }
+                      }
                     }
                   }
                 }
@@ -385,13 +469,13 @@ export const getAllAreas = async (req, res) => {
 
 export const createArea = async (req, res) => {
   try {
-    const { name, zoneId } = req.body;
-    if (!name || !zoneId) {
-      return res.status(400).json({ success: false, message: 'Name and zoneId are required' });
+    const { area_name, zone_id } = req.body;
+    if (!area_name || !zone_id) {
+      return res.status(400).json({ success: false, message: 'Area name and zone_id are required' });
     }
 
     const area = await prisma.area.create({
-      data: { name, zoneId },
+      data: { area_name, zone_id },
       include: { zone: true }
     });
     res.status(201).json({ success: true, data: area });
@@ -403,11 +487,11 @@ export const createArea = async (req, res) => {
 export const updateArea = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, zoneId } = req.body;
+    const { area_name, zone_id } = req.body;
 
     const area = await prisma.area.update({
-      where: { id },
-      data: { name, zoneId },
+      where: { area_id: parseInt(id) },
+      data: { area_name, zone_id },
       include: { zone: true }
     });
     res.json({ success: true, data: area });
@@ -419,7 +503,7 @@ export const updateArea = async (req, res) => {
 export const deleteArea = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.area.delete({ where: { id } });
+    await prisma.area.delete({ where: { area_id: parseInt(id) } });
     res.json({ success: true, message: 'Area deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -82,10 +82,10 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
     }
   }
 
-  Future<void> _loadDistricts(int stateId) async {
+  Future<void> _loadDistricts(int regionId) async {
     setState(() => isLoading = true);
     try {
-      final data = await LocationService.fetchDistricts(stateId);
+      final data = await LocationService.fetchDistricts(regionId);
       setState(() {
         districts = data;
         selectedDistrictId = null;
@@ -179,21 +179,44 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Dashboard"),
-        backgroundColor: const Color(0xFFD7BE69),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+    return WillPopScope(
+      onWillPop: () async {
+        final result = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exit App?'),
+            content: const Text('Are you sure you want to exit?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+        );
+        return result ?? false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Dashboard"),
+          backgroundColor: const Color(0xFFD7BE69),
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
           ),
         ),
+        drawer: _buildDrawer(),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _buildBody(),
       ),
-      drawer: _buildDrawer(),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildBody(),
     );
   }
 

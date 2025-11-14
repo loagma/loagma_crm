@@ -41,9 +41,25 @@ class _OtpScreenState extends State<OtpScreen> {
       print('🔍 OTP Verify Response: $data');
 
       if (data['success'] == true) {
-        print('✅ Redirecting to dashboard...');
-        Fluttertoast.showToast(msg: "Login successful");
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        final isNewUser = data['isNewUser'] == true;
+
+        if (isNewUser) {
+          print('🆕 Redirecting to signup page...');
+          Fluttertoast.showToast(msg: "Please complete your signup");
+          Navigator.pushNamed(
+            context,
+            '/signup',
+            arguments: {'contactNumber': contactNumber},
+          );
+        } else {
+          print('✅ Redirecting to dashboard...');
+          Fluttertoast.showToast(msg: "Login successful");
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/dashboard',
+            ModalRoute.withName('/'),
+          );
+        }
       } else {
         print('❌ Verification failed: ${data['message']}');
         Fluttertoast.showToast(msg: data['message'] ?? "Invalid OTP");
@@ -60,7 +76,7 @@ class _OtpScreenState extends State<OtpScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFD7BE69),
       appBar: AppBar(
-        backgroundColor: Colors.amber.shade700,
+        backgroundColor: const Color(0xFFD7BE69),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -98,7 +114,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     hintText: "Enter OTP",
-                    prefixIcon: const Icon(Icons.lock, color: Colors.amber),
+                    prefixIcon: const Icon(Icons.lock, color: Color.fromARGB(255, 72, 72, 71)),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -107,7 +123,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 const SizedBox(height: 20),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber,
+                    backgroundColor: const Color.fromARGB(255, 235, 235, 233),
                     minimumSize: const Size(double.infinity, 50),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -115,11 +131,8 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   onPressed: isLoading ? null : verifyOtp,
                   child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          "Verify",
-                          style: TextStyle(fontSize: 16),
-                        ),
+                      ? const CircularProgressIndicator(color:Color(0xFFD7BE69))
+                      : const Text("Verify", style: TextStyle(fontSize: 16)),
                 ),
               ],
             ),
