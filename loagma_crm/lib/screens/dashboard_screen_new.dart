@@ -4,6 +4,7 @@ import '../services/location_service.dart';
 import '../services/account_service.dart';
 import 'employee_account_master_screen.dart';
 import 'employee_list_screen.dart';
+import 'view_all_masters_screen.dart';
 
 class DashboardScreenNew extends StatefulWidget {
   const DashboardScreenNew({super.key});
@@ -255,6 +256,19 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
           ),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.list_alt, color: Color(0xFFD7BE69)),
+            title: const Text('View All Account Masters'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ViewAllMastersScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
             title: const Text('View Employees'),
             onTap: () {
@@ -301,10 +315,34 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
     if (showAccountMasterForm) {
       return _AccountMasterForm(
         areaId: selectedAreaId,
-        onBack: () {
-          setState(() {
-            showAccountMasterForm = false;
-          });
+        onBack: () async {
+          // Show confirmation dialog
+          final shouldGoBack = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Confirm'),
+              content: const Text('Do you want to go back? Any unsaved changes will be lost.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7BE69),
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Yes, Go Back'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldGoBack == true) {
+            setState(() {
+              showAccountMasterForm = false;
+            });
+          }
         },
         onSuccess: (message) {
           _showSuccess(message);
