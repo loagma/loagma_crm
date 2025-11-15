@@ -1,126 +1,178 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/location_models.dart';
-import 'api_config.dart';
+import 'api_service.dart';
+import '../models/location_models.dart' as models;
 
 class LocationService {
-  // Countries
-  static Future<List<Country>> fetchCountries() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/countries'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => Country.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load countries');
-    } catch (e) {
-      print('Error fetching countries: $e');
-      rethrow;
+  // Country - Map version for forms
+  static Future<List<Map<String, dynamic>>> getCountries() async {
+    final response = await ApiService.get('/locations/countries');
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
     }
+    throw Exception(response['message'] ?? 'Failed to load countries');
   }
 
-  // States
-  static Future<List<State>> fetchStates(int countryId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/states?countryId=$countryId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => State.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load states');
-    } catch (e) {
-      print('Error fetching states: $e');
-      rethrow;
+  // Country - Typed version for dashboard
+  static Future<List<models.Country>> fetchCountries() async {
+    final response = await ApiService.get('/locations/countries');
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.Country.fromJson(json))
+          .toList();
     }
+    throw Exception(response['message'] ?? 'Failed to load countries');
   }
 
-  // Districts
-  static Future<List<District>> fetchDistricts(int stateId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/districts?stateId=$stateId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => District.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load districts');
-    } catch (e) {
-      print('Error fetching districts: $e');
-      rethrow;
+  // State - Map version
+  static Future<List<Map<String, dynamic>>> getStates({int? countryId}) async {
+    String url = '/locations/states';
+    if (countryId != null) {
+      url += '?country_id=$countryId';
     }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load states');
   }
 
-  // Cities
-  static Future<List<City>> fetchCities(int districtId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/cities?districtId=$districtId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => City.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load cities');
-    } catch (e) {
-      print('Error fetching cities: $e');
-      rethrow;
+  // State - Typed version
+  static Future<List<models.State>> fetchStates(int countryId) async {
+    final response = await ApiService.get(
+      '/locations/states?country_id=$countryId',
+    );
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.State.fromJson(json))
+          .toList();
     }
+    throw Exception(response['message'] ?? 'Failed to load states');
   }
 
-  // Zones
-  static Future<List<Zone>> fetchZones(int cityId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/zones?cityId=$cityId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => Zone.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load zones');
-    } catch (e) {
-      print('Error fetching zones: $e');
-      rethrow;
+  // Region - Map version
+  static Future<List<Map<String, dynamic>>> getRegions({int? stateId}) async {
+    String url = '/locations/regions';
+    if (stateId != null) {
+      url += '?state_id=$stateId';
     }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load regions');
   }
 
-  // Areas
-  static Future<List<Area>> fetchAreas(int zoneId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.locationsUrl}/areas?zoneId=$zoneId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => Area.fromJson(json))
-            .toList();
-      }
-      throw Exception('Failed to load areas');
-    } catch (e) {
-      print('Error fetching areas: $e');
-      rethrow;
+  // Region - Typed version
+  static Future<List<models.Region>> fetchRegions(int stateId) async {
+    final response = await ApiService.get(
+      '/locations/regions?state_id=$stateId',
+    );
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.Region.fromJson(json))
+          .toList();
     }
+    throw Exception(response['message'] ?? 'Failed to load regions');
+  }
+
+  // District - Map version
+  static Future<List<Map<String, dynamic>>> getDistricts({
+    int? regionId,
+  }) async {
+    String url = '/locations/districts';
+    if (regionId != null) {
+      url += '?region_id=$regionId';
+    }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load districts');
+  }
+
+  // District - Typed version
+  static Future<List<models.District>> fetchDistricts(int regionId) async {
+    final response = await ApiService.get(
+      '/locations/districts?region_id=$regionId',
+    );
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.District.fromJson(json))
+          .toList();
+    }
+    throw Exception(response['message'] ?? 'Failed to load districts');
+  }
+
+  // City - Map version
+  static Future<List<Map<String, dynamic>>> getCities({int? districtId}) async {
+    String url = '/locations/cities';
+    if (districtId != null) {
+      url += '?district_id=$districtId';
+    }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load cities');
+  }
+
+  // City - Typed version
+  static Future<List<models.City>> fetchCities(int districtId) async {
+    final response = await ApiService.get(
+      '/locations/cities?district_id=$districtId',
+    );
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.City.fromJson(json))
+          .toList();
+    }
+    throw Exception(response['message'] ?? 'Failed to load cities');
+  }
+
+  // Zone - Map version
+  static Future<List<Map<String, dynamic>>> getZones({int? cityId}) async {
+    String url = '/locations/zones';
+    if (cityId != null) {
+      url += '?city_id=$cityId';
+    }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load zones');
+  }
+
+  // Zone - Typed version
+  static Future<List<models.Zone>> fetchZones(int cityId) async {
+    final response = await ApiService.get('/locations/zones?city_id=$cityId');
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.Zone.fromJson(json))
+          .toList();
+    }
+    throw Exception(response['message'] ?? 'Failed to load zones');
+  }
+
+  // Area - Map version
+  static Future<List<Map<String, dynamic>>> getAreas({int? zoneId}) async {
+    String url = '/locations/areas';
+    if (zoneId != null) {
+      url += '?zone_id=$zoneId';
+    }
+    final response = await ApiService.get(url);
+    if (response['success'] == true) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    }
+    throw Exception(response['message'] ?? 'Failed to load areas');
+  }
+
+  // Area - Typed version
+  static Future<List<models.Area>> fetchAreas(int zoneId) async {
+    final response = await ApiService.get('/locations/areas?zone_id=$zoneId');
+    if (response['success'] == true) {
+      return (response['data'] as List)
+          .map((json) => models.Area.fromJson(json))
+          .toList();
+    }
+    throw Exception(response['message'] ?? 'Failed to load areas');
   }
 }

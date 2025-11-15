@@ -52,7 +52,11 @@ class _SignupScreenState extends State<SignupScreen> {
       if (data['success'] == true) {
         Fluttertoast.showToast(msg: "Signup successful! Welcome aboard!");
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/dashboard',
+          ModalRoute.withName('/'),
+        );
       } else {
         Fluttertoast.showToast(
           msg: data['message'] ?? "Signup failed, please try again.",

@@ -44,7 +44,7 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> _get(
+  static Future<Map<String, dynamic>> get(
     String path, {
     Duration timeout = const Duration(seconds: 10),
   }) async {

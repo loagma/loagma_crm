@@ -12,6 +12,12 @@ import {
   updateState,
   deleteState,
   
+  // Region
+  getAllRegions,
+  createRegion,
+  updateRegion,
+  deleteRegion,
+  
   // District
   getAllDistricts,
   createDistrict,
@@ -50,6 +56,12 @@ router.get('/states', getAllStates);
 router.post('/states', createState);
 router.put('/states/:id', updateState);
 router.delete('/states/:id', deleteState);
+
+// ==================== REGION ROUTES ====================
+router.get('/regions', getAllRegions);
+router.post('/regions', createRegion);
+router.put('/regions/:id', updateRegion);
+router.delete('/regions/:id', deleteRegion);
 
 // ==================== DISTRICT ROUTES ====================
 router.get('/districts', getAllDistricts);
