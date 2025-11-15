@@ -4,18 +4,16 @@ import '../screens/nsm/nsm_dashboard_screen.dart';
 import '../screens/rsm/rsm_dashboard_screen.dart';
 import '../screens/asm/asm_dashboard_screen.dart';
 import '../screens/tso/tso_dashboard_screen.dart';
+import '../screens/employee/employee_dashboard_screen.dart';
 
 class RoleRouter {
   static Widget getDashboardForRole(String? role, {String? userContact}) {
     // Normalize role name for comparison
     final normalizedRole = role?.toLowerCase().trim();
 
-    // Check for common role patterns
+    // Check for common role patterns - if no role, show employee dashboard
     if (normalizedRole == null || normalizedRole.isEmpty) {
-      return AdminDashboardScreen(
-        userRole: role,
-        userContactNumber: userContact,
-      );
+      return EmployeeDashboardScreen(userContactNumber: userContact);
     }
 
     // Match role patterns - handles various role formats
