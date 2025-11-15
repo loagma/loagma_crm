@@ -179,8 +179,11 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
+
         final result = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -199,7 +202,10 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
             ],
           ),
         );
-        return result ?? false;
+
+        if (result == true && context.mounted) {
+          Navigator.of(context).pop();
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -222,73 +228,146 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
 
   Widget _buildDrawer() {
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      child: Column(
         children: [
           const DrawerHeader(
             decoration: BoxDecoration(color: Color(0xFFD7BE69)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(Icons.business, size: 50, color: Colors.white),
-                SizedBox(height: 10),
-                Text(
-                  'Loagma CRM',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Icon(Icons.business, size: 50, color: Colors.white),
+                  SizedBox(height: 10),
+                  Text(
+                    'Loagma CRM',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                ExpansionTile(
+                  leading: const Icon(Icons.storage, color: Color(0xFFD7BE69)),
+                  title: const Text(
+                    'Master',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  initiallyExpanded: isMasterExpanded,
+                  onExpansionChanged: (expanded) {
+                    setState(() {
+                      isMasterExpanded = expanded;
+                    });
+                  },
+                  children: masterOptions.map((option) {
+                    return ListTile(
+                      leading: Icon(
+                        option['icon'],
+                        color: const Color(0xFFD7BE69),
+                        size: 20,
+                      ),
+                      title: Text(option['name']),
+                      selected: selectedMasterOption == option['name'],
+                      selectedTileColor: const Color(
+                        0xFFD7BE69,
+                      ).withOpacity(0.1),
+                      onTap: () {
+                        setState(() {
+                          selectedMasterOption = option['name'];
+                          _resetLocationAndForm();
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
+                  title: const Text('View Employees'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EmployeeListScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-          ExpansionTile(
-            leading: const Icon(Icons.storage, color: Color(0xFFD7BE69)),
-            title: const Text(
-              'Master',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            initiallyExpanded: isMasterExpanded,
-            onExpansionChanged: (expanded) {
-              setState(() {
-                isMasterExpanded = expanded;
-              });
-            },
-            children: masterOptions.map((option) {
-              return ListTile(
-                leading: Icon(
-                  option['icon'],
-                  color: const Color(0xFFD7BE69),
-                  size: 20,
-                ),
-                title: Text(option['name']),
-                selected: selectedMasterOption == option['name'],
-                selectedTileColor: const Color(0xFFD7BE69).withOpacity(0.1),
-                onTap: () {
-                  setState(() {
-                    selectedMasterOption = option['name'];
-                    _resetLocationAndForm();
-                  });
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-          const Divider(),
+          const Divider(height: 1),
           ListTile(
-            leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
-            title: const Text('View Employees'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const EmployeeListScreen(),
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Logout'),
+            onTap: () async {
+              final shouldLogout = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Logout'),
+                    ),
+                  ],
                 ),
               );
+
+              if (shouldLogout == true && mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
             },
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              border: Border(
+                top: BorderSide(color: Colors.grey[300]!, width: 1),
+              ),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Version 1.0.0',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "© ${DateTime.now().year} Loagma CRM",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                ),
+              ],
+            ),
           ),
         ],
       ),

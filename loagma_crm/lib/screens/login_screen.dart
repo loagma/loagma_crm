@@ -130,7 +130,7 @@
 //                   style: ElevatedButton.styleFrom(
 //                     backgroundColor: const Color(0xFFD7BE69),
 //                     minimumSize: const Size(double.infinity, 50),
-                    
+
 //                     shape: RoundedRectangleBorder(
 //                       borderRadius: BorderRadius.circular(12),
 //                     ),
@@ -151,8 +151,6 @@
 //     );
 //   }
 // }
-
-
 
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -280,7 +278,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 20), // <-- Added margin above button
-
                 // Button
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -298,6 +295,40 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
                 ),
+
+                // Development Skip Button
+                if (kDebugMode) ...[
+                  const SizedBox(height: 15),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/dashboard');
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      overlayColor: Colors.grey.withOpacity(0.1),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(255, 232, 229, 159).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Skip Login (Dev Mode)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color.fromARGB(255, 106, 105, 105),
+                          fontWeight: FontWeight.w500,
+                          
+                          decorationThickness: 1.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
