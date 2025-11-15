@@ -239,6 +239,11 @@ flutter run -d chrome
 
 ---
 
+## Build Apk
+ - flutter build apk --release
+
+---
+
 ##  Deployment
 
 ### Backend Deployment (Render/Heroku/Railway)
