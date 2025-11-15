@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/employee_service.dart';
-import 'shared/employee_account_master_screen.dart';
+import 'shared/account_master_screen.dart';
 
 class EmployeeListScreen extends StatefulWidget {
   const EmployeeListScreen({super.key});
@@ -145,7 +145,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const EmployeeAccountMasterScreen(),
+              builder: (context) => const AccountMasterScreen(),
             ),
           );
           if (result == true) {

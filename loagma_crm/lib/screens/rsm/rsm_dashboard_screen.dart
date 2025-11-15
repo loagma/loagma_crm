@@ -1,30 +1,23 @@
 import 'package:flutter/material.dart';
+import '../../widgets/role_dashboard_template.dart';
 
 class RsmDashboardScreen extends StatelessWidget {
-  const RsmDashboardScreen({super.key});
+  final String? userRole;
+  final String? userContactNumber;
+
+  const RsmDashboardScreen({super.key, this.userRole, this.userContactNumber});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('RSM Dashboard'),
-        backgroundColor: const Color(0xFFD7BE69),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Text(
-          'RSM Dashboard\n(Coming Soon)',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 20),
-        ),
-      ),
+    return RoleDashboardTemplate(
+      roleName: 'rsm',
+      roleDisplayName: userRole ?? 'Regional Sales Manager',
+      roleIcon: Icons.map,
+      primaryColor: const Color(0xFFD7BE69), // Gold
+      userContactNumber: userContactNumber,
+      cards: [
+        // Add RSM specific cards here when features are ready
+      ],
     );
   }
 }

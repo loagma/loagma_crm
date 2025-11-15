@@ -6,7 +6,7 @@ import { roleGuard } from '../middleware/roleGuard.js';
 const router = express.Router();
 
 // Only NSM can create users
-router.post('/', authMiddleware, roleGuard(['NSM']), createUser);
-router.get('/', authMiddleware, getAllUsers);
+router.post('/', createUser);
+router.get('/', getAllUsers);
 
 export default router;

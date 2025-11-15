@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
+import 'edit_user_screen.dart';
 
 class AdminViewUsersScreen extends StatefulWidget {
   const AdminViewUsersScreen({super.key});
@@ -94,32 +95,52 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                       "${user['contactNumber']}\nRole: ${user['role'] ?? 'N/A'}",
                     ),
                     isThreeLine: true,
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text("Delete User"),
-                            content: const Text(
-                              "Are you sure you want to delete this user?",
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text("Cancel"),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue),
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    EditUserScreen(user: user),
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  deleteUser(user['id']);
-                                },
-                                child: const Text("Delete"),
+                            );
+                            if (result == true) {
+                              fetchUsers(); // Refresh list
+                            }
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text("Delete User"),
+                                content: const Text(
+                                  "Are you sure you want to delete this user?",
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text("Cancel"),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      deleteUser(user['id']);
+                                    },
+                                    child: const Text("Delete"),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );

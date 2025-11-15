@@ -57,9 +57,15 @@ class _OtpScreenState extends State<OtpScreen> {
           if (kDebugMode) print('✅ Redirecting to role-based dashboard...');
           Fluttertoast.showToast(msg: "Login successful");
 
-          // Get user role from response and navigate to role-based dashboard
+          // Get user role and contact from response
           final userRole = data['data']?['role'];
-          RoleRouter.navigateToRoleDashboard(context, userRole);
+          final userContact = data['data']?['contactNumber'] ?? contactNumber;
+          // Navigate to role-based dashboard with contact number
+          RoleRouter.navigateToRoleDashboard(
+            context,
+            userRole,
+            userContact: userContact,
+          );
         }
       } else {
         if (kDebugMode) print('❌ Verification failed: ${data['message']}');

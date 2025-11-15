@@ -1,30 +1,23 @@
 import 'package:flutter/material.dart';
+import '../../widgets/role_dashboard_template.dart';
 
 class AsmDashboardScreen extends StatelessWidget {
-  const AsmDashboardScreen({super.key});
+  final String? userRole;
+  final String? userContactNumber;
+
+  const AsmDashboardScreen({super.key, this.userRole, this.userContactNumber});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ASM Dashboard'),
-        backgroundColor: const Color(0xFFD7BE69),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Text(
-          'ASM Dashboard\n(Coming Soon)',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 20),
-        ),
-      ),
+    return RoleDashboardTemplate(
+      roleName: 'asm',
+      roleDisplayName: userRole ?? 'Area Sales Manager',
+      roleIcon: Icons.location_city,
+      primaryColor: const Color(0xFFD7BE69), // Gold
+      userContactNumber: userContactNumber,
+      cards: [
+        // Add ASM specific cards here when features are ready
+      ],
     );
   }
 }

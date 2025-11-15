@@ -75,8 +75,10 @@ export const getAllUsersByAdmin = async (req, res) => {
       users: users.map((u) => ({
         id: u.id,
         name: u.name,
+        email: u.email,
         contactNumber: u.contactNumber,
         role: u.role?.name,
+        roleId: u.roleId,
         isActive: u.isActive,
         createdAt: u.createdAt,
       })),
@@ -86,6 +88,50 @@ export const getAllUsersByAdmin = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch users',
+    });
+  }
+};
+
+// Update user
+export const updateUserByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { contactNumber, roleId, name, email } = req.body;
+
+    if (contactNumber) {
+      contactNumber = cleanPhoneNumber(contactNumber);
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(contactNumber && { contactNumber }),
+        ...(roleId && { roleId }),
+        ...(name && { name }),
+        ...(email && { email }),
+      },
+      include: {
+        role: { select: { name: true } },
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        contactNumber: user.contactNumber,
+        role: user.role?.name,
+        roleId: user.roleId,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Update User Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user',
     });
   }
 };

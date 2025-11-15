@@ -1,30 +1,23 @@
 import 'package:flutter/material.dart';
+import '../../widgets/role_dashboard_template.dart';
 
 class TsoDashboardScreen extends StatelessWidget {
-  const TsoDashboardScreen({super.key});
+  final String? userRole;
+  final String? userContactNumber;
+
+  const TsoDashboardScreen({super.key, this.userRole, this.userContactNumber});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('TSO Dashboard'),
-        backgroundColor: const Color(0xFFD7BE69),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Text(
-          'TSO Dashboard\n(Coming Soon)',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 20),
-        ),
-      ),
+    return RoleDashboardTemplate(
+      roleName: 'tso',
+      roleDisplayName: userRole ?? 'Territory Sales Officer',
+      roleIcon: Icons.person_pin_circle,
+      primaryColor: const Color(0xFFD7BE69), // Gold
+      userContactNumber: userContactNumber,
+      cards: [
+        // Add TSO specific cards here when features are ready
+      ],
     );
   }
 }
