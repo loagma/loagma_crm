@@ -15,9 +15,9 @@ const router = express.Router();
 // router.get('/users', authMiddleware, roleGuard(['Admin']), getAllUsersByAdmin);
 // router.put('/users/:id', authMiddleware, roleGuard(['Admin']), updateUserByAdmin);
 // router.delete('/users/:id', authMiddleware, roleGuard(['Admin']), deleteUserByAdmin);
-router.post('/users' , roleGuard(['Admin']), createUserByAdmin);
-router.get('/users', roleGuard(['Admin']), getAllUsersByAdmin);
-router.put('/users/:id', roleGuard(['Admin']), updateUserByAdmin);
-router.delete('/users/:id', roleGuard(['Admin']), deleteUserByAdmin);
+router.post('/users' ,  createUserByAdmin);
+router.get('/users',  getAllUsersByAdmin);
+router.put('/users/:id', updateUserByAdmin);
+router.delete('/users/:id',  deleteUserByAdmin);
 
 export default router;
