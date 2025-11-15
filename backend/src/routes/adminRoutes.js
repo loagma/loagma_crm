@@ -11,9 +11,13 @@ import { roleGuard } from '../middleware/roleGuard.js';
 const router = express.Router();
 
 // Only Admin can access these routes
-router.post('/users', authMiddleware, roleGuard(['Admin']), createUserByAdmin);
-router.get('/users', authMiddleware, roleGuard(['Admin']), getAllUsersByAdmin);
-router.put('/users/:id', authMiddleware, roleGuard(['Admin']), updateUserByAdmin);
-router.delete('/users/:id', authMiddleware, roleGuard(['Admin']), deleteUserByAdmin);
+// router.post('/users', authMiddleware, roleGuard(['Admin']), createUserByAdmin);
+// router.get('/users', authMiddleware, roleGuard(['Admin']), getAllUsersByAdmin);
+// router.put('/users/:id', authMiddleware, roleGuard(['Admin']), updateUserByAdmin);
+// router.delete('/users/:id', authMiddleware, roleGuard(['Admin']), deleteUserByAdmin);
+router.post('/users' , roleGuard(['Admin']), createUserByAdmin);
+router.get('/users', roleGuard(['Admin']), getAllUsersByAdmin);
+router.put('/users/:id', roleGuard(['Admin']), updateUserByAdmin);
+router.delete('/users/:id', roleGuard(['Admin']), deleteUserByAdmin);
 
 export default router;

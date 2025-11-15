@@ -1,12 +1,11 @@
 import express from 'express';
 import { createUser, getAllUsers } from '../controllers/userController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
-import { roleGuard } from '../middleware/roleGuard.js';
+
 
 const router = express.Router();
 
 // Only NSM can create users
 router.post('/', createUser);
-router.get('/', getAllUsers);
+router.get('/get-all', getAllUsers);
 
 export default router;
