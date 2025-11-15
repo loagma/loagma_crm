@@ -29,20 +29,43 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/roles');
       if (kDebugMode) print('📡 Fetching roles from $url');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        if (!mounted) return;
-        setState(() {
-          roles = List<Map<String, dynamic>>.from(data['roles']);
-        });
-        if (kDebugMode) print('✅ Loaded ${roles.length} roles from backend');
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException('Request timed out after 30 seconds');
+            },
+          );
+
+      if (kDebugMode) print('✅ Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          if (!mounted) return;
+          setState(() {
+            roles = List<Map<String, dynamic>>.from(data['roles']);
+          });
+          if (kDebugMode) print('✅ Loaded ${roles.length} roles from backend');
+        } else {
+          Fluttertoast.showToast(msg: "Failed to load roles");
+        }
       } else {
-        Fluttertoast.showToast(msg: "Failed to load roles");
+        Fluttertoast.showToast(
+          msg: "Failed to load roles: ${response.statusCode}",
+        );
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error fetching roles: $e');
-      Fluttertoast.showToast(msg: "Error loading roles");
+      Fluttertoast.showToast(msg: "Error loading roles: Check network");
     }
   }
 

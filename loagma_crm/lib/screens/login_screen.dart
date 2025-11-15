@@ -33,22 +33,61 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loadRoles() async {
     setState(() => isLoadingRoles = true);
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/roles');
+      // final url = Uri.parse('${ApiConfig.baseUrl}/roles');
+       final url = Uri.parse('${ApiConfig.baseUrl}/roles');
       if (kDebugMode) print('📡 Fetching roles from $url');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        if (!mounted) return;
-        setState(() {
-          roles = List<Map<String, dynamic>>.from(data['roles']);
-          isLoadingRoles = false;
-        });
+
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException('Request timed out after 30 seconds');
+            },
+          );
+
+      if (kDebugMode) print('✅ Response status: ${response.statusCode}');
+      if (kDebugMode) print('📦 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          if (!mounted) return;
+          setState(() {
+            roles = List<Map<String, dynamic>>.from(data['roles']);
+            isLoadingRoles = false;
+          });
+          if (kDebugMode) print('✅ Loaded ${roles.length} roles');
+        } else {
+          if (kDebugMode) print('❌ API returned success: false');
+          setState(() => isLoadingRoles = false);
+        }
       } else {
+        if (kDebugMode)
+          print('❌ HTTP ${response.statusCode}: ${response.body}');
         setState(() => isLoadingRoles = false);
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error fetching roles: $e');
       setState(() => isLoadingRoles = false);
+      // Show error message to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to load roles. Please check your connection.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -193,10 +232,42 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 10),
                   isLoadingRoles
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFFD7BE69),
-                          ),
+                      ? Column(
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Color(0xFFD7BE69),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Loading roles from server...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        )
+                      : roles.isEmpty
+                      ? Column(
+                          children: [
+                            const Text(
+                              'Failed to load roles',
+                              style: TextStyle(fontSize: 14, color: Colors.red),
+                            ),
+                            const SizedBox(height: 10),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFD7BE69),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onPressed: _loadRoles,
+                            ),
+                          ],
                         )
                       : DropdownButtonFormField<String>(
                           value: selectedDevRole,
@@ -212,9 +283,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             });
                           },
                           decoration: InputDecoration(
-                            hintText: roles.isEmpty
-                                ? "Loading roles..."
-                                : "Choose role to test",
+                            hintText: "Choose role to test",
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),

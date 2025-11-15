@@ -14,12 +14,25 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow all origins for now
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true,
+}));
 app.use(express.json());
 
-// Default route
+// Health check route
 app.get('/', (req, res) => {
   res.send('Loagma CRM Backend running well!!');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Server is healthy',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Routes

@@ -35,23 +35,24 @@
 //   static String get locationsUrl => '$baseUrl/locations';
 // }
 
-
 // lib/config/api_config.dart
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Centralized API Configuration
-/// ✅ Production version pointing to deployed backend
+/// ✅ Toggle between local and production backend
 class ApiConfig {
-  /// Toggle between environments (optional)
-  static const bool useProduction = true;
+  /// Toggle between environments
+  /// Set to false for local development
+  /// Set to true for production/deployed backend
+  static const bool useProduction = true; // Using deployed backend on Render
 
   static String get baseUrl {
     if (useProduction) {
       // 🌍 Your live backend
       return 'https://loagma-crm.onrender.com';
     } else {
-      // 🧪 Local testing (if ever needed again)
+      // 🧪 Local testing
       if (kIsWeb) return 'http://localhost:5000';
       try {
         if (Platform.isAndroid) {
@@ -73,4 +74,3 @@ class ApiConfig {
   static String get accountsUrl => '$baseUrl/accounts';
   static String get locationsUrl => '$baseUrl/locations';
 }
-
