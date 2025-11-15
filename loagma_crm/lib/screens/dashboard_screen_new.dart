@@ -4,6 +4,7 @@ import '../services/location_service.dart';
 import '../services/account_service.dart';
 import 'employee_account_master_screen.dart';
 import 'employee_list_screen.dart';
+import 'view_all_masters_screen.dart';
 
 class DashboardScreenNew extends StatefulWidget {
   const DashboardScreenNew({super.key});
@@ -232,142 +233,81 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
         children: [
           const DrawerHeader(
             decoration: BoxDecoration(color: Color(0xFFD7BE69)),
-            child: SizedBox(
-              width: double.infinity,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.business, size: 50, color: Colors.white),
-                  SizedBox(height: 10),
-                  Text(
-                    'Loagma CRM',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                ExpansionTile(
-                  leading: const Icon(Icons.storage, color: Color(0xFFD7BE69)),
-                  title: const Text(
-                    'Master',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                Icon(Icons.business, size: 50, color: Colors.white),
+                SizedBox(height: 10),
+                Text(
+                  'Loagma CRM',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
-                  initiallyExpanded: isMasterExpanded,
-                  onExpansionChanged: (expanded) {
-                    setState(() {
-                      isMasterExpanded = expanded;
-                    });
-                  },
-                  children: masterOptions.map((option) {
-                    return ListTile(
-                      leading: Icon(
-                        option['icon'],
-                        color: const Color(0xFFD7BE69),
-                        size: 20,
-                      ),
-                      title: Text(option['name']),
-                      selected: selectedMasterOption == option['name'],
-                      selectedTileColor: const Color(
-                        0xFFD7BE69,
-                      ).withOpacity(0.1),
-                      onTap: () {
-                        setState(() {
-                          selectedMasterOption = option['name'];
-                          _resetLocationAndForm();
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  }).toList(),
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
-                  title: const Text('View Employees'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EmployeeListScreen(),
-                      ),
-                    );
-                  },
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
+          ExpansionTile(
+            leading: const Icon(Icons.storage, color: Color(0xFFD7BE69)),
+            title: const Text(
+              'Master',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            initiallyExpanded: isMasterExpanded,
+            onExpansionChanged: (expanded) {
+              setState(() {
+                isMasterExpanded = expanded;
+              });
+            },
+            children: masterOptions.map((option) {
+              return ListTile(
+                leading: Icon(
+                  option['icon'],
+                  color: const Color(0xFFD7BE69),
+                  size: 20,
+                ),
+                title: Text(option['name']),
+                selected: selectedMasterOption == option['name'],
+                selectedTileColor: const Color(0xFFD7BE69).withOpacity(0.1),
+                onTap: () {
+                  setState(() {
+                    selectedMasterOption = option['name'];
+                    _resetLocationAndForm();
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+          const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Logout'),
-            onTap: () async {
-              final shouldLogout = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text('Logout'),
-                    ),
-                  ],
+            leading: const Icon(Icons.list_alt, color: Color(0xFFD7BE69)),
+            title: const Text('View All Account Masters'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ViewAllMastersScreen(),
                 ),
               );
-
-              if (shouldLogout == true && mounted) {
-                Navigator.pushReplacementNamed(context, '/login');
-              }
             },
           ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              border: Border(
-                top: BorderSide(color: Colors.grey[300]!, width: 1),
-              ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Version 1.0.0',
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+          ListTile(
+            leading: const Icon(Icons.people, color: Color(0xFFD7BE69)),
+            title: const Text('View Employees'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EmployeeListScreen(),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  "© ${DateTime.now().year} Loagma CRM",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -403,10 +343,34 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
     if (showAccountMasterForm) {
       return _AccountMasterForm(
         areaId: selectedAreaId,
-        onBack: () {
-          setState(() {
-            showAccountMasterForm = false;
-          });
+        onBack: () async {
+          // Show confirmation dialog
+          final shouldGoBack = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Confirm'),
+              content: const Text('Do you want to go back? Any unsaved changes will be lost.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7BE69),
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Yes, Go Back'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldGoBack == true) {
+            setState(() {
+              showAccountMasterForm = false;
+            });
+          }
         },
         onSuccess: (message) {
           _showSuccess(message);
