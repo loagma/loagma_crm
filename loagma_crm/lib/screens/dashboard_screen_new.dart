@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/location_models.dart' as models;
 import '../services/location_service.dart';
 import '../services/account_service.dart';
-import 'employee_account_master_screen.dart';
+import 'shared/employee_account_master_screen.dart';
 import 'employee_list_screen.dart';
 import 'view_all_masters_screen.dart';
 
@@ -349,7 +349,9 @@ class _DashboardScreenNewState extends State<DashboardScreenNew> {
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Confirm'),
-              content: const Text('Do you want to go back? Any unsaved changes will be lost.'),
+              content: const Text(
+                'Do you want to go back? Any unsaved changes will be lost.',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),

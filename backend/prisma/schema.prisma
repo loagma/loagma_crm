@@ -1,125 +1,92 @@
-// ==========================================
-//  DATASOURCE
-// ==========================================
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-// ==========================================
-//  COUNTRY → STATE → REGION → DISTRICT → CITY → ZONE → AREA
-// ==========================================
-
 model Country {
-  country_id   Int      @id @default(autoincrement())
-  country_name String   @db.VarChar(100)
-
-  states State[]
+  country_id    Int            @id @default(autoincrement())
+  country_name  String         @db.VarChar(100)
   employeeAreas EmployeeArea[]
+  states        State[]
 }
 
 model State {
-  state_id     Int      @id @default(autoincrement())
-  state_name   String   @db.VarChar(100)
-  country_id   Int
-
-  country  Country @relation(fields: [country_id], references: [country_id], onDelete: Cascade)
-  regions  Region[]
+  state_id      Int            @id @default(autoincrement())
+  state_name    String         @db.VarChar(100)
+  country_id    Int
   employeeAreas EmployeeArea[]
+  regions       Region[]
+  country       Country        @relation(fields: [country_id], references: [country_id], onDelete: Cascade)
 }
 
 model Region {
-  region_id   Int      @id @default(autoincrement())
-  region_name String   @db.VarChar(100)   // Telangana Region 1...4
-  state_id    Int
-
-  state     State     @relation(fields: [state_id], references: [state_id], onDelete: Cascade)
-  districts District[]
-
+  region_id     Int            @id @default(autoincrement())
+  region_name   String         @db.VarChar(100)
+  state_id      Int
+  districts     District[]
   employeeAreas EmployeeArea[]
+  state         State          @relation(fields: [state_id], references: [state_id], onDelete: Cascade)
 }
 
 model District {
-  district_id   Int     @id @default(autoincrement())
-  district_name String  @db.VarChar(100)
+  district_id   Int            @id @default(autoincrement())
+  district_name String         @db.VarChar(100)
   region_id     Int
-
-  region Region @relation(fields: [region_id], references: [region_id], onDelete: Cascade)
-  cities City[]
-
+  cities        City[]
+  region        Region         @relation(fields: [region_id], references: [region_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
 }
 
 model City {
-  city_id     Int    @id @default(autoincrement())
-  city_name   String @db.VarChar(100)
-  district_id Int
-
-  district District @relation(fields: [district_id], references: [district_id], onDelete: Cascade)
-  zones    Zone[]
-
+  city_id       Int            @id @default(autoincrement())
+  city_name     String         @db.VarChar(100)
+  district_id   Int
+  district      District       @relation(fields: [district_id], references: [district_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
+  zones         Zone[]
 }
 
 model Zone {
-  zone_id   Int    @id @default(autoincrement())
-  zone_name String @db.VarChar(100)  // North / East / South / West
-  city_id   Int
-
-  city  City  @relation(fields: [city_id], references: [city_id], onDelete: Cascade)
-  areas Area[]
-
+  zone_id       Int            @id @default(autoincrement())
+  zone_name     String         @db.VarChar(100)
+  city_id       Int
+  areas         Area[]
   employeeAreas EmployeeArea[]
+  city          City           @relation(fields: [city_id], references: [city_id], onDelete: Cascade)
 }
 
 model Area {
-  area_id    Int    @id @default(autoincrement())
-  area_name  String @db.VarChar(100)
-  zone_id    Int
-
-  zone Zone @relation(fields: [zone_id], references: [zone_id], onDelete: Cascade)
-
+  area_id       Int            @id @default(autoincrement())
+  area_name     String         @db.VarChar(100)
+  zone_id       Int
   accounts      Account[]
+  zone          Zone           @relation(fields: [zone_id], references: [zone_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
 }
-
-// ==========================================
-//  DEPARTMENT
-// ==========================================
 
 model Department {
   id        String   @id
   name      String   @unique
   createdAt DateTime @default(now())
-
-  users User[]
+  users     User[]
 }
-
-// ==========================================
-//  ROLE
-// ==========================================
 
 model Role {
   id        String   @id
   name      String
   createdAt DateTime @default(now())
-
-  users User[]
+  users     User[]
 }
 
-// ==========================================
-//  USER (EMPLOYEE)
-// ==========================================
-
 model User {
-  id                 String     @id
+  id                 String        @id
   name               String?
-  email              String?    @unique
-  contactNumber      String     @unique
+  email              String?       @unique
+  contactNumber      String        @unique
   roleId             String?
   functionalRoleId   String?
   departmentId       String?
@@ -127,68 +94,54 @@ model User {
   otp                String?
   otpExpiry          DateTime?
   lastLogin          DateTime?
-  isActive           Boolean    @default(true)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   dateOfBirth        DateTime?
   designation        String?
-  employeeCode       String?    @unique
+  employeeCode       String?       @unique
   gender             String?
   image              String?
-  nationality        String?
-  postUnder          String?
   jobPost            String?
   jobPostCode        String?
   jobPostName        String?
   joiningDate        DateTime?
+  nationality        String?
+  postUnder          String?
   preferredLanguages String[]
-
-  employeeArea EmployeeArea?
-
-  role       Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  manager    User?       @relation("ManagerRelation", fields: [managerId], references: [id], onDelete: SetNull)
-  team       User[]      @relation("ManagerRelation")
-
-  accounts Account[]
+  accounts           Account[]
+  employeeArea       EmployeeArea?
+  department         Department?   @relation(fields: [departmentId], references: [id])
+  manager            User?         @relation("ManagerRelation", fields: [managerId], references: [id])
+  team               User[]        @relation("ManagerRelation")
+  role               Role?         @relation(fields: [roleId], references: [id])
 }
-
-// ==========================================
-//  EMPLOYEE AREA
-// ==========================================
 
 model EmployeeArea {
-  id          Int      @id @default(autoincrement())
-  employeeId  String   @unique
-  country_id  Int?
-  state_id    Int?
-  region_id   Int?
-  district_id Int?
-  city_id     Int?
-  zone_id     Int?
   area_id     Int?
-
+  city_id     Int?
+  country_id  Int?
+  district_id Int?
+  employeeId  String    @unique
   latitude    Float?
   longitude   Float?
-
-  employee User @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-
-  country  Country? @relation(fields: [country_id], references: [country_id])
-  state    State?   @relation(fields: [state_id], references: [state_id])
-  region   Region?  @relation(fields: [region_id], references: [region_id])
-  district District? @relation(fields: [district_id], references: [district_id])
-  city     City?     @relation(fields: [city_id], references: [city_id])
-  zone     Zone?     @relation(fields: [zone_id], references: [zone_id])
-  area     Area?     @relation(fields: [area_id], references: [area_id])
+  region_id   Int?
+  state_id    Int?
+  zone_id     Int?
+  id          Int       @id @default(autoincrement())
+  area        Area?     @relation(fields: [area_id], references: [area_id])
+  city        City?     @relation(fields: [city_id], references: [city_id])
+  country     Country?  @relation(fields: [country_id], references: [country_id])
+  district    District? @relation(fields: [district_id], references: [district_id])
+  employee    User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  region      Region?   @relation(fields: [region_id], references: [region_id])
+  state       State?    @relation(fields: [state_id], references: [state_id])
+  zone        Zone?     @relation(fields: [zone_id], references: [zone_id])
 }
 
-// ==========================================
-//  ACCOUNT MASTER
-// ==========================================
-
 model Account {
-  id            String   @id
-  accountCode   String   @unique
+  id            String    @id
+  accountCode   String    @unique
   personName    String
   dateOfBirth   DateTime?
   contactNumber String
@@ -196,10 +149,9 @@ model Account {
   customerStage String?
   funnelStage   String?
   assignedToId  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   areaId        Int?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  assignedTo User? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  area       Area? @relation(fields: [areaId], references: [area_id], onDelete: SetNull)
+  area          Area?     @relation(fields: [areaId], references: [area_id])
+  assignedTo    User?     @relation(fields: [assignedToId], references: [id])
 }

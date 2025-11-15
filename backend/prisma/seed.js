@@ -1,74 +1,68 @@
-import { PrismaClient } from '../src/generated/prisma/index.js';
+import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
+
 const prisma = new PrismaClient();
 
-
 async function main() {
-  console.log("🌱 Starting CRM database seeding...");
+  console.log('🌱 Starting database seeding...');
 
-  // 1️⃣ Create Sales Role Hierarchy
-  await prisma.role.createMany({
-    data: [
-      { code: "R1", name: "NSM - National Sales Manager", level: 1 },
-      { code: "R2", name: "RSM - Regional Sales Manager", level: 2 },
-      { code: "R3", name: "ASM - Area Sales Manager", level: 3 },
-      { code: "R4", name: "TSM - Territory Sales Manager", level: 4 },
-    ],
-    skipDuplicates: true, // avoids errors if rerun
+  // Seed Admin User (one-time)
+  const adminPhone = '+919876543210'; // Change this to your admin phone
+  
+  const existingAdmin = await prisma.user.findUnique({
+    where: { contactNumber: adminPhone },
   });
 
-  // 2️⃣ Create Departments
-  await prisma.department.createMany({
-    data: [
-      { name: "Sales" },
-      { name: "Marketing" },
-      { name: "Telecalling" },
-      { name: "Support" },
-    ],
-    skipDuplicates: true,
-  });
-
-  // 3️⃣ Create Functional Roles
-  const marketingDept = await prisma.department.findUnique({ where: { name: "Marketing" } });
-  const teleDept = await prisma.department.findUnique({ where: { name: "Telecalling" } });
-
-  if (marketingDept && teleDept) {
-    await prisma.functionalRole.createMany({
-      data: [
-        { name: "Digital Marketing Head", departmentId: marketingDept.id },
-        { name: "Digital Marketer", departmentId: marketingDept.id },
-        { name: "Telecaller Lead", departmentId: teleDept.id },
-        { name: "Telecaller", departmentId: teleDept.id },
-      ],
-      skipDuplicates: true,
-    });
-  } else {
-    console.warn("⚠️ Departments not found. Skipping functional roles creation.");
-  }
-
-  // 4️⃣ Seed Default NSM
-  const nsmRole = await prisma.role.findUnique({ where: { code: "R1" } });
-
-  if (nsmRole) {
-    await prisma.user.upsert({
-      where: { email: "nsm@crm.com" },
+  if (!existingAdmin) {
+    // Create Admin role if not exists
+    const adminRole = await prisma.role.upsert({
+      where: { id: 'admin' },
       update: {},
       create: {
-        name: "Default NSM",
-        email: "nsm@crm.com",
-        contactNumber: "9999999999",
-        roleId: nsmRole.id,
+        id: 'admin',
+        name: 'Admin',
       },
     });
+
+    // Create Admin user
+    await prisma.user.create({
+      data: {
+        id: randomUUID(),
+        contactNumber: adminPhone,
+        roleId: adminRole.id,
+        name: 'Admin',
+        isActive: true,
+      },
+    });
+    console.log('✅ Admin user created with phone:', adminPhone);
   } else {
-    console.warn("⚠️ NSM role not found. User creation skipped.");
+    console.log('ℹ️  Admin user already exists');
   }
 
-  console.log("✅ Seed data created successfully!");
+  // Seed default roles
+  const roles = [
+    { id: 'admin', name: 'Admin' },
+    { id: 'nsm', name: 'NSM' },
+    { id: 'rsm', name: 'RSM' },
+    { id: 'asm', name: 'ASM' },
+    { id: 'tso', name: 'TSO' },
+  ];
+
+  for (const role of roles) {
+    await prisma.role.upsert({
+      where: { id: role.id },
+      update: { name: role.name },
+      create: role,
+    });
+  }
+  console.log('✅ Roles seeded');
+
+  console.log('🎉 Seeding completed!');
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seeding failed:", e);
+    console.error('❌ Seeding error:', e);
     process.exit(1);
   })
   .finally(async () => {

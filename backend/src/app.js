@@ -7,6 +7,8 @@ import locationRoutes from './routes/locationRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
 import employeeRoutes from './routes/employeeRoutes.js';
 import masterRoutes from './routes/masterRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import roleRoutes from './routes/roleRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -27,6 +29,8 @@ app.use('/locations', locationRoutes);
 app.use('/accounts', accountRoutes);
 app.use('/employees', employeeRoutes);
 app.use('/masters', masterRoutes);
+app.use('/admin', adminRoutes);
+app.use('/roles', roleRoutes);
 
 const PORT = process.env.PORT || 5000;
 

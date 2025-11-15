@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:fluttertoast/fluttertoast.dart';
 import '../services/api_service.dart';
+import '../utils/role_router.dart';
 
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key});
@@ -38,13 +40,13 @@ class _OtpScreenState extends State<OtpScreen> {
       if (!mounted) return;
       setState(() => isLoading = false);
 
-      print('🔍 OTP Verify Response: $data');
+      if (kDebugMode) print('🔍 OTP Verify Response: $data');
 
       if (data['success'] == true) {
         final isNewUser = data['isNewUser'] == true;
 
         if (isNewUser) {
-          print('🆕 Redirecting to signup page...');
+          if (kDebugMode) print('🆕 Redirecting to signup page...');
           Fluttertoast.showToast(msg: "Please complete your signup");
           Navigator.pushNamed(
             context,
@@ -52,20 +54,19 @@ class _OtpScreenState extends State<OtpScreen> {
             arguments: {'contactNumber': contactNumber},
           );
         } else {
-          print('✅ Redirecting to dashboard...');
+          if (kDebugMode) print('✅ Redirecting to role-based dashboard...');
           Fluttertoast.showToast(msg: "Login successful");
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/dashboard',
-            ModalRoute.withName('/'),
-          );
+
+          // Get user role from response and navigate to role-based dashboard
+          final userRole = data['data']?['role'];
+          RoleRouter.navigateToRoleDashboard(context, userRole);
         }
       } else {
-        print('❌ Verification failed: ${data['message']}');
+        if (kDebugMode) print('❌ Verification failed: ${data['message']}');
         Fluttertoast.showToast(msg: data['message'] ?? "Invalid OTP");
       }
     } catch (e) {
-      print('❌ Exception during OTP verification: $e');
+      if (kDebugMode) print('❌ Exception during OTP verification: $e');
       if (mounted) setState(() => isLoading = false);
       Fluttertoast.showToast(msg: "Error: $e");
     }
@@ -114,7 +115,10 @@ class _OtpScreenState extends State<OtpScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     hintText: "Enter OTP",
-                    prefixIcon: const Icon(Icons.lock, color: Color.fromARGB(255, 72, 72, 71)),
+                    prefixIcon: const Icon(
+                      Icons.lock,
+                      color: Color.fromARGB(255, 72, 72, 71),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -131,7 +135,9 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   onPressed: isLoading ? null : verifyOtp,
                   child: isLoading
-                      ? const CircularProgressIndicator(color:Color(0xFFD7BE69))
+                      ? const CircularProgressIndicator(
+                          color: Color(0xFFD7BE69),
+                        )
                       : const Text("Verify", style: TextStyle(fontSize: 16)),
                 ),
               ],
