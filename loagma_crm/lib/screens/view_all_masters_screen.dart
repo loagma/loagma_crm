@@ -32,7 +32,9 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
         page: currentPage,
         limit: itemsPerPage,
         search: searchQuery.isNotEmpty ? searchQuery : null,
-        customerStage: filterCustomerStage != 'All' ? filterCustomerStage : null,
+        customerStage: filterCustomerStage != 'All'
+            ? filterCustomerStage
+            : null,
       );
       setState(() {
         accounts = data;
@@ -46,19 +48,13 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
 
@@ -70,13 +66,20 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
         content: Text('Are you sure you want to delete account "$name"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () {
+              Navigator.pop(context, false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Delete cancelled'),
+                  backgroundColor: Colors.grey,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
@@ -102,10 +105,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
         title: const Text('All Account Masters'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAccounts,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAccounts),
         ],
       ),
       body: Column(
@@ -120,13 +120,19 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                 TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by name, code, or contact...',
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFFD7BE69)),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Color(0xFFD7BE69),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFD7BE69),
+                        width: 2,
+                      ),
                     ),
                     filled: true,
                     fillColor: Colors.white,
@@ -185,141 +191,149 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : accounts.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.inbox,
-                              size: 80,
-                              color: Colors.grey[300],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No accounts found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Create your first account from the Master menu',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inbox, size: 80, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No accounts found',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadAccounts,
-                        child: ListView.builder(
-                          itemCount: accounts.length,
-                          padding: const EdgeInsets.all(8),
-                          itemBuilder: (context, index) {
-                            final account = accounts[index];
-                            return Card(
-                              elevation: 2,
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create your first account from the Master menu',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadAccounts,
+                    child: ListView.builder(
+                      itemCount: accounts.length,
+                      padding: const EdgeInsets.all(8),
+                      itemBuilder: (context, index) {
+                        final account = accounts[index];
+                        return Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFFD7BE69),
+                              child: Text(
+                                account.personName[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFFD7BE69),
-                                  child: Text(
-                                    account.personName[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
+                            ),
+                            title: Text(
+                              account.personName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text('Code: ${account.accountCode}'),
+                                Text('Contact: ${account.contactNumber}'),
+                                if (account.customerStage != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _getStageColor(
+                                        account.customerStage!,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      account.customerStage!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                title: Text(
-                                  account.personName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                              ],
+                            ),
+                            trailing: PopupMenuButton(
+                              icon: const Icon(Icons.more_vert),
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'view',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.visibility, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('View Details'),
+                                    ],
                                   ),
                                 ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text('Code: ${account.accountCode}'),
-                                    Text('Contact: ${account.contactNumber}'),
-                                    if (account.customerStage != null)
-                                      Container(
-                                        margin: const EdgeInsets.only(top: 4),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _getStageColor(account.customerStage!),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          account.customerStage!,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('Edit'),
+                                    ],
+                                  ),
                                 ),
-                                trailing: PopupMenuButton(
-                                  icon: const Icon(Icons.more_vert),
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'view',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.visibility, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('View Details'),
-                                        ],
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 20,
+                                        color: Colors.red,
                                       ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Edit'),
-                                        ],
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Delete',
+                                        style: TextStyle(color: Colors.red),
                                       ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete, size: 20, color: Colors.red),
-                                          SizedBox(width: 8),
-                                          Text('Delete', style: TextStyle(color: Colors.red)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  onSelected: (value) {
-                                    if (value == 'view') {
-                                      _showAccountDetails(account);
-                                    } else if (value == 'edit') {
-                                      _showError('Edit functionality coming soon!');
-                                    } else if (value == 'delete') {
-                                      _deleteAccount(account.id, account.personName);
-                                    }
-                                  },
+                                    ],
+                                  ),
                                 ),
-                                onTap: () => _showAccountDetails(account),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'view') {
+                                  _showAccountDetails(account);
+                                } else if (value == 'edit') {
+                                  _showError('Edit functionality coming soon!');
+                                } else if (value == 'delete') {
+                                  _deleteAccount(
+                                    account.id,
+                                    account.personName,
+                                  );
+                                }
+                              },
+                            ),
+                            onTap: () => _showAccountDetails(account),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
 
           // Summary Footer
@@ -328,9 +342,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: const Color(0xFFD7BE69).withOpacity(0.1),
-                border: Border(
-                  top: BorderSide(color: Colors.grey[300]!),
-                ),
+                border: Border(top: BorderSide(color: Colors.grey[300]!)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -344,9 +356,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                   ),
                   Text(
                     'Page $currentPage',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -432,9 +442,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
               ),
             ),
           ),
-          Expanded(
-            child: Text(value),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );

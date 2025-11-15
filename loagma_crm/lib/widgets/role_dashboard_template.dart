@@ -43,7 +43,47 @@ class RoleDashboardTemplate extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              Navigator.pushReplacementNamed(context, '/login');
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Confirm Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Logout cancelled'),
+                            backgroundColor: Colors.grey,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Logged out successfully'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          Navigator.pushReplacementNamed(context, '/login');
+                        });
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
             },
           ),
         ],
@@ -319,7 +359,47 @@ class RoleDashboardTemplate extends StatelessWidget {
             title: 'Logout',
             color: Colors.red[400]!,
             onTap: () {
-              Navigator.pushReplacementNamed(context, '/login');
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Confirm Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Logout cancelled'),
+                            backgroundColor: Colors.grey,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Logged out successfully'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          Navigator.pushReplacementNamed(context, '/login');
+                        });
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
             },
           ),
 

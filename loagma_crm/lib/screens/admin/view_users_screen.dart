@@ -125,7 +125,13 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                                 ),
                                 actions: [
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      Fluttertoast.showToast(
+                                        msg: "Delete cancelled",
+                                        backgroundColor: Colors.grey,
+                                      );
+                                    },
                                     child: const Text("Cancel"),
                                   ),
                                   TextButton(

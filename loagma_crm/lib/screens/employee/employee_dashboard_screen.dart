@@ -131,12 +131,55 @@ class EmployeeDashboardScreen extends StatelessWidget {
                 leading: const Icon(Icons.logout, color: Colors.red),
                 title: const Text('Logout'),
                 onTap: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Confirm Logout'),
+                      content: const Text('Are you sure you want to logout?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Logout cancelled'),
+                                backgroundColor: Colors.grey,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Logged out successfully'),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                            Future.delayed(
+                              const Duration(milliseconds: 500),
+                              () {
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const LoginScreen(),
+                                  ),
+                                  (route) => false,
+                                );
+                              },
+                            );
+                          },
+                          child: const Text('Logout'),
+                        ),
+                      ],
                     ),
-                    (route) => false,
                   );
                 },
               ),

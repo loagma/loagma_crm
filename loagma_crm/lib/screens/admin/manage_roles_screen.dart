@@ -144,7 +144,13 @@ class _ManageRolesScreenState extends State<ManageRolesScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              Fluttertoast.showToast(
+                msg: "Create cancelled",
+                backgroundColor: Colors.grey,
+              );
+            },
             child: const Text("Cancel"),
           ),
           TextButton(
@@ -172,7 +178,13 @@ class _ManageRolesScreenState extends State<ManageRolesScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              Fluttertoast.showToast(
+                msg: "Edit cancelled",
+                backgroundColor: Colors.grey,
+              );
+            },
             child: const Text("Cancel"),
           ),
           TextButton(
@@ -234,7 +246,13 @@ class _ManageRolesScreenState extends State<ManageRolesScreen> {
                                 content: const Text("Are you sure?"),
                                 actions: [
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      Fluttertoast.showToast(
+                                        msg: "Delete cancelled",
+                                        backgroundColor: Colors.grey,
+                                      );
+                                    },
                                     child: const Text("Cancel"),
                                   ),
                                   TextButton(
