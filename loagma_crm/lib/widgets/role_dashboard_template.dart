@@ -19,184 +19,216 @@ class RoleDashboardTemplate extends StatelessWidget {
     this.userContactNumber,
   });
 
+  Future<bool> _onWillPop(BuildContext context) async {
+    final shouldPop = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Exit'),
+        content: const Text('Are you sure you want to go back to login?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
+    return shouldPop ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = primaryColor ?? const Color(0xFFD7BE69);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(roleIcon, size: 24),
-            const SizedBox(width: 10),
-            Text('$roleDisplayName Dashboard'),
-          ],
-        ),
-        backgroundColor: color,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await _onWillPop(context);
+        if (shouldPop && context.mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Icon(roleIcon, size: 24),
+              const SizedBox(width: 10),
+              Text('$roleDisplayName Dashboard'),
+            ],
           ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Confirm Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Logout cancelled'),
-                            backgroundColor: Colors.grey,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Logged out successfully'),
-                            backgroundColor: Colors.green,
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                        Future.delayed(const Duration(milliseconds: 500), () {
-                          Navigator.pushReplacementNamed(context, '/login');
-                        });
-                      },
-                      child: const Text('Logout'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      drawer: _buildDrawer(context, color),
-      body: Column(
-        children: [
-          // Role Header Banner
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+          backgroundColor: color,
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(roleIcon, size: 40, color: Colors.white),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        roleDisplayName,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Confirm Logout'),
+                    content: const Text('Are you sure you want to logout?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Logout cancelled'),
+                              backgroundColor: Colors.grey,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: const Text('Cancel'),
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'Welcome to your dashboard',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
                         ),
+                        onPressed: () {
+                          Navigator.pop(context); // Close dialog
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Logged out successfully'),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                            Navigator.pushReplacementNamed(context, '/login');
+                          }
+                        },
+                        child: const Text('Logout'),
                       ),
                     ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          ),
-
-          // Dashboard Cards
-          Expanded(
-            child: cards.isEmpty
-                ? Center(
+          ],
+        ),
+        drawer: _buildDrawer(context, color),
+        body: Column(
+          children: [
+            // Role Header Banner
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color, color.withOpacity(0.7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Icon(roleIcon, size: 40, color: Colors.white),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.dashboard,
-                          size: 80,
-                          color: Colors.grey[300],
-                        ),
-                        const SizedBox(height: 20),
                         Text(
-                          'Dashboard Coming Soon',
-                          style: TextStyle(
-                            fontSize: 20,
-                            color: Colors.grey[600],
+                          roleDisplayName,
+                          style: const TextStyle(
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 5),
                         Text(
-                          'Features will be added here',
+                          'Welcome to your dashboard',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[500],
+                            color: Colors.white.withOpacity(0.9),
                           ),
                         ),
                       ],
                     ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 15,
-                            mainAxisSpacing: 15,
-                            childAspectRatio: 1.1,
-                          ),
-                      itemCount: cards.length,
-                      itemBuilder: (context, index) {
-                        final card = cards[index];
-                        return _buildDashboardCard(
-                          context,
-                          card.title,
-                          card.icon,
-                          card.onTap,
-                          color,
-                        );
-                      },
-                    ),
                   ),
-          ),
-        ],
+                ],
+              ),
+            ),
+
+            // Dashboard Cards
+            Expanded(
+              child: cards.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.dashboard,
+                            size: 80,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Dashboard Coming Soon',
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Features will be added here',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 15,
+                              mainAxisSpacing: 15,
+                              childAspectRatio: 1.1,
+                            ),
+                        itemCount: cards.length,
+                        itemBuilder: (context, index) {
+                          final card = cards[index];
+                          return _buildDashboardCard(
+                            context,
+                            card.title,
+                            card.icon,
+                            card.onTap,
+                            color,
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -383,17 +415,17 @@ class RoleDashboardTemplate extends StatelessWidget {
                         backgroundColor: Colors.red,
                       ),
                       onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Logged out successfully'),
-                            backgroundColor: Colors.green,
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                        Future.delayed(const Duration(milliseconds: 500), () {
+                        Navigator.pop(context); // Close dialog
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Logged out successfully'),
+                              backgroundColor: Colors.green,
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
                           Navigator.pushReplacementNamed(context, '/login');
-                        });
+                        }
                       },
                       child: const Text('Logout'),
                     ),
