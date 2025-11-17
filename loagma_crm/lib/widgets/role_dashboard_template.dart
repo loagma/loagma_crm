@@ -5,60 +5,137 @@ class RoleDashboardTemplate extends StatelessWidget {
   final String roleName;
   final String roleDisplayName;
   final IconData roleIcon;
-  final List<DashboardCard> cards;
+  final List<DashboardCard>? cards; // Now optional
   final Color? primaryColor;
   final String? userContactNumber;
+  
+  // Customizable sidebar content
+  final String? logoPath;
+  final double? logoWidth;
+  final double? logoHeight;
+  final String? appName;
+  final String? appVersion;
 
   const RoleDashboardTemplate({
     super.key,
     required this.roleName,
     required this.roleDisplayName,
     required this.roleIcon,
-    required this.cards,
+    this.cards, // Now optional - will auto-generate from menu
     this.primaryColor,
     this.userContactNumber,
+    this.logoPath,
+    this.logoWidth,
+    this.logoHeight,
+    this.appName,
+    this.appVersion,
   });
 
   // =========================
   // ROLE-BASED MENU MAP
   // =========================
   List<MenuItem> getRoleMenu(BuildContext context) {
-    return _roleMenuConfig(context)[roleName] ??
-        _roleMenuConfig(context)["DEFAULT"]!;
+    // Debug: Print the roleName to help troubleshoot
+    print('🔍 DEBUG: roleName = "$roleName"');
+    print('🔍 DEBUG: Available keys = ${_roleMenuConfig(context).keys.toList()}');
+    
+    final menu = _roleMenuConfig(context)[roleName];
+    if (menu == null) {
+      print('⚠️ WARNING: No menu found for role "$roleName", using DEFAULT');
+    }
+    
+    return menu ?? _roleMenuConfig(context)["DEFAULT"]!;
+  }
+
+  // =========================
+  // AUTO-GENERATE DASHBOARD CARDS FROM MENU
+  // =========================
+  List<DashboardCard> getDashboardCards(BuildContext context) {
+    // If cards are manually provided, use them
+    if (cards != null && cards!.isNotEmpty) {
+      return cards!;
+    }
+    
+    // Otherwise, auto-generate from menu items (excluding Dashboard item)
+    final menuItems = getRoleMenu(context);
+    return menuItems
+        .where((item) => item.title != "Dashboard") // Skip Dashboard menu item
+        .map((item) => DashboardCard(
+              title: item.title,
+              icon: item.icon,
+              onTap: item.onTap,
+            ))
+        .toList();
   }
 
   Map<String, List<MenuItem>> _roleMenuConfig(BuildContext context) => {
-        "ADMIN": [
+        // ========== ADMIN MENU ==========
+        "admin": [
           MenuItem(
             icon: Icons.dashboard_outlined,
             title: "Dashboard",
             onTap: () => Navigator.pop(context),
           ),
           MenuItem(
-            icon: Icons.badge_outlined,
-            title: "Employee Master",
+            icon: Icons.people_outline,
+            title: "User Management",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/admin/view-users');
+            },
+          ),
+          MenuItem(
+            icon: Icons.person_add_outlined,
+            title: "Create User",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/admin/create-user');
+            },
+          ),
+          MenuItem(
+            icon: Icons.admin_panel_settings_outlined,
+            title: "Manage Roles",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/admin/manage-roles');
+            },
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.settings_outlined,
+            title: "System Settings",
             onTap: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Employee Master - Coming Soon")),
+                const SnackBar(content: Text("System Settings - Coming Soon")),
               );
             },
           ),
           MenuItem(
-            icon: Icons.account_box_outlined,
-            title: "Account Master",
+            icon: Icons.analytics_outlined,
+            title: "Reports & Analytics",
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const AccountMasterScreen()),
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Reports - Coming Soon")),
               );
             },
           ),
         ],
 
-        "SALES": [
+        // ========== SALES MENU ==========
+        "sales": [
           MenuItem(
             icon: Icons.dashboard_outlined,
             title: "Dashboard",
@@ -76,22 +153,418 @@ class RoleDashboardTemplate extends StatelessWidget {
               );
             },
           ),
+          MenuItem(
+            icon: Icons.shopping_cart_outlined,
+            title: "Orders",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Orders - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.inventory_outlined,
+            title: "Products",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Products - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.bar_chart_outlined,
+            title: "Sales Reports",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Sales Reports - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.location_on_outlined,
+            title: "Territory",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Territory - Coming Soon")),
+              );
+            },
+          ),
         ],
 
-        "MARKETING": [
+    
+
+        // ========== MARKETING MENU ==========
+        "marketing": [
           MenuItem(
             icon: Icons.dashboard_outlined,
             title: "Dashboard",
             onTap: () => Navigator.pop(context),
           ),
+          MenuItem(
+            icon: Icons.campaign_outlined,
+            title: "Campaigns",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Campaigns - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.email_outlined,
+            title: "Email Marketing",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Email Marketing - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.trending_up_outlined,
+            title: "Social Media",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Social Media - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.insights_outlined,
+            title: "Marketing Analytics",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Marketing Analytics - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.content_paste_outlined,
+            title: "Content Library",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Content Library - Coming Soon")),
+              );
+            },
+          ),
         ],
 
-        // fallback
+        // ========== NSM (National Sales Manager) MENU ==========
+        "nsm": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.groups_outlined,
+            title: "Team Overview",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Team Overview - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.assessment_outlined,
+            title: "National Reports",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("National Reports - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.flag_outlined,
+            title: "Targets & Goals",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Targets & Goals - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.map_outlined,
+            title: "Regional Performance",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Regional Performance - Coming Soon")),
+              );
+            },
+          ),
+        ],
+
+        // ========== RSM (Regional Sales Manager) MENU ==========
+        "rsm": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.people_alt_outlined,
+            title: "My Team",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("My Team - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.location_city_outlined,
+            title: "Regional Reports",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Regional Reports - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.track_changes_outlined,
+            title: "Performance Tracking",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Performance Tracking - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.store_outlined,
+            title: "Territory Management",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Territory Management - Coming Soon")),
+              );
+            },
+          ),
+        ],
+
+        // ========== ASM (Area Sales Manager) MENU ==========
+        "asm": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.supervisor_account_outlined,
+            title: "Field Team",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Field Team - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.place_outlined,
+            title: "Area Coverage",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Area Coverage - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.checklist_outlined,
+            title: "Daily Activities",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Daily Activities - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.leaderboard_outlined,
+            title: "Area Performance",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Area Performance - Coming Soon")),
+              );
+            },
+          ),
+        ],
+
+        // ========== TSO (Territory Sales Officer) MENU ==========
+        "tso": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.add_business_outlined,
+            title: "New Orders",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("New Orders - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.route_outlined,
+            title: "My Route",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("My Route - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.check_circle_outline,
+            title: "Visit Checklist",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Visit Checklist - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.history_outlined,
+            title: "Visit History",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Visit History - Coming Soon")),
+              );
+            },
+          ),
+        ],
+        // ========== TELECALLER MENU ==========
+        "telecaller": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.call_outlined,
+            title: "Call Logs",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Call Logs - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.contacts_outlined,
+            title: "Lead Management",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Lead Management - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.assignment_outlined,
+            title: "Call Scripts",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Call Scripts - Coming Soon")),
+              );
+            },
+          ),
+        ],
+        // ========== DEFAULT FALLBACK ==========
         "DEFAULT": [
           MenuItem(
             icon: Icons.dashboard_outlined,
             title: "Dashboard",
             onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.info_outline,
+            title: "Help & Support",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Help & Support - Coming Soon")),
+              );
+            },
           ),
         ],
       };
@@ -206,13 +679,15 @@ class RoleDashboardTemplate extends StatelessWidget {
   // BODY
   // =========================
   Widget _buildBody(BuildContext context, Color color) {
+    final dashboardCards = getDashboardCards(context);
+    
     return Column(
       children: [
         _roleHeader(color),
         Expanded(
-          child: cards.isEmpty
+          child: dashboardCards.isEmpty
               ? _comingSoon()
-              : _dashboardGrid(context, color),
+              : _dashboardGrid(context, color, dashboardCards),
         ),
       ],
     );
@@ -290,7 +765,7 @@ class RoleDashboardTemplate extends StatelessWidget {
     );
   }
 
-  Widget _dashboardGrid(BuildContext context, Color color) {
+  Widget _dashboardGrid(BuildContext context, Color color, List<DashboardCard> dashboardCards) {
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: GridView.builder(
@@ -300,9 +775,9 @@ class RoleDashboardTemplate extends StatelessWidget {
           mainAxisSpacing: 15,
           childAspectRatio: 1.1,
         ),
-        itemCount: cards.length,
+        itemCount: dashboardCards.length,
         itemBuilder: (context, index) {
-          final card = cards[index];
+          final card = dashboardCards[index];
           return _buildDashboardCard(card, color);
         },
       ),
@@ -373,7 +848,7 @@ class RoleDashboardTemplate extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              'Version 1.0.0',
+              appVersion ?? 'Version 1.0.0',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ),
@@ -393,36 +868,52 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Image.asset('assets/logo.png', width: 170, height: 105),
+          // Customizable Logo
+          Image.asset(
+            logoPath ?? 'assets/logo.png',
+            width: logoWidth ?? 170,
+            height: logoHeight ?? 105,
+          ),
           const SizedBox(height: 12),
-          const Text(
-            'Loagma CRM',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          
+          // Customizable App Name
+          Text(
+            appName ?? 'Loagma CRM',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
           ),
           const SizedBox(height: 6),
+          
+          // Role Display Name
           Text(
             roleDisplayName,
             style: TextStyle(color: Colors.white.withOpacity(0.95)),
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.22),
-              borderRadius: BorderRadius.circular(18),
+          
+          // Contact Number Badge
+          if (userContactNumber != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.22),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.phone, size: 13, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(
+                    userContactNumber!,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.phone, size: 13, color: Colors.white),
-                const SizedBox(width: 6),
-                Text(
-                  userContactNumber ?? 'No Contact',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
