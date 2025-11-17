@@ -109,7 +109,9 @@ model User {
   nationality        String?
   postUnder          String?
   preferredLanguages String[]
-  accounts           Account[]
+  assignedAccounts   Account[]     @relation("AccountAssignedTo")
+  createdAccounts    Account[]     @relation("AccountCreatedBy")
+  approvedAccounts   Account[]     @relation("AccountApprovedBy")
   employeeArea       EmployeeArea?
   department         Department?   @relation(fields: [departmentId], references: [id])
   manager            User?         @relation("ManagerRelation", fields: [managerId], references: [id])
@@ -149,9 +151,15 @@ model Account {
   customerStage String?
   funnelStage   String?
   assignedToId  String?
+  createdById   String?
+  approvedById  String?
+  approvedAt    DateTime?
+  isApproved    Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   areaId        Int?
   area          Area?     @relation(fields: [areaId], references: [area_id])
-  assignedTo    User?     @relation(fields: [assignedToId], references: [id])
+  assignedTo    User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
+  createdBy     User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
+  approvedBy    User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
 }

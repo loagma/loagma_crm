@@ -12,6 +12,8 @@ export const getAllAccounts = async (req, res) => {
       assignedToId, 
       customerStage, 
       funnelStage,
+      isApproved,
+      createdById,
       search,
       page = 1,
       limit = 50
@@ -19,10 +21,12 @@ export const getAllAccounts = async (req, res) => {
 
     const where = {};
     
-    if (areaId) where.areaId = areaId;
+    if (areaId) where.areaId = parseInt(areaId);
     if (assignedToId) where.assignedToId = assignedToId;
     if (customerStage) where.customerStage = customerStage;
     if (funnelStage) where.funnelStage = funnelStage;
+    if (isApproved !== undefined) where.isApproved = isApproved === 'true';
+    if (createdById) where.createdById = createdById;
     
     if (search) {
       where.OR = [
@@ -46,7 +50,24 @@ export const getAllAccounts = async (req, res) => {
             select: {
               id: true,
               name: true,
-              contactNumber: true
+              contactNumber: true,
+              roleId: true
+            }
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              contactNumber: true,
+              roleId: true
+            }
+          },
+          approvedBy: {
+            select: {
+              id: true,
+              name: true,
+              contactNumber: true,
+              roleId: true
             }
           },
           area: {
@@ -57,8 +78,12 @@ export const getAllAccounts = async (req, res) => {
                     include: {
                       district: {
                         include: {
-                          state: {
-                            include: { country: true }
+                          region: {
+                            include: {
+                              state: {
+                                include: { country: true }
+                              }
+                            }
                           }
                         }
                       }
@@ -84,6 +109,7 @@ export const getAllAccounts = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Get all accounts error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -100,7 +126,26 @@ export const getAccountById = async (req, res) => {
             id: true,
             name: true,
             contactNumber: true,
-            email: true
+            email: true,
+            roleId: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true,
+            email: true,
+            roleId: true
+          }
+        },
+        approvedBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true,
+            email: true,
+            roleId: true
           }
         },
         area: {
@@ -111,8 +156,12 @@ export const getAccountById = async (req, res) => {
                   include: {
                     district: {
                       include: {
-                        state: {
-                          include: { country: true }
+                        region: {
+                          include: {
+                            state: {
+                              include: { country: true }
+                            }
+                          }
                         }
                       }
                     }
@@ -131,6 +180,7 @@ export const getAccountById = async (req, res) => {
 
     res.json({ success: true, data: account });
   } catch (error) {
+    console.error('Get account by ID error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -145,7 +195,8 @@ export const createAccount = async (req, res) => {
       customerStage,
       funnelStage,
       assignedToId,
-      areaId
+      areaId,
+      createdById
     } = req.body;
 
     // Validation
@@ -156,8 +207,31 @@ export const createAccount = async (req, res) => {
       });
     }
 
+    // Validate contact number format (10 digits)
+    if (!/^\d{10}$/.test(contactNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Contact number must be exactly 10 digits'
+      });
+    }
+
+    // Check if contact number already exists
+    const existingAccount = await prisma.account.findFirst({
+      where: { contactNumber }
+    });
+
+    if (existingAccount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Account with this contact number already exists'
+      });
+    }
+
     // Generate unique account code
     const accountCode = await generateAccountCode();
+
+    // Get user ID from auth middleware (req.user.id)
+    const userId = req.user?.id || createdById;
 
     const account = await prisma.account.create({
       data: {
@@ -170,14 +244,25 @@ export const createAccount = async (req, res) => {
         customerStage,
         funnelStage,
         assignedToId,
-        areaId
+        areaId: areaId ? parseInt(areaId) : null,
+        createdById: userId,
+        isApproved: false
       },
       include: {
         assignedTo: {
           select: {
             id: true,
             name: true,
-            contactNumber: true
+            contactNumber: true,
+            roleId: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true,
+            roleId: true
           }
         },
         area: {
@@ -192,8 +277,13 @@ export const createAccount = async (req, res) => {
       }
     });
 
-    res.status(201).json({ success: true, data: account });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Account created successfully',
+      data: account 
+    });
   } catch (error) {
+    console.error('Create account error:', error);
     if (error.code === 'P2002') {
       return res.status(400).json({
         success: false,
@@ -218,6 +308,43 @@ export const updateAccount = async (req, res) => {
       areaId
     } = req.body;
 
+    // Check if account exists
+    const existingAccount = await prisma.account.findUnique({
+      where: { id }
+    });
+
+    if (!existingAccount) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Account not found' 
+      });
+    }
+
+    // If updating contact number, check for duplicates
+    if (contactNumber && contactNumber !== existingAccount.contactNumber) {
+      const duplicate = await prisma.account.findFirst({
+        where: { 
+          contactNumber,
+          id: { not: id }
+        }
+      });
+
+      if (duplicate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contact number already exists for another account'
+        });
+      }
+
+      // Validate contact number format
+      if (!/^\d{10}$/.test(contactNumber)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contact number must be exactly 10 digits'
+        });
+      }
+    }
+
     const updateData = {};
     
     if (personName !== undefined) updateData.personName = personName;
@@ -227,7 +354,7 @@ export const updateAccount = async (req, res) => {
     if (customerStage !== undefined) updateData.customerStage = customerStage;
     if (funnelStage !== undefined) updateData.funnelStage = funnelStage;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
-    if (areaId !== undefined) updateData.areaId = areaId;
+    if (areaId !== undefined) updateData.areaId = areaId ? parseInt(areaId) : null;
 
     const account = await prisma.account.update({
       where: { id },
@@ -237,7 +364,24 @@ export const updateAccount = async (req, res) => {
           select: {
             id: true,
             name: true,
-            contactNumber: true
+            contactNumber: true,
+            roleId: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true,
+            roleId: true
+          }
+        },
+        approvedBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true,
+            roleId: true
           }
         },
         area: {
@@ -252,8 +396,13 @@ export const updateAccount = async (req, res) => {
       }
     });
 
-    res.json({ success: true, data: account });
+    res.json({ 
+      success: true, 
+      message: 'Account updated successfully',
+      data: account 
+    });
   } catch (error) {
+    console.error('Update account error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ success: false, message: 'Account not found' });
     }
@@ -265,12 +414,124 @@ export const deleteAccount = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check if account exists
+    const existingAccount = await prisma.account.findUnique({
+      where: { id }
+    });
+
+    if (!existingAccount) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Account not found' 
+      });
+    }
+
     await prisma.account.delete({
       where: { id }
     });
 
-    res.json({ success: true, message: 'Account deleted successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Account deleted successfully' 
+    });
   } catch (error) {
+    console.error('Delete account error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== APPROVAL OPERATIONS ====================
+
+export const approveAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const approvedById = req.user?.id || req.body.approvedById;
+
+    if (!approvedById) {
+      return res.status(400).json({
+        success: false,
+        message: 'Approver ID is required'
+      });
+    }
+
+    const account = await prisma.account.update({
+      where: { id },
+      data: {
+        isApproved: true,
+        approvedById,
+        approvedAt: new Date()
+      },
+      include: {
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true
+          }
+        },
+        approvedBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Account approved successfully',
+      data: account 
+    });
+  } catch (error) {
+    console.error('Approve account error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const rejectAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const account = await prisma.account.update({
+      where: { id },
+      data: {
+        isApproved: false,
+        approvedById: null,
+        approvedAt: null
+      },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            contactNumber: true
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Account approval rejected',
+      data: account 
+    });
+  } catch (error) {
+    console.error('Reject account error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ success: false, message: 'Account not found' });
     }
@@ -307,19 +568,30 @@ async function generateAccountCode() {
 
 export const getAccountStats = async (req, res) => {
   try {
-    const { assignedToId, areaId } = req.query;
+    const { assignedToId, areaId, createdById } = req.query;
     const where = {};
     
     if (assignedToId) where.assignedToId = assignedToId;
-    if (areaId) where.areaId = areaId;
+    if (areaId) where.areaId = parseInt(areaId);
+    if (createdById) where.createdById = createdById;
 
     const [
       totalAccounts,
+      approvedAccounts,
+      pendingAccounts,
       byCustomerStage,
       byFunnelStage,
       recentAccounts
     ] = await Promise.all([
       prisma.account.count({ where }),
+      
+      prisma.account.count({ 
+        where: { ...where, isApproved: true } 
+      }),
+      
+      prisma.account.count({ 
+        where: { ...where, isApproved: false } 
+      }),
       
       prisma.account.groupBy({
         by: ['customerStage'],
@@ -343,7 +615,14 @@ export const getAccountStats = async (req, res) => {
           personName: true,
           contactNumber: true,
           customerStage: true,
-          createdAt: true
+          isApproved: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              name: true,
+              roleId: true
+            }
+          }
         }
       })
     ]);
@@ -352,12 +631,15 @@ export const getAccountStats = async (req, res) => {
       success: true,
       data: {
         totalAccounts,
+        approvedAccounts,
+        pendingAccounts,
         byCustomerStage,
         byFunnelStage,
         recentAccounts
       }
     });
   } catch (error) {
+    console.error('Get account stats error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -390,6 +672,48 @@ export const bulkAssignAccounts = async (req, res) => {
       count: result.count
     });
   } catch (error) {
+    console.error('Bulk assign accounts error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const bulkApproveAccounts = async (req, res) => {
+  try {
+    const { accountIds } = req.body;
+    const approvedById = req.user?.id || req.body.approvedById;
+
+    if (!accountIds || !Array.isArray(accountIds) || accountIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'accountIds array is required'
+      });
+    }
+
+    if (!approvedById) {
+      return res.status(400).json({
+        success: false,
+        message: 'Approver ID is required'
+      });
+    }
+
+    const result = await prisma.account.updateMany({
+      where: {
+        id: { in: accountIds }
+      },
+      data: {
+        isApproved: true,
+        approvedById,
+        approvedAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `${result.count} accounts approved successfully`,
+      count: result.count
+    });
+  } catch (error) {
+    console.error('Bulk approve accounts error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

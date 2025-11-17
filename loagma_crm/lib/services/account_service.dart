@@ -1,10 +1,33 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/account_model.dart';
 import 'api_config.dart';
 
 class AccountService {
-  // Create Account
+  // Get auth token from shared preferences
+  static Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  // Get user ID from shared preferences
+  static Future<String?> _getUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_id');
+  }
+
+  // Get headers with auth token
+  static Future<Map<String, String>> _getHeaders() async {
+    final token = await _getToken();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  // ==================== CREATE ====================
+  
   static Future<Account> createAccount({
     required String personName,
     required String contactNumber,
@@ -16,9 +39,12 @@ class AccountService {
     int? areaId,
   }) async {
     try {
+      final userId = await _getUserId();
+      final headers = await _getHeaders();
+
       final response = await http.post(
         Uri.parse(ApiConfig.accountsUrl),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: json.encode({
           'personName': personName,
           'contactNumber': contactNumber,
@@ -28,6 +54,7 @@ class AccountService {
           if (funnelStage != null) 'funnelStage': funnelStage,
           if (assignedToId != null) 'assignedToId': assignedToId,
           if (areaId != null) 'areaId': areaId,
+          if (userId != null) 'createdById': userId,
         }),
       );
 
@@ -44,17 +71,21 @@ class AccountService {
     }
   }
 
-  // Fetch All Accounts
-  static Future<List<Account>> fetchAccounts({
+  // ==================== READ ====================
+  
+  static Future<Map<String, dynamic>> fetchAccounts({
     int page = 1,
     int limit = 50,
     String? areaId,
     String? assignedToId,
     String? customerStage,
     String? funnelStage,
+    bool? isApproved,
+    String? createdById,
     String? search,
   }) async {
     try {
+      final headers = await _getHeaders();
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
@@ -62,6 +93,8 @@ class AccountService {
         if (assignedToId != null) 'assignedToId': assignedToId,
         if (customerStage != null) 'customerStage': customerStage,
         if (funnelStage != null) 'funnelStage': funnelStage,
+        if (isApproved != null) 'isApproved': isApproved.toString(),
+        if (createdById != null) 'createdById': createdById,
         if (search != null) 'search': search,
       };
 
@@ -69,13 +102,16 @@ class AccountService {
         queryParameters: queryParams,
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return (data['data'] as List)
-            .map((json) => Account.fromJson(json))
-            .toList();
+        return {
+          'accounts': (data['data'] as List)
+              .map((json) => Account.fromJson(json))
+              .toList(),
+          'pagination': data['pagination'],
+        };
       }
       throw Exception('Failed to load accounts');
     } catch (e) {
@@ -84,11 +120,12 @@ class AccountService {
     }
   }
 
-  // Fetch Account by ID
   static Future<Account> fetchAccountById(String id) async {
     try {
+      final headers = await _getHeaders();
       final response = await http.get(
         Uri.parse('${ApiConfig.accountsUrl}/$id'),
+        headers: headers,
       );
 
       if (response.statusCode == 200) {
@@ -102,13 +139,17 @@ class AccountService {
     }
   }
 
-  // Update Account
+  // ==================== UPDATE ====================
+  
   static Future<Account> updateAccount(
-      String id, Map<String, dynamic> updates) async {
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
     try {
+      final headers = await _getHeaders();
       final response = await http.put(
         Uri.parse('${ApiConfig.accountsUrl}/$id'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: json.encode(updates),
       );
 
@@ -125,18 +166,162 @@ class AccountService {
     }
   }
 
-  // Delete Account
+  // ==================== DELETE ====================
+  
   static Future<void> deleteAccount(String id) async {
     try {
+      final headers = await _getHeaders();
       final response = await http.delete(
         Uri.parse('${ApiConfig.accountsUrl}/$id'),
+        headers: headers,
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Failed to delete account');
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to delete account');
       }
     } catch (e) {
       print('Error deleting account: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== APPROVAL ====================
+  
+  static Future<Account> approveAccount(String id) async {
+    try {
+      final userId = await _getUserId();
+      final headers = await _getHeaders();
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/$id/approve'),
+        headers: headers,
+        body: json.encode({
+          if (userId != null) 'approvedById': userId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Account.fromJson(data['data']);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to approve account');
+      }
+    } catch (e) {
+      print('Error approving account: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Account> rejectAccount(String id) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/$id/reject'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Account.fromJson(data['data']);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to reject account');
+      }
+    } catch (e) {
+      print('Error rejecting account: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== STATISTICS ====================
+  
+  static Future<Map<String, dynamic>> getAccountStats({
+    String? assignedToId,
+    String? areaId,
+    String? createdById,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final queryParams = {
+        if (assignedToId != null) 'assignedToId': assignedToId,
+        if (areaId != null) 'areaId': areaId,
+        if (createdById != null) 'createdById': createdById,
+      };
+
+      final uri = Uri.parse('${ApiConfig.accountsUrl}/stats').replace(
+        queryParameters: queryParams,
+      );
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['data'];
+      }
+      throw Exception('Failed to load account stats');
+    } catch (e) {
+      print('Error fetching account stats: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== BULK OPERATIONS ====================
+  
+  static Future<int> bulkAssignAccounts({
+    required List<String> accountIds,
+    required String assignedToId,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/bulk/assign'),
+        headers: headers,
+        body: json.encode({
+          'accountIds': accountIds,
+          'assignedToId': assignedToId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['count'];
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to assign accounts');
+      }
+    } catch (e) {
+      print('Error bulk assigning accounts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<int> bulkApproveAccounts({
+    required List<String> accountIds,
+  }) async {
+    try {
+      final userId = await _getUserId();
+      final headers = await _getHeaders();
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/bulk/approve'),
+        headers: headers,
+        body: json.encode({
+          'accountIds': accountIds,
+          if (userId != null) 'approvedById': userId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['count'];
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to approve accounts');
+      }
+    } catch (e) {
+      print('Error bulk approving accounts: $e');
       rethrow;
     }
   }

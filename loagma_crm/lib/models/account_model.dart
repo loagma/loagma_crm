@@ -8,9 +8,19 @@ class Account {
   final String? customerStage;
   final String? funnelStage;
   final String? assignedToId;
+  final String? createdById;
+  final String? approvedById;
+  final DateTime? approvedAt;
+  final bool isApproved;
   final int? areaId;
   final DateTime createdAt;
   final DateTime updatedAt;
+  
+  // Related objects
+  final Map<String, dynamic>? assignedTo;
+  final Map<String, dynamic>? createdBy;
+  final Map<String, dynamic>? approvedBy;
+  final Map<String, dynamic>? area;
 
   Account({
     required this.id,
@@ -22,9 +32,17 @@ class Account {
     this.customerStage,
     this.funnelStage,
     this.assignedToId,
+    this.createdById,
+    this.approvedById,
+    this.approvedAt,
+    this.isApproved = false,
     this.areaId,
     required this.createdAt,
     required this.updatedAt,
+    this.assignedTo,
+    this.createdBy,
+    this.approvedBy,
+    this.area,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
@@ -40,9 +58,19 @@ class Account {
       customerStage: json['customerStage'],
       funnelStage: json['funnelStage'],
       assignedToId: json['assignedToId'],
+      createdById: json['createdById'],
+      approvedById: json['approvedById'],
+      approvedAt: json['approvedAt'] != null 
+          ? DateTime.parse(json['approvedAt']) 
+          : null,
+      isApproved: json['isApproved'] ?? false,
       areaId: json['areaId'],
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
+      assignedTo: json['assignedTo'],
+      createdBy: json['createdBy'],
+      approvedBy: json['approvedBy'],
+      area: json['area'],
     );
   }
 
@@ -55,7 +83,13 @@ class Account {
       if (customerStage != null) 'customerStage': customerStage,
       if (funnelStage != null) 'funnelStage': funnelStage,
       if (assignedToId != null) 'assignedToId': assignedToId,
+      if (createdById != null) 'createdById': createdById,
       if (areaId != null) 'areaId': areaId,
     };
   }
+
+  String get createdByName => createdBy?['name'] ?? 'Unknown';
+  String get approvedByName => approvedBy?['name'] ?? 'Not Approved';
+  String get assignedToName => assignedTo?['name'] ?? 'Unassigned';
+  String get areaName => area?['area_name'] ?? 'No Area';
 }
