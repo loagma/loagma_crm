@@ -23,58 +23,15 @@ class AdminDashboardScreen extends StatelessWidget {
       roleIcon: Icons.admin_panel_settings,
       primaryColor: const Color(0xFFD7BE69), // Gold
       userContactNumber: userContactNumber,
-      cards: [
-        DashboardCard(
-          title: 'Create User',
-          icon: Icons.person_add,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AdminCreateUserScreen(),
-            ),
-          ),
-        ),
-        DashboardCard(
-          title: 'View Users',
-          icon: Icons.people,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AdminViewUsersScreen(),
-            ),
-          ),
-        ),
-        DashboardCard(
-          title: 'Manage Roles',
-          icon: Icons.admin_panel_settings,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ManageRolesScreen()),
-          ),
-        ),
-        DashboardCard(
-          title: 'Employee Master',
-          icon: Icons.badge,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Employee Master - Coming Soon'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-        DashboardCard(
-          title: 'Account Master',
-          icon: Icons.account_box,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AccountMasterScreen(),
-            ),
-          ),
-        ),
-      ],
+      
+      // Customize sidebar content here
+      logoPath: 'assets/logo.png',
+      logoWidth: 170,
+      logoHeight: 105,
+      appName: 'Loagma CRM',
+      appVersion: 'Version 1.0.2',
+      
+      // Cards will be auto-generated from sidebar menu
     );
   }
 }

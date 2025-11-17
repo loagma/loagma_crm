@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/role_dashboard_template.dart';
+import '../shared/account_master_screen.dart';
 
 class RsmDashboardScreen extends StatelessWidget {
   final String? userRole;
@@ -15,9 +16,7 @@ class RsmDashboardScreen extends StatelessWidget {
       roleIcon: Icons.map,
       primaryColor: const Color(0xFFD7BE69), // Gold
       userContactNumber: userContactNumber,
-      cards: [
-        // Add RSM specific cards here when features are ready
-      ],
+      // Cards will be auto-generated from sidebar menu
     );
   }
 }
