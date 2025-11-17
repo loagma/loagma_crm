@@ -19,6 +19,86 @@ class RoleDashboardTemplate extends StatelessWidget {
     this.userContactNumber,
   });
 
+  // =========================
+  // ROLE-BASED MENU MAP
+  // =========================
+  List<MenuItem> getRoleMenu(BuildContext context) {
+    return _roleMenuConfig(context)[roleName] ??
+        _roleMenuConfig(context)["DEFAULT"]!;
+  }
+
+  Map<String, List<MenuItem>> _roleMenuConfig(BuildContext context) => {
+        "ADMIN": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.badge_outlined,
+            title: "Employee Master",
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Employee Master - Coming Soon")),
+              );
+            },
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+        ],
+
+        "SALES": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+          MenuItem(
+            icon: Icons.account_box_outlined,
+            title: "Account Master",
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const AccountMasterScreen()),
+              );
+            },
+          ),
+        ],
+
+        "MARKETING": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+        ],
+
+        // fallback
+        "DEFAULT": [
+          MenuItem(
+            icon: Icons.dashboard_outlined,
+            title: "Dashboard",
+            onTap: () => Navigator.pop(context),
+          ),
+        ],
+      };
+
+  // =========================
+  // EXIT HANDLER
+  // =========================
   Future<bool> _onWillPop(BuildContext context) async {
     final shouldPop = await showDialog<bool>(
       context: context,
@@ -55,401 +135,290 @@ class RoleDashboardTemplate extends StatelessWidget {
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Row(
-            children: [
-              Icon(roleIcon, size: 24),
-              const SizedBox(width: 10),
-              Text('$roleDisplayName Dashboard'),
-            ],
-          ),
-          backgroundColor: color,
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Confirm Logout'),
-                    content: const Text('Are you sure you want to logout?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Logout cancelled'),
-                              backgroundColor: Colors.grey,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context); // Close dialog
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Logged out successfully'),
-                                backgroundColor: Colors.green,
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                            Navigator.pushReplacementNamed(context, '/login');
-                          }
-                        },
-                        child: const Text('Logout'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+        appBar: _buildAppBar(context, color),
         drawer: _buildDrawer(context, color),
-        body: Column(
-          children: [
-            // Role Header Banner
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color, color.withOpacity(0.7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Icon(roleIcon, size: 40, color: Colors.white),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          roleDisplayName,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          'Welcome to your dashboard',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Dashboard Cards
-            Expanded(
-              child: cards.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.dashboard,
-                            size: 80,
-                            color: Colors.grey[300],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Dashboard Coming Soon',
-                            style: TextStyle(
-                              fontSize: 20,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Features will be added here',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 15,
-                              mainAxisSpacing: 15,
-                              childAspectRatio: 1.1,
-                            ),
-                        itemCount: cards.length,
-                        itemBuilder: (context, index) {
-                          final card = cards[index];
-                          return _buildDashboardCard(
-                            context,
-                            card.title,
-                            card.icon,
-                            card.onTap,
-                            color,
-                          );
-                        },
-                      ),
-                    ),
-            ),
-          ],
-        ),
+        body: _buildBody(context, color),
       ),
     );
   }
 
-  Widget _buildDrawer(BuildContext context, Color color) {
-    return Drawer(
-      child: Column(
+  // =========================
+  // APP BAR
+  // =========================
+  AppBar _buildAppBar(BuildContext context, Color color) {
+    return AppBar(
+      title: Row(
         children: [
-          // Improved Header with Logo
+          Icon(roleIcon, size: 24),
+          const SizedBox(width: 10),
+          Text('$roleDisplayName Dashboard'),
+        ],
+      ),
+      backgroundColor: color,
+      leading: Builder(
+        builder: (context) => IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.logout),
+          onPressed: () => _handleLogout(context),
+        ),
+      ],
+    );
+  }
+
+  void _handleLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Logout cancelled'),
+                  backgroundColor: Colors.grey,
+                ),
+              );
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/login');
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================
+  // BODY
+  // =========================
+  Widget _buildBody(BuildContext context, Color color) {
+    return Column(
+      children: [
+        _roleHeader(color),
+        Expanded(
+          child: cards.isEmpty
+              ? _comingSoon()
+              : _dashboardGrid(context, color),
+        ),
+      ],
+    );
+  }
+
+  Widget _roleHeader(Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Row(
+        children: [
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 35, 20, 20),
+            padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.85)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(15),
             ),
+            child: Icon(roleIcon, size: 40, color: Colors.white),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Logo Section
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  child: Image.asset(
-                    'assets/logo.png',
-                    width: 170,
-                    height: 105,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // CRM Title
-                const Text(
-                  'Loagma CRM',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Role Display
                 Text(
                   roleDisplayName,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.95),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 10),
-                // Contact Number Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.22),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.phone,
-                        size: 13,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        userContactNumber ?? '1111111111',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.92),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 5),
+                Text(
+                  'Welcome to your dashboard',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.9),
                   ),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          // Menu Items
+  Widget _comingSoon() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.dashboard, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 20),
+          Text(
+            'Dashboard Coming Soon',
+            style: TextStyle(
+                fontSize: 20, color: Colors.grey[600], fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Features will be added here',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dashboardGrid(BuildContext context, Color color) {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          childAspectRatio: 1.1,
+        ),
+        itemCount: cards.length,
+        itemBuilder: (context, index) {
+          final card = cards[index];
+          return _buildDashboardCard(card, color);
+        },
+      ),
+    );
+  }
+
+  Widget _buildDashboardCard(DashboardCard card, Color color) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: InkWell(
+        onTap: card.onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(card.icon, size: 40, color: color),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                card.title,
+                style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // DRAWER (ROLE-BASED)
+  // =========================
+  Widget _buildDrawer(BuildContext context, Color color) {
+    final menuItems = getRoleMenu(context);
+
+    return Drawer(
+      child: Column(
+        children: [
+          _drawerHeader(color),
           const SizedBox(height: 8),
-          _buildMenuItem(
-            context,
-            icon: Icons.dashboard_outlined,
-            title: 'Dashboard',
-            color: color,
-            onTap: () => Navigator.pop(context),
-          ),
-          _buildMenuItem(
-            context,
-            icon: Icons.badge_outlined,
-            title: 'Employee Master',
-            color: color,
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Employee Master - Coming Soon'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-          _buildMenuItem(
-            context,
-            icon: Icons.account_box_outlined,
-            title: 'Account Master',
-            color: color,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AccountMasterScreen(),
-                ),
-              );
-            },
-          ),
 
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Divider(height: 1),
-          ),
-
-          _buildMenuItem(
-            context,
-            icon: Icons.settings_outlined,
-            title: 'Settings',
-            color: Colors.grey[600]!,
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Settings coming soon'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
+          // DYNAMIC ROLE-BASED MENU
+          ...menuItems.map((item) =>
+              _buildMenuItem(context, icon: item.icon, title: item.title, color: color, onTap: item.onTap)),
 
           const Spacer(),
 
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Divider(height: 1),
-          ),
-
+          // Logout Button
           _buildMenuItem(
             context,
             icon: Icons.logout_outlined,
             title: 'Logout',
-            color: Colors.red[400]!,
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Confirm Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Logout cancelled'),
-                            backgroundColor: Colors.grey,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context); // Close dialog
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Logged out successfully'),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                          Navigator.pushReplacementNamed(context, '/login');
-                        }
-                      },
-                      child: const Text('Logout'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            color: Colors.red,
+            onTap: () => _handleLogout(context),
           ),
 
-          // Version Info
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Version 1.0.0',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _drawerHeader(Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 35, 20, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withOpacity(0.85)],
+        ),
+      ),
+      child: Column(
+        children: [
+          Image.asset('assets/logo.png', width: 170, height: 105),
+          const SizedBox(height: 12),
+          const Text(
+            'Loagma CRM',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            roleDisplayName,
+            style: TextStyle(color: Colors.white.withOpacity(0.95)),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.22),
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
+                Icon(Icons.phone, size: 13, color: Colors.white),
                 const SizedBox(width: 6),
                 Text(
-                  'Version 1.0.0',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
+                  userContactNumber ?? 'No Contact',
+                  style: const TextStyle(color: Colors.white),
                 ),
               ],
             ),
@@ -467,68 +436,36 @@ class RoleDashboardTemplate extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon, color: color, size: 22),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-      ),
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Icon(icon, color: color),
+      title: Text(title),
       onTap: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      hoverColor: color.withOpacity(0.1),
-    );
-  }
-
-  Widget _buildDashboardCard(
-    BuildContext context,
-    String title,
-    IconData icon,
-    VoidCallback onTap,
-    Color color,
-  ) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 40, color: color),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
 
+// =========================
+// DATA MODELS
+// =========================
 class DashboardCard {
   final String title;
   final IconData icon;
   final VoidCallback onTap;
 
-  DashboardCard({required this.title, required this.icon, required this.onTap});
+  DashboardCard({
+    required this.title,
+    required this.icon,
+    required this.onTap,
+  });
+}
+
+class MenuItem {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  MenuItem({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
 }
