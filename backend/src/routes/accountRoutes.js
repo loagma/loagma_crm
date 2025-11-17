@@ -5,21 +5,30 @@ import {
   createAccount,
   updateAccount,
   deleteAccount,
+  approveAccount,
+  rejectAccount,
   getAccountStats,
-  bulkAssignAccounts
+  bulkAssignAccounts,
+  bulkApproveAccounts
 } from '../controllers/accountController.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // ==================== ACCOUNT ROUTES ====================
-router.get('/', getAllAccounts);
-router.get('/stats', getAccountStats);
-router.get('/:id', getAccountById);
-router.post('/', createAccount);
-router.put('/:id', updateAccount);
-router.delete('/:id', deleteAccount);
+router.get('/', authenticateToken, getAllAccounts);
+router.get('/stats', authenticateToken, getAccountStats);
+router.get('/:id', authenticateToken, getAccountById);
+router.post('/', authenticateToken, createAccount);
+router.put('/:id', authenticateToken, updateAccount);
+router.delete('/:id', authenticateToken, deleteAccount);
+
+// ==================== APPROVAL ROUTES ====================
+router.post('/:id/approve', authenticateToken, approveAccount);
+router.post('/:id/reject', authenticateToken, rejectAccount);
 
 // ==================== BULK OPERATIONS ====================
-router.post('/bulk/assign', bulkAssignAccounts);
+router.post('/bulk/assign', authenticateToken, bulkAssignAccounts);
+router.post('/bulk/approve', authenticateToken, bulkApproveAccounts);
 
 export default router;
