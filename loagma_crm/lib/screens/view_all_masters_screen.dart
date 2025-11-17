@@ -37,7 +37,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
             : null,
       );
       setState(() {
-        accounts = data;
+        accounts = data['accounts'] as List<Account>;
         isLoading = false;
       });
     } catch (e) {

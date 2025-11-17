@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/location_service.dart';
 import '../../services/account_service.dart';
+import '../view_all_masters_screen.dart';
 
 class AccountMasterScreen extends StatefulWidget {
   const AccountMasterScreen({super.key});
@@ -268,6 +269,20 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       appBar: AppBar(
         title: const Text('Account Master'),
         backgroundColor: const Color(0xFFD7BE69),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.list_alt),
+            tooltip: 'View All Accounts',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ViewAllMastersScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
