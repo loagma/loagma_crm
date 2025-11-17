@@ -21,12 +21,48 @@ class _LoginScreenState extends State<LoginScreen> {
   bool isLoadingRoles = false;
   String? selectedDevRole;
   List<Map<String, dynamic>> roles = [];
+  bool showDevMode = kDebugMode; // Show in debug mode by default
+  int logoTapCount = 0;
+  Timer? _tapResetTimer;
 
   @override
   void initState() {
     super.initState();
     if (kDebugMode) {
       _loadRoles();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tapResetTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onLogoTap() {
+    setState(() {
+      logoTapCount++;
+    });
+
+    // Reset tap count after 3 seconds of no taps
+    _tapResetTimer?.cancel();
+    _tapResetTimer = Timer(const Duration(seconds: 3), () {
+      setState(() {
+        logoTapCount = 0;
+      });
+    });
+
+    // Enable dev mode after 5 taps
+    if (logoTapCount >= 5 && !showDevMode) {
+      setState(() {
+        showDevMode = true;
+      });
+      _loadRoles();
+      Fluttertoast.showToast(
+        msg: "Dev Mode Enabled! 🔧",
+        backgroundColor: Colors.green,
+        toastLength: Toast.LENGTH_LONG,
+      );
     }
   }
 
@@ -167,8 +203,15 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Logo
-                Image.asset('assets/logo.png', width: 120, height: 120),
+                // Logo (tap 5 times to enable dev mode)
+                GestureDetector(
+                  onTap: _onLogoTap,
+                  child: Image.asset(
+                    'assets/logo.png',
+                    width: 120,
+                    height: 120,
+                  ),
+                ),
                 const SizedBox(height: 20),
 
                 // Title
@@ -218,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 // Development Skip Button with Role Selection
-                if (kDebugMode) ...[
+                if (showDevMode) ...[
                   const SizedBox(height: 20),
                   const Divider(),
                   const SizedBox(height: 10),
