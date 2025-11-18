@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../screens/shared/account_master_screen.dart';
+import '../screens/admin/view_users_screen.dart';
+import '../screens/admin/create_user_screen.dart';
+import '../screens/admin/manage_roles_screen.dart';
 import '../screens/view_all_masters_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
@@ -86,7 +89,12 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: "User Management",
         onTap: () {
           Navigator.pop(context);
-          Navigator.pushNamed(context, '/admin/view-users');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminViewUsersScreen(),
+            ),
+          );
         },
       ),
       MenuItem(
@@ -94,7 +102,12 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: "Create User",
         onTap: () {
           Navigator.pop(context);
-          Navigator.pushNamed(context, '/admin/create-user');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminCreateUserScreen(),
+            ),
+          );
         },
       ),
       MenuItem(
@@ -102,7 +115,12 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: "Manage Roles",
         onTap: () {
           Navigator.pop(context);
-          Navigator.pushNamed(context, '/admin/manage-roles');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ManageRolesScreen(),
+            ),
+          );
         },
       ),
       MenuItem(
@@ -621,14 +639,34 @@ class RoleDashboardTemplate extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = primaryColor ?? const Color(0xFFD7BE69);
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        final shouldPop = await _onWillPop(context);
-        if (shouldPop && context.mounted) {
+    return WillPopScope(
+      onWillPop: () async {
+        // Show confirmation dialog
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exit App'),
+            content: const Text('Do you want to exit the app?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        
+        // If user confirmed exit, go back to login
+        if (shouldExit == true && context.mounted) {
           Navigator.pushReplacementNamed(context, '/login');
+          return false;
         }
+        return false;
       },
       child: Scaffold(
         appBar: _buildAppBar(context, color),
@@ -651,13 +689,44 @@ class RoleDashboardTemplate extends StatelessWidget {
         ],
       ),
       backgroundColor: color,
-      leading: Builder(
-        builder: (context) => IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-        ),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () async {
+              final shouldExit = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Exit App'),
+                  content: const Text('Do you want to exit the app?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Exit'),
+                    ),
+                  ],
+                ),
+              );
+              if (shouldExit == true && context.mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
+            },
+          ),
+        ],
       ),
       actions: [
+        Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         IconButton(
           icon: const Icon(Icons.logout),
           onPressed: () => _handleLogout(context),

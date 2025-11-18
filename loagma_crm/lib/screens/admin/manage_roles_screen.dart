@@ -205,6 +205,10 @@ class _ManageRolesScreenState extends State<ManageRolesScreen> {
       appBar: AppBar(
         title: const Text("Manage Roles"),
         backgroundColor: const Color(0xFFD7BE69),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: showCreateRoleDialog,

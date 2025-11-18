@@ -45,6 +45,35 @@ app.use('/masters', masterRoutes);
 app.use('/admin', adminRoutes);
 app.use('/roles', roleRoutes);
 
+// 404 Handler - Must be after all routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Page Not Found',
+    error: `Cannot ${req.method} ${req.originalUrl}`,
+    availableRoutes: [
+      '/auth',
+      '/users',
+      '/locations',
+      '/accounts',
+      '/employees',
+      '/masters',
+      '/admin',
+      '/roles'
+    ]
+  });
+});
+
+// Error Handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, '0.0.0.0', () => {

@@ -119,6 +119,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       appBar: AppBar(
         title: const Text("Create User"),
         backgroundColor: const Color(0xFFD7BE69),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
