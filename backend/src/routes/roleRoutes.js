@@ -16,8 +16,8 @@ const router = express.Router();
 // router.put('/:id', authMiddleware, roleGuard(['Admin']), updateRole);
 // router.delete('/:id', authMiddleware, roleGuard(['Admin']), deleteRole);
 router.get('/', getAllRoles);
-router.post('/', authMiddleware,  createRole);
-router.put('/:id', authMiddleware,  updateRole);
-router.delete('/:id', authMiddleware,  deleteRole);
+router.post('/',  createRole);
+router.put('/:id',  updateRole);
+router.delete('/:id',  deleteRole);
 
 export default router;
