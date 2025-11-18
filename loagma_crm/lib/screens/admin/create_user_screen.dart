@@ -115,16 +115,36 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Create User"),
-        backgroundColor: const Color(0xFFD7BE69),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+    return WillPopScope(
+      onWillPop: () async {
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Go Back'),
+            content: const Text('Do you want to go back?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('No'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+        );
+        return shouldExit ?? false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Create User"),
+          backgroundColor: const Color(0xFFD7BE69),
+          automaticallyImplyLeading: true,
         ),
-      ),
-      body: Padding(
+        body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: ListView(
           children: [
@@ -172,6 +192,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
