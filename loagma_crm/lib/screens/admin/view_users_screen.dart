@@ -75,6 +75,10 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
       appBar: AppBar(
         title: const Text("View Users"),
         backgroundColor: const Color(0xFFD7BE69),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: isLoading
           ? const Center(
