@@ -758,6 +758,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 }
