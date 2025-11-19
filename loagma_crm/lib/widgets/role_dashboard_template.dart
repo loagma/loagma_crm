@@ -86,7 +86,7 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       MenuItem(
         icon: Icons.people_outline,
-        title: "User Management",
+        title: "Employee Management",
         onTap: () {
           Navigator.pop(context);
           Navigator.push(
@@ -99,7 +99,7 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       MenuItem(
         icon: Icons.person_add_outlined,
-        title: "Create User",
+        title: "Create Employee",
         onTap: () {
           Navigator.pop(context);
           Navigator.push(
@@ -191,46 +191,46 @@ class RoleDashboardTemplate extends StatelessWidget {
           );
         },
       ),
-      MenuItem(
-        icon: Icons.shopping_cart_outlined,
-        title: "Orders",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text("Orders - Coming Soon")));
-        },
-      ),
-      MenuItem(
-        icon: Icons.inventory_outlined,
-        title: "Products",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Products - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.bar_chart_outlined,
-        title: "Sales Reports",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Sales Reports - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.location_on_outlined,
-        title: "Territory",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Territory - Coming Soon")),
-          );
-        },
-      ),
+      // MenuItem(
+      //   icon: Icons.shopping_cart_outlined,
+      //   title: "Orders",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(
+      //       context,
+      //     ).showSnackBar(const SnackBar(content: Text("Orders - Coming Soon")));
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.inventory_outlined,
+      //   title: "Products",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Products - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.bar_chart_outlined,
+      //   title: "Sales Reports",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Sales Reports - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.location_on_outlined,
+      //   title: "Territory",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Territory - Coming Soon")),
+      //     );
+      //   },
+      // ),
     ],
 
     // ========== MARKETING MENU ==========
@@ -240,56 +240,56 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: "Dashboard",
         onTap: () => Navigator.pop(context),
       ),
-      MenuItem(
-        icon: Icons.campaign_outlined,
-        title: "Campaigns",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Campaigns - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.email_outlined,
-        title: "Email Marketing",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Email Marketing - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.trending_up_outlined,
-        title: "Social Media",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Social Media - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.insights_outlined,
-        title: "Marketing Analytics",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Marketing Analytics - Coming Soon")),
-          );
-        },
-      ),
-      MenuItem(
-        icon: Icons.content_paste_outlined,
-        title: "Content Library",
-        onTap: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Content Library - Coming Soon")),
-          );
-        },
-      ),
+      // MenuItem(
+      //   icon: Icons.campaign_outlined,
+      //   title: "Campaigns",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Campaigns - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.email_outlined,
+      //   title: "Email Marketing",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Email Marketing - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.trending_up_outlined,
+      //   title: "Social Media",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Social Media - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.insights_outlined,
+      //   title: "Marketing Analytics",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Marketing Analytics - Coming Soon")),
+      //     );
+      //   },
+      // ),
+      // MenuItem(
+      //   icon: Icons.content_paste_outlined,
+      //   title: "Content Library",
+      //   onTap: () {
+      //     Navigator.pop(context);
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text("Content Library - Coming Soon")),
+      //     );
+      //   },
+      // ),
     ],
 
     // ========== NSM (National Sales Manager) MENU ==========

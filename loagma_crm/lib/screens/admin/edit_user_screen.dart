@@ -313,7 +313,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Edit User"),
+        title: const Text("Edit Employee"),
         backgroundColor: const Color(0xFFD7BE69),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -758,7 +758,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
                     child: isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
-                            "Update User",
+                            "Update Employee",
                             style: TextStyle(fontSize: 16),
                           ),
                   ),

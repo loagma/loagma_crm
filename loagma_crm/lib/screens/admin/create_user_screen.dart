@@ -328,7 +328,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Create User"),
+        title: const Text("Create Employee"),
         backgroundColor: const Color(0xFFD7BE69),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -753,7 +753,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               onPressed: isLoading ? null : createUser,
               child: isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Create User", style: TextStyle(fontSize: 16)),
+                  : const Text(
+                      "Create Employee",
+                      style: TextStyle(fontSize: 16),
+                    ),
             ),
           ],
         ),

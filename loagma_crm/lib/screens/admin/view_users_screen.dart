@@ -73,7 +73,7 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("View Users"),
+        title: const Text("View Employees"),
         backgroundColor: const Color(0xFFD7BE69),
         automaticallyImplyLeading: true,
       ),
@@ -82,7 +82,7 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
               child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
             )
           : users.isEmpty
-          ? const Center(child: Text("No users found"))
+          ? const Center(child: Text("No employee found"))
           : ListView.builder(
               padding: const EdgeInsets.all(20),
               itemCount: users.length,

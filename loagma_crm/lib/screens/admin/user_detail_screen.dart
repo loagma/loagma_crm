@@ -22,7 +22,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("User Details"),
+        title: const Text("Employee Details"),
         backgroundColor: const Color(0xFFD7BE69),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -261,7 +261,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   }
                 },
                 icon: const Icon(Icons.edit),
-                label: const Text("Edit User", style: TextStyle(fontSize: 16)),
+                label: const Text("Edit Employee", style: TextStyle(fontSize: 16)),
               ),
             ),
           ],
