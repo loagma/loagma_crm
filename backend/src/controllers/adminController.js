@@ -5,17 +5,40 @@ import { cleanPhoneNumber } from '../utils/phoneUtils.js';
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {
   try {
-    let { contactNumber, roleId } = req.body;
+    let { 
+      contactNumber, 
+      roleId, 
+      roles,
+      name, 
+      email, 
+      alternativeNumber,
+      gender,
+      preferredLanguages,
+      departmentId,
+      isActive,
+      password,
+      address,
+      city,
+      state,
+      pincode,
+      image,
+      notes,
+      aadharCard,
+      panCard
+    } = req.body;
 
-    if (!contactNumber || !roleId) {
+    if (!contactNumber) {
       return res.status(400).json({
         success: false,
-        message: 'Contact number and role are required',
+        message: 'Contact number is required',
       });
     }
 
-    // Clean phone number
+    // Clean phone numbers
     contactNumber = cleanPhoneNumber(contactNumber);
+    if (alternativeNumber) {
+      alternativeNumber = cleanPhoneNumber(alternativeNumber);
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -29,16 +52,47 @@ export const createUserByAdmin = async (req, res) => {
       });
     }
 
+    // Check if email exists
+    if (email) {
+      const existingEmail = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingEmail) {
+        return res.status(400).json({
+          success: false,
+          message: 'User with this email already exists',
+        });
+      }
+    }
+
     // Create user
     const user = await prisma.user.create({
       data: {
         id: randomUUID(),
         contactNumber,
+        alternativeNumber,
+        name,
+        email,
         roleId,
-        isActive: true,
+        roles: roles || [],
+        gender,
+        preferredLanguages: preferredLanguages || [],
+        departmentId,
+        isActive: isActive !== undefined ? isActive : true,
+        password,
+        address,
+        city,
+        state,
+        pincode,
+        image,
+        notes,
+        aadharCard,
+        panCard,
       },
       include: {
         role: { select: { name: true } },
+        department: { select: { name: true } },
       },
     });
 
@@ -47,8 +101,15 @@ export const createUserByAdmin = async (req, res) => {
       message: 'User created successfully',
       user: {
         id: user.id,
+        name: user.name,
+        email: user.email,
         contactNumber: user.contactNumber,
+        alternativeNumber: user.alternativeNumber,
         role: user.role?.name,
+        roles: user.roles,
+        department: user.department?.name,
+        gender: user.gender,
+        isActive: user.isActive,
       },
     });
   } catch (error) {
@@ -66,6 +127,7 @@ export const getAllUsersByAdmin = async (req, res) => {
     const users = await prisma.user.findMany({
       include: {
         role: { select: { name: true } },
+        department: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -77,9 +139,23 @@ export const getAllUsersByAdmin = async (req, res) => {
         name: u.name,
         email: u.email,
         contactNumber: u.contactNumber,
+        alternativeNumber: u.alternativeNumber,
         role: u.role?.name,
+        roles: u.roles,
         roleId: u.roleId,
+        department: u.department?.name,
+        departmentId: u.departmentId,
+        gender: u.gender,
+        preferredLanguages: u.preferredLanguages,
         isActive: u.isActive,
+        address: u.address,
+        city: u.city,
+        state: u.state,
+        pincode: u.pincode,
+        image: u.image,
+        notes: u.notes,
+        aadharCard: u.aadharCard,
+        panCard: u.panCard,
         createdAt: u.createdAt,
       })),
     });
@@ -96,22 +172,62 @@ export const getAllUsersByAdmin = async (req, res) => {
 export const updateUserByAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    let { contactNumber, roleId, name, email } = req.body;
+    let { 
+      contactNumber, 
+      alternativeNumber,
+      roleId, 
+      roles,
+      name, 
+      email,
+      gender,
+      preferredLanguages,
+      departmentId,
+      isActive,
+      password,
+      address,
+      city,
+      state,
+      pincode,
+      image,
+      notes,
+      aadharCard,
+      panCard
+    } = req.body;
 
     if (contactNumber) {
       contactNumber = cleanPhoneNumber(contactNumber);
+    }
+
+    if (alternativeNumber) {
+      alternativeNumber = cleanPhoneNumber(alternativeNumber);
     }
 
     const user = await prisma.user.update({
       where: { id },
       data: {
         ...(contactNumber && { contactNumber }),
-        ...(roleId && { roleId }),
-        ...(name && { name }),
-        ...(email && { email }),
+        ...(alternativeNumber !== undefined && { alternativeNumber }),
+        ...(roleId !== undefined && { roleId }),
+        ...(roles !== undefined && { roles }),
+        ...(name !== undefined && { name }),
+        ...(email !== undefined && { email }),
+        ...(gender !== undefined && { gender }),
+        ...(preferredLanguages !== undefined && { preferredLanguages }),
+        ...(departmentId !== undefined && { departmentId }),
+        ...(isActive !== undefined && { isActive }),
+        ...(password !== undefined && { password }),
+        ...(address !== undefined && { address }),
+        ...(city !== undefined && { city }),
+        ...(state !== undefined && { state }),
+        ...(pincode !== undefined && { pincode }),
+        ...(image !== undefined && { image }),
+        ...(notes !== undefined && { notes }),
+        ...(aadharCard !== undefined && { aadharCard }),
+        ...(panCard !== undefined && { panCard }),
       },
       include: {
         role: { select: { name: true } },
+        department: { select: { name: true } },
       },
     });
 
@@ -123,8 +239,13 @@ export const updateUserByAdmin = async (req, res) => {
         name: user.name,
         email: user.email,
         contactNumber: user.contactNumber,
+        alternativeNumber: user.alternativeNumber,
         role: user.role?.name,
+        roles: user.roles,
         roleId: user.roleId,
+        department: user.department?.name,
+        gender: user.gender,
+        isActive: user.isActive,
       },
     });
   } catch (error) {
