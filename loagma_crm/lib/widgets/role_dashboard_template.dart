@@ -641,32 +641,31 @@ class RoleDashboardTemplate extends StatelessWidget {
 
     return WillPopScope(
       onWillPop: () async {
-        // Show confirmation dialog
+        // Show exit confirmation dialog
         final shouldExit = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) => AlertDialog(
             title: const Text('Exit App'),
-            content: const Text('Do you want to exit the app?'),
+            content: const Text('Do you want to exit the application?'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('No'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Exit'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Yes, Exit'),
               ),
             ],
           ),
         );
         
-        // If user confirmed exit, go back to login
-        if (shouldExit == true && context.mounted) {
-          Navigator.pushReplacementNamed(context, '/login');
-          return false;
-        }
-        return false;
+        return shouldExit ?? false;
       },
       child: Scaffold(
         appBar: _buildAppBar(context, color),
@@ -689,36 +688,35 @@ class RoleDashboardTemplate extends StatelessWidget {
         ],
       ),
       backgroundColor: color,
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () async {
-              final shouldExit = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Exit App'),
-                  content: const Text('Do you want to exit the app?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Exit'),
-                    ),
-                  ],
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () async {
+          final shouldExit = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) => AlertDialog(
+              title: const Text('Exit App'),
+              content: const Text('Do you want to exit the application?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('No'),
                 ),
-              );
-              if (shouldExit == true && context.mounted) {
-                Navigator.pushReplacementNamed(context, '/login');
-              }
-            },
-          ),
-        ],
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Yes, Exit'),
+                ),
+              ],
+            ),
+          );
+          if (shouldExit == true && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        },
       ),
       actions: [
         Builder(

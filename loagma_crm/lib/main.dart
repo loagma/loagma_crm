@@ -33,6 +33,58 @@ class MyApp extends StatelessWidget {
         '/asm-dashboard': (context) => const AsmDashboardScreen(),
         '/tso-dashboard': (context) => const TsoDashboardScreen(),
       },
+      onUnknownRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              title: const Text('Page Not Found'),
+              backgroundColor: const Color(0xFFD7BE69),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.construction,
+                    size: 100,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Coming Soon',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFD7BE69),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'This feature is under development',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Go Back'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD7BE69),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 15,
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
