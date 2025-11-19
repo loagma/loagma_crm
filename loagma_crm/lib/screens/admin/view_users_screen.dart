@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
-import 'edit_user_screen.dart';
+import 'user_detail_screen.dart';
 
 class AdminViewUsersScreen extends StatefulWidget {
   const AdminViewUsersScreen({super.key});
@@ -94,64 +94,70 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ListTile(
-                    title: Text(user['name'] ?? user['contactNumber']),
-                    subtitle: Text(
-                      "${user['contactNumber']}\nRole: ${user['role'] ?? 'N/A'}",
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFFD7BE69),
+                      backgroundImage: user['image'] != null
+                          ? NetworkImage(user['image'])
+                          : null,
+                      child: user['image'] == null
+                          ? Text(
+                              (user['name'] ?? 'U')[0].toUpperCase(),
+                              style: const TextStyle(color: Colors.white),
+                            )
+                          : null,
                     ),
-                    isThreeLine: true,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    title: Text(
+                      user['name'] ?? user['contactNumber'],
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    EditUserScreen(user: user),
-                              ),
-                            );
-                            if (result == true) {
-                              fetchUsers(); // Refresh list
-                            }
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text("Delete User"),
-                                content: const Text(
-                                  "Are you sure you want to delete this user?",
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      Fluttertoast.showToast(
-                                        msg: "Delete cancelled",
-                                        backgroundColor: Colors.grey,
-                                      );
-                                    },
-                                    child: const Text("Cancel"),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      deleteUser(user['id']);
-                                    },
-                                    child: const Text("Delete"),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                        const SizedBox(height: 4),
+                        Text("📞 ${user['contactNumber']}"),
+                        if (user['email'] != null) Text("📧 ${user['email']}"),
+                        Text("👤 ${user['role'] ?? 'No Role'}"),
+                        if (user['department'] != null)
+                          Text("🏢 ${user['department']}"),
                       ],
                     ),
+                    isThreeLine: true,
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: user['isActive'] == true
+                            ? Colors.green.shade100
+                            : Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        user['isActive'] == true ? 'Active' : 'Inactive',
+                        style: TextStyle(
+                          color: user['isActive'] == true
+                              ? Colors.green.shade800
+                              : Colors.red.shade800,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    onTap: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => UserDetailScreen(
+                            user: user,
+                            onUpdate: fetchUsers,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        fetchUsers();
+                      }
+                    },
                   ),
                 );
               },

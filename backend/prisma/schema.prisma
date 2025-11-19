@@ -87,7 +87,9 @@ model User {
   name               String?
   email              String?       @unique
   contactNumber      String        @unique
+  alternativeNumber  String?
   roleId             String?
+  roles              String[]      @default([])
   functionalRoleId   String?
   departmentId       String?
   managerId          String?
@@ -109,6 +111,14 @@ model User {
   nationality        String?
   postUnder          String?
   preferredLanguages String[]
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  aadharCard         String?
+  panCard            String?
+  password           String?
+  notes              String?
   assignedAccounts   Account[]     @relation("AccountAssignedTo")
   createdAccounts    Account[]     @relation("AccountCreatedBy")
   approvedAccounts   Account[]     @relation("AccountApprovedBy")
