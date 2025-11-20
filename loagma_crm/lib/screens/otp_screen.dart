@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../utils/role_router.dart';
 
@@ -44,6 +45,13 @@ class _OtpScreenState extends State<OtpScreen> {
 
       if (data['success'] == true) {
         final isNewUser = data['isNewUser'] == true;
+
+        // Store token if available
+        if (data['token'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', data['token']);
+          if (kDebugMode) print('🔑 Token saved to SharedPreferences');
+        }
 
         if (isNewUser) {
           if (kDebugMode) print('🆕 Redirecting to signup page...');

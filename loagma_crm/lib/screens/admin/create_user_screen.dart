@@ -247,7 +247,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         if (selectedGender != null) "gender": selectedGender,
         if (selectedLanguage != null) "preferredLanguages": [selectedLanguage],
         "isActive": isActive,
-        if (password != null && password.isNotEmpty) "password": password,
+        if (password.isNotEmpty) "password": password,
         if (_addressController.text.trim().isNotEmpty)
           "address": _addressController.text.trim(),
         if (_cityController.text.trim().isNotEmpty)
@@ -284,7 +284,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           toastLength: Toast.LENGTH_LONG,
         );
 
-        if (autoGeneratePassword && password != null) {
+        if (autoGeneratePassword && password.isNotEmpty) {
           Fluttertoast.showToast(
             msg: "Generated Password: $password",
             toastLength: Toast.LENGTH_LONG,
@@ -416,7 +416,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             // Gender
             DropdownButtonFormField<String>(
-              value: selectedGender,
               items: const [
                 DropdownMenuItem(value: "Male", child: Text("Male")),
                 DropdownMenuItem(value: "Female", child: Text("Female")),
@@ -439,7 +438,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             // Language
             DropdownButtonFormField<String>(
-              value: selectedLanguage,
               items: const [
                 DropdownMenuItem(value: "English", child: Text("English")),
                 DropdownMenuItem(value: "Hindi", child: Text("Hindi")),
@@ -465,7 +463,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             // Select Role (Single)
             DropdownButtonFormField<String>(
-              value: selectedRoleId,
               items: roles.map((role) {
                 return DropdownMenuItem<String>(
                   value: role['id'],
@@ -545,7 +542,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             // Department
             DropdownButtonFormField<String>(
-              value: selectedDepartmentId,
               items: departments.map((dept) {
                 return DropdownMenuItem<String>(
                   value: dept['id'],
