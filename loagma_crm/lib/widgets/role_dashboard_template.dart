@@ -5,6 +5,7 @@ import '../screens/admin/create_user_screen.dart';
 import '../screens/admin/manage_roles_screen.dart';
 import '../screens/view_all_masters_screen.dart';
 import '../screens/shared/create_expense_screen.dart';
+import '../screens/shared/my_expenses_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
   final String roleName;
@@ -162,6 +163,17 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.settings_outlined,
         title: "System Settings",
         onTap: () {
@@ -213,6 +225,17 @@ class RoleDashboardTemplate extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => const CreateExpenseScreen(),
             ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
           );
         },
       ),
@@ -351,6 +374,17 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.groups_outlined,
         title: "Team Overview",
         onTap: () {
@@ -422,6 +456,17 @@ class RoleDashboardTemplate extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => const CreateExpenseScreen(),
             ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
           );
         },
       ),
@@ -501,6 +546,17 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.supervisor_account_outlined,
         title: "Field Team",
         onTap: () {
@@ -576,6 +632,17 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.add_business_outlined,
         title: "New Orders",
         onTap: () {
@@ -646,6 +713,17 @@ class RoleDashboardTemplate extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => const CreateExpenseScreen(),
             ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.list_alt,
+        title: "My Expenses",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyExpensesScreen()),
           );
         },
       ),
