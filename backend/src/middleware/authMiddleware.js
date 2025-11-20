@@ -31,3 +31,6 @@ export const authMiddleware = async (req, res, next) => {
     res.status(401).json({ success: false, message: 'Invalid token' });
   }
 };
+
+// Export alias for compatibility
+export const authenticateToken = authMiddleware;
