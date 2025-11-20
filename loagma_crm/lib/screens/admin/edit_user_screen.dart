@@ -31,6 +31,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   late TextEditingController _panController;
   late TextEditingController _passwordController;
   late TextEditingController _notesController;
+  late TextEditingController _salaryController;
 
   // Dropdown values
   String? selectedRoleId;
@@ -77,6 +78,11 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _panController = TextEditingController(text: widget.user['panCard'] ?? '');
     _passwordController = TextEditingController();
     _notesController = TextEditingController(text: widget.user['notes'] ?? '');
+    _salaryController = TextEditingController(
+      text: widget.user['salary'] != null
+          ? widget.user['salary']['basicSalary'].toString()
+          : '',
+    );
 
     // Initialize dropdown values
     selectedRoleId = widget.user['roleId'];
@@ -114,6 +120,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _panController.dispose();
     _passwordController.dispose();
     _notesController.dispose();
+    _salaryController.dispose();
     super.dispose();
   }
 
@@ -265,6 +272,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
           "notes": _notesController.text.trim(),
       };
 
+      // Update user first
       final url = Uri.parse(
         '${ApiConfig.baseUrl}/admin/users/${widget.user['id']}',
       );
@@ -282,6 +290,22 @@ class _EditUserScreenState extends State<EditUserScreen> {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
+        // Update salary if changed
+        if (_salaryController.text.trim().isNotEmpty) {
+          final salaryBody = {
+            "employeeId": widget.user['id'],
+            "basicSalary": _salaryController.text.trim(),
+            "effectiveFrom": DateTime.now().toIso8601String(),
+          };
+
+          final salaryUrl = Uri.parse('${ApiConfig.baseUrl}/salaries');
+          await http.post(
+            salaryUrl,
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode(salaryBody),
+          );
+        }
+
         Fluttertoast.showToast(
           msg: "User updated successfully",
           toastLength: Toast.LENGTH_LONG,
@@ -730,6 +754,33 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       hintText: "ABCDE1234F",
                     ),
                     validator: validatePAN,
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Salary Per Month
+                  TextFormField(
+                    controller: _salaryController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: "Salary Per Month *",
+                      prefixIcon: const Icon(Icons.currency_rupee),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      hintText: "e.g., 50000",
+                      helperText: "Update basic salary for the employee",
+                      helperStyle: const TextStyle(fontSize: 12),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Salary per month is required';
+                      }
+                      final salary = double.tryParse(value.trim());
+                      if (salary == null || salary <= 0) {
+                        return 'Please enter a valid salary amount greater than 0';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 15),
 

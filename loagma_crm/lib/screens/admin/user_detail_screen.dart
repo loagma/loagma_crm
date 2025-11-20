@@ -211,6 +211,84 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               const SizedBox(height: 20),
             ],
 
+            // Salary Information
+            if (widget.user['salary'] != null) ...[
+              _buildSectionTitle("Salary Information"),
+              _buildInfoCard([
+                _buildSalaryRow(
+                  "Basic Salary",
+                  widget.user['salary']['basicSalary'],
+                  Colors.blue,
+                ),
+                if ((widget.user['salary']['hra'] ?? 0) > 0)
+                  _buildSalaryRow(
+                    "HRA",
+                    widget.user['salary']['hra'],
+                    Colors.purple,
+                  ),
+                if ((widget.user['salary']['travelAllowance'] ?? 0) > 0)
+                  _buildSalaryRow(
+                    "Travel Allowance",
+                    widget.user['salary']['travelAllowance'],
+                    Colors.orange,
+                  ),
+                if ((widget.user['salary']['dailyAllowance'] ?? 0) > 0)
+                  _buildSalaryRow(
+                    "Daily Allowance",
+                    widget.user['salary']['dailyAllowance'],
+                    Colors.teal,
+                  ),
+                if ((widget.user['salary']['medicalAllowance'] ?? 0) > 0)
+                  _buildSalaryRow(
+                    "Medical Allowance",
+                    widget.user['salary']['medicalAllowance'],
+                    Colors.red,
+                  ),
+                const Divider(height: 24),
+                _buildSalaryRow(
+                  "Gross Salary",
+                  widget.user['salary']['grossSalary'],
+                  Colors.green,
+                  isBold: true,
+                ),
+                if ((widget.user['salary']['totalDeductions'] ?? 0) > 0)
+                  _buildSalaryRow(
+                    "Total Deductions",
+                    widget.user['salary']['totalDeductions'],
+                    Colors.red,
+                  ),
+                const Divider(height: 24),
+                _buildSalaryRow(
+                  "Net Salary",
+                  widget.user['salary']['netSalary'],
+                  const Color(0xFFD7BE69),
+                  isBold: true,
+                  isLarge: true,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Payment: ${widget.user['salary']['paymentFrequency'] ?? 'Monthly'}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Text(
+                      "Currency: ${widget.user['salary']['currency'] ?? 'INR'}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ]),
+              const SizedBox(height: 20),
+            ],
+
             // Notes
             if (widget.user['notes'] != null) ...[
               _buildSectionTitle("Notes"),
@@ -342,6 +420,48 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildSalaryRow(
+    String label,
+    dynamic amount,
+    Color color, {
+    bool isBold = false,
+    bool isLarge = false,
+  }) {
+    final value = amount is String ? double.tryParse(amount) ?? 0 : (amount ?? 0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: isLarge ? 16 : 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            "₹${_formatNumber(value)}",
+            style: TextStyle(
+              fontSize: isLarge ? 18 : 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(dynamic number) {
+    if (number == null) return '0';
+    final value = number is String ? double.tryParse(number) ?? 0 : number;
+    return value.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
   }
 
   String _formatDate(dynamic date) {

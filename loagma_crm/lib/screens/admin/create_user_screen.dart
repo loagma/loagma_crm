@@ -31,6 +31,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   final TextEditingController _panController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _salaryController = TextEditingController();
 
   // Dropdown values
   String? selectedRoleId;
@@ -70,6 +71,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     _panController.dispose();
     _passwordController.dispose();
     _notesController.dispose();
+    _salaryController.dispose();
     super.dispose();
   }
 
@@ -232,6 +234,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       final body = {
         "contactNumber": phone,
+        "salaryPerMonth": _salaryController.text.trim(), // Now required
         if (_nameController.text.trim().isNotEmpty)
           "name": _nameController.text.trim(),
         if (_emailController.text.trim().isNotEmpty)
@@ -302,6 +305,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         _panController.clear();
         _passwordController.clear();
         _notesController.clear();
+        _salaryController.clear();
 
         if (!mounted) return;
         setState(() {
@@ -726,6 +730,33 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 hintText: "ABCDE1234F",
               ),
               validator: validatePAN,
+            ),
+            const SizedBox(height: 15),
+
+            // Salary Per Month (REQUIRED)
+            TextFormField(
+              controller: _salaryController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: "Salary Per Month *",
+                prefixIcon: const Icon(Icons.currency_rupee),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                hintText: "e.g., 50000",
+                helperText: "Required: Basic salary for the employee",
+                helperStyle: const TextStyle(fontSize: 12),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Salary per month is required';
+                }
+                final salary = double.tryParse(value.trim());
+                if (salary == null || salary <= 0) {
+                  return 'Please enter a valid salary amount greater than 0';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 15),
 
