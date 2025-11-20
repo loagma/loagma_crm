@@ -72,7 +72,9 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
   String _formatNumber(dynamic number) {
     if (number == null) return '0';
     final value = number is String ? double.tryParse(number) ?? 0 : number;
-    return value.toStringAsFixed(0).replaceAllMapped(
+    return value
+        .toStringAsFixed(0)
+        .replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]},',
         );
@@ -125,10 +127,10 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                         Text("👤 ${user['role'] ?? 'No Role'}"),
                         if (user['department'] != null)
                           Text("🏢 ${user['department']}"),
-                        if (user['salary'] != null) ...[
+                        if (user['salaryDetails'] != null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            "💰 Salary: ₹${_formatNumber(user['salary']['netSalary'] ?? user['salary']['basicSalary'])}",
+                            "💰 Salary: ₹${_formatNumber(user['salaryDetails']['netSalary'] ?? user['salaryDetails']['basicSalary'])}",
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.green,
