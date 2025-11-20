@@ -124,6 +124,8 @@ model User {
   approvedAccounts   Account[]           @relation("AccountApprovedBy")
   employeeArea       EmployeeArea?
   salaryInformation  SalaryInformation?
+  expenses           Expense[]           @relation("EmployeeExpenses")
+  approvedExpenses   Expense[]           @relation("ApprovedExpenses")
   department         Department?         @relation(fields: [departmentId], references: [id])
   manager            User?               @relation("ManagerRelation", fields: [managerId], references: [id])
   team               User[]              @relation("ManagerRelation")
@@ -206,4 +208,30 @@ model SalaryInformation {
   @@index([employeeId])
   @@index([effectiveFrom])
   @@index([isActive])
+}
+
+model Expense {
+  id              String    @id @default(cuid())
+  employeeId      String
+  expenseType     String    // Travel, Food, Accommodation, Fuel, Other
+  amount          Float
+  expenseDate     DateTime
+  description     String?
+  billNumber      String?
+  attachmentUrl   String?   // For bill/receipt image
+  status          String    @default("Pending") // Pending, Approved, Rejected, Paid
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  paidAt          DateTime?
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  employee        User      @relation("EmployeeExpenses", fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?     @relation("ApprovedExpenses", fields: [approvedBy], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([expenseDate])
+  @@index([expenseType])
 }
