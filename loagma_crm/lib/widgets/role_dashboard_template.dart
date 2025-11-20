@@ -4,6 +4,7 @@ import '../screens/admin/view_users_screen.dart';
 import '../screens/admin/create_user_screen.dart';
 import '../screens/admin/manage_roles_screen.dart';
 import '../screens/view_all_masters_screen.dart';
+import '../screens/shared/create_expense_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
   final String roleName;
@@ -117,9 +118,7 @@ class RoleDashboardTemplate extends StatelessWidget {
           Navigator.pop(context);
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const ManageRolesScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const ManageRolesScreen()),
           );
         },
       ),
@@ -145,6 +144,19 @@ class RoleDashboardTemplate extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => const ViewAllMastersScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
             ),
           );
         },
@@ -187,6 +199,19 @@ class RoleDashboardTemplate extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => const AccountMasterScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
             ),
           );
         },
@@ -313,6 +338,19 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.groups_outlined,
         title: "Team Overview",
         onTap: () {
@@ -370,6 +408,19 @@ class RoleDashboardTemplate extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => const AccountMasterScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
             ),
           );
         },
@@ -437,6 +488,19 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.supervisor_account_outlined,
         title: "Field Team",
         onTap: () {
@@ -494,6 +558,19 @@ class RoleDashboardTemplate extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => const AccountMasterScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
             ),
           );
         },
@@ -560,6 +637,19 @@ class RoleDashboardTemplate extends StatelessWidget {
         },
       ),
       MenuItem(
+        icon: Icons.receipt_long_outlined,
+        title: "Submit Expense",
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateExpenseScreen(),
+            ),
+          );
+        },
+      ),
+      MenuItem(
         icon: Icons.call_outlined,
         title: "Call Logs",
         onTap: () {
@@ -610,31 +700,6 @@ class RoleDashboardTemplate extends StatelessWidget {
     ],
   };
 
-  // =========================
-  // EXIT HANDLER
-  // =========================
-  Future<bool> _onWillPop(BuildContext context) async {
-    final shouldPop = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Exit'),
-        content: const Text('Are you sure you want to go back to login?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Exit'),
-          ),
-        ],
-      ),
-    );
-    return shouldPop ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
     final color = primaryColor ?? const Color(0xFFD7BE69);
@@ -664,7 +729,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             ],
           ),
         );
-        
+
         return shouldExit ?? false;
       },
       child: Scaffold(

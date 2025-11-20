@@ -45,7 +45,7 @@ app.use('/employees', employeeRoutes);
 app.use('/masters', masterRoutes);
 app.use('/admin', adminRoutes);
 app.use('/roles', roleRoutes);
-app.use('/api', expenseRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // 404 Handler - Must be after all routes
 app.use((req, res) => {
@@ -61,7 +61,8 @@ app.use((req, res) => {
       '/employees',
       '/masters',
       '/admin',
-      '/roles'
+      '/roles',
+      '/api/expenses'
     ]
   });
 });

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import '../utils/role_router.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -41,21 +44,33 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => isLoading = true);
 
     try {
-      print('📤 Sending signup request...');
-      print('📞 Contact: $contactNumber');
-      print('👤 Name: $name');
-      print('📧 Email: $email');
+      if (kDebugMode) print('📤 Sending signup request...');
+      if (kDebugMode) print('📞 Contact: $contactNumber');
+      if (kDebugMode) print('👤 Name: $name');
+      if (kDebugMode) print('📧 Email: $email');
 
       final data = await ApiService.completeSignup(contactNumber!, name, email);
-      print('📥 Signup Response: $data');
+      if (kDebugMode) print('📥 Signup Response: $data');
 
       if (data['success'] == true) {
+        // Store token if available
+        if (data['token'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', data['token']);
+          if (kDebugMode) print('🔑 Token saved to SharedPreferences');
+        }
+
         Fluttertoast.showToast(msg: "Signup successful! Welcome aboard!");
         if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(
+
+        // Get user role and navigate to role-based dashboard
+        final userRole = data['data']?['role'];
+        final userContact = data['data']?['contactNumber'] ?? contactNumber;
+
+        RoleRouter.navigateToRoleDashboard(
           context,
-          '/dashboard',
-          ModalRoute.withName('/'),
+          userRole,
+          userContact: userContact,
         );
       } else {
         Fluttertoast.showToast(
@@ -63,7 +78,7 @@ class _SignupScreenState extends State<SignupScreen> {
         );
       }
     } catch (e) {
-      print('❌ Signup Error: $e');
+      if (kDebugMode) print('❌ Signup Error: $e');
       Fluttertoast.showToast(msg: "Error: $e");
     } finally {
       if (mounted) {

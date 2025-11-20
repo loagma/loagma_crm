@@ -1,6 +1,3 @@
-
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -23,9 +20,9 @@ class UserDetailScreen extends StatefulWidget {
 class _UserDetailScreenState extends State<UserDetailScreen> {
   @override
   Widget build(BuildContext context) {
-  print(widget.user); 
     // 🔥 FIXED SALARY HANDLING HERE (NOT INSIDE UI)
-    final salary = widget.user['salary'] ??
+    final salary =
+        widget.user['salary'] ??
         widget.user['Salary'] ??
         widget.user['salaryInfo'];
 
@@ -63,7 +60,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // ============================================
             // PROFILE SECTION
             // ============================================
@@ -96,8 +92,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: widget.user['isActive'] == true
                           ? Colors.green.shade100
@@ -203,24 +201,28 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             if (widget.user['address'] != null ||
                 widget.user['city'] != null ||
                 widget.user['state'] != null ||
-                widget.user['pincode'] != null)
-              ...[
-                _buildSectionTitle("Address Information"),
-                _buildInfoCard([
-                  if (widget.user['address'] != null)
-                    _buildInfoRow(
-                        Icons.home, "Address", widget.user['address']),
-                  if (widget.user['city'] != null)
-                    _buildInfoRow(Icons.location_city, "City",
-                        widget.user['city']),
-                  if (widget.user['state'] != null)
-                    _buildInfoRow(Icons.map, "State", widget.user['state']),
-                  if (widget.user['pincode'] != null)
-                    _buildInfoRow(
-                        Icons.pin_drop, "Pincode", widget.user['pincode']),
-                ]),
-                const SizedBox(height: 20),
-              ],
+                widget.user['pincode'] != null) ...[
+              _buildSectionTitle("Address Information"),
+              _buildInfoCard([
+                if (widget.user['address'] != null)
+                  _buildInfoRow(Icons.home, "Address", widget.user['address']),
+                if (widget.user['city'] != null)
+                  _buildInfoRow(
+                    Icons.location_city,
+                    "City",
+                    widget.user['city'],
+                  ),
+                if (widget.user['state'] != null)
+                  _buildInfoRow(Icons.map, "State", widget.user['state']),
+                if (widget.user['pincode'] != null)
+                  _buildInfoRow(
+                    Icons.pin_drop,
+                    "Pincode",
+                    widget.user['pincode'],
+                  ),
+              ]),
+              const SizedBox(height: 20),
+            ],
 
             // ============================================
             // SALARY INFORMATION (FIXED)
@@ -236,24 +238,39 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 if ((salary['hra'] ?? 0) > 0)
                   _buildSalaryRow("HRA", salary['hra'], Colors.purple),
                 if ((salary['travelAllowance'] ?? 0) > 0)
-                  _buildSalaryRow("Travel Allowance",
-                      salary['travelAllowance'], Colors.orange),
+                  _buildSalaryRow(
+                    "Travel Allowance",
+                    salary['travelAllowance'],
+                    Colors.orange,
+                  ),
                 if ((salary['dailyAllowance'] ?? 0) > 0)
-                  _buildSalaryRow("Daily Allowance",
-                      salary['dailyAllowance'], Colors.teal),
+                  _buildSalaryRow(
+                    "Daily Allowance",
+                    salary['dailyAllowance'],
+                    Colors.teal,
+                  ),
                 if ((salary['medicalAllowance'] ?? 0) > 0)
-                  _buildSalaryRow("Medical Allowance",
-                      salary['medicalAllowance'], Colors.red),
+                  _buildSalaryRow(
+                    "Medical Allowance",
+                    salary['medicalAllowance'],
+                    Colors.red,
+                  ),
 
                 const Divider(height: 24),
 
                 _buildSalaryRow(
-                    "Gross Salary", salary['grossSalary'], Colors.green,
-                    isBold: true),
+                  "Gross Salary",
+                  salary['grossSalary'],
+                  Colors.green,
+                  isBold: true,
+                ),
 
                 if ((salary['totalDeductions'] ?? 0) > 0)
-                  _buildSalaryRow("Total Deductions",
-                      salary['totalDeductions'], Colors.red),
+                  _buildSalaryRow(
+                    "Total Deductions",
+                    salary['totalDeductions'],
+                    Colors.red,
+                  ),
 
                 const Divider(height: 24),
 
@@ -272,13 +289,17 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   children: [
                     Text(
                       "Payment: ${salary['paymentFrequency'] ?? 'Monthly'}",
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     Text(
                       "Currency: ${salary['currency'] ?? 'INR'}",
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
@@ -304,8 +325,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             // SYSTEM INFORMATION
             _buildSectionTitle("System Information"),
             _buildInfoCard([
-              _buildInfoRow(Icons.calendar_today, "Created At",
-                  _formatDate(widget.user['createdAt'])),
+              _buildInfoRow(
+                Icons.calendar_today,
+                "Created At",
+                _formatDate(widget.user['createdAt']),
+              ),
               _buildInfoRow(Icons.fingerprint, "User ID", widget.user['id']),
             ]),
 
@@ -427,8 +451,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     bool isBold = false,
     bool isLarge = false,
   }) {
-    final value =
-        amount is String ? double.tryParse(amount) ?? 0 : (amount ?? 0);
+    final value = amount is String
+        ? double.tryParse(amount) ?? 0
+        : (amount ?? 0);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -459,7 +484,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   String _formatNumber(dynamic number) {
     if (number == null) return '0';
     final value = number is String ? double.tryParse(number) ?? 0 : number;
-    return value.toStringAsFixed(0).replaceAllMapped(
+    return value
+        .toStringAsFixed(0)
+        .replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]},',
         );
