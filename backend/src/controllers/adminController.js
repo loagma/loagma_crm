@@ -24,13 +24,22 @@ export const createUserByAdmin = async (req, res) => {
       image,
       notes,
       aadharCard,
-      panCard
+      panCard,
+      salaryPerMonth
     } = req.body;
 
+    // Validate required fields
     if (!contactNumber) {
       return res.status(400).json({
         success: false,
         message: 'Contact number is required',
+      });
+    }
+
+    if (!salaryPerMonth || parseFloat(salaryPerMonth) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Salary per month is required and must be greater than 0',
       });
     }
 
@@ -67,9 +76,10 @@ export const createUserByAdmin = async (req, res) => {
     }
 
     // Create user
+    const userId = randomUUID();
     const user = await prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: userId,
         contactNumber,
         alternativeNumber,
         name,
@@ -96,9 +106,26 @@ export const createUserByAdmin = async (req, res) => {
       },
     });
 
+    // Create salary information (now mandatory)
+    const salaryInfo = await prisma.salaryInformation.create({
+      data: {
+        employeeId: userId,
+        basicSalary: parseFloat(salaryPerMonth),
+        effectiveFrom: new Date(),
+        currency: 'INR',
+        paymentFrequency: 'Monthly',
+        isActive: true,
+      },
+    });
+
+    // Calculate salary totals
+    const grossSalary = salaryInfo.basicSalary;
+    const totalDeductions = 0;
+    const netSalary = grossSalary - totalDeductions;
+
     res.json({
       success: true,
-      message: 'User created successfully',
+      message: 'User and salary information created successfully',
       user: {
         id: user.id,
         name: user.name,
@@ -107,9 +134,42 @@ export const createUserByAdmin = async (req, res) => {
         alternativeNumber: user.alternativeNumber,
         role: user.role?.name,
         roles: user.roles,
+        roleId: user.roleId,
         department: user.department?.name,
+        departmentId: user.departmentId,
         gender: user.gender,
         isActive: user.isActive,
+        address: user.address,
+        city: user.city,
+        state: user.state,
+        pincode: user.pincode,
+        aadharCard: user.aadharCard,
+        panCard: user.panCard,
+        createdAt: user.createdAt,
+      },
+      salary: {
+        id: salaryInfo.id,
+        employeeId: salaryInfo.employeeId,
+        basicSalary: salaryInfo.basicSalary,
+        hra: salaryInfo.hra || 0,
+        travelAllowance: salaryInfo.travelAllowance || 0,
+        dailyAllowance: salaryInfo.dailyAllowance || 0,
+        medicalAllowance: salaryInfo.medicalAllowance || 0,
+        specialAllowance: salaryInfo.specialAllowance || 0,
+        otherAllowances: salaryInfo.otherAllowances || 0,
+        providentFund: salaryInfo.providentFund || 0,
+        professionalTax: salaryInfo.professionalTax || 0,
+        incomeTax: salaryInfo.incomeTax || 0,
+        otherDeductions: salaryInfo.otherDeductions || 0,
+        grossSalary,
+        totalDeductions,
+        netSalary,
+        effectiveFrom: salaryInfo.effectiveFrom,
+        effectiveTo: salaryInfo.effectiveTo,
+        currency: salaryInfo.currency,
+        paymentFrequency: salaryInfo.paymentFrequency,
+        isActive: salaryInfo.isActive,
+        createdAt: salaryInfo.createdAt,
       },
     });
   } catch (error) {
@@ -128,36 +188,81 @@ export const getAllUsersByAdmin = async (req, res) => {
       include: {
         role: { select: { name: true } },
         department: { select: { name: true } },
+        salaryInformation: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
     res.json({
       success: true,
-      users: users.map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        contactNumber: u.contactNumber,
-        alternativeNumber: u.alternativeNumber,
-        role: u.role?.name,
-        roles: u.roles,
-        roleId: u.roleId,
-        department: u.department?.name,
-        departmentId: u.departmentId,
-        gender: u.gender,
-        preferredLanguages: u.preferredLanguages,
-        isActive: u.isActive,
-        address: u.address,
-        city: u.city,
-        state: u.state,
-        pincode: u.pincode,
-        image: u.image,
-        notes: u.notes,
-        aadharCard: u.aadharCard,
-        panCard: u.panCard,
-        createdAt: u.createdAt,
-      })),
+      users: users.map((u) => {
+        // Calculate salary totals if salary exists
+        let salaryDetails = null;
+        if (u.salaryInformation) {
+          const grossSalary = u.salaryInformation.basicSalary + 
+                             (u.salaryInformation.hra || 0) + 
+                             (u.salaryInformation.travelAllowance || 0) + 
+                             (u.salaryInformation.dailyAllowance || 0) + 
+                             (u.salaryInformation.medicalAllowance || 0) + 
+                             (u.salaryInformation.specialAllowance || 0) + 
+                             (u.salaryInformation.otherAllowances || 0);
+
+          const totalDeductions = (u.salaryInformation.providentFund || 0) + 
+                                 (u.salaryInformation.professionalTax || 0) + 
+                                 (u.salaryInformation.incomeTax || 0) + 
+                                 (u.salaryInformation.otherDeductions || 0);
+
+          const netSalary = grossSalary - totalDeductions;
+
+          salaryDetails = {
+            id: u.salaryInformation.id,
+            basicSalary: u.salaryInformation.basicSalary,
+            hra: u.salaryInformation.hra || 0,
+            travelAllowance: u.salaryInformation.travelAllowance || 0,
+            dailyAllowance: u.salaryInformation.dailyAllowance || 0,
+            medicalAllowance: u.salaryInformation.medicalAllowance || 0,
+            specialAllowance: u.salaryInformation.specialAllowance || 0,
+            otherAllowances: u.salaryInformation.otherAllowances || 0,
+            providentFund: u.salaryInformation.providentFund || 0,
+            professionalTax: u.salaryInformation.professionalTax || 0,
+            incomeTax: u.salaryInformation.incomeTax || 0,
+            otherDeductions: u.salaryInformation.otherDeductions || 0,
+            grossSalary,
+            totalDeductions,
+            netSalary,
+            effectiveFrom: u.salaryInformation.effectiveFrom,
+            currency: u.salaryInformation.currency,
+            paymentFrequency: u.salaryInformation.paymentFrequency,
+            isActive: u.salaryInformation.isActive,
+          };
+        }
+
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          contactNumber: u.contactNumber,
+          alternativeNumber: u.alternativeNumber,
+          role: u.role?.name,
+          roles: u.roles,
+          roleId: u.roleId,
+          department: u.department?.name,
+          departmentId: u.departmentId,
+          gender: u.gender,
+          preferredLanguages: u.preferredLanguages,
+          isActive: u.isActive,
+          address: u.address,
+          city: u.city,
+          state: u.state,
+          pincode: u.pincode,
+          image: u.image,
+          notes: u.notes,
+          aadharCard: u.aadharCard,
+          panCard: u.panCard,
+          createdAt: u.createdAt,
+          salary: salaryDetails,
+        };
+      }),
     });
   } catch (error) {
     console.error('❌ Get Users Error:', error);
