@@ -119,14 +119,15 @@ model User {
   panCard            String?
   password           String?
   notes              String?
-  assignedAccounts   Account[]     @relation("AccountAssignedTo")
-  createdAccounts    Account[]     @relation("AccountCreatedBy")
-  approvedAccounts   Account[]     @relation("AccountApprovedBy")
+  assignedAccounts   Account[]           @relation("AccountAssignedTo")
+  createdAccounts    Account[]           @relation("AccountCreatedBy")
+  approvedAccounts   Account[]           @relation("AccountApprovedBy")
   employeeArea       EmployeeArea?
-  department         Department?   @relation(fields: [departmentId], references: [id])
-  manager            User?         @relation("ManagerRelation", fields: [managerId], references: [id])
-  team               User[]        @relation("ManagerRelation")
-  role               Role?         @relation(fields: [roleId], references: [id])
+  salaryInformation  SalaryInformation?
+  department         Department?         @relation(fields: [departmentId], references: [id])
+  manager            User?               @relation("ManagerRelation", fields: [managerId], references: [id])
+  team               User[]              @relation("ManagerRelation")
+  role               Role?               @relation(fields: [roleId], references: [id])
 }
 
 model EmployeeArea {
@@ -172,4 +173,37 @@ model Account {
   assignedTo    User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
   createdBy     User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
   approvedBy    User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
+}
+
+model SalaryInformation {
+  id                    String    @id @default(cuid())
+  employeeId            String    @unique
+  basicSalary           Float
+  hra                   Float?    @default(0)
+  travelAllowance       Float?    @default(0)
+  dailyAllowance        Float?    @default(0)
+  medicalAllowance      Float?    @default(0)
+  specialAllowance      Float?    @default(0)
+  otherAllowances       Float?    @default(0)
+  providentFund         Float?    @default(0)
+  professionalTax       Float?    @default(0)
+  incomeTax             Float?    @default(0)
+  otherDeductions       Float?    @default(0)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  currency              String    @default("INR")
+  paymentFrequency      String    @default("Monthly")
+  bankName              String?
+  accountNumber         String?
+  ifscCode              String?
+  panNumber             String?
+  remarks               String?
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  employee              User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([effectiveFrom])
+  @@index([isActive])
 }
