@@ -234,7 +234,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       final body = {
         "contactNumber": phone,
-        "salaryPerMonth": _salaryController.text.trim(), // Now required
+        "salaryPerMonth": double.tryParse(_salaryController.text.trim()),
         if (_nameController.text.trim().isNotEmpty)
           "name": _nameController.text.trim(),
         if (_emailController.text.trim().isNotEmpty)
@@ -736,7 +736,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             // Salary Per Month (REQUIRED)
             TextFormField(
               controller: _salaryController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 labelText: "Salary Per Month *",
                 prefixIcon: const Icon(Icons.currency_rupee),
