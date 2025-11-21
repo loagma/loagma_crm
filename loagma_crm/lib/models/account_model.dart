@@ -15,7 +15,7 @@ class Account {
   final int? areaId;
   final DateTime createdAt;
   final DateTime updatedAt;
-  
+
   // Related objects
   final Map<String, dynamic>? assignedTo;
   final Map<String, dynamic>? createdBy;
@@ -50,8 +50,8 @@ class Account {
       id: json['id'],
       accountCode: json['accountCode'],
       personName: json['personName'],
-      dateOfBirth: json['dateOfBirth'] != null 
-          ? DateTime.parse(json['dateOfBirth']) 
+      dateOfBirth: json['dateOfBirth'] != null
+          ? DateTime.parse(json['dateOfBirth'])
           : null,
       contactNumber: json['contactNumber'],
       businessType: json['businessType'],
@@ -60,17 +60,23 @@ class Account {
       assignedToId: json['assignedToId'],
       createdById: json['createdById'],
       approvedById: json['approvedById'],
-      approvedAt: json['approvedAt'] != null 
-          ? DateTime.parse(json['approvedAt']) 
+      approvedAt: json['approvedAt'] != null
+          ? DateTime.parse(json['approvedAt'])
           : null,
       isApproved: json['isApproved'] ?? false,
       areaId: json['areaId'],
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
-      assignedTo: json['assignedTo'],
-      createdBy: json['createdBy'],
-      approvedBy: json['approvedBy'],
-      area: json['area'],
+      assignedTo: json['assignedTo'] is Map
+          ? json['assignedTo'] as Map<String, dynamic>?
+          : null,
+      createdBy: json['createdBy'] is Map
+          ? json['createdBy'] as Map<String, dynamic>?
+          : null,
+      approvedBy: json['approvedBy'] is Map
+          ? json['approvedBy'] as Map<String, dynamic>?
+          : null,
+      area: json['area'] is Map ? json['area'] as Map<String, dynamic>? : null,
     );
   }
 
