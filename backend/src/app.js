@@ -10,6 +10,7 @@ import masterRoutes from './routes/masterRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import roleRoutes from './routes/roleRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
+import pincodeRoutes from './routes/pincodeRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -46,6 +47,7 @@ app.use('/masters', masterRoutes);
 app.use('/admin', adminRoutes);
 app.use('/roles', roleRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/pincode', pincodeRoutes);
 
 // 404 Handler - Must be after all routes
 app.use((req, res) => {

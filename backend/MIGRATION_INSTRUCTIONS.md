@@ -1,94 +1,145 @@
-# Database Migration Instructions for Account Master
+# Account Master Migration Instructions
 
-## Changes Made to Schema
+## Problem
+You have 2 existing records in the Account table, and we're adding new fields. Prisma won't allow adding required fields to a table with existing data.
 
-Added the following fields to the `Account` model:
-- `createdById` - String? (references User who created the account)
-- `approvedById` - String? (references User who approved the account)
-- `approvedAt` - DateTime? (timestamp of approval)
-- `isApproved` - Boolean (default: false)
+## Solution: Manual Migration Steps
 
-Updated User model relations to support:
-- `assignedAccounts` - Accounts assigned to this user
-- `createdAccounts` - Accounts created by this user
-- `approvedAccounts` - Accounts approved by this user
+### Step 1: Create Migration File
 
-## Steps to Apply Migration
-
-### 1. Generate Prisma Migration
-
+Run this command in the backend folder:
 ```bash
-cd backend
-npx prisma migrate dev --name add_account_approval_tracking
+npx prisma migrate dev --create-only --name account_master_refactoring
 ```
 
-### 2. Apply Migration to Database
+This will create a migration file in `prisma/migrations/` folder without applying it.
 
-The above command will automatically apply the migration. If you need to apply manually:
+### Step 2: Edit the Migration File
 
-```bash
-npx prisma migrate deploy
+Open the newly created migration file (it will be in a folder like `prisma/migrations/20240XXX_account_master_refactoring/migration.sql`)
+
+Replace its content with this:
+
+```sql
+-- AlterTable: Add new optional columns to Account table
+ALTER TABLE "Account" 
+ADD COLUMN IF NOT EXISTS "businessName" TEXT,
+ADD COLUMN IF NOT EXISTS "gstNumber" TEXT,
+ADD COLUMN IF NOT EXISTS "panCard" TEXT,
+ADD COLUMN IF NOT EXISTS "ownerImage" TEXT,
+ADD COLUMN IF NOT EXISTS "shopImage" TEXT,
+ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS "pincode" TEXT,
+ADD COLUMN IF NOT EXISTS "country" TEXT,
+ADD COLUMN IF NOT EXISTS "state" TEXT,
+ADD COLUMN IF NOT EXISTS "district" TEXT,
+ADD COLUMN IF NOT EXISTS "city" TEXT,
+ADD COLUMN IF NOT EXISTS "area" TEXT,
+ADD COLUMN IF NOT EXISTS "address" TEXT;
+
+-- Update existing records: Set businessName from personName
+UPDATE "Account" 
+SET "businessName" = "personName" || '''s Business'
+WHERE "businessName" IS NULL;
+
+-- Update existing records: Set isActive to true if NULL
+UPDATE "Account" 
+SET "isActive" = true
+WHERE "isActive" IS NULL;
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS "Account_pincode_idx" ON "Account"("pincode");
+CREATE INDEX IF NOT EXISTS "Account_isActive_idx" ON "Account"("isActive");
+CREATE INDEX IF NOT EXISTS "Account_customerStage_idx" ON "Account"("customerStage");
+CREATE INDEX IF NOT EXISTS "Account_createdAt_idx" ON "Account"("createdAt");
 ```
 
-### 3. Generate Prisma Client
+### Step 3: Apply the Migration
 
+Run this command:
+```bash
+npx prisma migrate dev
+```
+
+This will apply the migration you just edited.
+
+### Step 4: Generate Prisma Client
+
+Run this command:
 ```bash
 npx prisma generate
 ```
 
-### 4. Verify Migration
+### Step 5: Verify
 
+Check that the migration was successful:
 ```bash
 npx prisma studio
 ```
 
-This will open Prisma Studio where you can verify the new fields exist in the Account table.
+Open Prisma Studio and verify:
+- All existing accounts have a `businessName`
+- All existing accounts have `isActive = true`
+- New fields are present
 
-## Rollback (if needed)
+## Alternative: Quick SQL Script
 
-If you need to rollback this migration:
+If you prefer, you can run this SQL directly in your database:
 
-```bash
-npx prisma migrate resolve --rolled-back add_account_approval_tracking
+```sql
+-- Add new columns
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "businessName" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "gstNumber" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "panCard" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "ownerImage" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "shopImage" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "pincode" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "country" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "state" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "district" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "city" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "area" TEXT;
+ALTER TABLE "Account" ADD COLUMN IF NOT EXISTS "address" TEXT;
+
+-- Update existing data
+UPDATE "Account" SET "businessName" = "personName" || '''s Business' WHERE "businessName" IS NULL;
+UPDATE "Account" SET "isActive" = true WHERE "isActive" IS NULL;
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS "Account_pincode_idx" ON "Account"("pincode");
+CREATE INDEX IF NOT EXISTS "Account_isActive_idx" ON "Account"("isActive");
+CREATE INDEX IF NOT EXISTS "Account_customerStage_idx" ON "Account"("customerStage");
+CREATE INDEX IF NOT EXISTS "Account_createdAt_idx" ON "Account"("createdAt");
 ```
 
-## Testing the Changes
-
-### Test Account Creation
+Then run:
 ```bash
-curl -X POST http://localhost:5000/accounts \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "personName": "Test User",
-    "contactNumber": "9876543210",
-    "createdById": "USER_ID"
-  }'
+npx prisma db pull
+npx prisma generate
 ```
 
-### Test Account Approval
+## After Migration
+
+Once migration is complete, you can:
+1. Restart your backend server
+2. Test the new Account Master screen
+3. Create new accounts with all the new fields
+
+## Troubleshooting
+
+### If migration fails:
+1. Check your DATABASE_URL in `.env`
+2. Ensure PostgreSQL is running
+3. Check database permissions
+4. Try the SQL script method instead
+
+### If Prisma Client errors:
 ```bash
-curl -X POST http://localhost:5000/accounts/ACCOUNT_ID/approve \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "approvedById": "APPROVER_USER_ID"
-  }'
+npx prisma generate --force
 ```
 
-### Test Fetching Accounts with Filters
+### To reset and start fresh (⚠️ WARNING: Deletes all data):
 ```bash
-# Get only approved accounts
-curl "http://localhost:5000/accounts?isApproved=true" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# Get accounts created by specific user
-curl "http://localhost:5000/accounts?createdById=USER_ID" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+npx prisma migrate reset
 ```
-
-## Notes
-
-- All existing accounts will have `isApproved = false` by default
-- `createdById`, `approvedById`, and `approvedAt` will be `null` for existing accounts
-- The migration is backward compatible - existing functionality will continue to work
