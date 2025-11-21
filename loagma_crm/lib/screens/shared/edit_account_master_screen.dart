@@ -5,34 +5,37 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
-import '../view_all_masters_screen.dart';
+import '../../models/account_model.dart';
 
-class AccountMasterScreen extends StatefulWidget {
-  const AccountMasterScreen({super.key});
+class EditAccountMasterScreen extends StatefulWidget {
+  final Account account;
+
+  const EditAccountMasterScreen({super.key, required this.account});
 
   @override
-  State<AccountMasterScreen> createState() => _AccountMasterScreenState();
+  State<EditAccountMasterScreen> createState() =>
+      _EditAccountMasterScreenState();
 }
 
-class _AccountMasterScreenState extends State<AccountMasterScreen> {
+class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
   final _formKey = GlobalKey<FormState>();
   bool isSubmitting = false;
   bool isLoadingLocation = false;
 
   // Controllers
-  final _businessNameController = TextEditingController();
-  final _businessTypeController = TextEditingController();
-  final _personNameController = TextEditingController();
-  final _contactNumberController = TextEditingController();
-  final _gstNumberController = TextEditingController();
-  final _panCardController = TextEditingController();
-  final _pincodeController = TextEditingController();
-  final _countryController = TextEditingController();
-  final _stateController = TextEditingController();
-  final _districtController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _areaController = TextEditingController();
-  final _addressController = TextEditingController();
+  late TextEditingController _businessNameController;
+  late TextEditingController _businessTypeController;
+  late TextEditingController _personNameController;
+  late TextEditingController _contactNumberController;
+  late TextEditingController _gstNumberController;
+  late TextEditingController _panCardController;
+  late TextEditingController _pincodeController;
+  late TextEditingController _countryController;
+  late TextEditingController _stateController;
+  late TextEditingController _districtController;
+  late TextEditingController _cityController;
+  late TextEditingController _areaController;
+  late TextEditingController _addressController;
 
   // Dropdown values
   String? _selectedCustomerStage;
@@ -62,6 +65,48 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   ];
 
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeControllers();
+  }
+
+  void _initializeControllers() {
+    // Initialize controllers with existing account data
+    _businessNameController =
+        TextEditingController(text: widget.account.businessName ?? '');
+    _businessTypeController =
+        TextEditingController(text: widget.account.businessType ?? '');
+    _personNameController =
+        TextEditingController(text: widget.account.personName);
+    _contactNumberController =
+        TextEditingController(text: widget.account.contactNumber);
+    _gstNumberController =
+        TextEditingController(text: widget.account.gstNumber ?? '');
+    _panCardController =
+        TextEditingController(text: widget.account.panCard ?? '');
+    _pincodeController =
+        TextEditingController(text: widget.account.pincode ?? '');
+    _countryController =
+        TextEditingController(text: widget.account.country ?? '');
+    _stateController = TextEditingController(text: widget.account.state ?? '');
+    _districtController =
+        TextEditingController(text: widget.account.district ?? '');
+    _cityController = TextEditingController(text: widget.account.city ?? '');
+    _areaController = TextEditingController(text: widget.account.area ?? '');
+    _addressController =
+        TextEditingController(text: widget.account.address ?? '');
+
+    _selectedCustomerStage = widget.account.customerStage;
+    _selectedFunnelStage = widget.account.funnelStage;
+    _dateOfBirth = widget.account.dateOfBirth;
+    _isActive = widget.account.isActive ?? true;
+
+    // Load existing images if available
+    _ownerImageBase64 = widget.account.ownerImage;
+    _shopImageBase64 = widget.account.shopImage;
+  }
 
   @override
   void dispose() {
@@ -105,7 +150,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         });
 
         _showSuccess(
-          isOwnerImage ? 'Owner image selected' : 'Shop image selected',
+          isOwnerImage ? 'Owner image updated' : 'Shop image updated',
         );
       }
     } catch (e) {
@@ -172,61 +217,76 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       setState(() => isSubmitting = true);
 
       try {
-        print(
-          '📤 Submitting account with contact number: ${_contactNumberController.text.trim()}',
-        );
+        final updates = <String, dynamic>{};
 
-        await AccountService.createAccount(
-          businessName: _businessNameController.text.trim().isEmpty
-              ? null
-              : _businessNameController.text.trim(),
-          personName: _personNameController.text.trim(),
-          contactNumber: _contactNumberController.text.trim(),
-          businessType: _businessTypeController.text.trim().isEmpty
-              ? null
-              : _businessTypeController.text.trim(),
-          dateOfBirth: _dateOfBirth?.toIso8601String(),
-          customerStage: _selectedCustomerStage,
-          funnelStage: _selectedFunnelStage,
-          gstNumber: _gstNumberController.text.trim().isEmpty
-              ? null
-              : _gstNumberController.text.trim().toUpperCase(),
-          panCard: _panCardController.text.trim().isEmpty
-              ? null
-              : _panCardController.text.trim().toUpperCase(),
-          ownerImage: _ownerImageBase64,
-          shopImage: _shopImageBase64,
-          isActive: _isActive,
-          pincode: _pincodeController.text.trim().isEmpty
-              ? null
-              : _pincodeController.text.trim(),
-          country: _countryController.text.trim().isEmpty
-              ? null
-              : _countryController.text.trim(),
-          state: _stateController.text.trim().isEmpty
-              ? null
-              : _stateController.text.trim(),
-          district: _districtController.text.trim().isEmpty
-              ? null
-              : _districtController.text.trim(),
-          city: _cityController.text.trim().isEmpty
-              ? null
-              : _cityController.text.trim(),
-          area: _areaController.text.trim().isEmpty
-              ? null
-              : _areaController.text.trim(),
-          address: _addressController.text.trim().isEmpty
-              ? null
-              : _addressController.text.trim(),
-        );
+        // Only include changed fields
+        if (_businessNameController.text.trim().isNotEmpty) {
+          updates['businessName'] = _businessNameController.text.trim();
+        }
+        if (_personNameController.text.trim() != widget.account.personName) {
+          updates['personName'] = _personNameController.text.trim();
+        }
+        if (_contactNumberController.text.trim() !=
+            widget.account.contactNumber) {
+          updates['contactNumber'] = _contactNumberController.text.trim();
+        }
+        if (_businessTypeController.text.trim().isNotEmpty) {
+          updates['businessType'] = _businessTypeController.text.trim();
+        }
+        if (_dateOfBirth != null) {
+          updates['dateOfBirth'] = _dateOfBirth!.toIso8601String();
+        }
+        if (_selectedCustomerStage != null) {
+          updates['customerStage'] = _selectedCustomerStage;
+        }
+        if (_selectedFunnelStage != null) {
+          updates['funnelStage'] = _selectedFunnelStage;
+        }
+        if (_gstNumberController.text.trim().isNotEmpty) {
+          updates['gstNumber'] =
+              _gstNumberController.text.trim().toUpperCase();
+        }
+        if (_panCardController.text.trim().isNotEmpty) {
+          updates['panCard'] = _panCardController.text.trim().toUpperCase();
+        }
+        if (_ownerImageBase64 != null) {
+          updates['ownerImage'] = _ownerImageBase64;
+        }
+        if (_shopImageBase64 != null) {
+          updates['shopImage'] = _shopImageBase64;
+        }
+        updates['isActive'] = _isActive;
 
-        print('✅ Account created successfully');
-        _showSuccess('Account created successfully!');
-        _clearForm();
+        if (_pincodeController.text.trim().isNotEmpty) {
+          updates['pincode'] = _pincodeController.text.trim();
+        }
+        if (_countryController.text.trim().isNotEmpty) {
+          updates['country'] = _countryController.text.trim();
+        }
+        if (_stateController.text.trim().isNotEmpty) {
+          updates['state'] = _stateController.text.trim();
+        }
+        if (_districtController.text.trim().isNotEmpty) {
+          updates['district'] = _districtController.text.trim();
+        }
+        if (_cityController.text.trim().isNotEmpty) {
+          updates['city'] = _cityController.text.trim();
+        }
+        if (_areaController.text.trim().isNotEmpty) {
+          updates['area'] = _areaController.text.trim();
+        }
+        if (_addressController.text.trim().isNotEmpty) {
+          updates['address'] = _addressController.text.trim();
+        }
+
+        await AccountService.updateAccount(widget.account.id, updates);
+
+        _showSuccess('Account updated successfully!');
+        if (mounted) {
+          Navigator.pop(context, true); // Return true to indicate success
+        }
       } catch (e) {
-        print('❌ Error creating account: $e');
-        print('Error type: ${e.runtimeType}');
-        _showError('Failed to create account: $e');
+        _showError('Failed to update account: $e');
       } finally {
         if (mounted) {
           setState(() => isSubmitting = false);
@@ -235,53 +295,12 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     }
   }
 
-  void _clearForm() {
-    _formKey.currentState?.reset();
-    setState(() {
-      _businessNameController.clear();
-      _businessTypeController.clear();
-      _personNameController.clear();
-      _contactNumberController.clear();
-      _gstNumberController.clear();
-      _panCardController.clear();
-      _pincodeController.clear();
-      _countryController.clear();
-      _stateController.clear();
-      _districtController.clear();
-      _cityController.clear();
-      _areaController.clear();
-      _addressController.clear();
-      _selectedCustomerStage = null;
-      _selectedFunnelStage = null;
-      _dateOfBirth = null;
-      _isActive = true;
-      _ownerImageBase64 = null;
-      _shopImageBase64 = null;
-      _ownerImageFile = null;
-      _shopImageFile = null;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Account Master'),
+        title: const Text('Edit Account Master'),
         backgroundColor: const Color(0xFFD7BE69),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: 'View All Accounts',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ViewAllMastersScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -292,7 +311,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
             children: [
               _buildSectionHeader('Business Information', Icons.business),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _businessNameController,
                 label: 'Business Name',
@@ -300,7 +318,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 hint: 'Enter business name',
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _businessTypeController,
                 label: 'Business Type',
@@ -308,7 +325,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 hint: 'e.g., Retail, Wholesale',
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _personNameController,
                 label: 'Person Name *',
@@ -317,7 +333,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     v?.isEmpty ?? true ? 'Person name is required' : null,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _contactNumberController,
                 label: 'Contact Number *',
@@ -331,7 +346,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 },
               ),
               const SizedBox(height: 15),
-
               _buildDropdown(
                 value: _selectedCustomerStage,
                 label: 'Customer Stage',
@@ -340,7 +354,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 onChanged: (v) => setState(() => _selectedCustomerStage = v),
               ),
               const SizedBox(height: 15),
-
               _buildDropdown(
                 value: _selectedFunnelStage,
                 label: 'Funnel Stage',
@@ -349,7 +362,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 onChanged: (v) => setState(() => _selectedFunnelStage = v),
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _gstNumberController,
                 label: 'GST Number',
@@ -358,7 +370,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 textCapitalization: TextCapitalization.characters,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _panCardController,
                 label: 'PAN Card',
@@ -368,10 +379,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 maxLength: 10,
               ),
               const SizedBox(height: 25),
-
               _buildSectionHeader('Images', Icons.image),
               const SizedBox(height: 15),
-
               Row(
                 children: [
                   Expanded(
@@ -394,7 +403,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ],
               ),
               const SizedBox(height: 25),
-
               _buildSectionHeader('Status', Icons.toggle_on),
               const SizedBox(height: 10),
               SwitchListTile(
@@ -409,10 +417,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ),
               ),
               const SizedBox(height: 25),
-
               _buildSectionHeader('Location Details', Icons.location_on),
               const SizedBox(height: 15),
-
               Row(
                 children: [
                   Expanded(
@@ -450,7 +456,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ],
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _countryController,
                 label: 'Country',
@@ -459,7 +464,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _stateController,
                 label: 'State',
@@ -468,7 +472,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _districtController,
                 label: 'District',
@@ -477,7 +480,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _cityController,
                 label: 'City',
@@ -486,7 +488,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _areaController,
                 label: 'Area',
@@ -495,7 +496,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-
               _buildTextField(
                 controller: _addressController,
                 label: 'Address',
@@ -504,7 +504,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 hint: 'Enter complete address manually',
               ),
               const SizedBox(height: 30),
-
               Row(
                 children: [
                   Expanded(
@@ -519,7 +518,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                               ),
                             )
                           : const Icon(Icons.save),
-                      label: Text(isSubmitting ? 'Submitting...' : 'Submit'),
+                      label: Text(isSubmitting ? 'Updating...' : 'Update'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFD7BE69),
                         foregroundColor: Colors.white,
@@ -534,8 +533,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.clear),
-                      label: const Text('Clear'),
+                      icon: const Icon(Icons.cancel),
+                      label: const Text('Cancel'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFD7BE69),
                         padding: const EdgeInsets.symmetric(vertical: 15),
@@ -544,7 +543,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: _clearForm,
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
                 ],
@@ -669,37 +668,37 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ),
               )
             : (imageBase64 != null && kIsWeb)
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(
-                  base64Decode(imageBase64.split(',')[1]),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.add_photo_alternate,
-                    size: 40,
-                    color: Color(0xFFD7BE69),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Color(0xFFD7BE69),
-                      fontWeight: FontWeight.w500,
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(imageBase64.split(',')[1]),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
                     ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.add_photo_alternate,
+                        size: 40,
+                        color: Color(0xFFD7BE69),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: Color(0xFFD7BE69),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tap to select',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap to select',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
       ),
     );
   }
