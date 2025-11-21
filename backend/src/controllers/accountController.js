@@ -231,17 +231,8 @@ export const createAccount = async (req, res) => {
       });
     }
 
-    // Check if contact number already exists
-    const existingAccount = await prisma.account.findFirst({
-      where: { contactNumber }
-    });
-
-    if (existingAccount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Account with this contact number already exists'
-      });
-    }
+    // Note: Duplicate contact numbers are allowed as per business requirements
+    // Multiple accounts can share the same contact number
 
     // Validate GST format if provided
     if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {

@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../../services/location_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
+import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import '../view_all_masters_screen.dart';
 
@@ -13,191 +17,139 @@ class AccountMasterScreen extends StatefulWidget {
 class _AccountMasterScreenState extends State<AccountMasterScreen> {
   final _formKey = GlobalKey<FormState>();
   bool isSubmitting = false;
-  bool isLoadingLocations = false;
+  bool isLoadingLocation = false;
 
   // Controllers
+  final _businessNameController = TextEditingController();
+  final _businessTypeController = TextEditingController();
   final _personNameController = TextEditingController();
   final _contactNumberController = TextEditingController();
-  final _businessTypeController = TextEditingController();
+  final _gstNumberController = TextEditingController();
+  final _panCardController = TextEditingController();
+  final _pincodeController = TextEditingController();
+  final _countryController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _districtController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _areaController = TextEditingController();
+  final _addressController = TextEditingController();
 
   // Dropdown values
   String? _selectedCustomerStage;
   String? _selectedFunnelStage;
   DateTime? _dateOfBirth;
+  bool _isActive = true;
 
-  // Location dropdowns
-  int? _selectedCountryId;
-  int? _selectedStateId;
-  int? _selectedRegionId;
-  int? _selectedDistrictId;
-  int? _selectedCityId;
-  int? _selectedZoneId;
-  int? _selectedAreaId;
+  // Images
+  String? _ownerImageBase64;
+  String? _shopImageBase64;
+  File? _ownerImageFile;
+  File? _shopImageFile;
 
-  List<Map<String, dynamic>> _countries = [];
-  List<Map<String, dynamic>> _states = [];
-  List<Map<String, dynamic>> _regions = [];
-  List<Map<String, dynamic>> _districts = [];
-  List<Map<String, dynamic>> _cities = [];
-  List<Map<String, dynamic>> _zones = [];
-  List<Map<String, dynamic>> _areas = [];
+  final List<String> _customerStages = [
+    'Lead',
+    'Prospect',
+    'Customer',
+    'Inactive',
+  ];
+  final List<String> _funnelStages = [
+    'Awareness',
+    'Interest',
+    'Consideration',
+    'Intent',
+    'Evaluation',
+    'Converted',
+  ];
 
-  final List<String> _customerStages = ['Lead', 'Prospect', 'Customer'];
-  final List<String> _funnelStages = ['Awareness', 'Interest', 'Converted'];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCountries();
-  }
-
-  Future<void> _loadCountries() async {
-    setState(() => isLoadingLocations = true);
-    try {
-      final countries = await LocationService.getCountries();
-      setState(() {
-        _countries = countries;
-        isLoadingLocations = false;
-      });
-    } catch (e) {
-      setState(() => isLoadingLocations = false);
-      _showError('Failed to load countries: $e');
-    }
-  }
-
-  Future<void> _loadStates(int countryId) async {
-    setState(() {
-      _selectedStateId = null;
-      _selectedRegionId = null;
-      _selectedDistrictId = null;
-      _selectedCityId = null;
-      _selectedZoneId = null;
-      _selectedAreaId = null;
-      _states = [];
-      _regions = [];
-      _districts = [];
-      _cities = [];
-      _zones = [];
-      _areas = [];
-    });
-    try {
-      final states = await LocationService.getStates(countryId: countryId);
-      setState(() => _states = states);
-    } catch (e) {
-      _showError('Failed to load states: $e');
-    }
-  }
-
-  Future<void> _loadRegions(int stateId) async {
-    setState(() {
-      _selectedRegionId = null;
-      _selectedDistrictId = null;
-      _selectedCityId = null;
-      _selectedZoneId = null;
-      _selectedAreaId = null;
-      _regions = [];
-      _districts = [];
-      _cities = [];
-      _zones = [];
-      _areas = [];
-    });
-    try {
-      final regions = await LocationService.getRegions(stateId: stateId);
-      setState(() => _regions = regions);
-    } catch (e) {
-      _showError('Failed to load regions: $e');
-    }
-  }
-
-  Future<void> _loadDistricts(int regionId) async {
-    setState(() {
-      _selectedDistrictId = null;
-      _selectedCityId = null;
-      _selectedZoneId = null;
-      _selectedAreaId = null;
-      _districts = [];
-      _cities = [];
-      _zones = [];
-      _areas = [];
-    });
-    try {
-      final districts = await LocationService.getDistricts(regionId: regionId);
-      setState(() => _districts = districts);
-    } catch (e) {
-      _showError('Failed to load districts: $e');
-    }
-  }
-
-  Future<void> _loadCities(int districtId) async {
-    setState(() {
-      _selectedCityId = null;
-      _selectedZoneId = null;
-      _selectedAreaId = null;
-      _cities = [];
-      _zones = [];
-      _areas = [];
-    });
-    try {
-      final cities = await LocationService.getCities(districtId: districtId);
-      setState(() => _cities = cities);
-    } catch (e) {
-      _showError('Failed to load cities: $e');
-    }
-  }
-
-  Future<void> _loadZones(int cityId) async {
-    setState(() {
-      _selectedZoneId = null;
-      _selectedAreaId = null;
-      _zones = [];
-      _areas = [];
-    });
-    try {
-      final zones = await LocationService.getZones(cityId: cityId);
-      setState(() => _zones = zones);
-    } catch (e) {
-      _showError('Failed to load zones: $e');
-    }
-  }
-
-  Future<void> _loadAreas(int zoneId) async {
-    setState(() {
-      _selectedAreaId = null;
-      _areas = [];
-    });
-    try {
-      final areas = await LocationService.getAreas(zoneId: zoneId);
-      setState(() => _areas = areas);
-    } catch (e) {
-      _showError('Failed to load areas: $e');
-    }
-  }
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
+    _businessNameController.dispose();
+    _businessTypeController.dispose();
     _personNameController.dispose();
     _contactNumberController.dispose();
-    _businessTypeController.dispose();
+    _gstNumberController.dispose();
+    _panCardController.dispose();
+    _pincodeController.dispose();
+    _countryController.dispose();
+    _stateController.dispose();
+    _districtController.dispose();
+    _cityController.dispose();
+    _areaController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFFD7BE69)),
-          ),
-          child: child!,
+  Future<void> _pickImage(bool isOwnerImage) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        final base64Image = base64Encode(bytes);
+
+        setState(() {
+          if (isOwnerImage) {
+            if (!kIsWeb) _ownerImageFile = File(image.path);
+            _ownerImageBase64 = 'data:image/jpeg;base64,$base64Image';
+          } else {
+            if (!kIsWeb) _shopImageFile = File(image.path);
+            _shopImageBase64 = 'data:image/jpeg;base64,$base64Image';
+          }
+        });
+
+        _showSuccess(
+          isOwnerImage ? 'Owner image selected' : 'Shop image selected',
         );
-      },
-    );
-    if (picked != null) {
-      setState(() => _dateOfBirth = picked);
+      }
+    } catch (e) {
+      _showError('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _lookupPincode() async {
+    final pincode = _pincodeController.text.trim();
+
+    if (pincode.isEmpty) {
+      _showError('Please enter pincode');
+      return;
+    }
+
+    if (!PincodeService.isValidPincode(pincode)) {
+      _showError('Pincode must be exactly 6 digits');
+      return;
+    }
+
+    setState(() => isLoadingLocation = true);
+
+    try {
+      final result = await PincodeService.getLocationByPincode(pincode);
+
+      if (result['success'] == true) {
+        final data = result['data'];
+        setState(() {
+          _countryController.text = data['country'] ?? '';
+          _stateController.text = data['state'] ?? '';
+          _districtController.text = data['district'] ?? '';
+          _cityController.text = data['city'] ?? '';
+          _areaController.text = data['area'] ?? '';
+        });
+        _showSuccess('Location details fetched successfully');
+      } else {
+        _showError(result['message'] ?? 'Failed to fetch location');
+      }
+    } catch (e) {
+      _showError('Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingLocation = false);
+      }
     }
   }
 
@@ -220,40 +172,60 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       setState(() => isSubmitting = true);
 
       try {
-        final account = await AccountService.createAccount(
+        print(
+          '📤 Submitting account with contact number: ${_contactNumberController.text.trim()}',
+        );
+
+        await AccountService.createAccount(
+          businessName: _businessNameController.text.trim().isEmpty
+              ? null
+              : _businessNameController.text.trim(),
           personName: _personNameController.text.trim(),
           contactNumber: _contactNumberController.text.trim(),
-          dateOfBirth: _dateOfBirth?.toIso8601String(),
           businessType: _businessTypeController.text.trim().isEmpty
               ? null
               : _businessTypeController.text.trim(),
+          dateOfBirth: _dateOfBirth?.toIso8601String(),
           customerStage: _selectedCustomerStage,
           funnelStage: _selectedFunnelStage,
-          areaId: _selectedAreaId,
+          gstNumber: _gstNumberController.text.trim().isEmpty
+              ? null
+              : _gstNumberController.text.trim().toUpperCase(),
+          panCard: _panCardController.text.trim().isEmpty
+              ? null
+              : _panCardController.text.trim().toUpperCase(),
+          ownerImage: _ownerImageBase64,
+          shopImage: _shopImageBase64,
+          isActive: _isActive,
+          pincode: _pincodeController.text.trim().isEmpty
+              ? null
+              : _pincodeController.text.trim(),
+          country: _countryController.text.trim().isEmpty
+              ? null
+              : _countryController.text.trim(),
+          state: _stateController.text.trim().isEmpty
+              ? null
+              : _stateController.text.trim(),
+          district: _districtController.text.trim().isEmpty
+              ? null
+              : _districtController.text.trim(),
+          city: _cityController.text.trim().isEmpty
+              ? null
+              : _cityController.text.trim(),
+          area: _areaController.text.trim().isEmpty
+              ? null
+              : _areaController.text.trim(),
+          address: _addressController.text.trim().isEmpty
+              ? null
+              : _addressController.text.trim(),
         );
 
-        _showSuccess(
-          'Account created successfully! Code: ${account.accountCode}',
-        );
-
-        // Clear form
-        _formKey.currentState?.reset();
-        setState(() {
-          _personNameController.clear();
-          _contactNumberController.clear();
-          _businessTypeController.clear();
-          _selectedCustomerStage = null;
-          _selectedFunnelStage = null;
-          _dateOfBirth = null;
-          _selectedCountryId = null;
-          _selectedStateId = null;
-          _selectedRegionId = null;
-          _selectedDistrictId = null;
-          _selectedCityId = null;
-          _selectedZoneId = null;
-          _selectedAreaId = null;
-        });
+        print('✅ Account created successfully');
+        _showSuccess('Account created successfully!');
+        _clearForm();
       } catch (e) {
+        print('❌ Error creating account: $e');
+        print('Error type: ${e.runtimeType}');
         _showError('Failed to create account: $e');
       } finally {
         if (mounted) {
@@ -261,6 +233,33 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         }
       }
     }
+  }
+
+  void _clearForm() {
+    _formKey.currentState?.reset();
+    setState(() {
+      _businessNameController.clear();
+      _businessTypeController.clear();
+      _personNameController.clear();
+      _contactNumberController.clear();
+      _gstNumberController.clear();
+      _panCardController.clear();
+      _pincodeController.clear();
+      _countryController.clear();
+      _stateController.clear();
+      _districtController.clear();
+      _cityController.clear();
+      _areaController.clear();
+      _addressController.clear();
+      _selectedCustomerStage = null;
+      _selectedFunnelStage = null;
+      _dateOfBirth = null;
+      _isActive = true;
+      _ownerImageBase64 = null;
+      _shopImageBase64 = null;
+      _ownerImageFile = null;
+      _shopImageFile = null;
+    });
   }
 
   @override
@@ -291,71 +290,48 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD7BE69),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.account_box, color: Colors.white, size: 30),
-                    SizedBox(width: 10),
-                    Text(
-                      'Account Master',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 25),
+              _buildSectionHeader('Business Information', Icons.business),
+              const SizedBox(height: 15),
 
-              // Person Name
+              _buildTextField(
+                controller: _businessNameController,
+                label: 'Business Name',
+                icon: Icons.store,
+                hint: 'Enter business name',
+              ),
+              const SizedBox(height: 15),
+
+              _buildTextField(
+                controller: _businessTypeController,
+                label: 'Business Type',
+                icon: Icons.category,
+                hint: 'e.g., Retail, Wholesale',
+              ),
+              const SizedBox(height: 15),
+
               _buildTextField(
                 controller: _personNameController,
                 label: 'Person Name *',
                 icon: Icons.person,
-                validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Person name is required' : null,
               ),
               const SizedBox(height: 15),
 
-              // Contact Number
               _buildTextField(
                 controller: _contactNumberController,
                 label: 'Contact Number *',
                 icon: Icons.phone,
                 keyboardType: TextInputType.phone,
+                maxLength: 10,
                 validator: (v) {
-                  if (v?.isEmpty ?? true) return 'Required';
+                  if (v?.isEmpty ?? true) return 'Contact number is required';
                   if (v!.length != 10) return 'Must be 10 digits';
                   return null;
                 },
               ),
               const SizedBox(height: 15),
 
-              // Date of Birth
-              _buildDateField(
-                label: 'Date of Birth',
-                icon: Icons.cake,
-                date: _dateOfBirth,
-                onTap: () => _selectDate(context),
-              ),
-              const SizedBox(height: 15),
-
-              // Business Type
-              _buildTextField(
-                controller: _businessTypeController,
-                label: 'Business Type',
-                icon: Icons.business,
-              ),
-              const SizedBox(height: 15),
-
-              // Customer Stage
               _buildDropdown(
                 value: _selectedCustomerStage,
                 label: 'Customer Stage',
@@ -365,7 +341,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
               ),
               const SizedBox(height: 15),
 
-              // Funnel Stage
               _buildDropdown(
                 value: _selectedFunnelStage,
                 label: 'Funnel Stage',
@@ -373,142 +348,183 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 items: _funnelStages,
                 onChanged: (v) => setState(() => _selectedFunnelStage = v),
               ),
+              const SizedBox(height: 15),
+
+              _buildTextField(
+                controller: _gstNumberController,
+                label: 'GST Number',
+                icon: Icons.receipt_long,
+                hint: '22AAAAA0000A1Z5',
+                textCapitalization: TextCapitalization.characters,
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    if (!RegExp(
+                      r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$',
+                    ).hasMatch(v.toUpperCase())) {
+                      return 'Invalid GST format';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 15),
+
+              _buildTextField(
+                controller: _panCardController,
+                label: 'PAN Card',
+                icon: Icons.credit_card,
+                hint: 'ABCDE1234F',
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 10,
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    if (!RegExp(
+                      r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$',
+                    ).hasMatch(v.toUpperCase())) {
+                      return 'Invalid PAN format';
+                    }
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 25),
 
-              // Location Section Header
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.location_on, color: Color(0xFFD7BE69)),
-                    SizedBox(width: 10),
-                    Text(
-                      'Location Details',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+              _buildSectionHeader('Images', Icons.image),
+              const SizedBox(height: 15),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildImagePicker(
+                      label: 'Owner Image',
+                      imageFile: _ownerImageFile,
+                      imageBase64: _ownerImageBase64,
+                      onTap: () => _pickImage(true),
                     ),
-                  ],
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: _buildImagePicker(
+                      label: 'Shop Image',
+                      imageFile: _shopImageFile,
+                      imageBase64: _shopImageBase64,
+                      onTap: () => _pickImage(false),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 25),
+
+              _buildSectionHeader('Status', Icons.toggle_on),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                title: const Text('Active Status'),
+                subtitle: Text(_isActive ? 'Active' : 'Inactive'),
+                value: _isActive,
+                onChanged: (value) => setState(() => _isActive = value),
+                activeColor: const Color(0xFFD7BE69),
+                secondary: Icon(
+                  _isActive ? Icons.check_circle : Icons.cancel,
+                  color: _isActive ? Colors.green : Colors.red,
                 ),
+              ),
+              const SizedBox(height: 25),
+
+              _buildSectionHeader('Location Details', Icons.location_on),
+              const SizedBox(height: 15),
+
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _buildTextField(
+                      controller: _pincodeController,
+                      label: 'Pincode',
+                      icon: Icons.pin_drop,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      hint: '400001',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: isLoadingLocation
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.search, size: 20),
+                      label: const Text('Lookup'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD7BE69),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      onPressed: isLoadingLocation ? null : _lookupPincode,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 15),
 
-              // Country
-              _buildLocationDropdown<int>(
-                value: _selectedCountryId,
+              _buildTextField(
+                controller: _countryController,
                 label: 'Country',
                 icon: Icons.public,
-                items: _countries,
-                idKey: 'country_id',
-                nameKey: 'country_name',
-                onChanged: (value) {
-                  setState(() => _selectedCountryId = value);
-                  if (value != null) _loadStates(value);
-                },
+                readOnly: true,
+                filled: true,
               ),
               const SizedBox(height: 15),
 
-              // State
-              _buildLocationDropdown<int>(
-                value: _selectedStateId,
+              _buildTextField(
+                controller: _stateController,
                 label: 'State',
                 icon: Icons.map,
-                items: _states,
-                idKey: 'state_id',
-                nameKey: 'state_name',
-                onChanged: (value) {
-                  setState(() => _selectedStateId = value);
-                  if (value != null) _loadRegions(value);
-                },
-                enabled: _selectedCountryId != null,
+                readOnly: true,
+                filled: true,
               ),
               const SizedBox(height: 15),
 
-              // Region
-              _buildLocationDropdown<int>(
-                value: _selectedRegionId,
-                label: 'Region',
-                icon: Icons.terrain,
-                items: _regions,
-                idKey: 'region_id',
-                nameKey: 'region_name',
-                onChanged: (value) {
-                  setState(() => _selectedRegionId = value);
-                  if (value != null) _loadDistricts(value);
-                },
-                enabled: _selectedStateId != null,
-              ),
-              const SizedBox(height: 15),
-
-              // District
-              _buildLocationDropdown<int>(
-                value: _selectedDistrictId,
+              _buildTextField(
+                controller: _districtController,
                 label: 'District',
                 icon: Icons.location_city,
-                items: _districts,
-                idKey: 'district_id',
-                nameKey: 'district_name',
-                onChanged: (value) {
-                  setState(() => _selectedDistrictId = value);
-                  if (value != null) _loadCities(value);
-                },
-                enabled: _selectedRegionId != null,
+                readOnly: true,
+                filled: true,
               ),
               const SizedBox(height: 15),
 
-              // City
-              _buildLocationDropdown<int>(
-                value: _selectedCityId,
+              _buildTextField(
+                controller: _cityController,
                 label: 'City',
                 icon: Icons.apartment,
-                items: _cities,
-                idKey: 'city_id',
-                nameKey: 'city_name',
-                onChanged: (value) {
-                  setState(() => _selectedCityId = value);
-                  if (value != null) _loadZones(value);
-                },
-                enabled: _selectedDistrictId != null,
+                readOnly: true,
+                filled: true,
               ),
               const SizedBox(height: 15),
 
-              // Zone
-              _buildLocationDropdown<int>(
-                value: _selectedZoneId,
-                label: 'Zone',
-                icon: Icons.explore,
-                items: _zones,
-                idKey: 'zone_id',
-                nameKey: 'zone_name',
-                onChanged: (value) {
-                  setState(() => _selectedZoneId = value);
-                  if (value != null) _loadAreas(value);
-                },
-                enabled: _selectedCityId != null,
-              ),
-              const SizedBox(height: 15),
-
-              // Area
-              _buildLocationDropdown<int>(
-                value: _selectedAreaId,
+              _buildTextField(
+                controller: _areaController,
                 label: 'Area',
                 icon: Icons.place,
-                items: _areas,
-                idKey: 'area_id',
-                nameKey: 'area_name',
-                onChanged: (value) {
-                  setState(() => _selectedAreaId = value);
-                },
-                enabled: _selectedZoneId != null,
+                readOnly: true,
+                filled: true,
+              ),
+              const SizedBox(height: 15),
+
+              _buildTextField(
+                controller: _addressController,
+                label: 'Address',
+                icon: Icons.home,
+                maxLines: 3,
+                hint: 'Enter complete address manually',
               ),
               const SizedBox(height: 30),
 
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -548,24 +564,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: () {
-                        _formKey.currentState?.reset();
-                        setState(() {
-                          _personNameController.clear();
-                          _contactNumberController.clear();
-                          _businessTypeController.clear();
-                          _selectedCustomerStage = null;
-                          _selectedFunnelStage = null;
-                          _dateOfBirth = null;
-                          _selectedCountryId = null;
-                          _selectedStateId = null;
-                          _selectedRegionId = null;
-                          _selectedDistrictId = null;
-                          _selectedCityId = null;
-                          _selectedZoneId = null;
-                          _selectedAreaId = null;
-                        });
-                      },
+                      onPressed: _clearForm,
                     ),
                   ),
                 ],
@@ -577,24 +576,64 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     );
   }
 
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD7BE69).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD7BE69).withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFFD7BE69)),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFD7BE69),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
     required IconData icon,
     TextInputType? keyboardType,
+    int? maxLength,
+    int? maxLines,
+    String? hint,
     String? Function(String?)? validator,
+    bool readOnly = false,
+    bool filled = false,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      maxLength: maxLength,
+      maxLines: maxLines ?? 1,
+      readOnly: readOnly,
+      enabled: true,
+      textCapitalization: textCapitalization,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
         ),
+        filled: filled,
+        fillColor: filled ? Colors.grey[100] : null,
+        counterText: maxLength != null ? '' : null,
       ),
       validator: validator,
     );
@@ -625,64 +664,63 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     );
   }
 
-  Widget _buildDateField({
+  Widget _buildImagePicker({
     required String label,
-    required IconData icon,
-    required DateTime? date,
+    required File? imageFile,
+    required String? imageBase64,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
-          ),
-        ),
-        child: Text(
-          date != null
-              ? '${date.day}/${date.month}/${date.year}'
-              : 'Select Date',
-          style: TextStyle(color: date != null ? Colors.black : Colors.grey),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocationDropdown<T>({
-    required T? value,
-    required String label,
-    required IconData icon,
-    required List<Map<String, dynamic>> items,
-    required String idKey,
-    required String nameKey,
-    required void Function(T?) onChanged,
-    bool enabled = true,
-  }) {
-    return DropdownButtonFormField<T>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        focusedBorder: OutlineInputBorder(
+      child: Container(
+        height: 150,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFD7BE69)),
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
+          color: Colors.grey[50],
         ),
-        filled: !enabled,
-        fillColor: enabled ? null : Colors.grey[200],
+        child: (imageFile != null && !kIsWeb)
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.file(
+                  imageFile,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
+              )
+            : (imageBase64 != null && kIsWeb)
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  base64Decode(imageBase64.split(',')[1]),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.add_photo_alternate,
+                    size: 40,
+                    color: Color(0xFFD7BE69),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFD7BE69),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to select',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
       ),
-      items: items.map((item) {
-        return DropdownMenuItem<T>(
-          value: item[idKey] as T,
-          child: Text(item[nameKey] as String),
-        );
-      }).toList(),
-      onChanged: enabled ? onChanged : null,
     );
   }
 }

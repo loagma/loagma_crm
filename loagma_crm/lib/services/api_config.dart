@@ -45,11 +45,12 @@ class ApiConfig {
   /// Toggle between environments
   /// Set to false for local development
   /// Set to true for production/deployed backend
-  static const bool useProduction = true; // Using deployed backend on Render
+  static const bool useProduction = true; // Using Render deployed backend
 
   static String get baseUrl {
     if (useProduction) {
-      // 🌍 Your live backend
+      // 🌍 Your live backend on Render
+      // Note: If DNS fails on emulator, try restarting with: flutter run --host-vmservice-port 0
       return 'https://loagma-crm.onrender.com';
     } else {
       // 🧪 Local testing
