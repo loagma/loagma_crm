@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/account_model.dart';
 import '../services/account_service.dart';
+import 'shared/edit_account_master_screen.dart';
 
 class ViewAllMastersScreen extends StatefulWidget {
   const ViewAllMastersScreen({super.key});
@@ -25,9 +26,23 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
     _loadAccounts();
   }
 
-  Future<void> _loadAccounts() async {
-    setState(() => isLoading = true);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh data when screen becomes visible again
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadAccounts(showLoading: false);
+      }
+    });
+  }
+
+  Future<void> _loadAccounts({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => isLoading = true);
+    }
     try {
+      print('🔄 Fetching accounts from API...');
       final data = await AccountService.fetchAccounts(
         page: currentPage,
         limit: itemsPerPage,
@@ -36,11 +51,13 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
             ? filterCustomerStage
             : null,
       );
+      print('✅ Fetched ${(data['accounts'] as List).length} accounts');
       setState(() {
         accounts = data['accounts'] as List<Account>;
         isLoading = false;
       });
     } catch (e) {
+      print('❌ Error loading accounts: $e');
       setState(() => isLoading = false);
       _showError('Failed to load accounts: $e');
     }
@@ -66,16 +83,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
         content: Text('Are you sure you want to delete account "$name"?'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context, false);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Delete cancelled'),
-                  backgroundColor: Colors.grey,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -89,12 +97,29 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
 
     if (confirmed == true) {
       try {
+        print('🗑️ Deleting account: $id');
         await AccountService.deleteAccount(id);
         _showSuccess('Account deleted successfully');
-        _loadAccounts();
+        await _loadAccounts(showLoading: false);
       } catch (e) {
+        print('❌ Error deleting account: $e');
         _showError('Failed to delete account: $e');
       }
+    }
+  }
+
+  Future<void> _editAccount(Account account) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditAccountMasterScreen(account: account),
+      ),
+    );
+
+    // If edit was successful, refresh the list
+    if (result == true) {
+      print('✅ Account edited successfully, refreshing list...');
+      await _loadAccounts(showLoading: false);
     }
   }
 
@@ -319,7 +344,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                                 if (value == 'view') {
                                   _showAccountDetails(account);
                                 } else if (value == 'edit') {
-                                  _showError('Edit functionality coming soon!');
+                                  _editAccount(account);
                                 } else if (value == 'delete') {
                                   _deleteAccount(
                                     account.id,
@@ -382,46 +407,206 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
   void _showAccountDetails(Account account) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.account_circle, color: Color(0xFFD7BE69)),
-            const SizedBox(width: 8),
-            const Text('Account Details'),
-          ],
-        ),
-        content: SingleChildScrollView(
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              _buildDetailRow('Account Code', account.accountCode),
-              _buildDetailRow('Person Name', account.personName),
-              _buildDetailRow('Contact Number', account.contactNumber),
-              if (account.dateOfBirth != null)
-                _buildDetailRow(
-                  'Date of Birth',
-                  '${account.dateOfBirth!.day}/${account.dateOfBirth!.month}/${account.dateOfBirth!.year}',
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFD7BE69),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
                 ),
-              if (account.businessType != null)
-                _buildDetailRow('Business Type', account.businessType!),
-              if (account.customerStage != null)
-                _buildDetailRow('Customer Stage', account.customerStage!),
-              if (account.funnelStage != null)
-                _buildDetailRow('Funnel Stage', account.funnelStage!),
-              _buildDetailRow(
-                'Created At',
-                '${account.createdAt.day}/${account.createdAt.month}/${account.createdAt.year}',
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_circle, color: Colors.white),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Account Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Basic Information
+                      _buildSectionTitle('Basic Information'),
+                      _buildDetailRow('Account Code', account.accountCode),
+                      const Divider(),
+                      if (account.businessName != null) ...[
+                        _buildDetailRow('Business Name', account.businessName!),
+                        const Divider(),
+                      ],
+                      _buildDetailRow('Person Name', account.personName),
+                      _buildDetailRow('Contact Number', account.contactNumber),
+                      if (account.dateOfBirth != null) ...[
+                        const Divider(),
+                        _buildDetailRow(
+                          'Date of Birth',
+                          '${account.dateOfBirth!.day}/${account.dateOfBirth!.month}/${account.dateOfBirth!.year}',
+                        ),
+                      ],
+                      if (account.businessType != null) ...[
+                        const Divider(),
+                        _buildDetailRow('Business Type', account.businessType!),
+                      ],
+
+                      // Business Details
+                      if (account.gstNumber != null ||
+                          account.panCard != null) ...[
+                        const SizedBox(height: 16),
+                        _buildSectionTitle('Business Details'),
+                        if (account.gstNumber != null) ...[
+                          _buildDetailRow('GST Number', account.gstNumber!),
+                          const Divider(),
+                        ],
+                        if (account.panCard != null)
+                          _buildDetailRow('PAN Card', account.panCard!),
+                      ],
+
+                      // Stages
+                      if (account.customerStage != null ||
+                          account.funnelStage != null) ...[
+                        const SizedBox(height: 16),
+                        _buildSectionTitle('Sales Information'),
+                        if (account.customerStage != null) ...[
+                          _buildDetailRow(
+                              'Customer Stage', account.customerStage!),
+                          const Divider(),
+                        ],
+                        if (account.funnelStage != null)
+                          _buildDetailRow('Funnel Stage', account.funnelStage!),
+                      ],
+
+                      // Location
+                      if (account.pincode != null ||
+                          account.address != null) ...[
+                        const SizedBox(height: 16),
+                        _buildSectionTitle('Location Details'),
+                        if (account.pincode != null) ...[
+                          _buildDetailRow('Pincode', account.pincode!),
+                          const Divider(),
+                        ],
+                        if (account.country != null) ...[
+                          _buildDetailRow('Country', account.country!),
+                          const Divider(),
+                        ],
+                        if (account.state != null) ...[
+                          _buildDetailRow('State', account.state!),
+                          const Divider(),
+                        ],
+                        if (account.district != null) ...[
+                          _buildDetailRow('District', account.district!),
+                          const Divider(),
+                        ],
+                        if (account.city != null) ...[
+                          _buildDetailRow('City', account.city!),
+                          const Divider(),
+                        ],
+                        if (account.area != null) ...[
+                          _buildDetailRow('Area', account.area!),
+                          const Divider(),
+                        ],
+                        if (account.address != null)
+                          _buildDetailRow('Address', account.address!),
+                      ],
+
+                      // Status
+                      const SizedBox(height: 16),
+                      _buildSectionTitle('Status'),
+                      _buildDetailRow(
+                        'Approval Status',
+                        account.isApproved ? 'Approved ✓' : 'Pending',
+                      ),
+                      const Divider(),
+                      _buildDetailRow(
+                        'Active Status',
+                        (account.isActive ?? true) ? 'Active ✓' : 'Inactive',
+                      ),
+
+                      // Timestamps
+                      const SizedBox(height: 16),
+                      _buildSectionTitle('Timestamps'),
+                      _buildDetailRow(
+                        'Created At',
+                        '${account.createdAt.day}/${account.createdAt.month}/${account.createdAt.year} ${account.createdAt.hour}:${account.createdAt.minute.toString().padLeft(2, '0')}',
+                      ),
+                      const Divider(),
+                      _buildDetailRow(
+                        'Updated At',
+                        '${account.updatedAt.day}/${account.updatedAt.month}/${account.updatedAt.year} ${account.updatedAt.hour}:${account.updatedAt.minute.toString().padLeft(2, '0')}',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Actions
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  border: Border(top: BorderSide(color: Colors.grey[300]!)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit'),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _editAccount(account);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD7BE69),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFFD7BE69),
+        ),
       ),
     );
   }
