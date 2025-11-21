@@ -215,6 +215,12 @@ export const createAccount = async (req, res) => {
       createdById
     } = req.body;
 
+    console.log('📥 CREATE ACCOUNT REQUEST:', {
+      personName,
+      contactNumber,
+      businessName
+    });
+
     // Validation
     if (!personName || !contactNumber) {
       return res.status(400).json({
@@ -233,6 +239,7 @@ export const createAccount = async (req, res) => {
 
     // Note: Duplicate contact numbers are allowed as per business requirements
     // Multiple accounts can share the same contact number
+    console.log('✅ Validation passed, generating account code...');
 
     // Validate GST format if provided
     if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
@@ -260,10 +267,12 @@ export const createAccount = async (req, res) => {
 
     // Generate unique account code
     const accountCode = await generateAccountCode();
+    console.log('✅ Generated account code:', accountCode);
 
     // Get user ID from auth middleware (req.user.id)
     const userId = req.user?.id || createdById;
 
+    console.log('✅ Creating account in database...');
     const account = await prisma.account.create({
       data: {
         id: randomUUID(),
@@ -321,17 +330,24 @@ export const createAccount = async (req, res) => {
       }
     });
 
+    console.log('✅ Account created successfully:', account.accountCode);
     res.status(201).json({ 
       success: true, 
       message: 'Account created successfully',
       data: account 
     });
   } catch (error) {
-    console.error('Create account error:', error);
+    console.error('❌ Create account error:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error meta:', error.meta);
+    
     if (error.code === 'P2002') {
+      // P2002 is Prisma's unique constraint violation error
+      const field = error.meta?.target?.[0] || 'field';
+      console.error(`Duplicate field detected: ${field}`);
       return res.status(400).json({
         success: false,
-        message: 'Account with this contact number already exists'
+        message: `Duplicate ${field} - this value already exists`
       });
     }
     res.status(500).json({ success: false, message: error.message });
@@ -641,21 +657,46 @@ async function generateAccountCode() {
   const year = date.getFullYear().toString().slice(-2);
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   
-  // Get count of accounts created today
-  const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-  
-  const count = await prisma.account.count({
-    where: {
-      createdAt: {
-        gte: startOfDay,
-        lte: endOfDay
-      }
+  // Try up to 10 times to generate a unique code
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // Get count of all accounts with this year-month prefix
+    const pattern = `${prefix}${year}${month}%`;
+    const existingAccounts = await prisma.account.findMany({
+      where: {
+        accountCode: {
+          startsWith: `${prefix}${year}${month}`
+        }
+      },
+      select: { accountCode: true },
+      orderBy: { accountCode: 'desc' }
+    });
+    
+    let sequence = 1;
+    if (existingAccounts.length > 0) {
+      // Extract the last sequence number and increment
+      const lastCode = existingAccounts[0].accountCode;
+      const lastSequence = parseInt(lastCode.slice(-4));
+      sequence = lastSequence + 1;
     }
-  });
+    
+    const accountCode = `${prefix}${year}${month}${sequence.toString().padStart(4, '0')}`;
+    
+    // Check if this code already exists
+    const exists = await prisma.account.findUnique({
+      where: { accountCode }
+    });
+    
+    if (!exists) {
+      return accountCode;
+    }
+    
+    // If exists, wait a bit and try again
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   
-  const sequence = (count + 1).toString().padStart(4, '0');
-  return `${prefix}${year}${month}${sequence}`;
+  // Fallback: use timestamp to ensure uniqueness
+  const timestamp = Date.now().toString().slice(-6);
+  return `${prefix}${year}${month}${timestamp}`;
 }
 
 // ==================== STATISTICS ====================
