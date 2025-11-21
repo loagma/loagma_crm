@@ -155,26 +155,54 @@ model EmployeeArea {
 }
 
 model Account {
-  id            String    @id
-  accountCode   String    @unique
-  personName    String
-  dateOfBirth   DateTime?
-  contactNumber String
-  businessType  String?
-  customerStage String?
-  funnelStage   String?
-  assignedToId  String?
-  createdById   String?
-  approvedById  String?
-  approvedAt    DateTime?
-  isApproved    Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  areaId        Int?
-  area          Area?     @relation(fields: [areaId], references: [area_id])
-  assignedTo    User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
-  createdBy     User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
-  approvedBy    User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
+  id                    String    @id
+  accountCode           String    @unique
+  businessName          String?   // Made optional to handle existing data
+  businessType          String?
+  personName            String
+  contactNumber         String
+  dateOfBirth           DateTime?
+  customerStage         String?
+  funnelStage           String?
+  gstNumber             String?
+  panCard               String?
+  ownerImage            String?   // URL to business owner personal image
+  shopImage             String?   // URL to shop image
+  isActive              Boolean   @default(true)
+  
+  // Location fields (pincode-based)
+  pincode               String?
+  country               String?
+  state                 String?
+  district              String?
+  city                  String?
+  area                  String?
+  address               String?   // Manual address field
+  
+  // Legacy area relation (kept for backward compatibility)
+  areaId                Int?
+  
+  // Assignment and approval
+  assignedToId          String?
+  createdById           String?
+  approvedById          String?
+  approvedAt            DateTime?
+  isApproved            Boolean   @default(false)
+  
+  // Timestamps
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // Relations
+  areaRelation          Area?     @relation(fields: [areaId], references: [area_id])
+  assignedTo            User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
+  createdBy             User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
+  approvedBy            User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
+  
+  @@index([pincode])
+  @@index([isActive])
+  @@index([customerStage])
+  @@index([createdAt])
 }
 
 model SalaryInformation {

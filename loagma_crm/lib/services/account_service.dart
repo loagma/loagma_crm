@@ -27,14 +27,27 @@ class AccountService {
   }
 
   // ==================== CREATE ====================
-  
+
   static Future<Account> createAccount({
+    String? businessName,
     required String personName,
     required String contactNumber,
-    String? dateOfBirth,
     String? businessType,
+    String? dateOfBirth,
     String? customerStage,
     String? funnelStage,
+    String? gstNumber,
+    String? panCard,
+    String? ownerImage,
+    String? shopImage,
+    bool? isActive,
+    String? pincode,
+    String? country,
+    String? state,
+    String? district,
+    String? city,
+    String? area,
+    String? address,
     String? assignedToId,
     int? areaId,
   }) async {
@@ -46,12 +59,25 @@ class AccountService {
         Uri.parse(ApiConfig.accountsUrl),
         headers: headers,
         body: json.encode({
+          if (businessName != null) 'businessName': businessName,
           'personName': personName,
           'contactNumber': contactNumber,
-          if (dateOfBirth != null) 'dateOfBirth': dateOfBirth,
           if (businessType != null) 'businessType': businessType,
+          if (dateOfBirth != null) 'dateOfBirth': dateOfBirth,
           if (customerStage != null) 'customerStage': customerStage,
           if (funnelStage != null) 'funnelStage': funnelStage,
+          if (gstNumber != null) 'gstNumber': gstNumber,
+          if (panCard != null) 'panCard': panCard,
+          if (ownerImage != null) 'ownerImage': ownerImage,
+          if (shopImage != null) 'shopImage': shopImage,
+          if (isActive != null) 'isActive': isActive,
+          if (pincode != null) 'pincode': pincode,
+          if (country != null) 'country': country,
+          if (state != null) 'state': state,
+          if (district != null) 'district': district,
+          if (city != null) 'city': city,
+          if (area != null) 'area': area,
+          if (address != null) 'address': address,
           if (assignedToId != null) 'assignedToId': assignedToId,
           if (areaId != null) 'areaId': areaId,
           if (userId != null) 'createdById': userId,
@@ -72,7 +98,7 @@ class AccountService {
   }
 
   // ==================== READ ====================
-  
+
   static Future<Map<String, dynamic>> fetchAccounts({
     int page = 1,
     int limit = 50,
@@ -98,9 +124,9 @@ class AccountService {
         if (search != null) 'search': search,
       };
 
-      final uri = Uri.parse(ApiConfig.accountsUrl).replace(
-        queryParameters: queryParams,
-      );
+      final uri = Uri.parse(
+        ApiConfig.accountsUrl,
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(uri, headers: headers);
 
@@ -140,7 +166,7 @@ class AccountService {
   }
 
   // ==================== UPDATE ====================
-  
+
   static Future<Account> updateAccount(
     String id,
     Map<String, dynamic> updates,
@@ -167,7 +193,7 @@ class AccountService {
   }
 
   // ==================== DELETE ====================
-  
+
   static Future<void> deleteAccount(String id) async {
     try {
       final headers = await _getHeaders();
@@ -187,18 +213,16 @@ class AccountService {
   }
 
   // ==================== APPROVAL ====================
-  
+
   static Future<Account> approveAccount(String id) async {
     try {
       final userId = await _getUserId();
       final headers = await _getHeaders();
-      
+
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/$id/approve'),
         headers: headers,
-        body: json.encode({
-          if (userId != null) 'approvedById': userId,
-        }),
+        body: json.encode({if (userId != null) 'approvedById': userId}),
       );
 
       if (response.statusCode == 200) {
@@ -236,7 +260,7 @@ class AccountService {
   }
 
   // ==================== STATISTICS ====================
-  
+
   static Future<Map<String, dynamic>> getAccountStats({
     String? assignedToId,
     String? areaId,
@@ -250,9 +274,9 @@ class AccountService {
         if (createdById != null) 'createdById': createdById,
       };
 
-      final uri = Uri.parse('${ApiConfig.accountsUrl}/stats').replace(
-        queryParameters: queryParams,
-      );
+      final uri = Uri.parse(
+        '${ApiConfig.accountsUrl}/stats',
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(uri, headers: headers);
 
@@ -268,7 +292,7 @@ class AccountService {
   }
 
   // ==================== BULK OPERATIONS ====================
-  
+
   static Future<int> bulkAssignAccounts({
     required List<String> accountIds,
     required String assignedToId,
@@ -303,7 +327,7 @@ class AccountService {
     try {
       final userId = await _getUserId();
       final headers = await _getHeaders();
-      
+
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/bulk/approve'),
         headers: headers,

@@ -30,9 +30,12 @@ export const getAllAccounts = async (req, res) => {
     
     if (search) {
       where.OR = [
+        { businessName: { contains: search, mode: 'insensitive' } },
         { personName: { contains: search, mode: 'insensitive' } },
         { accountCode: { contains: search, mode: 'insensitive' } },
-        { contactNumber: { contains: search } }
+        { contactNumber: { contains: search } },
+        { gstNumber: { contains: search, mode: 'insensitive' } },
+        { panCard: { contains: search, mode: 'insensitive' } }
       ];
     }
 
@@ -70,7 +73,7 @@ export const getAllAccounts = async (req, res) => {
               roleId: true
             }
           },
-          area: {
+          areaRelation: {
             include: {
               zone: {
                 include: {
@@ -148,7 +151,7 @@ export const getAccountById = async (req, res) => {
             roleId: true
           }
         },
-        area: {
+        areaRelation: {
           include: {
             zone: {
               include: {
@@ -188,12 +191,25 @@ export const getAccountById = async (req, res) => {
 export const createAccount = async (req, res) => {
   try {
     const {
-      personName,
-      dateOfBirth,
-      contactNumber,
+      businessName,
       businessType,
+      personName,
+      contactNumber,
+      dateOfBirth,
       customerStage,
       funnelStage,
+      gstNumber,
+      panCard,
+      ownerImage,
+      shopImage,
+      isActive,
+      pincode,
+      country,
+      state,
+      district,
+      city,
+      area,
+      address,
       assignedToId,
       areaId,
       createdById
@@ -227,6 +243,30 @@ export const createAccount = async (req, res) => {
       });
     }
 
+    // Validate GST format if provided
+    if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid GST number format'
+      });
+    }
+
+    // Validate PAN format if provided
+    if (panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid PAN card format'
+      });
+    }
+
+    // Validate pincode format if provided
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pincode must be exactly 6 digits'
+      });
+    }
+
     // Generate unique account code
     const accountCode = await generateAccountCode();
 
@@ -237,12 +277,25 @@ export const createAccount = async (req, res) => {
       data: {
         id: randomUUID(),
         accountCode,
-        personName,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        contactNumber,
+        businessName,
         businessType,
+        personName,
+        contactNumber,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         customerStage,
         funnelStage,
+        gstNumber: gstNumber?.toUpperCase(),
+        panCard: panCard?.toUpperCase(),
+        ownerImage,
+        shopImage,
+        isActive: isActive !== undefined ? isActive : true,
+        pincode,
+        country,
+        state,
+        district,
+        city,
+        area,
+        address,
         assignedToId,
         areaId: areaId ? parseInt(areaId) : null,
         createdById: userId,
@@ -265,7 +318,7 @@ export const createAccount = async (req, res) => {
             roleId: true
           }
         },
-        area: {
+        areaRelation: {
           include: {
             zone: {
               include: {
@@ -298,12 +351,25 @@ export const updateAccount = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      personName,
-      dateOfBirth,
-      contactNumber,
+      businessName,
       businessType,
+      personName,
+      contactNumber,
+      dateOfBirth,
       customerStage,
       funnelStage,
+      gstNumber,
+      panCard,
+      ownerImage,
+      shopImage,
+      isActive,
+      pincode,
+      country,
+      state,
+      district,
+      city,
+      area,
+      address,
       assignedToId,
       areaId
     } = req.body;
@@ -345,14 +411,51 @@ export const updateAccount = async (req, res) => {
       }
     }
 
+    // Validate GST format if provided
+    if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid GST number format'
+      });
+    }
+
+    // Validate PAN format if provided
+    if (panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid PAN card format'
+      });
+    }
+
+    // Validate pincode format if provided
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pincode must be exactly 6 digits'
+      });
+    }
+
     const updateData = {};
     
-    if (personName !== undefined) updateData.personName = personName;
-    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
-    if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
+    if (businessName !== undefined) updateData.businessName = businessName;
     if (businessType !== undefined) updateData.businessType = businessType;
+    if (personName !== undefined) updateData.personName = personName;
+    if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
     if (customerStage !== undefined) updateData.customerStage = customerStage;
     if (funnelStage !== undefined) updateData.funnelStage = funnelStage;
+    if (gstNumber !== undefined) updateData.gstNumber = gstNumber?.toUpperCase();
+    if (panCard !== undefined) updateData.panCard = panCard?.toUpperCase();
+    if (ownerImage !== undefined) updateData.ownerImage = ownerImage;
+    if (shopImage !== undefined) updateData.shopImage = shopImage;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (pincode !== undefined) updateData.pincode = pincode;
+    if (country !== undefined) updateData.country = country;
+    if (state !== undefined) updateData.state = state;
+    if (district !== undefined) updateData.district = district;
+    if (city !== undefined) updateData.city = city;
+    if (area !== undefined) updateData.area = area;
+    if (address !== undefined) updateData.address = address;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
     if (areaId !== undefined) updateData.areaId = areaId ? parseInt(areaId) : null;
 
@@ -384,7 +487,7 @@ export const updateAccount = async (req, res) => {
             roleId: true
           }
         },
-        area: {
+        areaRelation: {
           include: {
             zone: {
               include: {
