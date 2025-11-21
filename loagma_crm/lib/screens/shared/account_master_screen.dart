@@ -356,16 +356,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 icon: Icons.receipt_long,
                 hint: '22AAAAA0000A1Z5',
                 textCapitalization: TextCapitalization.characters,
-                validator: (v) {
-                  if (v != null && v.isNotEmpty) {
-                    if (!RegExp(
-                      r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$',
-                    ).hasMatch(v.toUpperCase())) {
-                      return 'Invalid GST format';
-                    }
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 15),
 
@@ -376,16 +366,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 hint: 'ABCDE1234F',
                 textCapitalization: TextCapitalization.characters,
                 maxLength: 10,
-                validator: (v) {
-                  if (v != null && v.isNotEmpty) {
-                    if (!RegExp(
-                      r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$',
-                    ).hasMatch(v.toUpperCase())) {
-                      return 'Invalid PAN format';
-                    }
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 25),
 
