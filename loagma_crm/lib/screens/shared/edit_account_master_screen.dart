@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import '../../models/account_model.dart';
@@ -21,10 +22,11 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
   final _formKey = GlobalKey<FormState>();
   bool isSubmitting = false;
   bool isLoadingLocation = false;
+  bool isLoadingAreas = false;
+  bool isLoadingGeolocation = false;
 
   // Controllers
   late TextEditingController _businessNameController;
-  late TextEditingController _businessTypeController;
   late TextEditingController _personNameController;
   late TextEditingController _contactNumberController;
   late TextEditingController _gstNumberController;
@@ -34,20 +36,53 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
   late TextEditingController _stateController;
   late TextEditingController _districtController;
   late TextEditingController _cityController;
-  late TextEditingController _areaController;
   late TextEditingController _addressController;
+  late TextEditingController _businessTypeController;
+  late TextEditingController _areaController;
 
   // Dropdown values
+  String? _selectedBusinessType;
+  String? _selectedBusinessSize;
+  String? _selectedArea;
   String? _selectedCustomerStage;
   String? _selectedFunnelStage;
   DateTime? _dateOfBirth;
   bool _isActive = true;
+
+  // Geolocation
+  double? _latitude;
+  double? _longitude;
 
   // Images
   String? _ownerImageBase64;
   String? _shopImageBase64;
   File? _ownerImageFile;
   File? _shopImageFile;
+
+  // Areas list
+  List<Map<String, dynamic>> _availableAreas = [];
+
+  // Business Type options
+  final List<String> _businessTypes = [
+    'Kirana Store',
+    'Sweet Shop',
+    'Restaurant',
+    'Bakery',
+    'Caterer',
+    'Hostel',
+    'Hotel',
+    'Cafe',
+    'Other',
+  ];
+
+  // Business Size options
+  final List<String> _businessSizes = [
+    'Semi Retailer',
+    'Retailer',
+    'Semi Wholesaler',
+    'Wholesaler',
+    'Home Buyer',
+  ];
 
   final List<String> _customerStages = [
     'Lead',

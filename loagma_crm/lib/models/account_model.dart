@@ -6,6 +6,7 @@ class Account {
   final DateTime? dateOfBirth;
   final String contactNumber;
   final String? businessType;
+  final String? businessSize;
   final String? customerStage;
   final String? funnelStage;
   final String? gstNumber;
@@ -20,6 +21,8 @@ class Account {
   final String? city;
   final String? area;
   final String? address;
+  final double? latitude;
+  final double? longitude;
   final String? assignedToId;
   final String? createdById;
   final String? approvedById;
@@ -43,6 +46,7 @@ class Account {
     this.dateOfBirth,
     required this.contactNumber,
     this.businessType,
+    this.businessSize,
     this.customerStage,
     this.funnelStage,
     this.gstNumber,
@@ -57,6 +61,8 @@ class Account {
     this.city,
     this.area,
     this.address,
+    this.latitude,
+    this.longitude,
     this.assignedToId,
     this.createdById,
     this.approvedById,
@@ -82,6 +88,7 @@ class Account {
           : null,
       contactNumber: json['contactNumber'],
       businessType: json['businessType'],
+      businessSize: json['businessSize'],
       customerStage: json['customerStage'],
       funnelStage: json['funnelStage'],
       gstNumber: json['gstNumber'],
@@ -96,6 +103,8 @@ class Account {
       city: json['city'],
       area: json['area'],
       address: json['address'],
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
       assignedToId: json['assignedToId'],
       createdById: json['createdById'],
       approvedById: json['approvedById'],
@@ -128,6 +137,7 @@ class Account {
       'contactNumber': contactNumber,
       if (dateOfBirth != null) 'dateOfBirth': dateOfBirth!.toIso8601String(),
       if (businessType != null) 'businessType': businessType,
+      if (businessSize != null) 'businessSize': businessSize,
       if (customerStage != null) 'customerStage': customerStage,
       if (funnelStage != null) 'funnelStage': funnelStage,
       if (gstNumber != null) 'gstNumber': gstNumber,
@@ -142,6 +152,8 @@ class Account {
       if (city != null) 'city': city,
       if (area != null) 'area': area,
       if (address != null) 'address': address,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
       if (assignedToId != null) 'assignedToId': assignedToId,
       if (createdById != null) 'createdById': createdById,
       if (areaId != null) 'areaId': areaId,
