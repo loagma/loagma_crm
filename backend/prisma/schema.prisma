@@ -159,6 +159,7 @@ model Account {
   accountCode           String    @unique
   businessName          String?   // Made optional to handle existing data
   businessType          String?
+  businessSize          String?   // New field: Semi Retailer, Retailer, Semi Wholesaler, Wholesaler, Home Buyer
   personName            String
   contactNumber         String
   dateOfBirth           DateTime?
@@ -178,6 +179,8 @@ model Account {
   city                  String?
   area                  String?
   address               String?   // Manual address field
+  latitude              Float?    // Geolocation latitude
+  longitude             Float?    // Geolocation longitude
   
   // Legacy area relation (kept for backward compatibility)
   areaId                Int?
@@ -203,6 +206,8 @@ model Account {
   @@index([isActive])
   @@index([customerStage])
   @@index([createdAt])
+  @@index([businessType])
+  @@index([businessSize])
 }
 
 model SalaryInformation {

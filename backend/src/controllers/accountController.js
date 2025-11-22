@@ -193,6 +193,7 @@ export const createAccount = async (req, res) => {
     const {
       businessName,
       businessType,
+      businessSize,
       personName,
       contactNumber,
       dateOfBirth,
@@ -210,6 +211,8 @@ export const createAccount = async (req, res) => {
       city,
       area,
       address,
+      latitude,
+      longitude,
       assignedToId,
       areaId,
       createdById
@@ -279,6 +282,7 @@ export const createAccount = async (req, res) => {
         accountCode,
         businessName,
         businessType,
+        businessSize,
         personName,
         contactNumber,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
@@ -296,6 +300,8 @@ export const createAccount = async (req, res) => {
         city,
         area,
         address,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
         assignedToId,
         areaId: areaId ? parseInt(areaId) : null,
         createdById: userId,
@@ -360,6 +366,7 @@ export const updateAccount = async (req, res) => {
     const {
       businessName,
       businessType,
+      businessSize,
       personName,
       contactNumber,
       dateOfBirth,
@@ -377,6 +384,8 @@ export const updateAccount = async (req, res) => {
       city,
       area,
       address,
+      latitude,
+      longitude,
       assignedToId,
       areaId
     } = req.body;
@@ -446,6 +455,7 @@ export const updateAccount = async (req, res) => {
     
     if (businessName !== undefined) updateData.businessName = businessName;
     if (businessType !== undefined) updateData.businessType = businessType;
+    if (businessSize !== undefined) updateData.businessSize = businessSize;
     if (personName !== undefined) updateData.personName = personName;
     if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
     if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
@@ -463,6 +473,8 @@ export const updateAccount = async (req, res) => {
     if (city !== undefined) updateData.city = city;
     if (area !== undefined) updateData.area = area;
     if (address !== undefined) updateData.address = address;
+    if (latitude !== undefined) updateData.latitude = latitude ? parseFloat(latitude) : null;
+    if (longitude !== undefined) updateData.longitude = longitude ? parseFloat(longitude) : null;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
     if (areaId !== undefined) updateData.areaId = areaId ? parseInt(areaId) : null;
 
