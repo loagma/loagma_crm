@@ -245,12 +245,12 @@ export const createAccount = async (req, res) => {
     console.log('✅ Validation passed, generating account code...');
 
     // Validate GST format if provided
-    if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid GST number format'
-      });
-    }
+    // if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'Invalid GST number format'
+    //   });
+    // }
 
     // Validate PAN format if provided
     if (panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panCard)) {
