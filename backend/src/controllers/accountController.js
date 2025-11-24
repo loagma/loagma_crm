@@ -864,3 +864,56 @@ export const bulkApproveAccounts = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ==================== CHECK CONTACT NUMBER ====================
+
+export const checkContactNumber = async (req, res) => {
+  try {
+    const { contactNumber } = req.body;
+
+    if (!contactNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Contact number is required'
+      });
+    }
+
+    // Validate contact number format (10 digits)
+    if (!/^\d{10}$/.test(contactNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Contact number must be exactly 10 digits'
+      });
+    }
+
+    // Check if contact number exists
+    const existingAccount = await prisma.account.findFirst({
+      where: { contactNumber },
+      select: {
+        id: true,
+        accountCode: true,
+        businessName: true,
+        personName: true,
+        contactNumber: true
+      }
+    });
+
+    if (existingAccount) {
+      return res.json({
+        success: true,
+        exists: true,
+        message: 'Contact number already exists',
+        data: existingAccount
+      });
+    }
+
+    res.json({
+      success: true,
+      exists: false,
+      message: 'Contact number is available'
+    });
+  } catch (error) {
+    console.error('Check contact number error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

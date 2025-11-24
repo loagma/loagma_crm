@@ -9,7 +9,8 @@ import {
   rejectAccount,
   getAccountStats,
   bulkAssignAccounts,
-  bulkApproveAccounts
+  bulkApproveAccounts,
+  checkContactNumber
 } from '../controllers/accountController.js';
 // import {  } from '../middleware/.js';
 
@@ -18,6 +19,7 @@ const router = express.Router();
 // ==================== ACCOUNT ROUTES ====================
 router.get('/', getAllAccounts);
 router.get('/stats',  getAccountStats);
+router.post('/check-contact', checkContactNumber);
 router.get('/:id',  getAccountById);
 router.post('/', createAccount);
 router.put('/:id',  updateAccount);
