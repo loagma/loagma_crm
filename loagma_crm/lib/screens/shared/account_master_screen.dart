@@ -224,7 +224,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
           _stateController.text = data['state'] ?? '';
           _districtController.text = data['district'] ?? '';
           _cityController.text = data['city'] ?? '';
-          
+
           // Load areas
           _availableAreas = List<Map<String, dynamic>>.from(
             data['areas'] ?? [],
@@ -390,6 +390,19 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
             children: [
               _buildSectionHeader('Business Information', Icons.business),
               const SizedBox(height: 15),
+              _buildTextField(
+                controller: _contactNumberController,
+                label: 'Contact Number *',
+                icon: Icons.phone,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                validator: (v) {
+                  if (v?.isEmpty ?? true) return 'Contact number is required';
+                  if (v!.length != 10) return 'Must be 10 digits';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 15),
 
               _buildTextField(
                 controller: _businessNameController,
@@ -405,7 +418,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 icon: Icons.category,
                 items: _businessTypes,
                 onChanged: (v) => setState(() => _selectedBusinessType = v),
-                validator: (v) => v == null ? 'Business type is required' : null,
+                validator: (v) =>
+                    v == null ? 'Business type is required' : null,
               ),
               const SizedBox(height: 15),
 
@@ -415,7 +429,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 icon: Icons.business_center,
                 items: _businessSizes,
                 onChanged: (v) => setState(() => _selectedBusinessSize = v),
-                validator: (v) => v == null ? 'Business size is required' : null,
+                validator: (v) =>
+                    v == null ? 'Business size is required' : null,
               ),
               const SizedBox(height: 15),
 
@@ -425,20 +440,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 icon: Icons.person,
                 validator: (v) =>
                     v?.isEmpty ?? true ? 'Person name is required' : null,
-              ),
-              const SizedBox(height: 15),
-
-              _buildTextField(
-                controller: _contactNumberController,
-                label: 'Contact Number *',
-                icon: Icons.phone,
-                keyboardType: TextInputType.phone,
-                maxLength: 10,
-                validator: (v) {
-                  if (v?.isEmpty ?? true) return 'Contact number is required';
-                  if (v!.length != 10) return 'Must be 10 digits';
-                  return null;
-                },
               ),
               const SizedBox(height: 15),
 
@@ -609,7 +610,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                           .map((area) => area['name'] as String)
                           .toList(),
                       onChanged: (v) => setState(() => _selectedArea = v),
-                      validator: (v) => v == null ? 'Please select an area' : null,
+                      validator: (v) =>
+                          v == null ? 'Please select an area' : null,
                     ),
                     const SizedBox(height: 15),
                   ],
@@ -874,37 +876,37 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ),
               )
             : (imageBase64 != null && kIsWeb)
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      base64Decode(imageBase64.split(',')[1]),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.add_photo_alternate,
-                        size: 40,
-                        color: Color(0xFFD7BE69),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          color: Color(0xFFD7BE69),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Tap to select',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  base64Decode(imageBase64.split(',')[1]),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.add_photo_alternate,
+                    size: 40,
+                    color: Color(0xFFD7BE69),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFD7BE69),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to select',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
       ),
     );
   }
