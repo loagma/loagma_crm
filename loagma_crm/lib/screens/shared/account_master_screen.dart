@@ -453,18 +453,107 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
             children: [
               _buildSectionHeader('Business Information', Icons.business),
               const SizedBox(height: 15),
-              _buildTextField(
+              TextFormField(
                 controller: _contactNumberController,
-                label: 'Contact Number *',
-                icon: Icons.phone,
                 keyboardType: TextInputType.phone,
                 maxLength: 10,
+                onChanged: (value) {
+                  if (value.length == 10) {
+                    _checkContactNumber(value);
+                  } else {
+                    setState(() {
+                      contactNumberError = null;
+                      existingAccountData = null;
+                    });
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Contact Number *',
+                  prefixIcon: const Icon(Icons.phone, color: Color(0xFFD7BE69)),
+                  suffixIcon: isCheckingContact
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFFD7BE69),
+                            ),
+                          ),
+                        )
+                      : contactNumberError != null
+                          ? const Icon(Icons.error, color: Colors.red)
+                          : _contactNumberController.text.length == 10
+                              ? const Icon(Icons.check_circle, color: Colors.green)
+                              : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: contactNumberError != null ? Colors.red : const Color(0xFFD7BE69),
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.red, width: 2),
+                  ),
+                  counterText: '',
+                  errorText: contactNumberError,
+                  errorMaxLines: 2,
+                ),
                 validator: (v) {
                   if (v?.isEmpty ?? true) return 'Contact number is required';
                   if (v!.length != 10) return 'Must be 10 digits';
+                  if (contactNumberError != null) return contactNumberError;
                   return null;
                 },
               ),
+              if (existingAccountData != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Account Already Exists',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              'Name: ${existingAccountData!['personName'] ?? 'N/A'}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            if (existingAccountData!['businessName'] != null)
+                              Text(
+                                'Business: ${existingAccountData!['businessName']}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            Text(
+                              'Code: ${existingAccountData!['accountCode'] ?? 'N/A'}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 15),
 
               _buildTextField(
@@ -771,6 +860,90 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ),
                 onPressed: isLoadingGeolocation ? null : _getCurrentLocation,
               ),
+              
+              // Google Map Display
+              if (_latitude != null && _longitude != null) ...[
+                const SizedBox(height: 20),
+                Container(
+                  height: 250,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFD7BE69), width: 2),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      children: [
+                        GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(_latitude!, _longitude!),
+                            zoom: 15,
+                          ),
+                          markers: {
+                            Marker(
+                              markerId: const MarkerId('current_location'),
+                              position: LatLng(_latitude!, _longitude!),
+                              infoWindow: const InfoWindow(
+                                title: 'Current Location',
+                              ),
+                            ),
+                          },
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          mapToolbarEnabled: false,
+                          onTap: (_) => _openInGoogleMaps(),
+                        ),
+                        Positioned(
+                          bottom: 10,
+                          right: 10,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _openInGoogleMaps,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.open_in_new,
+                                        size: 18,
+                                        color: Color(0xFFD7BE69),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Open in Maps',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFFD7BE69),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 30),
 
               Row(
