@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import '../view_all_masters_screen.dart';
@@ -21,6 +23,9 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   bool isLoadingLocation = false;
   bool isLoadingAreas = false;
   bool isLoadingGeolocation = false;
+  bool isCheckingContact = false;
+  String? contactNumberError;
+  Map<String, dynamic>? existingAccountData;
 
   // Controllers
   final _businessNameController = TextEditingController();
@@ -145,6 +150,39 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     }
   }
 
+  Future<void> _checkContactNumber(String contactNumber) async {
+    if (contactNumber.length != 10) return;
+
+    setState(() {
+      isCheckingContact = true;
+      contactNumberError = null;
+      existingAccountData = null;
+    });
+
+    try {
+      final result = await AccountService.checkContactNumber(contactNumber);
+      
+      if (result['exists'] == true && result['data'] != null) {
+        final account = result['data'];
+        setState(() {
+          contactNumberError = 'Contact number already exists';
+          existingAccountData = account;
+        });
+      } else {
+        setState(() {
+          contactNumberError = null;
+          existingAccountData = null;
+        });
+      }
+    } catch (e) {
+      print('Error checking contact number: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isCheckingContact = false);
+      }
+    }
+  }
+
   Future<void> _getCurrentLocation() async {
     setState(() => isLoadingGeolocation = true);
 
@@ -193,6 +231,23 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       if (mounted) {
         setState(() => isLoadingGeolocation = false);
       }
+    }
+  }
+
+  Future<void> _openInGoogleMaps() async {
+    if (_latitude == null || _longitude == null) return;
+
+    final url = 'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
+    final uri = Uri.parse(url);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showError('Could not open Google Maps');
+      }
+    } catch (e) {
+      _showError('Error opening Google Maps: $e');
     }
   }
 
@@ -271,6 +326,12 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
+      // Check if contact number already exists
+      if (contactNumberError != null) {
+        _showError('Please use a different contact number');
+        return;
+      }
+
       setState(() => isSubmitting = true);
 
       try {
@@ -357,6 +418,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       _ownerImageFile = null;
       _shopImageFile = null;
       _availableAreas = [];
+      contactNumberError = null;
+      existingAccountData = null;
     });
   }
 

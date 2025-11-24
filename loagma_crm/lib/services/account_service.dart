@@ -355,4 +355,30 @@ class AccountService {
       rethrow;
     }
   }
+
+  // ==================== CHECK CONTACT NUMBER ====================
+
+  static Future<Map<String, dynamic>> checkContactNumber(
+    String contactNumber,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/check-contact'),
+        headers: headers,
+        body: json.encode({'contactNumber': contactNumber}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to check contact number');
+      }
+    } catch (e) {
+      print('Error checking contact number: $e');
+      rethrow;
+    }
+  }
 }
