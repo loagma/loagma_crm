@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/account_model.dart';
-import '../services/account_service.dart';
-import 'shared/edit_account_master_screen.dart';
+import '../../models/account_model.dart';
+import '../../services/account_service.dart';
+import 'edit_account_master_screen.dart';
 
 class ViewAllMastersScreen extends StatefulWidget {
   const ViewAllMastersScreen({super.key});

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
-import 'account_master_screen.dart';
-import 'account_detail_screen.dart';
+import '../../services/user_service.dart';
 
 class AccountListScreen extends StatefulWidget {
   const AccountListScreen({super.key});
@@ -24,23 +25,32 @@ class _AccountListScreenState extends State<AccountListScreen> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
+  // Determines whether we should pass createdBy filter (non-admin)
+  bool get _shouldFilterByOwner {
+    final role = UserService.currentRole?.toLowerCase();
+    return role != null && role != 'admin';
+  }
+
+  String? get _currentUserId => UserService.currentUserId;
+
   @override
   void initState() {
     super.initState();
-    _loadAccounts();
+    _loadAccounts(refresh: true);
     _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 100) {
       if (_currentPage < _totalPages && !_isLoadingMore) {
         _loadMoreAccounts();
       }
@@ -62,19 +72,26 @@ class _AccountListScreenState extends State<AccountListScreen> {
         search: _searchQuery,
         customerStage: _filterCustomerStage,
         isApproved: _filterIsApproved,
+        // apply owner filter for non-admin roles
+        createdById: _shouldFilterByOwner ? _currentUserId : null,
       );
+
+      // result expected: { 'accounts': List<Account>, 'pagination': {'totalPages': n} }
+      final fetched = List<Account>.from(result['accounts'] ?? []);
+      final pagination = result['pagination'] ?? {'totalPages': 1};
 
       setState(() {
         if (refresh) {
-          _accounts = result['accounts'];
+          _accounts = fetched;
         } else {
-          _accounts.addAll(result['accounts']);
+          _accounts.addAll(fetched);
         }
-        _totalPages = result['pagination']['totalPages'];
+        _totalPages = (pagination['totalPages'] as int?) ?? 1;
         _isLoading = false;
         _isLoadingMore = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
@@ -133,7 +150,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
       try {
         await AccountService.deleteAccount(account.id);
         _showSuccess('Account deleted successfully');
-        _refreshAccounts();
+        // refresh first page
+        await _refreshAccounts();
       } catch (e) {
         _showError('Failed to delete account: $e');
       }
@@ -143,60 +161,81 @@ class _AccountListScreenState extends State<AccountListScreen> {
   void _showFilterDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filter Accounts'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: _filterCustomerStage,
-              decoration: const InputDecoration(labelText: 'Customer Stage'),
-              items: ['Lead', 'Prospect', 'Customer']
-                  .map((stage) => DropdownMenuItem(
-                        value: stage,
-                        child: Text(stage),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                setState(() => _filterCustomerStage = value);
-              },
-            ),
-            const SizedBox(height: 15),
-            DropdownButtonFormField<bool>(
-              value: _filterIsApproved,
-              decoration: const InputDecoration(labelText: 'Approval Status'),
-              items: const [
-                DropdownMenuItem(value: true, child: Text('Approved')),
-                DropdownMenuItem(value: false, child: Text('Pending')),
+      builder: (context) {
+        String? tmpStage = _filterCustomerStage;
+        bool? tmpApproved = _filterIsApproved;
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Filter Accounts'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: tmpStage,
+                  decoration: const InputDecoration(labelText: 'Customer Stage'),
+                  items: ['Lead', 'Prospect', 'Customer']
+                      .map((stage) => DropdownMenuItem(
+                            value: stage,
+                            child: Text(stage),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => tmpStage = value),
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<bool>(
+                  value: tmpApproved,
+                  decoration: const InputDecoration(labelText: 'Approval Status'),
+                  items: const [
+                    DropdownMenuItem(value: true, child: Text('Approved')),
+                    DropdownMenuItem(value: false, child: Text('Pending')),
+                  ],
+                  onChanged: (value) => setDialogState(() => tmpApproved = value),
+                ),
               ],
-              onChanged: (value) {
-                setState(() => _filterIsApproved = value);
-              },
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _filterCustomerStage = null;
-                _filterIsApproved = null;
-              });
-              Navigator.pop(context);
-              _refreshAccounts();
-            },
-            child: const Text('Clear'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _refreshAccounts();
-            },
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _filterCustomerStage = null;
+                    _filterIsApproved = null;
+                  });
+                  Navigator.pop(context);
+                  _refreshAccounts();
+                },
+                child: const Text('Clear'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _filterCustomerStage = tmpStage;
+                    _filterIsApproved = tmpApproved;
+                  });
+                  Navigator.pop(context);
+                  _refreshAccounts();
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        });
+      },
     );
+  }
+
+  // Navigate to create screen
+  Future<void> _navigateToCreate() async {
+    // expecting a route /account/create to exist
+    await context.push('/account/create');
+    // after returning, refresh list
+    await _refreshAccounts();
+  }
+
+  // Navigate to detail screen
+  Future<void> _navigateToDetail(String accountId) async {
+    await context.push('/account/$accountId');
+    // after returning, refresh list
+    await _refreshAccounts();
   }
 
   @override
@@ -226,7 +265,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
               decoration: InputDecoration(
                 hintText: 'Search by name, code, or phone...',
                 prefixIcon: const Icon(Icons.search, color: Color(0xFFD7BE69)),
-                suffixIcon: _searchQuery != null
+                suffixIcon: (_searchQuery != null && _searchQuery!.isNotEmpty)
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
@@ -241,8 +280,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: Color(0xFFD7BE69), width: 2),
+                  borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
                 ),
               ),
               onSubmitted: (value) {
@@ -263,8 +301,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                         child: ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.all(15),
-                          itemCount:
-                              _accounts.length + (_isLoadingMore ? 1 : 0),
+                          itemCount: _accounts.length + (_isLoadingMore ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (index == _accounts.length) {
                               return const Center(
@@ -282,15 +319,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AccountMasterScreen(),
-            ),
-          );
-          _refreshAccounts();
-        },
+        onPressed: _navigateToCreate,
         backgroundColor: const Color(0xFFD7BE69),
         icon: const Icon(Icons.add),
         label: const Text('New Account'),
@@ -303,16 +332,11 @@ class _AccountListScreenState extends State<AccountListScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.account_box_outlined,
-              size: 80, color: Colors.grey[300]),
+          Icon(Icons.account_box_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 20),
           Text(
             'No Accounts Found',
-            style: TextStyle(
-              fontSize: 20,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 20, color: Colors.grey[600], fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
           Text(
@@ -330,15 +354,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AccountDetailScreen(accountId: account.id),
-            ),
-          );
-          _refreshAccounts();
-        },
+        onTap: () => _navigateToDetail(account.id),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(15),
@@ -353,62 +369,31 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       color: const Color(0xFFD7BE69).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Color(0xFFD7BE69),
-                      size: 30,
-                    ),
+                    child: const Icon(Icons.person, color: Color(0xFFD7BE69), size: 30),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          account.personName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text(account.personName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 5),
-                        Text(
-                          account.accountCode,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
+                        Text(account.accountCode, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                       ],
                     ),
                   ),
-                  // Approval Badge
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: account.isApproved
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.orange.withOpacity(0.1),
+                      color: account.isApproved ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          account.isApproved ? Icons.check_circle : Icons.pending,
-                          size: 16,
-                          color: account.isApproved ? Colors.green : Colors.orange,
-                        ),
+                        Icon(account.isApproved ? Icons.check_circle : Icons.pending, size: 16, color: account.isApproved ? Colors.green : Colors.orange),
                         const SizedBox(width: 5),
-                        Text(
-                          account.isApproved ? 'Approved' : 'Pending',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: account.isApproved ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text(account.isApproved ? 'Approved' : 'Pending', style: TextStyle(fontSize: 12, color: account.isApproved ? Colors.green : Colors.orange, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -416,15 +401,9 @@ class _AccountListScreenState extends State<AccountListScreen> {
               ),
               const Divider(height: 20),
               _buildInfoRow(Icons.phone, account.contactNumber),
-              if (account.businessType != null)
-                _buildInfoRow(Icons.business, account.businessType!),
-              if (account.customerStage != null)
-                _buildInfoRow(Icons.stairs, account.customerStage!),
-              if (account.createdBy != null)
-                _buildInfoRow(
-                  Icons.person_add,
-                  'Created by: ${account.createdByName}',
-                ),
+              if (account.businessType != null) _buildInfoRow(Icons.business, account.businessType!),
+              if (account.customerStage != null) _buildInfoRow(Icons.stairs, account.customerStage!),
+              if (account.createdBy != null) _buildInfoRow(Icons.person_add, 'Created by: ${account.createdByName ?? account.createdBy}'),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -432,17 +411,9 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.edit, size: 18),
                     label: const Text('Edit'),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              AccountDetailScreen(accountId: account.id),
-                        ),
-                      );
-                      _refreshAccounts();
-                    },
+                    onPressed: () => _navigateToDetail(account.id),
                   ),
+                  const SizedBox(width: 8),
                   TextButton.icon(
                     icon: const Icon(Icons.delete, size: 18),
                     label: const Text('Delete'),
@@ -465,12 +436,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
         children: [
           Icon(icon, size: 18, color: Colors.grey[600]),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-            ),
-          ),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: Colors.grey[700]))),
         ],
       ),
     );

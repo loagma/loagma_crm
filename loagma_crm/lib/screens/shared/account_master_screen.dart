@@ -8,7 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
-import '../view_all_masters_screen.dart';
+import 'view_all_masters_screen.dart';
 
 class AccountMasterScreen extends StatefulWidget {
   const AccountMasterScreen({super.key});

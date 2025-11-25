@@ -1,55 +1,70 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'api_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
-  static Future<Map<String, dynamic>> getAllUsers({
-    int page = 1,
-    int limit = 1000,
-    String? departmentId,
-    bool? isActive,
-    String? search,
+  static SharedPreferences? _prefs;
+
+  static const String _keyUserId = "userId";
+  static const String _keyRole = "role";
+  static const String _keyContact = "contactNumber";
+  static const String _keyName = "name";
+  static const String _keyToken = "token";
+
+  /// -------------------------------------------------------------
+  /// MUST CALL IN main() → before runApp()
+  /// -------------------------------------------------------------
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  /// -------------------------------------------------------------
+  /// REAL LOGIN — Save full session from API response
+  /// -------------------------------------------------------------
+  static Future<void> loginFromApi(Map<String, dynamic> data) async {
+    final user = data['data'];
+
+    if (user == null) return;
+
+    await _prefs?.setString(_keyUserId, user['_id'] ?? "");
+    await _prefs?.setString(_keyRole, user['role'] ?? "");
+    await _prefs?.setString(_keyContact, user['contactNumber'] ?? "");
+    await _prefs?.setString(_keyName, user['name'] ?? "");
+
+    if (data['token'] != null) {
+      await _prefs?.setString(_keyToken, data['token']);
+    }
+  }
+
+  /// -------------------------------------------------------------
+  /// DEV MODE LOGIN
+  /// -------------------------------------------------------------
+  static Future<void> login({
+    required String role,
+    String? contactNumber,
   }) async {
-    try {
-      final queryParams = {
-        'page': page.toString(),
-        'limit': limit.toString(),
-        if (departmentId != null) 'departmentId': departmentId,
-        if (isActive != null) 'isActive': isActive.toString(),
-        if (search != null) 'search': search,
-      };
-
-      final uri = Uri.parse(
-        '${ApiConfig.baseUrl}/users',
-      ).replace(queryParameters: queryParams);
-
-      final response = await http.get(uri);
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return data;
-      }
-      throw Exception(data['message'] ?? 'Failed to load users');
-    } catch (e) {
-      print('Error fetching users: $e');
-      rethrow;
+    await _prefs?.setString(_keyRole, role);
+    if (contactNumber != null) {
+      await _prefs?.setString(_keyContact, contactNumber);
     }
   }
 
-  static Future<Map<String, dynamic>> getUserById(String id) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/users/$id'),
-      );
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return data;
-      }
-      throw Exception(data['message'] ?? 'Failed to load user');
-    } catch (e) {
-      print('Error fetching user: $e');
-      rethrow;
-    }
+  /// -------------------------------------------------------------
+  /// LOGOUT
+  /// -------------------------------------------------------------
+  static Future<void> logout() async {
+    await _prefs?.clear();
   }
+
+  /// -------------------------------------------------------------
+  /// GETTERS
+  /// -------------------------------------------------------------
+  static bool get isLoggedIn {
+    final role = _prefs?.getString(_keyRole);
+    return role != null && role.isNotEmpty;
+  }
+
+  static String? get currentUserId => _prefs?.getString(_keyUserId);
+  static String? get currentRole => _prefs?.getString(_keyRole);
+  static String? get contactNumber => _prefs?.getString(_keyContact);
+  static String? get name => _prefs?.getString(_keyName);
+  static String? get token => _prefs?.getString(_keyToken);
 }

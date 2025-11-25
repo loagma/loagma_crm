@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/employee_service.dart';
-import 'shared/account_master_screen.dart';
+import '../../services/employee_service.dart';
+import 'account_master_screen.dart';
 
 class EmployeeListScreen extends StatefulWidget {
   const EmployeeListScreen({super.key});

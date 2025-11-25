@@ -1,0 +1,121 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+class EnterpriseSidebar extends StatelessWidget {
+  final List<SidebarItem> items;
+  final Color primaryColor;
+  final String roleName;
+  final String? userContact;
+  final String? appName;
+  final String? logoPath;
+
+  const EnterpriseSidebar({
+    super.key,
+    required this.items,
+    required this.primaryColor,
+    required this.roleName,
+    this.userContact,
+    this.appName,
+    this.logoPath,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      elevation: 8,
+      child: Column(
+        children: [
+          _header(),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: items.map((e) => _tile(context, e)).toList(),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text("Logout"),
+            onTap: () => context.go('/login'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 45, 20, 25),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: primaryColor,
+        gradient: LinearGradient(
+          colors: [primaryColor, primaryColor.withOpacity(0.8)],
+        ),
+      ),
+      child: Column(
+        children: [
+          Image.asset(
+            logoPath ?? "assets/logo.png",
+            width: 120,
+            height: 90,
+          ),
+          const SizedBox(height: 12),
+
+          // App name
+          Text(
+            appName ?? "Loagma CRM",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
+          ),
+
+          // Role
+          Text(
+            roleName.toUpperCase(),
+            style: const TextStyle(color: Colors.white70),
+          ),
+
+          // Contact
+          if (userContact != null)
+            Text(
+              userContact!,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(BuildContext context, SidebarItem item) {
+    final currentRoute =
+        GoRouter.of(context).routerDelegate.currentConfiguration.uri.toString();
+
+    final isActive = currentRoute == item.route;
+
+    return ListTile(
+      leading: Icon(
+        item.icon,
+        color: isActive ? primaryColor : Colors.grey[700],
+      ),
+      title: Text(
+        item.title,
+        style: TextStyle(
+          color: isActive ? primaryColor : Colors.black87,
+          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      onTap: () => context.go(item.route),
+    );
+  }
+}
+
+class SidebarItem {
+  final String title;
+  final IconData icon;
+  final String route;
+
+  SidebarItem(this.title, this.icon, this.route);
+}
