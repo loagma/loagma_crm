@@ -221,14 +221,23 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         child: ListTile(
                           leading: CircleAvatar(
+                            radius: 28,
                             backgroundColor: const Color(0xFFD7BE69),
-                            backgroundImage: user['image'] != null
+                            backgroundImage:
+                                user['image'] != null &&
+                                    user['image'].toString().isNotEmpty
                                 ? NetworkImage(user['image'])
                                 : null,
-                            child: user['image'] == null
+                            child:
+                                user['image'] == null ||
+                                    user['image'].toString().isEmpty
                                 ? Text(
                                     (user['name'] ?? 'U')[0].toUpperCase(),
-                                    style: const TextStyle(color: Colors.white),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   )
                                 : null,
                           ),
