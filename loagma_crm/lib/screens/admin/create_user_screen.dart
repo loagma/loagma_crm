@@ -4,12 +4,15 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import '../../services/api_config.dart';
+import 'user_detail_screen.dart';
 
 // ⬇️ Add multi-select helper widget ABOVE this class
 // (already given above)
@@ -38,6 +41,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   final TextEditingController _password = TextEditingController();
   final TextEditingController _notes = TextEditingController();
   final TextEditingController _salary = TextEditingController();
+  final TextEditingController _country = TextEditingController();
+  final TextEditingController _district = TextEditingController();
 
   // ---------------- Dropdown Selections ----------------
   String? selectedRoleId;
@@ -46,12 +51,23 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   String? selectedLanguage;
   bool isActive = true;
   bool autoGeneratePassword = false;
+  bool manualAddress = false;
+  bool fetchingPincode = false;
 
   List<String> selectedRoles = []; // MULTI SELECT
 
   // ---------------- Data from API ----------------
   List<Map<String, dynamic>> roles = [];
   List<Map<String, dynamic>> departments = [];
+
+  // ---------------- Image Upload ----------------
+  File? _profileImage;
+  String? _uploadedImageUrl;
+  bool isUploadingImage = false;
+
+  // ---------------- Existing User Check ----------------
+  Map<String, dynamic>? existingUser;
+  bool checkingPhone = false;
 
   bool isLoading = false;
 
@@ -77,6 +93,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     _password.dispose();
     _notes.dispose();
     _salary.dispose();
+    _country.dispose();
+    _district.dispose();
     super.dispose();
   }
 
@@ -145,6 +163,287 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     return RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$').hasMatch(v)
         ? null
         : "Invalid PAN";
+  }
+
+  // ---------------- Check Existing User ----------------
+
+  Future<void> checkExistingUser(String phone) async {
+    if (phone.length != 10) return;
+
+    setState(() {
+      checkingPhone = true;
+      existingUser = null;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/admin/users?contactNumber=$phone"),
+        headers: {"Accept": "application/json"},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data["success"] == true && data["users"] != null) {
+          final users = List<Map<String, dynamic>>.from(data["users"]);
+          if (users.isNotEmpty) {
+            setState(() => existingUser = users[0]);
+            _showExistingUserDialog();
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print("Error checking user: $e");
+    }
+
+    setState(() => checkingPhone = false);
+  }
+
+  void _showExistingUserDialog() {
+    if (existingUser == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.orange),
+            const SizedBox(width: 8),
+            const Text("Employee Already Exists"),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: CircleAvatar(
+                  radius: 40,
+                  backgroundColor: const Color(0xFFD7BE69),
+                  backgroundImage: existingUser!['image'] != null
+                      ? NetworkImage(existingUser!['image'])
+                      : null,
+                  child: existingUser!['image'] == null
+                      ? Text(
+                          (existingUser!['name'] ?? 'U')[0].toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 32,
+                            color: Colors.white,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _detailRow("Name", existingUser!['name'] ?? 'N/A'),
+              _detailRow("Phone", existingUser!['contactNumber'] ?? 'N/A'),
+              _detailRow("Email", existingUser!['email'] ?? 'N/A'),
+              _detailRow("Role", existingUser!['role'] ?? 'N/A'),
+              _detailRow("Department", existingUser!['department'] ?? 'N/A'),
+              _detailRow(
+                "Status",
+                existingUser!['isActive'] == true ? 'Active' : 'Inactive',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.visibility),
+            label: const Text("View"),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      UserDetailScreen(user: existingUser!, onUpdate: () {}),
+                ),
+              );
+            },
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.edit),
+            label: const Text("Edit"),
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to edit screen
+              Navigator.pushNamed(
+                context,
+                '/admin/edit-user',
+                arguments: existingUser,
+              );
+            },
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            label: const Text("Delete", style: TextStyle(color: Colors.red)),
+            onPressed: () {
+              Navigator.pop(context);
+              _confirmDelete(existingUser!['id']);
+            },
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              "$label:",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(String userId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Delete"),
+        content: const Text("Are you sure you want to delete this employee?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _deleteUser(userId);
+    }
+  }
+
+  Future<void> _deleteUser(String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse("${ApiConfig.baseUrl}/admin/users/$userId"),
+        headers: {"Accept": "application/json"},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (data["success"] == true) {
+        Fluttertoast.showToast(msg: "Employee deleted successfully");
+        setState(() => existingUser = null);
+        _phone.clear();
+      } else {
+        Fluttertoast.showToast(msg: data["message"] ?? "Failed to delete");
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Error: $e");
+    }
+  }
+
+  // ---------------- Fetch Location from Pincode ----------------
+
+  Future<void> fetchLocationFromPincode() async {
+    final pincode = _pincode.text.trim();
+    if (pincode.length != 6) {
+      Fluttertoast.showToast(msg: "Enter valid 6-digit pincode");
+      return;
+    }
+
+    setState(() => fetchingPincode = true);
+
+    try {
+      final response = await http.get(
+        Uri.parse("https://api.postalpincode.in/pincode/$pincode"),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data[0]["Status"] == "Success") {
+          final postOffice = data[0]["PostOffice"][0];
+          setState(() {
+            _city.text = postOffice["District"] ?? "";
+            _state.text = postOffice["State"] ?? "";
+            _country.text = postOffice["Country"] ?? "India";
+            _district.text = postOffice["District"] ?? "";
+          });
+          Fluttertoast.showToast(msg: "Location fetched successfully");
+        } else {
+          Fluttertoast.showToast(msg: "Invalid pincode");
+        }
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Error fetching location: $e");
+    }
+
+    setState(() => fetchingPincode = false);
+  }
+
+  // ---------------- Image Upload to Cloudinary ----------------
+
+  Future<void> pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() => _profileImage = File(pickedFile.path));
+    }
+  }
+
+  Future<String?> uploadImageToCloudinary(File imageFile) async {
+    setState(() => isUploadingImage = true);
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.cloudinary.com/v1_1/dfncqhkl9/image/upload'),
+      );
+
+      request.fields['upload_preset'] = 'ml_default';
+      request.fields['api_key'] = '652667859422493';
+      request.files.add(
+        await http.MultipartFile.fromPath('file', imageFile.path),
+      );
+
+      final response = await request.send();
+      final responseData = await response.stream.toBytes();
+      final responseString = String.fromCharCodes(responseData);
+      final jsonData = jsonDecode(responseString);
+
+      if (response.statusCode == 200) {
+        setState(() => isUploadingImage = false);
+        return jsonData['secure_url'];
+      } else {
+        Fluttertoast.showToast(msg: "Image upload failed");
+        setState(() => isUploadingImage = false);
+        return null;
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Error uploading image: $e");
+      setState(() => isUploadingImage = false);
+      return null;
+    }
   }
 
   // ---------------- Password Generator ----------------
@@ -240,6 +539,16 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
     setState(() => isLoading = true);
 
+    // Upload image first if selected
+    if (_profileImage != null) {
+      _uploadedImageUrl = await uploadImageToCloudinary(_profileImage!);
+      if (_uploadedImageUrl == null) {
+        setState(() => isLoading = false);
+        Fluttertoast.showToast(msg: "Failed to upload image");
+        return;
+      }
+    }
+
     String password = _password.text;
     if (autoGeneratePassword) {
       password = generatePassword();
@@ -267,9 +576,12 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (_city.text.isNotEmpty) "city": _city.text.trim(),
       if (_state.text.isNotEmpty) "state": _state.text.trim(),
       if (_pincode.text.isNotEmpty) "pincode": _pincode.text.trim(),
+      if (_country.text.isNotEmpty) "country": _country.text.trim(),
+      if (_district.text.isNotEmpty) "district": _district.text.trim(),
       if (_aadhar.text.isNotEmpty) "aadharCard": _aadhar.text.trim(),
       if (_pan.text.isNotEmpty) "panCard": _pan.text.trim().toUpperCase(),
       if (_notes.text.isNotEmpty) "notes": _notes.text.trim(),
+      if (_uploadedImageUrl != null) "image": _uploadedImageUrl,
     };
 
     try {
@@ -288,12 +600,34 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           Fluttertoast.showToast(msg: "Password: $password");
         }
 
+        // Reset form
         _formKey.currentState!.reset();
-        selectedRoles.clear();
-        selectedRoleId = null;
-        selectedDepartmentId = null;
-        selectedGender = null;
-        selectedLanguage = null;
+        _phone.clear();
+        _name.clear();
+        _email.clear();
+        _altPhone.clear();
+        _address.clear();
+        _city.clear();
+        _state.clear();
+        _pincode.clear();
+        _country.clear();
+        _district.clear();
+        _aadhar.clear();
+        _pan.clear();
+        _password.clear();
+        _notes.clear();
+        _salary.clear();
+
+        setState(() {
+          selectedRoles.clear();
+          selectedRoleId = null;
+          selectedDepartmentId = null;
+          selectedGender = null;
+          selectedLanguage = null;
+          _profileImage = null;
+          _uploadedImageUrl = null;
+          existingUser = null;
+        });
       } else {
         Fluttertoast.showToast(msg: data["message"] ?? "Failed");
       }
@@ -319,13 +653,29 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // PHONE
+            // PHONE WITH CHECK
             TextFormField(
               controller: _phone,
               maxLength: 10,
               keyboardType: TextInputType.phone,
-              decoration: _input("Contact Number *", Icons.phone),
+              decoration: _input("Contact Number *", Icons.phone).copyWith(
+                suffixIcon: checkingPhone
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
+              ),
               validator: validatePhone,
+              onChanged: (value) {
+                if (value.length == 10) {
+                  checkExistingUser(value);
+                }
+              },
             ),
 
             const SizedBox(height: 15),
@@ -404,42 +754,112 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               validator: validatePAN,
             ),
 
-            // ADDRESS
-            TextFormField(
-              controller: _address,
-              maxLines: 2,
-              decoration: _input("Address", Icons.home),
-            ),
-
             const SizedBox(height: 15),
 
+            // PINCODE WITH LOOKUP
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
-                    controller: _city,
-                    decoration: _input("City", Icons.location_city),
+                    controller: _pincode,
+                    maxLength: 6,
+                    keyboardType: TextInputType.number,
+                    decoration: _input("Pincode", Icons.pin_drop),
+                    validator: validatePincode,
+                    enabled: !manualAddress,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    controller: _state,
-                    decoration: _input("State", Icons.map),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: fetchingPincode || manualAddress
+                      ? null
+                      : fetchLocationFromPincode,
+                  icon: fetchingPincode
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.search, size: 20),
+                  label: const Text("Lookup"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7BE69),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ],
             ),
 
+            const SizedBox(height: 8),
+
+            // MANUAL ADDRESS TOGGLE
+            CheckboxListTile(
+              title: const Text("Enter address manually"),
+              value: manualAddress,
+              onChanged: (v) {
+                setState(() {
+                  manualAddress = v ?? false;
+                  if (!manualAddress) {
+                    _country.clear();
+                    _district.clear();
+                    _city.clear();
+                    _state.clear();
+                  }
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+
             const SizedBox(height: 15),
 
-            // PINCODE
+            // COUNTRY
             TextFormField(
-              controller: _pincode,
-              maxLength: 6,
-              keyboardType: TextInputType.number,
-              decoration: _input("Pincode", Icons.pin_drop),
-              validator: validatePincode,
+              controller: _country,
+              decoration: _input("Country", Icons.public),
+              enabled: manualAddress,
+            ),
+
+            const SizedBox(height: 15),
+
+            // STATE
+            TextFormField(
+              controller: _state,
+              decoration: _input("State", Icons.map),
+              enabled: manualAddress,
+            ),
+
+            const SizedBox(height: 15),
+
+            // DISTRICT
+            TextFormField(
+              controller: _district,
+              decoration: _input("District", Icons.location_on),
+              enabled: manualAddress,
+            ),
+
+            const SizedBox(height: 15),
+
+            // CITY
+            TextFormField(
+              controller: _city,
+              decoration: _input("City", Icons.location_city),
+              enabled: manualAddress,
+            ),
+
+            const SizedBox(height: 15),
+
+            // ADDRESS
+            TextFormField(
+              controller: _address,
+              maxLines: 2,
+              decoration: _input("Address", Icons.home),
             ),
 
             const SizedBox(height: 15),
@@ -572,6 +992,81 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               controller: _notes,
               maxLines: 3,
               decoration: _input("Notes", Icons.note),
+            ),
+
+            const SizedBox(height: 25),
+
+            // PROFILE PICTURE UPLOAD
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Profile Picture",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 60,
+                            backgroundColor: const Color(0xFFD7BE69),
+                            backgroundImage: _profileImage != null
+                                ? FileImage(_profileImage!)
+                                : null,
+                            child: _profileImage == null
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 60,
+                                    color: Colors.white,
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: pickImage,
+                                icon: const Icon(Icons.photo_library),
+                                label: const Text("Choose Photo"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                ),
+                              ),
+                              if (_profileImage != null) ...[
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _profileImage = null;
+                                      _uploadedImageUrl = null;
+                                    });
+                                  },
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
 
             const SizedBox(height: 25),
