@@ -144,8 +144,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       final currentRole = UserService.currentRole;
       final currentUserId = UserService.currentUserId;
 
-      final isAdmin = (currentRole != null && currentRole.toLowerCase() == 'admin');
-      final isOwner = account.createdBy != null && account.createdBy == currentUserId;
+      final isAdmin =
+          (currentRole != null && currentRole.toLowerCase() == 'admin');
+      final isOwner =
+          account.createdBy != null && account.createdBy == currentUserId;
 
       // If not admin AND not owner => unauthorized
       if (!isAdmin && !isOwner) {
@@ -229,7 +231,9 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         }
       });
 
-      _showSuccess(isOwnerImage ? 'Owner image selected' : 'Shop image selected');
+      _showSuccess(
+        isOwnerImage ? 'Owner image selected' : 'Shop image selected',
+      );
     } catch (e) {
       _showError('Failed to pick image: $e');
     }
@@ -256,14 +260,18 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         }
       }
 
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       if (!mounted) return;
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
       });
 
-      _showSuccess('Location captured: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}');
+      _showSuccess(
+        'Location captured: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+      );
     } catch (e) {
       _showError('Failed to get location: $e');
     } finally {
@@ -296,7 +304,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         _districtController.text = data['district'] ?? '';
         _cityController.text = data['city'] ?? '';
         _availableAreas = List<Map<String, dynamic>>.from(data['areas'] ?? []);
-        if (_selectedArea != null && !_availableAreas.any((a) => a['name'] == _selectedArea)) {
+        if (_selectedArea != null &&
+            !_availableAreas.any((a) => a['name'] == _selectedArea)) {
           _selectedArea = null;
         }
         _showSuccess('Location fetched');
@@ -321,7 +330,9 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     setState(() => _isSubmitting = true);
 
     final updates = {
-      'businessName': _businessNameController.text.trim().isEmpty ? null : _businessNameController.text.trim(),
+      'businessName': _businessNameController.text.trim().isEmpty
+          ? null
+          : _businessNameController.text.trim(),
       'personName': _personNameController.text.trim(),
       'contactNumber': _contactNumberController.text.trim(),
       'businessType': _selectedBusinessType,
@@ -329,18 +340,34 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       if (_dateOfBirth != null) 'dateOfBirth': _dateOfBirth!.toIso8601String(),
       'customerStage': _selectedCustomerStage,
       'funnelStage': _selectedFunnelStage,
-      'gstNumber': _gstNumberController.text.trim().isEmpty ? null : _gstNumberController.text.trim().toUpperCase(),
-      'panCard': _panCardController.text.trim().isEmpty ? null : _panCardController.text.trim().toUpperCase(),
+      'gstNumber': _gstNumberController.text.trim().isEmpty
+          ? null
+          : _gstNumberController.text.trim().toUpperCase(),
+      'panCard': _panCardController.text.trim().isEmpty
+          ? null
+          : _panCardController.text.trim().toUpperCase(),
       'ownerImage': _ownerImageBase64,
       'shopImage': _shopImageBase64,
       'isActive': _isActive,
-      'pincode': _pincodeController.text.trim().isEmpty ? null : _pincodeController.text.trim(),
-      'country': _countryController.text.trim().isEmpty ? null : _countryController.text.trim(),
-      'state': _stateController.text.trim().isEmpty ? null : _stateController.text.trim(),
-      'district': _districtController.text.trim().isEmpty ? null : _districtController.text.trim(),
-      'city': _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+      'pincode': _pincodeController.text.trim().isEmpty
+          ? null
+          : _pincodeController.text.trim(),
+      'country': _countryController.text.trim().isEmpty
+          ? null
+          : _countryController.text.trim(),
+      'state': _stateController.text.trim().isEmpty
+          ? null
+          : _stateController.text.trim(),
+      'district': _districtController.text.trim().isEmpty
+          ? null
+          : _districtController.text.trim(),
+      'city': _cityController.text.trim().isEmpty
+          ? null
+          : _cityController.text.trim(),
       'area': _selectedArea,
-      'address': _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+      'address': _addressController.text.trim().isEmpty
+          ? null
+          : _addressController.text.trim(),
       'latitude': _latitude,
       'longitude': _longitude,
     };
@@ -363,12 +390,16 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
   // --------------------------
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   void _showSuccess(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
   }
 
   // --------------------------
@@ -381,7 +412,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         title: const Text('Confirm Logout'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -410,7 +444,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     final currentRole = UserService.currentRole?.toLowerCase();
     final currentUserId = UserService.currentUserId;
     final isAdmin = currentRole == 'admin';
-    final isOwner = _account?.createdBy != null && _account!.createdBy == currentUserId;
+    final isOwner =
+        _account?.createdBy != null && _account!.createdBy == currentUserId;
 
     if (!_isCheckingOwnership && !isAdmin && !isOwner) {
       // show 403 unauthorized
@@ -426,19 +461,32 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.lock_outline, size: 72, color: Colors.orange),
-              const SizedBox(height: 12),
-              const Text('Access Denied', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('You are not authorized to view this account.', textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => context.go('/dashboard/${UserService.currentRole ?? 'dashboard'}'),
-                child: const Text('Back to Dashboard'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD7BE69)),
-              )
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 72, color: Colors.orange),
+                const SizedBox(height: 12),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'You are not authorized to view this account.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => context.go(
+                    '/dashboard/${UserService.currentRole ?? 'dashboard'}',
+                  ),
+                  child: const Text('Back to Dashboard'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7BE69),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -477,31 +525,130 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     final acc = _account!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(children: [
-              Text(acc.personName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              if (acc.businessName != null) Text(acc.businessName!, style: const TextStyle(fontSize: 18)),
-              const SizedBox(height: 8),
-              Text(acc.accountCode ?? '', style: TextStyle(color: Colors.grey[600])),
-              const SizedBox(height: 12),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Chip(label: Text(acc.isApproved ? 'Approved' : 'Pending'), backgroundColor: acc.isApproved ? Colors.green[100] : Colors.orange[100]),
-                const SizedBox(width: 10),
-                Chip(label: Text(acc.isActive! ? 'Active' : 'Inactive'), backgroundColor: acc.isActive! ? Colors.blue[100] : Colors.red[100]),
-              ]),
-            ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  // Images Section
+                  if (acc.ownerImage != null || acc.shopImage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          if (acc.ownerImage != null)
+                            Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 50,
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                  backgroundImage:
+                                      acc.ownerImage!.startsWith('http')
+                                      ? NetworkImage(acc.ownerImage!)
+                                      : null,
+                                  child: !acc.ownerImage!.startsWith('http')
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 50,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Owner',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (acc.shopImage != null)
+                            Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 50,
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                  backgroundImage:
+                                      acc.shopImage!.startsWith('http')
+                                      ? NetworkImage(acc.shopImage!)
+                                      : null,
+                                  child: !acc.shopImage!.startsWith('http')
+                                      ? const Icon(
+                                          Icons.store,
+                                          size: 50,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Shop',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  Text(
+                    acc.personName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (acc.businessName != null)
+                    Text(
+                      acc.businessName!,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    acc.accountCode ?? '',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Chip(
+                        label: Text(acc.isApproved ? 'Approved' : 'Pending'),
+                        backgroundColor: acc.isApproved
+                            ? Colors.green[100]
+                            : Colors.orange[100],
+                      ),
+                      const SizedBox(width: 10),
+                      Chip(
+                        label: Text(acc.isActive! ? 'Active' : 'Inactive'),
+                        backgroundColor: acc.isActive!
+                            ? Colors.blue[100]
+                            : Colors.red[100],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        _infoCardSection(acc),
-        if (acc.pincode != null || acc.address != null || acc.latitude != null) ...[
           const SizedBox(height: 20),
-          _locationCard(acc),
+          _infoCardSection(acc),
+          if (acc.pincode != null ||
+              acc.address != null ||
+              acc.latitude != null) ...[
+            const SizedBox(height: 20),
+            _locationCard(acc),
+          ],
         ],
-      ]),
+      ),
     );
   }
 
@@ -509,17 +656,27 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Business Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Divider(),
-          _buildDetailRow('Contact', acc.contactNumber),
-          if (acc.businessType != null) _buildDetailRow('Business Type', acc.businessType!),
-          if (acc.businessSize != null) _buildDetailRow('Business Size', acc.businessSize!),
-          if (acc.gstNumber != null) _buildDetailRow('GST', acc.gstNumber!),
-          if (acc.panCard != null) _buildDetailRow('PAN', acc.panCard!),
-          if (acc.customerStage != null) _buildDetailRow('Customer Stage', acc.customerStage!),
-          if (acc.funnelStage != null) _buildDetailRow('Funnel Stage', acc.funnelStage!),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Business Information',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
+            _buildDetailRow('Contact', acc.contactNumber),
+            if (acc.businessType != null)
+              _buildDetailRow('Business Type', acc.businessType!),
+            if (acc.businessSize != null)
+              _buildDetailRow('Business Size', acc.businessSize!),
+            if (acc.gstNumber != null) _buildDetailRow('GST', acc.gstNumber!),
+            if (acc.panCard != null) _buildDetailRow('PAN', acc.panCard!),
+            if (acc.customerStage != null)
+              _buildDetailRow('Customer Stage', acc.customerStage!),
+            if (acc.funnelStage != null)
+              _buildDetailRow('Funnel Stage', acc.funnelStage!),
+          ],
+        ),
       ),
     );
   }
@@ -528,29 +685,51 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Location', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Divider(),
-          if (acc.pincode != null) _buildDetailRow('Pincode', acc.pincode!),
-          if (acc.area != null) _buildDetailRow('Area', acc.area!),
-          if (acc.city != null) _buildDetailRow('City', acc.city!),
-          if (acc.district != null) _buildDetailRow('District', acc.district!),
-          if (acc.state != null) _buildDetailRow('State', acc.state!),
-          if (acc.country != null) _buildDetailRow('Country', acc.country!),
-          if (acc.address != null) _buildDetailRow('Address', acc.address!),
-          if (acc.latitude != null && acc.longitude != null) ...[
-            const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.my_location, color: Color(0xFFD7BE69), size: 20),
-              const SizedBox(width: 8),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Latitude: ${acc.latitude!.toStringAsFixed(6)}', style: const TextStyle(fontFamily: 'monospace')),
-                const SizedBox(height: 4),
-                Text('Longitude: ${acc.longitude!.toStringAsFixed(6)}', style: const TextStyle(fontFamily: 'monospace')),
-              ])
-            ])
-          ]
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Location',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
+            if (acc.pincode != null) _buildDetailRow('Pincode', acc.pincode!),
+            if (acc.area != null) _buildDetailRow('Area', acc.area!),
+            if (acc.city != null) _buildDetailRow('City', acc.city!),
+            if (acc.district != null)
+              _buildDetailRow('District', acc.district!),
+            if (acc.state != null) _buildDetailRow('State', acc.state!),
+            if (acc.country != null) _buildDetailRow('Country', acc.country!),
+            if (acc.address != null) _buildDetailRow('Address', acc.address!),
+            if (acc.latitude != null && acc.longitude != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.my_location,
+                    color: Color(0xFFD7BE69),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Latitude: ${acc.latitude!.toStringAsFixed(6)}',
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Longitude: ${acc.longitude!.toStringAsFixed(6)}',
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -558,10 +737,21 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 120, child: Text(label, style: TextStyle(color: Colors.grey[600]))),
-        Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: TextStyle(color: Colors.grey[600])),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -573,100 +763,216 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       padding: const EdgeInsets.all(20),
       child: Form(
         key: _formKey,
-        child: Column(children: [
-          const Text('Edit Account', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          TextFormField(controller: _businessNameController, decoration: const InputDecoration(labelText: 'Business Name', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextFormField(controller: _personNameController, decoration: const InputDecoration(labelText: 'Person Name *', border: OutlineInputBorder()), validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _contactNumberController,
-            decoration: const InputDecoration(labelText: 'Contact Number *', border: OutlineInputBorder()),
-            keyboardType: TextInputType.phone,
-            maxLength: 10,
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Required';
-              if (v.length != 10) return 'Must be 10 digits';
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _selectedBusinessType,
-            decoration: const InputDecoration(labelText: 'Business Type', border: OutlineInputBorder()),
-            items: _businessTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-            onChanged: (v) => setState(() => _selectedBusinessType = v),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _selectedBusinessSize,
-            decoration: const InputDecoration(labelText: 'Business Size', border: OutlineInputBorder()),
-            items: _businessSizes.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-            onChanged: (v) => setState(() => _selectedBusinessSize = v),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(controller: _gstNumberController, decoration: const InputDecoration(labelText: 'GST Number', border: OutlineInputBorder()), textCapitalization: TextCapitalization.characters),
-          const SizedBox(height: 12),
-          TextFormField(controller: _panCardController, decoration: const InputDecoration(labelText: 'PAN Card', border: OutlineInputBorder()), textCapitalization: TextCapitalization.characters, maxLength: 10),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              flex: 2,
-              child: TextFormField(controller: _pincodeController, decoration: const InputDecoration(labelText: 'Pincode', border: OutlineInputBorder()), keyboardType: TextInputType.number, maxLength: 6),
+        child: Column(
+          children: [
+            const Text(
+              'Edit Account',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 10),
-            ElevatedButton(
-              onPressed: _isLookingUpPincode ? null : _lookupPincode,
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD7BE69), padding: const EdgeInsets.symmetric(vertical: 16)),
-              child: _isLookingUpPincode ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Lookup'),
-            )
-          ]),
-          const SizedBox(height: 12),
-          if (_availableAreas.isNotEmpty)
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _businessNameController,
+              decoration: const InputDecoration(
+                labelText: 'Business Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _personNameController,
+              decoration: const InputDecoration(
+                labelText: 'Person Name *',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _contactNumberController,
+              decoration: const InputDecoration(
+                labelText: 'Contact Number *',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.phone,
+              maxLength: 10,
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v.length != 10) return 'Must be 10 digits';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedArea,
-              decoration: const InputDecoration(labelText: 'Area', border: OutlineInputBorder()),
-              items: _availableAreas.map((a) => DropdownMenuItem(value: a['name'] as String, child: Text(a['name']))).toList(),
-              onChanged: (v) => setState(() => _selectedArea = v),
-            ),
-          const SizedBox(height: 12),
-          TextFormField(controller: _addressController, decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()), maxLines: 3),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            icon: _isLoadingGeolocation ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.my_location),
-            label: Text(_isLoadingGeolocation ? 'Getting Location...' : 'Capture Location'),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD7BE69), minimumSize: const Size(double.infinity, 50)),
-            onPressed: _isLoadingGeolocation ? null : _getCurrentLocation,
-          ),
-          if (_latitude != null)
-            Padding(padding: const EdgeInsets.only(top: 10), child: Text('Location: ${_latitude!.toStringAsFixed(6)}, ${_longitude!.toStringAsFixed(6)}', style: const TextStyle(color: Colors.green))),
-          const SizedBox(height: 12),
-          SwitchListTile(title: const Text('Active Status'), value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                icon: _isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
-                label: Text(_isSubmitting ? 'Saving...' : 'Save'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD7BE69), padding: const EdgeInsets.symmetric(vertical: 15)),
-                onPressed: _isSubmitting ? null : _updateAccount,
+              value: _selectedBusinessType,
+              decoration: const InputDecoration(
+                labelText: 'Business Type',
+                border: OutlineInputBorder(),
               ),
+              items: _businessTypes
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedBusinessType = v),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.cancel),
-                label: const Text('Cancel'),
-                onPressed: () {
-                  setState(() => _isEditing = false);
-                  _loadAccount();
-                },
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedBusinessSize,
+              decoration: const InputDecoration(
+                labelText: 'Business Size',
+                border: OutlineInputBorder(),
               ),
-            )
-          ]),
-          const SizedBox(height: 20),
-        ]),
+              items: _businessSizes
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedBusinessSize = v),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _gstNumberController,
+              decoration: const InputDecoration(
+                labelText: 'GST Number',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _panCardController,
+              decoration: const InputDecoration(
+                labelText: 'PAN Card',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 10,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: _pincodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Pincode',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _isLookingUpPincode ? null : _lookupPincode,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7BE69),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isLookingUpPincode
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Lookup'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_availableAreas.isNotEmpty)
+              DropdownButtonFormField<String>(
+                value: _selectedArea,
+                decoration: const InputDecoration(
+                  labelText: 'Area',
+                  border: OutlineInputBorder(),
+                ),
+                items: _availableAreas
+                    .map(
+                      (a) => DropdownMenuItem(
+                        value: a['name'] as String,
+                        child: Text(a['name']),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedArea = v),
+              ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _addressController,
+              decoration: const InputDecoration(
+                labelText: 'Address',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              icon: _isLoadingGeolocation
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.my_location),
+              label: Text(
+                _isLoadingGeolocation
+                    ? 'Getting Location...'
+                    : 'Capture Location',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD7BE69),
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              onPressed: _isLoadingGeolocation ? null : _getCurrentLocation,
+            ),
+            if (_latitude != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  'Location: ${_latitude!.toStringAsFixed(6)}, ${_longitude!.toStringAsFixed(6)}',
+                  style: const TextStyle(color: Colors.green),
+                ),
+              ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              title: const Text('Active Status'),
+              value: _isActive,
+              onChanged: (v) => setState(() => _isActive = v),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(_isSubmitting ? 'Saving...' : 'Save'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD7BE69),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                    onPressed: _isSubmitting ? null : _updateAccount,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.cancel),
+                    label: const Text('Cancel'),
+                    onPressed: () {
+                      setState(() => _isEditing = false);
+                      _loadAccount();
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }

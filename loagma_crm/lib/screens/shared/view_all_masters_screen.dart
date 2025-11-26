@@ -299,13 +299,22 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                               backgroundColor: isHighlighted
                                   ? Colors.orange
                                   : const Color(0xFFD7BE69),
-                              child: Text(
-                                account.personName[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              backgroundImage:
+                                  account.ownerImage != null &&
+                                      account.ownerImage!.startsWith('http')
+                                  ? NetworkImage(account.ownerImage!)
+                                  : null,
+                              child:
+                                  account.ownerImage == null ||
+                                      !account.ownerImage!.startsWith('http')
+                                  ? Text(
+                                      account.personName[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : null,
                             ),
                             title: Row(
                               children: [

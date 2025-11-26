@@ -277,29 +277,37 @@ export const createAccount = async (req, res) => {
     const userId = req.user?.id || createdById;
 
     // Upload images to Cloudinary if provided
-    let ownerImageUrl = ownerImage;
-    let shopImageUrl = shopImage;
+    let ownerImageUrl = null;
+    let shopImageUrl = null;
 
     if (ownerImage && ownerImage.startsWith('data:image')) {
       try {
         console.log('📸 Uploading owner image to Cloudinary...');
+        console.log('📦 Owner image size:', ownerImage.length, 'characters');
         ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
         console.log('✅ Owner image uploaded:', ownerImageUrl);
       } catch (error) {
         console.error('❌ Owner image upload failed:', error.message);
-        // Continue without image if upload fails
+        console.error('❌ Full error:', error);
+        ownerImageUrl = null;
       }
+    } else if (ownerImage && ownerImage.startsWith('http')) {
+      ownerImageUrl = ownerImage;
     }
 
     if (shopImage && shopImage.startsWith('data:image')) {
       try {
         console.log('📸 Uploading shop image to Cloudinary...');
+        console.log('📦 Shop image size:', shopImage.length, 'characters');
         shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
         console.log('✅ Shop image uploaded:', shopImageUrl);
       } catch (error) {
         console.error('❌ Shop image upload failed:', error.message);
-        // Continue without image if upload fails
+        console.error('❌ Full error:', error);
+        shopImageUrl = null;
       }
+    } else if (shopImage && shopImage.startsWith('http')) {
+      shopImageUrl = shopImage;
     }
 
     console.log('✅ Creating account in database...');
@@ -485,23 +493,31 @@ export const updateAccount = async (req, res) => {
     if (ownerImage && ownerImage.startsWith('data:image')) {
       try {
         console.log('📸 Uploading owner image to Cloudinary...');
+        console.log('📦 Owner image size:', ownerImage.length, 'characters');
         ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
         console.log('✅ Owner image uploaded:', ownerImageUrl);
       } catch (error) {
         console.error('❌ Owner image upload failed:', error.message);
-        ownerImageUrl = ownerImage; // Keep original if upload fails
+        console.error('❌ Full error:', error);
+        ownerImageUrl = undefined; // Don't update if upload fails
       }
+    } else if (ownerImage && !ownerImage.startsWith('http')) {
+      ownerImageUrl = undefined;
     }
 
     if (shopImage && shopImage.startsWith('data:image')) {
       try {
         console.log('📸 Uploading shop image to Cloudinary...');
+        console.log('📦 Shop image size:', shopImage.length, 'characters');
         shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
         console.log('✅ Shop image uploaded:', shopImageUrl);
       } catch (error) {
         console.error('❌ Shop image upload failed:', error.message);
-        shopImageUrl = shopImage; // Keep original if upload fails
+        console.error('❌ Full error:', error);
+        shopImageUrl = undefined; // Don't update if upload fails
       }
+    } else if (shopImage && !shopImage.startsWith('http')) {
+      shopImageUrl = undefined;
     }
 
     const updateData = {};
