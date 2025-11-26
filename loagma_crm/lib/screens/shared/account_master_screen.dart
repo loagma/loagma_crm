@@ -811,19 +811,19 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 children: [
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Owner Image',
-                      imageFile: _ownerImageFile,
-                      imageBase64: _ownerImageBase64,
-                      onTap: () => _pickImage(true),
+                      label: 'Outlet Image',
+                      imageFile: _shopImageFile,
+                      imageBase64: _shopImageBase64,
+                      onTap: () => _pickImage(false),
                     ),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Shop Image',
-                      imageFile: _shopImageFile,
-                      imageBase64: _shopImageBase64,
-                      onTap: () => _pickImage(false),
+                      label: 'Incharge Image',
+                      imageFile: _ownerImageFile,
+                      imageBase64: _ownerImageBase64,
+                      onTap: () => _pickImage(true),
                     ),
                   ),
                 ],
@@ -956,7 +956,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
               _buildTextField(
                 controller: _addressController,
-                label: 'Address',
+                label: 'Enter Main Area',
                 icon: Icons.home,
                 maxLines: 3,
                 hint: 'Enter complete address manually',
