@@ -103,8 +103,10 @@ class _LoginScreenState extends State<LoginScreen> {
   // SEND OTP LOGIN
   // ----------------------------------------------------------------
   Future<void> handleSendOtp() async {
-    final contactNumber =
-        _phoneController.text.trim().replaceAll(RegExp(r'[^\d+]'), '');
+    final contactNumber = _phoneController.text.trim().replaceAll(
+      RegExp(r'[^\d+]'),
+      '',
+    );
 
     if (contactNumber.isEmpty) {
       Fluttertoast.showToast(msg: "Please enter your contact number");
@@ -122,10 +124,13 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response['success'] == true) {
         Fluttertoast.showToast(msg: response['message'] ?? "OTP sent");
 
-        context.push('/otp', extra: {
-          'contactNumber': contactNumber,
-          'isNewUser': response['isNewUser'] ?? false,
-        });
+        context.push(
+          '/otp',
+          extra: {
+            'contactNumber': contactNumber,
+            'isNewUser': response['isNewUser'] ?? false,
+          },
+        );
       } else {
         Fluttertoast.showToast(msg: response['message'] ?? "Error");
       }
@@ -142,10 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (selectedDevRole == null) return;
 
     // Fake login – required for router guards
-    UserService.login(
-      role: selectedDevRole!,
-      contactNumber: "9999999999",
-    );
+    UserService.login(role: selectedDevRole!, contactNumber: "9999999999");
 
     context.go('/dashboard/$selectedDevRole');
   }
@@ -179,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 GestureDetector(
                   onTap: _onLogoTap,
                   child: Image.asset(
-                    'assets/logo.png',
+                    'assets/logo1.jpeg',
                     width: 120,
                     height: 120,
                   ),
@@ -203,8 +205,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   keyboardType: TextInputType.phone,
                   decoration: InputDecoration(
                     hintText: "Enter Phone Number",
-                    prefixIcon:
-                        const Icon(Icons.phone_android, color: Color(0xFFD7BE69)),
+                    prefixIcon: const Icon(
+                      Icons.phone_android,
+                      color: Color(0xFFD7BE69),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -268,9 +272,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ElevatedButton(
                           onPressed: _loadRoles,
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Color(0xFFD7BE69)),
+                            backgroundColor: Color(0xFFD7BE69),
+                          ),
                           child: const Text("Retry"),
-                        )
+                        ),
                       ],
                     )
                   else
@@ -311,7 +316,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(fontSize: 14, color: Colors.white),
                     ),
                   ),
-                ]
+                ],
               ],
             ),
           ),
