@@ -52,7 +52,7 @@ dev_dependencies:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/logo1.jpeg"
+  image_path: "assets/logo1.png"
 
   flutter_test:
     sdk: flutter

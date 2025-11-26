@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import '../../services/api_config.dart';
 
 class EditUserScreen extends StatefulWidget {
@@ -47,6 +49,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
   // Data lists
   List<Map<String, dynamic>> roles = [];
   List<Map<String, dynamic>> departments = [];
+
+  // Image Upload
+  File? _profileImage;
+  String? _existingImageUrl;
+  String? _uploadedImageUrl;
+  final ImagePicker _picker = ImagePicker();
 
   bool isLoading = false;
   bool isLoadingData = true;
@@ -101,6 +109,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
         (widget.user['preferredLanguages'] as List).isNotEmpty) {
       selectedLanguage = widget.user['preferredLanguages'][0];
     }
+
+    // Initialize existing image
+    _existingImageUrl = widget.user['image'];
 
     fetchRoles();
     fetchDepartments();
@@ -227,6 +238,32 @@ class _EditUserScreenState extends State<EditUserScreen> {
     return null;
   }
 
+  // Image picker
+  Future<void> pickImage() async {
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() => _profileImage = File(pickedFile.path));
+    }
+  }
+
+  // Convert image to base64
+  Future<String?> convertImageToBase64(File imageFile) async {
+    try {
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+      return 'data:image/jpeg;base64,$base64Image';
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Error processing image: $e");
+      return null;
+    }
+  }
+
   Future<void> updateUser() async {
     if (!_formKey.currentState!.validate()) {
       Fluttertoast.showToast(msg: "Please fix all validation errors");
@@ -234,6 +271,18 @@ class _EditUserScreenState extends State<EditUserScreen> {
     }
 
     setState(() => isLoading = true);
+
+    // Convert image to base64 if selected
+    if (_profileImage != null) {
+      if (kDebugMode) print("📸 Converting image to base64...");
+      _uploadedImageUrl = await convertImageToBase64(_profileImage!);
+      if (_uploadedImageUrl == null) {
+        setState(() => isLoading = false);
+        Fluttertoast.showToast(msg: "Failed to process image");
+        return;
+      }
+      if (kDebugMode) print("✅ Image converted successfully");
+    }
 
     try {
       String? password = _passwordController.text.trim();
@@ -270,6 +319,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
           "panCard": _panController.text.trim().toUpperCase(),
         if (_notesController.text.trim().isNotEmpty)
           "notes": _notesController.text.trim(),
+        if (_uploadedImageUrl != null) "image": _uploadedImageUrl,
       };
 
       // Update user first
@@ -760,7 +810,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   // Salary Per Month
                   TextFormField(
                     controller: _salaryController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: "Salary Per Month *",
                       prefixIcon: const Icon(Icons.currency_rupee),
@@ -797,6 +849,88 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 25),
+
+                  // PROFILE PICTURE UPLOAD
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Profile Picture",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Center(
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 60,
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                  backgroundImage: _profileImage != null
+                                      ? FileImage(_profileImage!)
+                                      : _existingImageUrl != null
+                                      ? NetworkImage(_existingImageUrl!)
+                                      : null,
+                                  child:
+                                      _profileImage == null &&
+                                          _existingImageUrl == null
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 60,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: pickImage,
+                                      icon: const Icon(Icons.photo_library),
+                                      label: const Text("Choose Photo"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFFD7BE69,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_profileImage != null ||
+                                        _existingImageUrl != null) ...[
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _profileImage = null;
+                                            _uploadedImageUrl = null;
+                                          });
+                                        },
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 25),
 
                   // Update Button
