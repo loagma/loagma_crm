@@ -25,6 +25,28 @@ class RoleDashboardTemplate extends StatelessWidget {
     this.logoPath,
     this.appName,
   });
+  Future<bool> _onBackPressed(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text("Exit Application"),
+        content: const Text("Do you really want to exit the app?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text("No"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text("Yes, Exit"),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false; // block exit when dialog dismissed
+  }
 
   // ------------------------------------------------------------
   // Sidebar menu definitions (with nested GoRouter paths)
@@ -116,17 +138,20 @@ class RoleDashboardTemplate extends StatelessWidget {
     final color = primaryColor ?? const Color(0xFFD7BE69);
     final dashCards = getDashCards(context);
 
-    return Scaffold(
-      appBar: _buildAppBar(context, color),
-      drawer: EnterpriseSidebar(
-        items: getSidebarMenu(),
-        primaryColor: color,
-        roleName: roleDisplayName,
-        userContact: userContactNumber,
-        logoPath: logoPath,
-        appName: appName,
+    return WillPopScope(
+      onWillPop: () => _onBackPressed(context),
+      child: Scaffold(
+        appBar: _buildAppBar(context, color),
+        drawer: EnterpriseSidebar(
+          items: getSidebarMenu(),
+          primaryColor: color,
+          roleName: roleDisplayName,
+          userContact: userContactNumber,
+          logoPath: logoPath,
+          appName: appName,
+        ),
+        body: _buildBody(context, color, dashCards),
       ),
-      body: _buildBody(context, color, dashCards),
     );
   }
 
