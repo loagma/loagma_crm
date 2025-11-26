@@ -33,23 +33,57 @@ class RoleDashboardTemplate extends StatelessWidget {
     switch (roleName.toLowerCase()) {
       case "admin":
         return [
-          SidebarItem("Dashboard", Icons.dashboard_outlined, "/dashboard/admin"),
-          SidebarItem("Employees", Icons.people_outline, "/dashboard/admin/employees"),
-          SidebarItem("Create Employee", Icons.person_add, "/dashboard/admin/employees/create"),
-          SidebarItem("Manage Roles", Icons.admin_panel_settings, "/dashboard/admin/roles"),
-          SidebarItem("Schedule Task", Icons.task_outlined, "/dashboard/admin/tasks/schedule"),
-          SidebarItem("View Tasks", Icons.list_alt_outlined, "/dashboard/admin/tasks/view"),
-          SidebarItem("Account Master", Icons.account_box, "/dashboard/admin/account/master"),
-          SidebarItem("View All Accounts", Icons.list_alt, "/dashboard/admin/account/all"),
-          SidebarItem("Submit Expense", Icons.receipt_long, "/dashboard/admin/expense/create"),
-          SidebarItem("My Expenses", Icons.history, "/dashboard/admin/expense/my"),
+          SidebarItem(
+            "Dashboard",
+            Icons.dashboard_outlined,
+            "/dashboard/admin",
+          ),
+          SidebarItem(
+            "Manage Roles",
+            Icons.admin_panel_settings,
+            "/dashboard/admin/roles",
+          ),
+          SidebarItem(
+            "Create Employee",
+            Icons.person_add,
+            "/dashboard/admin/employees/create",
+          ),
+          SidebarItem(
+            "Employees    Management",
+            Icons.people_outline,
+            "/dashboard/admin/employees",
+          ),
+          SidebarItem(
+            "Account Master",
+            Icons.account_box,
+            "/dashboard/admin/account/master",
+          ),
+          SidebarItem(
+            "Accounts Master Management",
+            Icons.list_alt,
+            "/dashboard/admin/account/all",
+          ),
+          SidebarItem(
+            "Schedule Task",
+            Icons.task_outlined,
+            "/dashboard/admin/tasks/schedule",
+          ),
+          SidebarItem(
+            "Tasks Management",
+            Icons.list_alt_outlined,
+            "/dashboard/admin/tasks/view",
+          ),
         ];
 
       case "employee":
         return [
           SidebarItem("Dashboard", Icons.dashboard, "/dashboard/employee"),
           SidebarItem("Profile", Icons.person, "/dashboard/employee/profile"),
-          SidebarItem("Settings", Icons.settings, "/dashboard/employee/settings"),
+          SidebarItem(
+            "Settings",
+            Icons.settings,
+            "/dashboard/employee/settings",
+          ),
         ];
 
       default:
@@ -133,7 +167,10 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: const Text("Confirm Logout"),
         content: const Text("Do you want to logout?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -151,7 +188,11 @@ class RoleDashboardTemplate extends StatelessWidget {
   // ------------------------------------------------------------
   // Body + Cards Grid
   // ------------------------------------------------------------
-  Widget _buildBody(BuildContext context, Color color, List<DashboardCard> cards) {
+  Widget _buildBody(
+    BuildContext context,
+    Color color,
+    List<DashboardCard> cards,
+  ) {
     return Column(
       children: [
         _header(color),
@@ -165,7 +206,9 @@ class RoleDashboardTemplate extends StatelessWidget {
                 .map(
                   (c) => Card(
                     elevation: 3,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
                     child: InkWell(
                       onTap: c.onTap,
                       child: Column(
@@ -175,9 +218,12 @@ class RoleDashboardTemplate extends StatelessWidget {
                           const SizedBox(height: 10),
                           Text(
                             c.title,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
                             textAlign: TextAlign.center,
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -192,20 +238,8 @@ class RoleDashboardTemplate extends StatelessWidget {
 
   Widget _header(Color color) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [color, color.withOpacity(0.7)]),
-      ),
-      child: Row(
-        children: [
-          Icon(roleIcon, size: 35, color: Colors.white),
-          const SizedBox(width: 12),
-          Text(
-            roleDisplayName,
-            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-        ],
       ),
     );
   }
