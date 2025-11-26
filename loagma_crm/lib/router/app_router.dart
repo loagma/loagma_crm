@@ -18,10 +18,10 @@ import '../screens/admin/view_tasks_screen.dart';
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
 import '../screens/shared/account_list_screen.dart';
+import '../screens/shared/account_detail_screen.dart';
 import '../screens/shared/create_expense_screen.dart';
 import '../screens/shared/my_expenses_screen.dart';
 import '../screens/shared/employee_list_screen.dart';
-import '../screens/shared/view_all_masters_screen.dart';
 
 // Guards & Services
 import 'auth_guard.dart';
@@ -78,10 +78,7 @@ final GoRouter appRouter = GoRouter(
           path: 'employees/create',
           builder: (_, __) => const AdminCreateUserScreen(),
         ),
-        GoRoute(
-          path: 'roles',
-          builder: (_, __) => const ManageRolesScreen(),
-        ),
+        GoRoute(path: 'roles', builder: (_, __) => const ManageRolesScreen()),
         GoRoute(
           path: 'tasks/schedule',
           builder: (_, __) => const ScheduleTaskScreen(),
@@ -94,9 +91,17 @@ final GoRouter appRouter = GoRouter(
           path: 'account/master',
           builder: (_, __) => const AccountMasterScreen(),
         ),
+
         GoRoute(
           path: 'account/all',
           builder: (_, __) => const AccountListScreen(),
+        ),
+        GoRoute(
+          path: 'account/view/:id',
+          builder: (context, state) {
+            final accountId = state.pathParameters['id']!;
+            return AccountDetailScreen(accountId: accountId);
+          },
         ),
         GoRoute(
           path: 'expense/create',
