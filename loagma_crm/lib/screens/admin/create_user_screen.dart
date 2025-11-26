@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import '../../services/api_config.dart';
 import 'user_detail_screen.dart';
+import 'edit_user_screen.dart';
 
 // ⬇️ Add multi-select helper widget ABOVE this class
 // (already given above)
@@ -26,6 +27,7 @@ class AdminCreateUserScreen extends StatefulWidget {
 
 class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   final _formKey = GlobalKey<FormState>();
+  final ScrollController _scrollController = ScrollController();
 
   // ---------------- Controllers ----------------
   final TextEditingController _phone = TextEditingController();
@@ -80,6 +82,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _phone.dispose();
     _name.dispose();
     _email.dispose();
@@ -110,26 +113,36 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          roles = List<Map<String, dynamic>>.from(data["roles"]);
+          // API returns {success: true, data: [...]}
+          roles = List<Map<String, dynamic>>.from(
+            data["data"] ?? data["roles"] ?? [],
+          );
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) print("Error fetching roles: $e");
+    }
   }
 
   Future<void> fetchDepartments() async {
     try {
       final response = await http.get(
-        Uri.parse("${ApiConfig.baseUrl}/departments"),
+        Uri.parse("${ApiConfig.baseUrl}/masters/departments"),
         headers: {"Accept": "application/json"},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          departments = List<Map<String, dynamic>>.from(data["departments"]);
+          // API returns {success: true, data: [...]}
+          departments = List<Map<String, dynamic>>.from(
+            data["data"] ?? data["departments"] ?? [],
+          );
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) print("Error fetching departments: $e");
+    }
   }
 
   // ---------------- Validators ----------------
@@ -168,7 +181,12 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   // ---------------- Check Existing User ----------------
 
   Future<void> checkExistingUser(String phone) async {
-    if (phone.length != 10) return;
+    if (phone.length != 10) {
+      setState(() {
+        existingUser = null;
+      });
+      return;
+    }
 
     setState(() {
       checkingPhone = true;
@@ -176,139 +194,53 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     });
 
     try {
+      if (kDebugMode) print("🔍 Checking contact number: $phone");
+
       final response = await http.get(
-        Uri.parse("${ApiConfig.baseUrl}/admin/users?contactNumber=$phone"),
+        Uri.parse("${ApiConfig.baseUrl}/admin/users"),
         headers: {"Accept": "application/json"},
       );
 
+      if (kDebugMode) print("📡 Response status: ${response.statusCode}");
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
+        if (kDebugMode)
+          print("📦 Response data: ${data.toString().substring(0, 200)}...");
+
         if (data["success"] == true && data["users"] != null) {
           final users = List<Map<String, dynamic>>.from(data["users"]);
-          if (users.isNotEmpty) {
-            setState(() => existingUser = users[0]);
-            _showExistingUserDialog();
+
+          // Filter users by contact number
+          final matchingUsers = users.where((user) {
+            final userPhone = user['contactNumber']?.toString() ?? '';
+            final cleanUserPhone = userPhone.replaceAll(RegExp(r'\D'), '');
+            final cleanSearchPhone = phone.replaceAll(RegExp(r'\D'), '');
+
+            if (kDebugMode) {
+              print("Comparing: $cleanUserPhone == $cleanSearchPhone");
+            }
+
+            return cleanUserPhone == cleanSearchPhone;
+          }).toList();
+
+          if (matchingUsers.isNotEmpty) {
+            if (kDebugMode)
+              print("✅ Found existing user: ${matchingUsers[0]['name']}");
+            setState(() => existingUser = matchingUsers[0]);
+          } else {
+            if (kDebugMode) print("✅ No existing user found");
           }
         }
       }
     } catch (e) {
-      if (kDebugMode) print("Error checking user: $e");
+      if (kDebugMode) print("❌ Error checking user: $e");
+    } finally {
+      if (mounted) {
+        setState(() => checkingPhone = false);
+      }
     }
-
-    setState(() => checkingPhone = false);
-  }
-
-  void _showExistingUserDialog() {
-    if (existingUser == null) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.warning, color: Colors.orange),
-            const SizedBox(width: 8),
-            const Text("Employee Already Exists"),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: CircleAvatar(
-                  radius: 40,
-                  backgroundColor: const Color(0xFFD7BE69),
-                  backgroundImage: existingUser!['image'] != null
-                      ? NetworkImage(existingUser!['image'])
-                      : null,
-                  child: existingUser!['image'] == null
-                      ? Text(
-                          (existingUser!['name'] ?? 'U')[0].toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            color: Colors.white,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _detailRow("Name", existingUser!['name'] ?? 'N/A'),
-              _detailRow("Phone", existingUser!['contactNumber'] ?? 'N/A'),
-              _detailRow("Email", existingUser!['email'] ?? 'N/A'),
-              _detailRow("Role", existingUser!['role'] ?? 'N/A'),
-              _detailRow("Department", existingUser!['department'] ?? 'N/A'),
-              _detailRow(
-                "Status",
-                existingUser!['isActive'] == true ? 'Active' : 'Inactive',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.visibility),
-            label: const Text("View"),
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      UserDetailScreen(user: existingUser!, onUpdate: () {}),
-                ),
-              );
-            },
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.edit),
-            label: const Text("Edit"),
-            onPressed: () {
-              Navigator.pop(context);
-              // Navigate to edit screen
-              Navigator.pushNamed(
-                context,
-                '/admin/edit-user',
-                arguments: existingUser,
-              );
-            },
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            label: const Text("Delete", style: TextStyle(color: Colors.red)),
-            onPressed: () {
-              Navigator.pop(context);
-              _confirmDelete(existingUser!['id']);
-            },
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              "$label:",
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
   }
 
   Future<void> _confirmDelete(String userId) async {
@@ -411,37 +343,13 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     }
   }
 
-  Future<String?> uploadImageToCloudinary(File imageFile) async {
-    setState(() => isUploadingImage = true);
-
+  Future<String?> convertImageToBase64(File imageFile) async {
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('https://api.cloudinary.com/v1_1/dfncqhkl9/image/upload'),
-      );
-
-      request.fields['upload_preset'] = 'ml_default';
-      request.fields['api_key'] = '652667859422493';
-      request.files.add(
-        await http.MultipartFile.fromPath('file', imageFile.path),
-      );
-
-      final response = await request.send();
-      final responseData = await response.stream.toBytes();
-      final responseString = String.fromCharCodes(responseData);
-      final jsonData = jsonDecode(responseString);
-
-      if (response.statusCode == 200) {
-        setState(() => isUploadingImage = false);
-        return jsonData['secure_url'];
-      } else {
-        Fluttertoast.showToast(msg: "Image upload failed");
-        setState(() => isUploadingImage = false);
-        return null;
-      }
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+      return 'data:image/jpeg;base64,$base64Image';
     } catch (e) {
-      Fluttertoast.showToast(msg: "Error uploading image: $e");
-      setState(() => isUploadingImage = false);
+      Fluttertoast.showToast(msg: "Error processing image: $e");
       return null;
     }
   }
@@ -537,16 +445,24 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       return;
     }
 
+    // Check if contact number already exists
+    if (existingUser != null) {
+      Fluttertoast.showToast(msg: "Please use a different contact number");
+      return;
+    }
+
     setState(() => isLoading = true);
 
-    // Upload image first if selected
+    // Convert image to base64 if selected
     if (_profileImage != null) {
-      _uploadedImageUrl = await uploadImageToCloudinary(_profileImage!);
+      if (kDebugMode) print("📸 Converting image to base64...");
+      _uploadedImageUrl = await convertImageToBase64(_profileImage!);
       if (_uploadedImageUrl == null) {
         setState(() => isLoading = false);
-        Fluttertoast.showToast(msg: "Failed to upload image");
+        Fluttertoast.showToast(msg: "Failed to process image");
         return;
       }
+      if (kDebugMode) print("✅ Image converted successfully");
     }
 
     String password = _password.text;
@@ -585,13 +501,22 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     };
 
     try {
+      if (kDebugMode) print("📤 Sending create user request...");
+      if (kDebugMode)
+        print("📦 Request body: ${jsonEncode(body).substring(0, 200)}...");
+
       final response = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/admin/users"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(body),
       );
 
+      if (kDebugMode) print("📡 Response status: ${response.statusCode}");
+
       final data = jsonDecode(response.body);
+
+      if (kDebugMode)
+        print("📦 Response: ${data.toString().substring(0, 200)}...");
 
       if (data["success"] == true) {
         Fluttertoast.showToast(msg: "User created successfully");
@@ -628,6 +553,13 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           _uploadedImageUrl = null;
           existingUser = null;
         });
+
+        // Scroll to top after successful submission
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+        );
       } else {
         Fluttertoast.showToast(msg: data["message"] ?? "Failed");
       }
@@ -651,6 +583,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(20),
           children: [
             // PHONE WITH CHECK
@@ -658,25 +591,193 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               controller: _phone,
               maxLength: 10,
               keyboardType: TextInputType.phone,
-              decoration: _input("Contact Number *", Icons.phone).copyWith(
-                suffixIcon: checkingPhone
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : null,
-              ),
-              validator: validatePhone,
               onChanged: (value) {
                 if (value.length == 10) {
                   checkExistingUser(value);
+                } else {
+                  setState(() {
+                    existingUser = null;
+                  });
                 }
               },
+              decoration: InputDecoration(
+                labelText: 'Contact Number *',
+                prefixIcon: const Icon(Icons.phone, color: Color(0xFFD7BE69)),
+                suffixIcon: checkingPhone
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFD7BE69),
+                          ),
+                        ),
+                      )
+                    : existingUser != null
+                    ? const Icon(Icons.error, color: Colors.red)
+                    : _phone.text.length == 10
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: existingUser != null
+                        ? Colors.red
+                        : const Color(0xFFD7BE69),
+                    width: 2,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+                counterText: '',
+              ),
+              validator: (v) {
+                if (v?.isEmpty ?? true) return 'Contact number is required';
+                if (v!.length != 10) return 'Must be 10 digits';
+                if (existingUser != null)
+                  return 'Contact number already exists';
+                return null;
+              },
             ),
+
+            // EXISTING USER WARNING
+            if (existingUser != null)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.warning, color: Colors.red, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Employee Already Exists',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                'Name: ${existingUser!['name'] ?? 'N/A'}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              if (existingUser!['email'] != null)
+                                Text(
+                                  'Email: ${existingUser!['email']}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              Text(
+                                'Role: ${existingUser!['role'] ?? 'N/A'}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.visibility, size: 16),
+                            label: const Text(
+                              'View',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              side: const BorderSide(color: Colors.blue),
+                              foregroundColor: Colors.blue,
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => UserDetailScreen(
+                                    user: existingUser!,
+                                    onUpdate: () {},
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: const Text(
+                              'Edit',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              side: const BorderSide(color: Colors.orange),
+                              foregroundColor: Colors.orange,
+                            ),
+                            onPressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EditUserScreen(user: existingUser!),
+                                ),
+                              );
+
+                              // If edit was successful, clear the form
+                              if (result == true) {
+                                Fluttertoast.showToast(
+                                  msg: 'Employee updated successfully',
+                                );
+                                setState(() {
+                                  existingUser = null;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.delete, size: 16),
+                            label: const Text(
+                              'Delete',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () =>
+                                _confirmDelete(existingUser!['id']),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 15),
 

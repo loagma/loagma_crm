@@ -1,6 +1,7 @@
 import prisma from '../config/db.js';
 import { randomUUID } from 'crypto';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
+import { uploadBase64Image } from '../services/cloudinaryService.js';
 
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {
@@ -77,6 +78,19 @@ export const createUserByAdmin = async (req, res) => {
       }
     }
 
+    // Upload image to Cloudinary if provided
+    let imageUrl = null;
+    if (image && image.startsWith('data:image')) {
+      try {
+        console.log('📸 Processing image upload...');
+        imageUrl = await uploadBase64Image(image, 'users');
+        console.log('✅ Image uploaded to Cloudinary:', imageUrl);
+      } catch (error) {
+        console.error('❌ Image upload failed:', error.message);
+        // Continue without image if upload fails
+      }
+    }
+
     // Create user
     const userId = randomUUID();
     const user = await prisma.user.create({
@@ -99,7 +113,7 @@ export const createUserByAdmin = async (req, res) => {
         pincode,
         country,
         district,
-        image,
+        image: imageUrl || image, // Use Cloudinary URL if uploaded, otherwise use original
         notes,
         aadharCard,
         panCard,
@@ -316,6 +330,19 @@ export const updateUserByAdmin = async (req, res) => {
       alternativeNumber = cleanPhoneNumber(alternativeNumber);
     }
 
+    // Upload image to Cloudinary if provided
+    let imageUrl = image;
+    if (image && image.startsWith('data:image')) {
+      try {
+        console.log('📸 Processing image upload for update...');
+        imageUrl = await uploadBase64Image(image, 'users');
+        console.log('✅ Image uploaded to Cloudinary:', imageUrl);
+      } catch (error) {
+        console.error('❌ Image upload failed:', error.message);
+        // Use original image if upload fails
+      }
+    }
+
     const user = await prisma.user.update({
       where: { id },
       data: {
@@ -336,7 +363,7 @@ export const updateUserByAdmin = async (req, res) => {
         ...(pincode !== undefined && { pincode }),
         ...(country !== undefined && { country }),
         ...(district !== undefined && { district }),
-        ...(image !== undefined && { image }),
+        ...(imageUrl !== undefined && { image: imageUrl }),
         ...(notes !== undefined && { notes }),
         ...(aadharCard !== undefined && { aadharCard }),
         ...(panCard !== undefined && { panCard }),
