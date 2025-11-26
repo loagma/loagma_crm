@@ -69,10 +69,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: const Color(0xFFD7BE69),
-                    backgroundImage: widget.user['image'] != null
+                    backgroundImage:
+                        widget.user['image'] != null &&
+                            widget.user['image'].toString().startsWith('http')
                         ? NetworkImage(widget.user['image'])
                         : null,
-                    child: widget.user['image'] == null
+                    child:
+                        widget.user['image'] == null ||
+                            !widget.user['image'].toString().startsWith('http')
                         ? Text(
                             (widget.user['name'] ?? 'U')[0].toUpperCase(),
                             style: const TextStyle(

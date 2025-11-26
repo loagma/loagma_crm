@@ -83,12 +83,22 @@ export const createUserByAdmin = async (req, res) => {
     if (image && image.startsWith('data:image')) {
       try {
         console.log('📸 Processing image upload...');
+        console.log('📦 Image size:', image.length, 'characters');
         imageUrl = await uploadBase64Image(image, 'users');
         console.log('✅ Image uploaded to Cloudinary:', imageUrl);
       } catch (error) {
         console.error('❌ Image upload failed:', error.message);
-        // Continue without image if upload fails
+        console.error('❌ Full error:', error);
+        // Don't save base64 to database if upload fails
+        imageUrl = null;
       }
+    } else if (image && !image.startsWith('data:image') && !image.startsWith('http')) {
+      // If image is provided but not base64 or URL, don't save it
+      console.log('⚠️ Invalid image format, skipping');
+      imageUrl = null;
+    } else if (image && image.startsWith('http')) {
+      // If it's already a URL, keep it
+      imageUrl = image;
     }
 
     // Create user
@@ -113,7 +123,7 @@ export const createUserByAdmin = async (req, res) => {
         pincode,
         country,
         district,
-        image: imageUrl || image, // Use Cloudinary URL if uploaded, otherwise use original
+        image: imageUrl, // Only save Cloudinary URL or existing URL
         notes,
         aadharCard,
         panCard,
@@ -335,12 +345,19 @@ export const updateUserByAdmin = async (req, res) => {
     if (image && image.startsWith('data:image')) {
       try {
         console.log('📸 Processing image upload for update...');
+        console.log('📦 Image size:', image.length, 'characters');
         imageUrl = await uploadBase64Image(image, 'users');
         console.log('✅ Image uploaded to Cloudinary:', imageUrl);
       } catch (error) {
         console.error('❌ Image upload failed:', error.message);
-        // Use original image if upload fails
+        console.error('❌ Full error:', error);
+        // Don't update image if upload fails
+        imageUrl = undefined;
       }
+    } else if (image && !image.startsWith('data:image') && !image.startsWith('http')) {
+      // If image is provided but not base64 or URL, don't save it
+      console.log('⚠️ Invalid image format, skipping');
+      imageUrl = undefined;
     }
 
     const user = await prisma.user.update({

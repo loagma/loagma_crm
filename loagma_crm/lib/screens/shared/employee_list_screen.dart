@@ -68,7 +68,6 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -100,7 +99,6 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             ),
           ),
 
-          // Employee List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -171,9 +169,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () {
-          _showEmployeeDetails(employee);
-        },
+        onTap: () => _showEmployeeDetails(employee),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -182,19 +178,30 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             children: [
               Row(
                 children: [
+                  // -------- PROFILE IMAGE ----------
                   CircleAvatar(
-                    backgroundColor: const Color(0xFFD7BE69),
                     radius: 25,
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    backgroundColor: const Color(0xFFD7BE69),
+                    backgroundImage:
+                        employee['image'] != null &&
+                            employee['image'].toString().startsWith('http')
+                        ? NetworkImage(employee['image'])
+                        : null,
+                    child:
+                        employee['image'] == null ||
+                            !employee['image'].toString().startsWith('http')
+                        ? Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 12),
+
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +249,9 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                   ),
                 ],
               ),
+
               const Divider(height: 24),
+
               Row(
                 children: [
                   Expanded(child: _buildInfoRow(Icons.work, designation)),
@@ -307,22 +316,34 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // ------------ PROFILE IMAGE IN DETAILS ----------
                   Center(
                     child: CircleAvatar(
-                      backgroundColor: const Color(0xFFD7BE69),
                       radius: 40,
-                      child: Text(
-                        employee['name']?.isNotEmpty == true
-                            ? employee['name'][0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      backgroundColor: const Color(0xFFD7BE69),
+                      backgroundImage:
+                          employee['image'] != null &&
+                              employee['image'].toString().startsWith('http')
+                          ? NetworkImage(employee['image'])
+                          : null,
+                      child:
+                          employee['image'] == null ||
+                              !employee['image'].toString().startsWith('http')
+                          ? Text(
+                              employee['name']?.isNotEmpty == true
+                                  ? employee['name'][0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
+
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
@@ -340,6 +361,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
                   _buildDetailRow('Email', employee['email']),
                   _buildDetailRow('Contact', employee['contactNumber']),
                   _buildDetailRow('Designation', employee['designation']),
