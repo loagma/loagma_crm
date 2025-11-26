@@ -47,6 +47,13 @@ dependencies:
   google_maps_flutter: ^2.10.0
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo1.jpeg"
+
   flutter_test:
     sdk: flutter
 

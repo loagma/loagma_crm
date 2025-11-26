@@ -900,24 +900,23 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             const SizedBox(height: 8),
 
             // MANUAL ADDRESS TOGGLE
-            CheckboxListTile(
-              title: const Text("Enter address manually"),
-              value: manualAddress,
-              onChanged: (v) {
-                setState(() {
-                  manualAddress = v ?? false;
-                  if (!manualAddress) {
-                    _country.clear();
-                    _district.clear();
-                    _city.clear();
-                    _state.clear();
-                  }
-                });
-              },
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-            ),
-
+            // CheckboxListTile(
+            //   title: const Text("Enter address manually"),
+            //   value: manualAddress,
+            //   onChanged: (v) {
+            //     setState(() {
+            //       manualAddress = v ?? false;
+            //       if (!manualAddress) {
+            //         _country.clear();
+            //         _district.clear();
+            //         _city.clear();
+            //         _state.clear();
+            //       }
+            //     });
+            //   },
+            //   controlAffinity: ListTileControlAffinity.leading,
+            //   contentPadding: EdgeInsets.zero,
+            // ),
             const SizedBox(height: 15),
 
             // COUNTRY
