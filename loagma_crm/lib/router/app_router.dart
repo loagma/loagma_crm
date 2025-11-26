@@ -21,22 +21,19 @@ import '../screens/shared/account_list_screen.dart';
 import '../screens/shared/create_expense_screen.dart';
 import '../screens/shared/my_expenses_screen.dart';
 import '../screens/shared/employee_list_screen.dart';
-import '../screens/shared/view_all_masters_screen.dart';
 
 // Guards & Services
 import 'auth_guard.dart';
 import 'role_guard.dart';
 import '../services/user_service.dart';
 
-// GLOBAL NAVIGATOR KEY
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
-
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/',
 
   routes: [
-    // ==================== HOME → AUTO ROUTER ====================
+    // AUTO ROUTER
     GoRoute(
       path: '/',
       redirect: (context, state) {
@@ -48,11 +45,11 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
-    // ==================== AUTH ROUTES ====================
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(path: '/otp', builder: (context, state) => const OtpScreen()),
+    // AUTH
+    GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+    GoRoute(path: '/otp', builder: (_, __) => const OtpScreen()),
 
-    // ==================== DASHBOARD (Protected) ====================
+    // DASHBOARD WITH CHILD ROUTES
     GoRoute(
       path: '/dashboard/:role',
       redirect: (context, state) {
@@ -69,69 +66,47 @@ final GoRouter appRouter = GoRouter(
           userContactNumber: UserService.contactNumber,
         );
       },
-    ),
 
-    // ==================== ADMIN ROUTES ====================
-    GoRoute(
-      path: '/admin/employees',
-      redirect: authGuard,
-      builder: (context, state) => const AdminViewUsersScreen(),
-    ),
-    GoRoute(
-      path: '/admin/employees/create',
-      redirect: authGuard,
-      builder: (context, state) => const AdminCreateUserScreen(),
-    ),
-    GoRoute(
-      path: '/admin/roles',
-      redirect: authGuard,
-      builder: (context, state) => const ManageRolesScreen(),
-    ),
-    GoRoute(
-      path: '/admin/tasks/schedule',
-      redirect: authGuard,
-      builder: (context, state) => const ScheduleTaskScreen(),
-    ),
-    GoRoute(
-      path: '/admin/tasks/view',
-      redirect: authGuard,
-      builder: (context, state) => const ViewTasksScreen(),
-    ),
-
-    // ==================== ACCOUNT ROUTES ====================
-    GoRoute(
-      path: '/account/master',
-      redirect: authGuard,
-      builder: (context, state) => const AccountMasterScreen(),
-    ),
-    GoRoute(
-      path: '/account/all',
-      redirect: authGuard,
-      builder: (context, state) => const AccountListScreen(),
-    ),
-    GoRoute(
-      path: '/account/masters/all',
-      redirect: authGuard,
-      builder: (context, state) => const ViewAllMastersScreen(),
-    ),
-
-    // ==================== EXPENSE ROUTES ====================
-    GoRoute(
-      path: '/expense/create',
-      redirect: authGuard,
-      builder: (context, state) => const CreateExpenseScreen(),
-    ),
-    GoRoute(
-      path: '/expense/my',
-      redirect: authGuard,
-      builder: (context, state) => const MyExpensesScreen(),
-    ),
-
-    // ==================== EMPLOYEE ROUTES ====================
-    GoRoute(
-      path: '/employees/list',
-      redirect: authGuard,
-      builder: (context, state) => const EmployeeListScreen(),
+      /// ALL ADMIN & SHARED ROUTES NESTED HERE
+      routes: [
+        GoRoute(
+          path: 'employees',
+          builder: (_, __) => const AdminViewUsersScreen(),
+        ),
+        GoRoute(
+          path: 'employees/create',
+          builder: (_, __) => const AdminCreateUserScreen(),
+        ),
+        GoRoute(path: 'roles', builder: (_, __) => const ManageRolesScreen()),
+        GoRoute(
+          path: 'tasks/schedule',
+          builder: (_, __) => const ScheduleTaskScreen(),
+        ),
+        GoRoute(
+          path: 'tasks/view',
+          builder: (_, __) => const ViewTasksScreen(),
+        ),
+        GoRoute(
+          path: 'account/master',
+          builder: (_, __) => const AccountMasterScreen(),
+        ),
+        GoRoute(
+          path: 'account/all',
+          builder: (_, __) => const AccountListScreen(),
+        ),
+        GoRoute(
+          path: 'expense/create',
+          builder: (_, __) => const CreateExpenseScreen(),
+        ),
+        GoRoute(
+          path: 'expense/my',
+          builder: (_, __) => const MyExpensesScreen(),
+        ),
+        GoRoute(
+          path: 'employees/list',
+          builder: (_, __) => const EmployeeListScreen(),
+        ),
+      ],
     ),
   ],
 );

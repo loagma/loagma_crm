@@ -22,33 +22,36 @@ class EnterpriseSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      elevation: 8,
+      elevation: 10,
       child: Column(
         children: [
-          _header(),
+          _buildHeader(),
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
-              children: items.map((e) => _tile(context, e)).toList(),
+              children: items.map((item) => _buildTile(context, item)).toList(),
             ),
           ),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text("Logout"),
-            onTap: () => context.go('/login'),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              context.go('/login');
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _header() {
+  // ---------------- HEADER ----------------
+  Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 45, 20, 25),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: primaryColor,
         gradient: LinearGradient(
           colors: [primaryColor, primaryColor.withOpacity(0.8)],
         ),
@@ -60,40 +63,34 @@ class EnterpriseSidebar extends StatelessWidget {
             width: 120,
             height: 90,
           ),
-          const SizedBox(height: 12),
-
-          // App name
+          const SizedBox(height: 8),
           Text(
             appName ?? "Loagma CRM",
             style: const TextStyle(
               color: Colors.white,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
-              fontSize: 17,
             ),
           ),
-
-          // Role
+          const SizedBox(height: 5),
           Text(
             roleName.toUpperCase(),
-            style: const TextStyle(color: Colors.white70),
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
-
-          // Contact
           if (userContact != null)
             Text(
               userContact!,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            )
         ],
       ),
     );
   }
 
-  Widget _tile(BuildContext context, SidebarItem item) {
-    final currentRoute =
-        GoRouter.of(context).routerDelegate.currentConfiguration.uri.toString();
-
-    final isActive = currentRoute == item.route;
+  // ---------------- TILE ----------------
+  Widget _buildTile(BuildContext context, SidebarItem item) {
+    final currentPath = GoRouterState.of(context).uri.toString();
+    final isActive = currentPath.startsWith(item.route);
 
     return ListTile(
       leading: Icon(
@@ -103,11 +100,14 @@ class EnterpriseSidebar extends StatelessWidget {
       title: Text(
         item.title,
         style: TextStyle(
-          color: isActive ? primaryColor : Colors.black87,
           fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          color: isActive ? primaryColor : Colors.black87,
         ),
       ),
-      onTap: () => context.go(item.route),
+      onTap: () {
+        Navigator.pop(context); // Close drawer properly
+        context.go(item.route); // Navigate cleanly
+      },
     );
   }
 }

@@ -12,10 +12,7 @@ class RoleDashboardTemplate extends StatelessWidget {
   final String? userContactNumber;
 
   final String? logoPath;
-  final double? logoWidth;
-  final double? logoHeight;
   final String? appName;
-  final String? appVersion;
 
   const RoleDashboardTemplate({
     super.key,
@@ -26,56 +23,33 @@ class RoleDashboardTemplate extends StatelessWidget {
     this.primaryColor,
     this.userContactNumber,
     this.logoPath,
-    this.logoWidth,
-    this.logoHeight,
     this.appName,
-    this.appVersion,
   });
 
   // ------------------------------------------------------------
-  // Sidebar items for each role
+  // Sidebar menu definitions (with nested GoRouter paths)
   // ------------------------------------------------------------
   List<SidebarItem> getSidebarMenu() {
-    switch (roleName) {
+    switch (roleName.toLowerCase()) {
       case "admin":
         return [
-          SidebarItem(
-            "Dashboard",
-            Icons.dashboard_outlined,
-            "/dashboard/admin",
-          ),
-          SidebarItem("Employees", Icons.people_outline, "/admin/employees"),
-          SidebarItem(
-            "Create Employee",
-            Icons.person_add,
-            "/admin/employees/create",
-          ),
-          SidebarItem(
-            "Manage Roles",
-            Icons.admin_panel_settings,
-            "/admin/roles",
-          ),
-          SidebarItem(
-            "Schedule Task",
-            Icons.task_outlined,
-            "/admin/tasks/schedule",
-          ),
-          SidebarItem(
-            "View Tasks",
-            Icons.list_alt_outlined,
-            "/admin/tasks/view",
-          ),
-          SidebarItem("Account Master", Icons.account_box, "/account/master"),
-          SidebarItem("View All Accounts", Icons.list_alt, "/account/all"),
-          SidebarItem("Submit Expense", Icons.receipt_long, "/expense/create"),
-          SidebarItem("My Expenses", Icons.history, "/expense/my"),
+          SidebarItem("Dashboard", Icons.dashboard_outlined, "/dashboard/admin"),
+          SidebarItem("Employees", Icons.people_outline, "/dashboard/admin/employees"),
+          SidebarItem("Create Employee", Icons.person_add, "/dashboard/admin/employees/create"),
+          SidebarItem("Manage Roles", Icons.admin_panel_settings, "/dashboard/admin/roles"),
+          SidebarItem("Schedule Task", Icons.task_outlined, "/dashboard/admin/tasks/schedule"),
+          SidebarItem("View Tasks", Icons.list_alt_outlined, "/dashboard/admin/tasks/view"),
+          SidebarItem("Account Master", Icons.account_box, "/dashboard/admin/account/master"),
+          SidebarItem("View All Accounts", Icons.list_alt, "/dashboard/admin/account/all"),
+          SidebarItem("Submit Expense", Icons.receipt_long, "/dashboard/admin/expense/create"),
+          SidebarItem("My Expenses", Icons.history, "/dashboard/admin/expense/my"),
         ];
 
       case "employee":
         return [
           SidebarItem("Dashboard", Icons.dashboard, "/dashboard/employee"),
-          SidebarItem("Profile", Icons.person, "/profile"),
-          SidebarItem("Settings", Icons.settings, "/settings"),
+          SidebarItem("Profile", Icons.person, "/dashboard/employee/profile"),
+          SidebarItem("Settings", Icons.settings, "/dashboard/employee/settings"),
         ];
 
       default:
@@ -85,70 +59,40 @@ class RoleDashboardTemplate extends StatelessWidget {
     }
   }
 
-  // ------------------------------------------------------------
-  // Auto-generate cards (same as your current logic)
-  // ------------------------------------------------------------
   List<DashboardCard> getDashCards(BuildContext context) {
     if (cards != null && cards!.isNotEmpty) return cards!;
 
-    return getSidebarMenu().where((item) => item.title != "Dashboard").map((
-      item,
-    ) {
-      return DashboardCard(
-        title: item.title,
-        icon: item.icon,
-        onTap: () => context.go(item.route),
-      );
-    }).toList();
+    return getSidebarMenu()
+        .where((m) => m.title != "Dashboard")
+        .map(
+          (m) => DashboardCard(
+            title: m.title,
+            icon: m.icon,
+            onTap: () => context.go(m.route),
+          ),
+        )
+        .toList();
   }
 
   // ------------------------------------------------------------
-  // Build UI
+  // BUILD UI
   // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final color = primaryColor ?? const Color(0xFFD7BE69);
-    final items = getSidebarMenu();
     final dashCards = getDashCards(context);
 
-    return WillPopScope(
-      onWillPop: () async {
-        final exit = await _confirmExit(context);
-        return exit ?? false;
-      },
-      child: Scaffold(
-        appBar: _buildAppBar(context, color),
-        drawer: EnterpriseSidebar(
-          items: items,
-          primaryColor: color,
-          roleName: roleDisplayName,
-          userContact: userContactNumber,
-          logoPath: logoPath,
-          appName: appName,
-        ),
-        body: _buildBody(context, color, dashCards),
+    return Scaffold(
+      appBar: _buildAppBar(context, color),
+      drawer: EnterpriseSidebar(
+        items: getSidebarMenu(),
+        primaryColor: color,
+        roleName: roleDisplayName,
+        userContact: userContactNumber,
+        logoPath: logoPath,
+        appName: appName,
       ),
-    );
-  }
-
-  Future<bool?> _confirmExit(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text("Exit App"),
-        content: const Text("Do you want to exit the application?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text("No"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text("Yes, Exit"),
-          ),
-        ],
-      ),
+      body: _buildBody(context, color, dashCards),
     );
   }
 
@@ -189,10 +133,7 @@ class RoleDashboardTemplate extends StatelessWidget {
         title: const Text("Confirm Logout"),
         content: const Text("Do you want to logout?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -208,29 +149,23 @@ class RoleDashboardTemplate extends StatelessWidget {
   }
 
   // ------------------------------------------------------------
-  // Body + Grid
+  // Body + Cards Grid
   // ------------------------------------------------------------
-  Widget _buildBody(
-    BuildContext context,
-    Color color,
-    List<DashboardCard> cards,
-  ) {
+  Widget _buildBody(BuildContext context, Color color, List<DashboardCard> cards) {
     return Column(
       children: [
         _header(color),
         Expanded(
           child: GridView.count(
-            crossAxisCount: 2,
             padding: const EdgeInsets.all(16),
+            crossAxisCount: 2,
             crossAxisSpacing: 15,
             mainAxisSpacing: 15,
             children: cards
                 .map(
                   (c) => Card(
                     elevation: 3,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     child: InkWell(
                       onTap: c.onTap,
                       child: Column(
@@ -240,12 +175,9 @@ class RoleDashboardTemplate extends StatelessWidget {
                           const SizedBox(height: 10),
                           Text(
                             c.title,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          )
                         ],
                       ),
                     ),
@@ -267,15 +199,11 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(roleIcon, color: Colors.white, size: 35),
+          Icon(roleIcon, size: 35, color: Colors.white),
           const SizedBox(width: 12),
           Text(
             roleDisplayName,
-            style: const TextStyle(
-              fontSize: 22,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -283,9 +211,9 @@ class RoleDashboardTemplate extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------------------
+// ------------------------------------------------------------
 // MODEL
-// ----------------------------------------------------------------
+// ------------------------------------------------------------
 class DashboardCard {
   final String title;
   final IconData icon;
