@@ -21,6 +21,7 @@ import '../screens/shared/account_list_screen.dart';
 import '../screens/shared/create_expense_screen.dart';
 import '../screens/shared/my_expenses_screen.dart';
 import '../screens/shared/employee_list_screen.dart';
+import '../screens/shared/view_all_masters_screen.dart';
 
 // Guards & Services
 import 'auth_guard.dart';
@@ -77,7 +78,10 @@ final GoRouter appRouter = GoRouter(
           path: 'employees/create',
           builder: (_, __) => const AdminCreateUserScreen(),
         ),
-        GoRoute(path: 'roles', builder: (_, __) => const ManageRolesScreen()),
+        GoRoute(
+          path: 'roles',
+          builder: (_, __) => const ManageRolesScreen(),
+        ),
         GoRoute(
           path: 'tasks/schedule',
           builder: (_, __) => const ScheduleTaskScreen(),
