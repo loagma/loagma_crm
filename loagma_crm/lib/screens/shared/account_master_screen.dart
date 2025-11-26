@@ -431,20 +431,20 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       appBar: AppBar(
         title: const Text('Account Master'),
         backgroundColor: const Color(0xFFD7BE69),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: 'View All Accounts',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ViewAllMastersScreen(),
-                ),
-              );
-            },
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: const Icon(Icons.list_alt),
+        //     tooltip: 'View All Accounts',
+        //     onPressed: () async {
+        //       await Navigator.push(
+        //         context,
+        //         MaterialPageRoute(
+        //           builder: (context) => const ViewAllMastersScreen(),
+        //         ),
+        //       );
+        //     },
+        //   ),
+        // ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

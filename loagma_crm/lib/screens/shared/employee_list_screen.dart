@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/employee_service.dart';
-import 'account_master_screen.dart';
 
 class EmployeeListScreen extends StatefulWidget {
   const EmployeeListScreen({super.key});
@@ -141,16 +140,15 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
+        onPressed: () {
+          Navigator.pushNamed(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AccountMasterScreen(),
-            ),
-          );
-          if (result == true) {
-            _loadEmployees();
-          }
+            "/dashboard/admin/employees/create",
+          ).then((result) {
+            if (result == true) {
+              _loadEmployees();
+            }
+          });
         },
         backgroundColor: const Color(0xFFD7BE69),
         icon: const Icon(Icons.add),
