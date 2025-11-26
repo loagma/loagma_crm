@@ -41,6 +41,20 @@ class EnterpriseSidebar extends StatelessWidget {
               context.go('/login');
             },
           ),
+          const Divider(height: 1),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Center(
+              child: Text(
+                "Version : 1.0.0",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -58,11 +72,7 @@ class EnterpriseSidebar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Image.asset(
-            logoPath ?? "assets/logo.png",
-            width: 120,
-            height: 90,
-          ),
+          Image.asset(logoPath ?? "assets/logo.png", width: 120, height: 90),
           const SizedBox(height: 8),
           Text(
             appName ?? "Loagma CRM",
@@ -81,7 +91,7 @@ class EnterpriseSidebar extends StatelessWidget {
             Text(
               userContact!,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
-            )
+            ),
         ],
       ),
     );
