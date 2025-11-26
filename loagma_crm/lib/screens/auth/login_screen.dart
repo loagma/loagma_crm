@@ -181,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 GestureDetector(
                   onTap: _onLogoTap,
                   child: Image.asset(
-                    'assets/logo1.jpeg',
+                    'assets/logo1.png',
                     width: 120,
                     height: 120,
                   ),

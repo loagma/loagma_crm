@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { uploadBase64Image } from '../services/cloudinaryService.js';
 
 const prisma = new PrismaClient();
 
@@ -275,6 +276,32 @@ export const createAccount = async (req, res) => {
     // Get user ID from auth middleware (req.user.id)
     const userId = req.user?.id || createdById;
 
+    // Upload images to Cloudinary if provided
+    let ownerImageUrl = ownerImage;
+    let shopImageUrl = shopImage;
+
+    if (ownerImage && ownerImage.startsWith('data:image')) {
+      try {
+        console.log('📸 Uploading owner image to Cloudinary...');
+        ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
+        console.log('✅ Owner image uploaded:', ownerImageUrl);
+      } catch (error) {
+        console.error('❌ Owner image upload failed:', error.message);
+        // Continue without image if upload fails
+      }
+    }
+
+    if (shopImage && shopImage.startsWith('data:image')) {
+      try {
+        console.log('📸 Uploading shop image to Cloudinary...');
+        shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
+        console.log('✅ Shop image uploaded:', shopImageUrl);
+      } catch (error) {
+        console.error('❌ Shop image upload failed:', error.message);
+        // Continue without image if upload fails
+      }
+    }
+
     console.log('✅ Creating account in database...');
     const account = await prisma.account.create({
       data: {
@@ -290,8 +317,8 @@ export const createAccount = async (req, res) => {
         funnelStage,
         gstNumber: gstNumber?.toUpperCase(),
         panCard: panCard?.toUpperCase(),
-        ownerImage,
-        shopImage,
+        ownerImage: ownerImageUrl,
+        shopImage: shopImageUrl,
         isActive: isActive !== undefined ? isActive : true,
         pincode,
         country,
@@ -451,6 +478,32 @@ export const updateAccount = async (req, res) => {
       });
     }
 
+    // Upload images to Cloudinary if provided
+    let ownerImageUrl = ownerImage;
+    let shopImageUrl = shopImage;
+
+    if (ownerImage && ownerImage.startsWith('data:image')) {
+      try {
+        console.log('📸 Uploading owner image to Cloudinary...');
+        ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
+        console.log('✅ Owner image uploaded:', ownerImageUrl);
+      } catch (error) {
+        console.error('❌ Owner image upload failed:', error.message);
+        ownerImageUrl = ownerImage; // Keep original if upload fails
+      }
+    }
+
+    if (shopImage && shopImage.startsWith('data:image')) {
+      try {
+        console.log('📸 Uploading shop image to Cloudinary...');
+        shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
+        console.log('✅ Shop image uploaded:', shopImageUrl);
+      } catch (error) {
+        console.error('❌ Shop image upload failed:', error.message);
+        shopImageUrl = shopImage; // Keep original if upload fails
+      }
+    }
+
     const updateData = {};
     
     if (businessName !== undefined) updateData.businessName = businessName;
@@ -463,8 +516,8 @@ export const updateAccount = async (req, res) => {
     if (funnelStage !== undefined) updateData.funnelStage = funnelStage;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber?.toUpperCase();
     if (panCard !== undefined) updateData.panCard = panCard?.toUpperCase();
-    if (ownerImage !== undefined) updateData.ownerImage = ownerImage;
-    if (shopImage !== undefined) updateData.shopImage = shopImage;
+    if (ownerImageUrl !== undefined) updateData.ownerImage = ownerImageUrl;
+    if (shopImageUrl !== undefined) updateData.shopImage = shopImageUrl;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (pincode !== undefined) updateData.pincode = pincode;
     if (country !== undefined) updateData.country = country;
