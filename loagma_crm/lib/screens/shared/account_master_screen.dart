@@ -20,6 +20,7 @@ class AccountMasterScreen extends StatefulWidget {
 
 class _AccountMasterScreenState extends State<AccountMasterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
   bool isSubmitting = false;
   bool isLoadingLocation = false;
   bool isLoadingAreas = false;
@@ -105,6 +106,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _businessNameController.dispose();
     _personNameController.dispose();
     _contactNumberController.dispose();
@@ -382,6 +384,13 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
         _showSuccess('Account created successfully!');
         _clearForm();
+
+        // Scroll to top after successful submission
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
       } catch (e) {
         _showError('Failed to create account: $e');
       } finally {
@@ -447,6 +456,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         // ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,

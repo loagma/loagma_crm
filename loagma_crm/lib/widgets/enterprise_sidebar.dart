@@ -72,7 +72,11 @@ class EnterpriseSidebar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Image.asset(logoPath ?? "assets/logo.png", width: 120, height: 90),
+          Image.asset(
+            logoPath ?? "assets/logo1.jpeg",
+            width: 100,
+            height: 60,
+          ),
           const SizedBox(height: 8),
           Text(
             appName ?? "Loagma CRM",
