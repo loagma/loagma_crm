@@ -71,7 +71,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/employees/create",
           ),
           SidebarItem(
-            "Employees    Management",
+            "Employees Management",
             Icons.people_outline,
             "/dashboard/admin/employees",
           ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
+import 'edit_account_master_screen.dart';
 
 class AccountListScreen extends StatefulWidget {
   const AccountListScreen({super.key});
@@ -331,11 +332,14 @@ class _AccountListScreenState extends State<AccountListScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navigateToCreate,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          context.push("/dashboard/admin/account/master");
+        },
         backgroundColor: const Color(0xFFD7BE69),
-        icon: const Icon(Icons.add),
-        label: const Text('New Account'),
+        tooltip: "Create New Account",
+        child: const Icon(Icons.add),
+        shape: const CircleBorder(),
       ),
     );
   }
@@ -472,9 +476,21 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.edit, size: 18),
                     label: const Text('Edit'),
-                    onPressed: () => context.push(
-                      "/dashboard/${UserService.currentRole!.toLowerCase()}/account/edit/${account.id}",
-                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              EditAccountMasterScreen(account: account),
+                        ),
+                      ).then((result) {
+                        if (result == true) {
+                          _loadAccounts(
+                            refresh: true,
+                          ); // Refresh list after edit
+                        }
+                      });
+                    },
                   ),
                   const SizedBox(width: 8),
                   TextButton.icon(
