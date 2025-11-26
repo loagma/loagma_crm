@@ -664,7 +664,7 @@ export const rejectAccount = async (req, res) => {
 // ==================== HELPER FUNCTIONS ====================
 
 async function generateAccountCode() {
-  const prefix = 'ACC';
+  const prefix = '000';
   const date = new Date();
   const year = date.getFullYear().toString().slice(-2);
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
