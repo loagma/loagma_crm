@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import 'view_all_masters_screen.dart';
+import 'edit_account_master_screen.dart';
 
 class AccountMasterScreen extends StatefulWidget {
   const AccountMasterScreen({super.key});
@@ -161,7 +162,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
     try {
       final result = await AccountService.checkContactNumber(contactNumber);
-      
+
       if (result['exists'] == true && result['data'] != null) {
         final account = result['data'];
         setState(() {
@@ -237,7 +238,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   Future<void> _openInGoogleMaps() async {
     if (_latitude == null || _longitude == null) return;
 
-    final url = 'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
     final uri = Uri.parse(url);
 
     try {
@@ -483,15 +485,19 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                           ),
                         )
                       : contactNumberError != null
-                          ? const Icon(Icons.error, color: Colors.red)
-                          : _contactNumberController.text.length == 10
-                              ? const Icon(Icons.check_circle, color: Colors.green)
-                              : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ? const Icon(Icons.error, color: Colors.red)
+                      : _contactNumberController.text.length == 10
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: contactNumberError != null ? Colors.red : const Color(0xFFD7BE69),
+                      color: contactNumberError != null
+                          ? Colors.red
+                          : const Color(0xFFD7BE69),
                       width: 2,
                     ),
                   ),
@@ -519,37 +525,203 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.warning, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Account Already Exists',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                                fontSize: 12,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Account Already Exists',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  'Name: ${existingAccountData!['personName'] ?? 'N/A'}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                if (existingAccountData!['businessName'] !=
+                                    null)
+                                  Text(
+                                    'Business: ${existingAccountData!['businessName']}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                Text(
+                                  'Code: ${existingAccountData!['accountCode'] ?? 'N/A'}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.visibility, size: 16),
+                              label: const Text(
+                                'View',
+                                style: TextStyle(fontSize: 12),
                               ),
-                            ),
-                            Text(
-                              'Name: ${existingAccountData!['personName'] ?? 'N/A'}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            if (existingAccountData!['businessName'] != null)
-                              Text(
-                                'Business: ${existingAccountData!['businessName']}',
-                                style: const TextStyle(fontSize: 11),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                side: const BorderSide(color: Colors.blue),
+                                foregroundColor: Colors.blue,
                               ),
-                            Text(
-                              'Code: ${existingAccountData!['accountCode'] ?? 'N/A'}',
-                              style: const TextStyle(fontSize: 11),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ViewAllMastersScreen(
+                                      initialAccountCode:
+                                          existingAccountData!['accountCode'],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.edit, size: 16),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                side: const BorderSide(color: Colors.orange),
+                                foregroundColor: Colors.orange,
+                              ),
+                              onPressed: () async {
+                                try {
+                                  // Show loading
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (context) => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+
+                                  // Fetch full account details
+                                  final account =
+                                      await AccountService.fetchAccountById(
+                                        existingAccountData!['id'],
+                                      );
+
+                                  // Close loading dialog
+                                  if (mounted) Navigator.pop(context);
+
+                                  // Navigate to edit screen
+                                  final result = await Navigator.push<bool>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          EditAccountMasterScreen(
+                                            account: account,
+                                          ),
+                                    ),
+                                  );
+
+                                  // If edit was successful, clear the form
+                                  if (result == true) {
+                                    _showSuccess(
+                                      'Account updated successfully',
+                                    );
+                                    setState(() {
+                                      contactNumberError = null;
+                                      existingAccountData = null;
+                                    });
+                                  }
+                                } catch (e) {
+                                  // Close loading dialog if still open
+                                  if (mounted) Navigator.pop(context);
+                                  _showError('Failed to load account: $e');
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.delete, size: 16),
+                              label: const Text(
+                                'Delete',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Account'),
+                                    content: Text(
+                                      'Are you sure you want to delete the account for ${existingAccountData!['personName']}?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                        ),
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm == true) {
+                                  try {
+                                    await AccountService.deleteAccount(
+                                      existingAccountData!['id'],
+                                    );
+                                    _showSuccess(
+                                      'Account deleted successfully',
+                                    );
+                                    setState(() {
+                                      contactNumberError = null;
+                                      existingAccountData = null;
+                                    });
+                                  } catch (e) {
+                                    _showError('Failed to delete account: $e');
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -860,7 +1032,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ),
                 onPressed: isLoadingGeolocation ? null : _getCurrentLocation,
               ),
-              
+
               // Google Map Display
               if (_latitude != null && _longitude != null) ...[
                 const SizedBox(height: 20),
@@ -868,7 +1040,10 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                   height: 250,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFD7BE69), width: 2),
+                    border: Border.all(
+                      color: const Color(0xFFD7BE69),
+                      width: 2,
+                    ),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
