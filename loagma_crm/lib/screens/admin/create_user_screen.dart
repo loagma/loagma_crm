@@ -1,11 +1,18 @@
+// ---------------------------------------------------
+// ADMIN CREATE USER SCREEN (Fully Refactored)
+// ---------------------------------------------------
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
+
+// ⬇️ Add multi-select helper widget ABOVE this class
+// (already given above)
 
 class AdminCreateUserScreen extends StatefulWidget {
   const AdminCreateUserScreen({super.key});
@@ -17,23 +24,22 @@ class AdminCreateUserScreen extends StatefulWidget {
 class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _alternativePhoneController =
-      TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _cityController = TextEditingController();
-  final TextEditingController _stateController = TextEditingController();
-  final TextEditingController _pincodeController = TextEditingController();
-  final TextEditingController _aadharController = TextEditingController();
-  final TextEditingController _panController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
-  final TextEditingController _salaryController = TextEditingController();
+  // ---------------- Controllers ----------------
+  final TextEditingController _phone = TextEditingController();
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _email = TextEditingController();
+  final TextEditingController _altPhone = TextEditingController();
+  final TextEditingController _address = TextEditingController();
+  final TextEditingController _city = TextEditingController();
+  final TextEditingController _state = TextEditingController();
+  final TextEditingController _pincode = TextEditingController();
+  final TextEditingController _aadhar = TextEditingController();
+  final TextEditingController _pan = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  final TextEditingController _notes = TextEditingController();
+  final TextEditingController _salary = TextEditingController();
 
-  // Dropdown values
+  // ---------------- Dropdown Selections ----------------
   String? selectedRoleId;
   String? selectedDepartmentId;
   String? selectedGender;
@@ -41,10 +47,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   bool isActive = true;
   bool autoGeneratePassword = false;
 
-  // Multiple roles selection
-  List<String> selectedRoles = [];
+  List<String> selectedRoles = []; // MULTI SELECT
 
-  // Data lists
+  // ---------------- Data from API ----------------
   List<Map<String, dynamic>> roles = [];
   List<Map<String, dynamic>> departments = [];
 
@@ -59,274 +64,247 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _alternativePhoneController.dispose();
-    _addressController.dispose();
-    _cityController.dispose();
-    _stateController.dispose();
-    _pincodeController.dispose();
-    _aadharController.dispose();
-    _panController.dispose();
-    _passwordController.dispose();
-    _notesController.dispose();
-    _salaryController.dispose();
+    _phone.dispose();
+    _name.dispose();
+    _email.dispose();
+    _altPhone.dispose();
+    _address.dispose();
+    _city.dispose();
+    _state.dispose();
+    _pincode.dispose();
+    _aadhar.dispose();
+    _pan.dispose();
+    _password.dispose();
+    _notes.dispose();
+    _salary.dispose();
     super.dispose();
   }
 
+  // ---------------- API Functions ----------------
+
   Future<void> fetchRoles() async {
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/roles');
-      if (kDebugMode) print('📡 Fetching roles from $url');
-
-      final response = await http
-          .get(
-            url,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw TimeoutException('Request timed out after 30 seconds');
-            },
-          );
-
-      if (kDebugMode) print('✅ Response status: ${response.statusCode}');
+      final response = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/roles"),
+        headers: {"Accept": "application/json"},
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          if (!mounted) return;
-          setState(() {
-            roles = List<Map<String, dynamic>>.from(data['roles']);
-          });
-          if (kDebugMode) print('✅ Loaded ${roles.length} roles from backend');
-        }
+        setState(() {
+          roles = List<Map<String, dynamic>>.from(data["roles"]);
+        });
       }
-    } catch (e) {
-      if (kDebugMode) print('❌ Error fetching roles: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> fetchDepartments() async {
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/departments');
-      if (kDebugMode) print('📡 Fetching departments from $url');
-
-      final response = await http
-          .get(
-            url,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/departments"),
+        headers: {"Accept": "application/json"},
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          if (!mounted) return;
-          setState(() {
-            departments = List<Map<String, dynamic>>.from(data['departments']);
-          });
-          if (kDebugMode) print('✅ Loaded ${departments.length} departments');
-        }
+        setState(() {
+          departments = List<Map<String, dynamic>>.from(data["departments"]);
+        });
       }
-    } catch (e) {
-      if (kDebugMode) print('❌ Error fetching departments: $e');
-    }
+    } catch (_) {}
   }
+
+  // ---------------- Validators ----------------
+
+  String? validatePhone(String? value) {
+    if (value == null || value.isEmpty) return "Required";
+    if (!RegExp(r'^\d{10}$').hasMatch(value)) return "Invalid phone";
+    return null;
+  }
+
+  String? validateEmail(String? v) {
+    if (v == null || v.isEmpty) return null;
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
+      return "Invalid Email";
+    }
+    return null;
+  }
+
+  String? validatePincode(String? v) {
+    if (v == null || v.isEmpty) return null;
+    return RegExp(r'^\d{6}$').hasMatch(v) ? null : "Invalid pincode";
+  }
+
+  String? validateAadhar(String? v) {
+    if (v == null || v.isEmpty) return null;
+    return RegExp(r'^\d{12}$').hasMatch(v) ? null : "Invalid Aadhar";
+  }
+
+  String? validatePAN(String? v) {
+    if (v == null || v.isEmpty) return null;
+    return RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$').hasMatch(v)
+        ? null
+        : "Invalid PAN";
+  }
+
+  // ---------------- Password Generator ----------------
 
   String generatePassword() {
     const chars =
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*';
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*";
     final random = Random.secure();
-    return List.generate(
-      12,
-      (index) => chars[random.nextInt(chars.length)],
-    ).join();
+
+    return List.generate(12, (i) => chars[random.nextInt(chars.length)]).join();
   }
 
-  String? validateEmail(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email address';
-    }
-    return null;
+  Future<void> showMultiSelectDialog({
+    required BuildContext context,
+    required List<Map<String, dynamic>> items,
+    required List<String> selectedValues,
+    required Function(List<String>) onConfirm,
+    String title = "Select Options",
+  }) {
+    List<String> tempSelected = List.from(selectedValues);
+
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const Divider(),
+
+                  SizedBox(
+                    height: 300,
+                    child: ListView(
+                      children: items.map((item) {
+                        final id = item['id'];
+                        final name = item['name'];
+
+                        return CheckboxListTile(
+                          title: Text(name),
+                          value: tempSelected.contains(id),
+                          onChanged: (value) {
+                            setModalState(() {
+                              if (value == true) {
+                                tempSelected.add(id);
+                              } else {
+                                tempSelected.remove(id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  ElevatedButton(
+                    onPressed: () {
+                      onConfirm(tempSelected);
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Done"),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
-  String? validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Contact number is required';
-    }
-    final phoneRegex = RegExp(r'^\d{10}$');
-    final cleanedValue = value.replaceAll(RegExp(r'[^\d]'), '');
-    if (!phoneRegex.hasMatch(cleanedValue)) {
-      return 'Please enter a valid 10-digit phone number';
-    }
-    return null;
-  }
-
-  String? validateAlternativePhone(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final phoneRegex = RegExp(r'^\d{10}$');
-    final cleanedValue = value.replaceAll(RegExp(r'[^\d]'), '');
-    if (!phoneRegex.hasMatch(cleanedValue)) {
-      return 'Please enter a valid 10-digit phone number';
-    }
-    return null;
-  }
-
-  String? validatePincode(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final pincodeRegex = RegExp(r'^\d{6}$');
-    if (!pincodeRegex.hasMatch(value)) {
-      return 'Please enter a valid 6-digit pincode';
-    }
-    return null;
-  }
-
-  String? validateAadhar(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final aadharRegex = RegExp(r'^\d{12}$');
-    final cleanedValue = value.replaceAll(RegExp(r'[^\d]'), '');
-    if (!aadharRegex.hasMatch(cleanedValue)) {
-      return 'Please enter a valid 12-digit Aadhar number';
-    }
-    return null;
-  }
-
-  String? validatePAN(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final panRegex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
-    if (!panRegex.hasMatch(value.toUpperCase())) {
-      return 'Please enter a valid PAN (e.g., ABCDE1234F)';
-    }
-    return null;
-  }
+  // ---------------- Create User ----------------
 
   Future<void> createUser() async {
     if (!_formKey.currentState!.validate()) {
-      Fluttertoast.showToast(msg: "Please fix all validation errors");
-      return;
-    }
-
-    final phone = _phoneController.text.trim();
-
-    if (phone.isEmpty) {
-      Fluttertoast.showToast(msg: "Contact number is required");
+      Fluttertoast.showToast(msg: "Fix validation errors");
       return;
     }
 
     setState(() => isLoading = true);
 
+    String password = _password.text;
+    if (autoGeneratePassword) {
+      password = generatePassword();
+    }
+
+    final body = {
+      "contactNumber": _phone.text.trim(),
+      "salaryPerMonth": double.tryParse(_salary.text.trim()),
+
+      if (_name.text.isNotEmpty) "name": _name.text.trim(),
+      if (_email.text.isNotEmpty) "email": _email.text.trim(),
+      if (_altPhone.text.isNotEmpty) "alternativeNumber": _altPhone.text.trim(),
+
+      if (selectedRoleId != null) "roleId": selectedRoleId,
+      if (selectedRoles.isNotEmpty) "roles": selectedRoles,
+
+      if (selectedDepartmentId != null) "departmentId": selectedDepartmentId,
+      if (selectedGender != null) "gender": selectedGender,
+      if (selectedLanguage != null) "preferredLanguages": [selectedLanguage],
+
+      "isActive": isActive,
+
+      if (password.isNotEmpty) "password": password,
+      if (_address.text.isNotEmpty) "address": _address.text.trim(),
+      if (_city.text.isNotEmpty) "city": _city.text.trim(),
+      if (_state.text.isNotEmpty) "state": _state.text.trim(),
+      if (_pincode.text.isNotEmpty) "pincode": _pincode.text.trim(),
+      if (_aadhar.text.isNotEmpty) "aadharCard": _aadhar.text.trim(),
+      if (_pan.text.isNotEmpty) "panCard": _pan.text.trim().toUpperCase(),
+      if (_notes.text.isNotEmpty) "notes": _notes.text.trim(),
+    };
+
     try {
-      String? password = _passwordController.text.trim();
-      if (autoGeneratePassword) {
-        password = generatePassword();
-      }
-
-      final body = {
-        "contactNumber": phone,
-        "salaryPerMonth": double.tryParse(_salaryController.text.trim()),
-        if (_nameController.text.trim().isNotEmpty)
-          "name": _nameController.text.trim(),
-        if (_emailController.text.trim().isNotEmpty)
-          "email": _emailController.text.trim(),
-        if (_alternativePhoneController.text.trim().isNotEmpty)
-          "alternativeNumber": _alternativePhoneController.text.trim(),
-        if (selectedRoleId != null) "roleId": selectedRoleId,
-        if (selectedRoles.isNotEmpty) "roles": selectedRoles,
-        if (selectedDepartmentId != null) "departmentId": selectedDepartmentId,
-        if (selectedGender != null) "gender": selectedGender,
-        if (selectedLanguage != null) "preferredLanguages": [selectedLanguage],
-        "isActive": isActive,
-        if (password.isNotEmpty) "password": password,
-        if (_addressController.text.trim().isNotEmpty)
-          "address": _addressController.text.trim(),
-        if (_cityController.text.trim().isNotEmpty)
-          "city": _cityController.text.trim(),
-        if (_stateController.text.trim().isNotEmpty)
-          "state": _stateController.text.trim(),
-        if (_pincodeController.text.trim().isNotEmpty)
-          "pincode": _pincodeController.text.trim(),
-        if (_aadharController.text.trim().isNotEmpty)
-          "aadharCard": _aadharController.text.trim(),
-        if (_panController.text.trim().isNotEmpty)
-          "panCard": _panController.text.trim().toUpperCase(),
-        if (_notesController.text.trim().isNotEmpty)
-          "notes": _notesController.text.trim(),
-      };
-
-      final url = Uri.parse('${ApiConfig.baseUrl}/admin/users');
-      if (kDebugMode) print('📡 Creating user via $url');
-      if (kDebugMode) print('📤 Request body: $body');
-
-      final response = await http
-          .post(
-            url,
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 10));
+      final response = await http.post(
+        Uri.parse("${ApiConfig.baseUrl}/admin/users"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && data['success'] == true) {
-        Fluttertoast.showToast(
-          msg: data['message'] ?? "User created successfully",
-          toastLength: Toast.LENGTH_LONG,
-        );
+      if (data["success"] == true) {
+        Fluttertoast.showToast(msg: "User created successfully");
 
-        if (autoGeneratePassword && password.isNotEmpty) {
-          Fluttertoast.showToast(
-            msg: "Generated Password: $password",
-            toastLength: Toast.LENGTH_LONG,
-          );
+        if (autoGeneratePassword) {
+          Fluttertoast.showToast(msg: "Password: $password");
         }
 
-        // Clear form
         _formKey.currentState!.reset();
-        _nameController.clear();
-        _emailController.clear();
-        _phoneController.clear();
-        _alternativePhoneController.clear();
-        _addressController.clear();
-        _cityController.clear();
-        _stateController.clear();
-        _pincodeController.clear();
-        _aadharController.clear();
-        _panController.clear();
-        _passwordController.clear();
-        _notesController.clear();
-        _salaryController.clear();
-
-        if (!mounted) return;
-        setState(() {
-          selectedRoleId = null;
-          selectedDepartmentId = null;
-          selectedGender = null;
-          selectedLanguage = null;
-          selectedRoles.clear();
-          isActive = true;
-          autoGeneratePassword = false;
-        });
+        selectedRoles.clear();
+        selectedRoleId = null;
+        selectedDepartmentId = null;
+        selectedGender = null;
+        selectedLanguage = null;
       } else {
-        Fluttertoast.showToast(msg: data['message'] ?? "Failed to create user");
+        Fluttertoast.showToast(msg: data["message"] ?? "Failed");
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error creating user: $e');
       Fluttertoast.showToast(msg: "Error: $e");
-    } finally {
-      if (mounted) setState(() => isLoading = false);
     }
+
+    setState(() => isLoading = false);
   }
+
+  // ---------------- UI ----------------
 
   @override
   Widget build(BuildContext context) {
@@ -334,290 +312,236 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       appBar: AppBar(
         title: const Text("Create Employee"),
         backgroundColor: const Color(0xFFD7BE69),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
+
       body: Form(
         key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20),
           children: [
-            // Full Name
+            // PHONE
             TextFormField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: "Full Name",
-                prefixIcon: const Icon(Icons.person),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              validator: (value) {
-                if (value != null && value.isNotEmpty && value.length < 2) {
-                  return 'Name must be at least 2 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 15),
-
-            // Email
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: "Email",
-                prefixIcon: const Icon(Icons.email),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              validator: validateEmail,
-            ),
-            const SizedBox(height: 15),
-
-            // Contact Number
-            TextFormField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
+              controller: _phone,
               maxLength: 10,
-              decoration: InputDecoration(
-                labelText: "Contact Number *",
-                prefixIcon: const Icon(Icons.phone),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                counterText: "",
-              ),
+              keyboardType: TextInputType.phone,
+              decoration: _input("Contact Number *", Icons.phone),
               validator: validatePhone,
             ),
+
             const SizedBox(height: 15),
 
-            // Alternative Number
+            // NAME
             TextFormField(
-              controller: _alternativePhoneController,
-              keyboardType: TextInputType.phone,
-              maxLength: 10,
-              decoration: InputDecoration(
-                labelText: "Alternative Number",
-                prefixIcon: const Icon(Icons.phone_android),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                counterText: "",
-              ),
-              validator: validateAlternativePhone,
+              controller: _name,
+              decoration: _input("Full Name", Icons.person),
             ),
+
             const SizedBox(height: 15),
 
-            // Gender
-            DropdownButtonFormField<String>(
+            // EMAIL
+            TextFormField(
+              controller: _email,
+              decoration: _input("Email", Icons.email),
+              validator: validateEmail,
+            ),
+
+            const SizedBox(height: 15),
+
+            // GENDER
+            DropdownButtonFormField(
+              decoration: _input("Gender", Icons.wc),
               items: const [
                 DropdownMenuItem(value: "Male", child: Text("Male")),
                 DropdownMenuItem(value: "Female", child: Text("Female")),
                 DropdownMenuItem(value: "Other", child: Text("Other")),
               ],
-              onChanged: (value) {
-                setState(() {
-                  selectedGender = value;
-                });
-              },
-              decoration: InputDecoration(
-                labelText: "Gender",
-                prefixIcon: const Icon(Icons.wc),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              onChanged: (v) => setState(() => selectedGender = v),
             ),
+
             const SizedBox(height: 15),
 
-            // Language
-            DropdownButtonFormField<String>(
+            // LANGUAGE
+            DropdownButtonFormField(
+              decoration: _input("Preferred Language", Icons.language),
               items: const [
                 DropdownMenuItem(value: "English", child: Text("English")),
                 DropdownMenuItem(value: "Hindi", child: Text("Hindi")),
                 DropdownMenuItem(value: "Marathi", child: Text("Marathi")),
                 DropdownMenuItem(value: "Gujarati", child: Text("Gujarati")),
-                DropdownMenuItem(value: "Tamil", child: Text("Tamil")),
-                DropdownMenuItem(value: "Telugu", child: Text("Telugu")),
               ],
-              onChanged: (value) {
-                setState(() {
-                  selectedLanguage = value;
-                });
-              },
-              decoration: InputDecoration(
-                labelText: "Preferred Language",
-                prefixIcon: const Icon(Icons.language),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              onChanged: (v) => setState(() => selectedLanguage = v),
             ),
             const SizedBox(height: 15),
-
-            // Select Role (Single)
-            DropdownButtonFormField<String>(
-              items: roles.map((role) {
-                return DropdownMenuItem<String>(
-                  value: role['id'],
-                  child: Text(role['name']),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedRoleId = value;
-                });
-              },
-              decoration: InputDecoration(
-                labelText: "Select Primary Role",
-                prefixIcon: const Icon(Icons.badge),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+            // ALT PHONE
+            TextFormField(
+              controller: _altPhone,
+              maxLength: 10,
+              keyboardType: TextInputType.phone,
+              decoration: _input("Alternative Number", Icons.phone_android),
             ),
+
             const SizedBox(height: 15),
 
-            // Multiple Roles (Checkboxes)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.checklist, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        "Additional Roles (Multiple Selection)",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (roles.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text(
-                        "Loading roles...",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    )
-                  else
-                    ...roles.map((role) {
-                      final roleId = role['id'] as String;
-                      return CheckboxListTile(
-                        title: Text(role['name']),
-                        value: selectedRoles.contains(roleId),
-                        onChanged: (bool? value) {
-                          setState(() {
-                            if (value == true) {
-                              selectedRoles.add(roleId);
-                            } else {
-                              selectedRoles.remove(roleId);
-                            }
-                          });
-                        },
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                      );
-                    }),
-                ],
-              ),
+            // AADHAR
+            TextFormField(
+              controller: _aadhar,
+              maxLength: 12,
+              keyboardType: TextInputType.number,
+              decoration: _input("Aadhar Number", Icons.credit_card),
+              validator: validateAadhar,
             ),
+
             const SizedBox(height: 15),
 
-            // Department
-            DropdownButtonFormField<String>(
-              items: departments.map((dept) {
-                return DropdownMenuItem<String>(
-                  value: dept['id'],
-                  child: Text(dept['name']),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedDepartmentId = value;
-                });
-              },
-              decoration: InputDecoration(
-                labelText: "Department/Team",
-                prefixIcon: const Icon(Icons.business),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            // PAN
+            TextFormField(
+              controller: _pan,
+              maxLength: 10,
+              decoration: _input(
+                "PAN Number (ABCDE1234F)",
+                Icons.account_balance,
               ),
+              validator: validatePAN,
             ),
+
+            // ADDRESS
+            TextFormField(
+              controller: _address,
+              maxLines: 2,
+              decoration: _input("Address", Icons.home),
+            ),
+
             const SizedBox(height: 15),
 
-            // Status
-            SwitchListTile(
-              title: const Text("Status"),
-              subtitle: Text(isActive ? "Active" : "Inactive"),
-              value: isActive,
-              onChanged: (value) {
-                setState(() {
-                  isActive = value;
-                });
-              },
-              secondary: Icon(
-                isActive ? Icons.check_circle : Icons.cancel,
-                color: isActive ? Colors.green : Colors.red,
-              ),
-            ),
-            const SizedBox(height: 15),
-
-            // Password Section
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    enabled: !autoGeneratePassword,
-                    decoration: InputDecoration(
-                      labelText: "Password",
-                      prefixIcon: const Icon(Icons.lock),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (!autoGeneratePassword &&
-                          value != null &&
-                          value.isNotEmpty &&
-                          value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
+                    controller: _city,
+                    decoration: _input("City", Icons.location_city),
                   ),
                 ),
                 const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    controller: _state,
+                    decoration: _input("State", Icons.map),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 15),
+
+            // PINCODE
+            TextFormField(
+              controller: _pincode,
+              maxLength: 6,
+              keyboardType: TextInputType.number,
+              decoration: _input("Pincode", Icons.pin_drop),
+              validator: validatePincode,
+            ),
+
+            const SizedBox(height: 15),
+
+            // DEPARTMENT
+            DropdownButtonFormField(
+              decoration: _input("Department", Icons.business),
+              items: departments
+                  .map(
+                    (d) => DropdownMenuItem(
+                      value: d["id"],
+                      child: Text(d["name"]),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                setState(() {
+                  selectedDepartmentId = v as String?;
+                });
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            // PRIMARY ROLE
+            DropdownButtonFormField(
+              decoration: _input("Primary Role", Icons.badge),
+              items: roles
+                  .map(
+                    (r) => DropdownMenuItem(
+                      value: r["id"],
+                      child: Text(r["name"]),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                setState(() {
+                  selectedRoleId = v as String?;
+                });
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            // MULTI SELECT DROPDOWN
+            ListTile(
+              shape: RoundedRectangleBorder(
+                side: const BorderSide(color: Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Text("Additional Roles"),
+              subtitle: Text(
+                selectedRoles.isEmpty
+                    ? "Tap to select"
+                    : "${selectedRoles.length} roles selected",
+              ),
+              trailing: const Icon(Icons.arrow_drop_down),
+              onTap: () {
+                showMultiSelectDialog(
+                  context: context,
+                  title: "Select Additional Roles",
+                  items: roles,
+                  selectedValues: selectedRoles,
+                  onConfirm: (values) {
+                    setState(() => selectedRoles = values);
+                  },
+                );
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            // STATUS
+            SwitchListTile(
+              title: const Text("Status"),
+              subtitle: Text(isActive ? "Active" : "Inactive"),
+              value: isActive,
+              onChanged: (v) => setState(() => isActive = v),
+            ),
+
+            const SizedBox(height: 15),
+
+            // PASSWORD
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _password,
+                    obscureText: true,
+                    enabled: !autoGeneratePassword,
+                    decoration: _input("Password", Icons.lock),
+                  ),
+                ),
                 Column(
                   children: [
-                    const Text("Auto Generate", style: TextStyle(fontSize: 12)),
+                    const Text("Auto"),
                     Checkbox(
                       value: autoGeneratePassword,
-                      onChanged: (value) {
+                      onChanged: (v) {
                         setState(() {
-                          autoGeneratePassword = value ?? false;
-                          if (autoGeneratePassword) {
-                            _passwordController.clear();
-                          }
+                          autoGeneratePassword = v ?? false;
+                          if (autoGeneratePassword) _password.clear();
                         });
                       },
                     ),
@@ -625,171 +549,56 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 ),
               ],
             ),
+
             const SizedBox(height: 15),
 
-            // Address
+            const SizedBox(height: 15),
+
+            // SALARY
             TextFormField(
-              controller: _addressController,
-              maxLines: 2,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: "Address",
-                prefixIcon: const Icon(Icons.home),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-
-            // City, State
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _cityController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: "City",
-                      prefixIcon: const Icon(Icons.location_city),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    controller: _stateController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: "State",
-                      prefixIcon: const Icon(Icons.map),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-
-            // Pincode
-            TextFormField(
-              controller: _pincodeController,
+              controller: _salary,
               keyboardType: TextInputType.number,
-              maxLength: 6,
-              decoration: InputDecoration(
-                labelText: "Pincode",
-                prefixIcon: const Icon(Icons.pin_drop),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                counterText: "",
-              ),
-              validator: validatePincode,
-            ),
-            const SizedBox(height: 15),
-
-            // Aadhar Card
-            TextFormField(
-              controller: _aadharController,
-              keyboardType: TextInputType.number,
-              maxLength: 12,
-              decoration: InputDecoration(
-                labelText: "Aadhar Card Number",
-                prefixIcon: const Icon(Icons.credit_card),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                counterText: "",
-                hintText: "XXXX XXXX XXXX",
-              ),
-              validator: validateAadhar,
-            ),
-            const SizedBox(height: 15),
-
-            // PAN Card
-            TextFormField(
-              controller: _panController,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 10,
-              decoration: InputDecoration(
-                labelText: "PAN Card Number",
-                prefixIcon: const Icon(Icons.account_balance_wallet),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                counterText: "",
-                hintText: "ABCDE1234F",
-              ),
-              validator: validatePAN,
-            ),
-            const SizedBox(height: 15),
-
-            // Salary Per Month (REQUIRED)
-            TextFormField(
-              controller: _salaryController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: "Salary Per Month *",
-                prefixIcon: const Icon(Icons.currency_rupee),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                hintText: "e.g., 50000",
-                helperText: "Required: Basic salary for the employee",
-                helperStyle: const TextStyle(fontSize: 12),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Salary per month is required';
-                }
-                final salary = double.tryParse(value.trim());
-                if (salary == null || salary <= 0) {
-                  return 'Please enter a valid salary amount greater than 0';
-                }
-                return null;
+              decoration: _input("Salary Per Month *", Icons.currency_rupee),
+              validator: (v) {
+                if (v == null || v.isEmpty) return "Required";
+                return double.tryParse(v) == null ? "Invalid amount" : null;
               },
             ),
+
             const SizedBox(height: 15),
 
-            // Notes
+            // NOTES
             TextFormField(
-              controller: _notesController,
+              controller: _notes,
               maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                labelText: "Notes",
-                prefixIcon: const Icon(Icons.note),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              decoration: _input("Notes", Icons.note),
             ),
+
             const SizedBox(height: 25),
 
-            // Create Button
+            // SUBMIT BUTTON
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: const Color(0xFFD7BE69),
-              ),
               onPressed: isLoading ? null : createUser,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD7BE69),
+                minimumSize: const Size(double.infinity, 50),
+              ),
               child: isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text(
-                      "Create Employee",
-                      style: TextStyle(fontSize: 16),
-                    ),
+                  : const Text("Create Employee"),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // --------------- Input Decoration ----------------
+  InputDecoration _input(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }
