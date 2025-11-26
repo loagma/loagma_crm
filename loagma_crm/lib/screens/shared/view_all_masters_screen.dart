@@ -4,7 +4,9 @@ import '../../services/account_service.dart';
 import 'edit_account_master_screen.dart';
 
 class ViewAllMastersScreen extends StatefulWidget {
-  const ViewAllMastersScreen({super.key});
+  final String? initialAccountCode;
+
+  const ViewAllMastersScreen({super.key, this.initialAccountCode});
 
   @override
   State<ViewAllMastersScreen> createState() => _ViewAllMastersScreenState();
@@ -17,13 +19,25 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
   String? filterCustomerStage;
   int currentPage = 1;
   final int itemsPerPage = 20;
+  final TextEditingController _searchController = TextEditingController();
 
   final List<String> customerStages = ['All', 'Lead', 'Prospect', 'Customer'];
 
   @override
   void initState() {
     super.initState();
+    // If initialAccountCode is provided, set it as search query
+    if (widget.initialAccountCode != null) {
+      searchQuery = widget.initialAccountCode!;
+      _searchController.text = widget.initialAccountCode!;
+    }
     _loadAccounts();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -143,12 +157,25 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
               children: [
                 // Search Bar
                 TextField(
+                  controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search by name, code, or contact...',
                     prefixIcon: const Icon(
                       Icons.search,
                       color: Color(0xFFD7BE69),
                     ),
+                    suffixIcon: searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                searchQuery = '';
+                              });
+                              _loadAccounts();
+                            },
+                          )
+                        : null,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -247,15 +274,30 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                       padding: const EdgeInsets.all(8),
                       itemBuilder: (context, index) {
                         final account = accounts[index];
+                        final isHighlighted =
+                            widget.initialAccountCode != null &&
+                            account.accountCode == widget.initialAccountCode;
                         return Card(
-                          elevation: 2,
+                          elevation: isHighlighted ? 8 : 2,
                           margin: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
                           ),
+                          color: isHighlighted ? Colors.yellow[100] : null,
+                          shape: isHighlighted
+                              ? RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: const BorderSide(
+                                    color: Color(0xFFD7BE69),
+                                    width: 3,
+                                  ),
+                                )
+                              : null,
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFD7BE69),
+                              backgroundColor: isHighlighted
+                                  ? Colors.orange
+                                  : const Color(0xFFD7BE69),
                               child: Text(
                                 account.personName[0].toUpperCase(),
                                 style: const TextStyle(
@@ -264,11 +306,36 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                                 ),
                               ),
                             ),
-                            title: Text(
-                              account.personName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    account.personName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                if (isHighlighted)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'FOUND',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,7 +559,9 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                         _buildSectionTitle('Sales Information'),
                         if (account.customerStage != null) ...[
                           _buildDetailRow(
-                              'Customer Stage', account.customerStage!),
+                            'Customer Stage',
+                            account.customerStage!,
+                          ),
                           const Divider(),
                         ],
                         if (account.funnelStage != null)
