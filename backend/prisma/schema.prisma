@@ -115,6 +115,8 @@ model User {
   city               String?
   state              String?
   pincode            String?
+  country            String?
+  district           String?
   aadharCard         String?
   panCard            String?
   password           String?
