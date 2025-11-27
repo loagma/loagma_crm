@@ -1,7 +1,36 @@
 import prisma from '../config/db.js';
-import { randomUUID } from 'crypto';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
 import { uploadBase64Image } from '../services/cloudinaryService.js';
+
+// Generate numeric user ID
+async function generateNumericUserId() {
+  // Get the count of existing users and add 1
+  const userCount = await prisma.user.count();
+  const nextId = userCount + 1;
+  
+  // Format as EMP followed by 6 digits (e.g., EMP000001, EMP000002)
+  const userId = `EMP${String(nextId).padStart(6, '0')}`;
+  
+  // Check if ID already exists (in case of deletions)
+  const existing = await prisma.user.findUnique({ where: { id: userId } });
+  if (existing) {
+    // If exists, find the highest numeric ID and increment
+    const allUsers = await prisma.user.findMany({
+      where: { id: { startsWith: 'EMP' } },
+      select: { id: true },
+      orderBy: { id: 'desc' },
+      take: 1,
+    });
+    
+    if (allUsers.length > 0) {
+      const lastId = allUsers[0].id;
+      const lastNumber = parseInt(lastId.replace('EMP', ''));
+      return `EMP${String(lastNumber + 1).padStart(6, '0')}`;
+    }
+  }
+  
+  return userId;
+}
 
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {
@@ -24,6 +53,9 @@ export const createUserByAdmin = async (req, res) => {
       pincode,
       country,
       district,
+      area,
+      latitude,
+      longitude,
       image,
       notes,
       aadharCard,
@@ -101,8 +133,8 @@ export const createUserByAdmin = async (req, res) => {
       imageUrl = image;
     }
 
-    // Create user
-    const userId = randomUUID();
+    // Create user with numeric ID
+    const userId = await generateNumericUserId();
     const user = await prisma.user.create({
       data: {
         id: userId,
@@ -123,6 +155,9 @@ export const createUserByAdmin = async (req, res) => {
         pincode,
         country,
         district,
+        area,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
         image: imageUrl, // Only save Cloudinary URL or existing URL
         notes,
         aadharCard,
@@ -326,6 +361,9 @@ export const updateUserByAdmin = async (req, res) => {
       pincode,
       country,
       district,
+      area,
+      latitude,
+      longitude,
       image,
       notes,
       aadharCard,
@@ -380,6 +418,9 @@ export const updateUserByAdmin = async (req, res) => {
         ...(pincode !== undefined && { pincode }),
         ...(country !== undefined && { country }),
         ...(district !== undefined && { district }),
+        ...(area !== undefined && { area }),
+        ...(latitude !== undefined && { latitude: latitude ? parseFloat(latitude) : null }),
+        ...(longitude !== undefined && { longitude: longitude ? parseFloat(longitude) : null }),
         ...(imageUrl !== undefined && { image: imageUrl }),
         ...(notes !== undefined && { notes }),
         ...(aadharCard !== undefined && { aadharCard }),

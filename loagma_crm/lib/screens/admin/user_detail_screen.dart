@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'edit_user_screen.dart';
 
 class UserDetailScreen extends StatefulWidget {
@@ -158,7 +159,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   (widget.user['preferredLanguages'] as List).isNotEmpty)
                 _buildInfoRow(
                   Icons.language,
-                  "Preferred Language",
+                  "Preferred Languages",
                   (widget.user['preferredLanguages'] as List).join(', '),
                 ),
               if (widget.user['aadharCard'] != null)
@@ -205,11 +206,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             if (widget.user['address'] != null ||
                 widget.user['city'] != null ||
                 widget.user['state'] != null ||
-                widget.user['pincode'] != null) ...[
+                widget.user['pincode'] != null ||
+                widget.user['area'] != null) ...[
               _buildSectionTitle("Address Information"),
               _buildInfoCard([
                 if (widget.user['address'] != null)
                   _buildInfoRow(Icons.home, "Address", widget.user['address']),
+                if (widget.user['area'] != null)
+                  _buildInfoRow(Icons.place, "Area", widget.user['area']),
                 if (widget.user['city'] != null)
                   _buildInfoRow(
                     Icons.location_city,
@@ -224,6 +228,59 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     "Pincode",
                     widget.user['pincode'],
                   ),
+              ]),
+              const SizedBox(height: 20),
+            ],
+
+            // GEOLOCATION INFORMATION
+            if (widget.user['latitude'] != null &&
+                widget.user['longitude'] != null) ...[
+              _buildSectionTitle("Geolocation"),
+              _buildInfoCard([
+                _buildInfoRow(
+                  Icons.location_on,
+                  "Coordinates",
+                  "Lat: ${_formatCoordinate(widget.user['latitude'])}, Lng: ${_formatCoordinate(widget.user['longitude'])}",
+                  canCopy: true,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFD7BE69),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(
+                          _parseCoordinate(widget.user['latitude']),
+                          _parseCoordinate(widget.user['longitude']),
+                        ),
+                        zoom: 15,
+                      ),
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId('employee_location'),
+                          position: LatLng(
+                            _parseCoordinate(widget.user['latitude']),
+                            _parseCoordinate(widget.user['longitude']),
+                          ),
+                          infoWindow: InfoWindow(
+                            title: widget.user['name'] ?? 'Employee Location',
+                          ),
+                        ),
+                      },
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: true,
+                      mapToolbarEnabled: false,
+                    ),
+                  ),
+                ),
               ]),
               const SizedBox(height: 20),
             ],
@@ -505,5 +562,20 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     } catch (e) {
       return date.toString();
     }
+  }
+
+  // Coordinate parser
+  double _parseCoordinate(dynamic coord) {
+    if (coord == null) return 0.0;
+    if (coord is double) return coord;
+    if (coord is int) return coord.toDouble();
+    if (coord is String) return double.tryParse(coord) ?? 0.0;
+    return 0.0;
+  }
+
+  // Coordinate formatter
+  String _formatCoordinate(dynamic coord) {
+    final value = _parseCoordinate(coord);
+    return value.toStringAsFixed(6);
   }
 }
