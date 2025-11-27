@@ -49,6 +49,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   final TextEditingController _country = TextEditingController();
   final TextEditingController _district = TextEditingController();
 
+  DateTime? _selectedDateOfBirth;
+
   // ---------------- Dropdown Selections ----------------
   String? selectedRoleId;
   String? selectedDepartmentId;
@@ -664,6 +666,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           _latitude = null;
           _longitude = null;
           _availableAreas = [];
+          _selectedDateOfBirth = null;
         });
 
         // Scroll to top after successful submission

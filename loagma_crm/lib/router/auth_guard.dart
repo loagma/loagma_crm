@@ -6,7 +6,7 @@ String? authGuard(context, GoRouterState state) {
   final path = state.uri.path; // safer than toString()
 
   // PUBLIC ROUTES (Unauthenticated Allowed)
-  const publicRoutes = ['/login', '/otp', '/signup'];
+  const publicRoutes = ['/login', '/otp', '/signup', '/no-role'];
 
   // Allow public routes
   if (publicRoutes.contains(path)) {
@@ -16,6 +16,12 @@ String? authGuard(context, GoRouterState state) {
   // If NOT logged in => redirect to login
   if (!isLogged) {
     return '/login';
+  }
+
+  // Check if user has a role assigned
+  final userRole = UserService.currentRole;
+  if (userRole == null || userRole.isEmpty) {
+    return '/no-role';
   }
 
   // Otherwise allow access

@@ -70,9 +70,7 @@ class _OtpScreenState extends State<OtpScreen> {
       // NEW USER → GO TO SIGNUP
       // ---------------------------------------------------------------------
       if (data['isNewUser'] == true) {
-        context.push('/signup', extra: {
-          'contactNumber': contactNumber,
-        });
+        context.push('/signup', extra: {'contactNumber': contactNumber});
         return;
       }
 
@@ -84,7 +82,8 @@ class _OtpScreenState extends State<OtpScreen> {
       final userRole = UserService.currentRole;
 
       if (userRole == null || userRole.isEmpty) {
-        Fluttertoast.showToast(msg: "User role missing");
+        // Navigate to no role screen
+        context.go('/no-role');
         return;
       }
 
@@ -92,7 +91,6 @@ class _OtpScreenState extends State<OtpScreen> {
       // NAVIGATE TO DASHBOARD (guards will validate)
       // ---------------------------------------------------------------------
       context.go('/dashboard/$userRole');
-
     } catch (e) {
       if (kDebugMode) print("❌ OTP Verification Error: $e");
       if (mounted) setState(() => isLoading = false);
@@ -164,9 +162,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 ),
                 onPressed: isLoading ? null : verifyOtp,
                 child: isLoading
-                    ? const CircularProgressIndicator(
-                        color: Color(0xFFD7BE69),
-                      )
+                    ? const CircularProgressIndicator(color: Color(0xFFD7BE69))
                     : const Text(
                         "Verify",
                         style: TextStyle(fontSize: 16, color: Colors.black87),
