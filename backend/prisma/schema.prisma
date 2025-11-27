@@ -90,9 +90,7 @@ model User {
   alternativeNumber  String?
   roleId             String?
   roles              String[]      @default([])
-  functionalRoleId   String?
   departmentId       String?
-  managerId          String?
   otp                String?
   otpExpiry          DateTime?
   lastLogin          DateTime?
@@ -100,16 +98,8 @@ model User {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   dateOfBirth        DateTime?
-  designation        String?
-  employeeCode       String?       @unique
   gender             String?
   image              String?
-  jobPost            String?
-  jobPostCode        String?
-  jobPostName        String?
-  joiningDate        DateTime?
-  nationality        String?
-  postUnder          String?
   preferredLanguages String[]
   address            String?
   city               String?
@@ -132,8 +122,6 @@ model User {
   expenses           Expense[]           @relation("EmployeeExpenses")
   approvedExpenses   Expense[]           @relation("ApprovedExpenses")
   department         Department?         @relation(fields: [departmentId], references: [id])
-  manager            User?               @relation("ManagerRelation", fields: [managerId], references: [id])
-  team               User[]              @relation("ManagerRelation")
   role               Role?               @relation(fields: [roleId], references: [id])
 }
 
