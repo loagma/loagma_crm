@@ -32,6 +32,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
   late TextEditingController _cityController;
   late TextEditingController _stateController;
   late TextEditingController _pincodeController;
+  late TextEditingController _countryController;
+  late TextEditingController _districtController;
   late TextEditingController _aadharController;
   late TextEditingController _panController;
   late TextEditingController _passwordController;
@@ -42,6 +44,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   String? selectedRoleId;
   String? selectedDepartmentId;
   String? selectedGender;
+  DateTime? _selectedDateOfBirth;
   bool isActive = true;
   bool autoGeneratePassword = false;
 
@@ -92,6 +95,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _pincodeController = TextEditingController(
       text: widget.user['pincode'] ?? '',
     );
+    _countryController = TextEditingController(
+      text: widget.user['country'] ?? '',
+    );
+    _districtController = TextEditingController(
+      text: widget.user['district'] ?? '',
+    );
     _aadharController = TextEditingController(
       text: widget.user['aadharCard'] ?? '',
     );
@@ -109,6 +118,15 @@ class _EditUserScreenState extends State<EditUserScreen> {
     selectedDepartmentId = widget.user['departmentId'];
     selectedGender = widget.user['gender'];
     isActive = widget.user['isActive'] ?? true;
+
+    // Initialize date of birth
+    if (widget.user['dateOfBirth'] != null) {
+      try {
+        _selectedDateOfBirth = DateTime.parse(widget.user['dateOfBirth']);
+      } catch (e) {
+        if (kDebugMode) print('Error parsing date of birth: $e');
+      }
+    }
 
     // Initialize multiple roles
     if (widget.user['roles'] != null && widget.user['roles'] is List) {
@@ -151,6 +169,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _cityController.dispose();
     _stateController.dispose();
     _pincodeController.dispose();
+    _countryController.dispose();
+    _districtController.dispose();
     _aadharController.dispose();
     _panController.dispose();
     _passwordController.dispose();
@@ -522,6 +542,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
         if (selectedRoles.isNotEmpty) "roles": selectedRoles,
         if (selectedDepartmentId != null) "departmentId": selectedDepartmentId,
         if (selectedGender != null) "gender": selectedGender,
+        if (_selectedDateOfBirth != null)
+          "dateOfBirth": _selectedDateOfBirth!.toIso8601String(),
         if (selectedLanguages.isNotEmpty)
           "preferredLanguages": selectedLanguages,
         "isActive": isActive,
@@ -534,6 +556,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
           "state": _stateController.text.trim(),
         if (_pincodeController.text.trim().isNotEmpty)
           "pincode": _pincodeController.text.trim(),
+        if (_countryController.text.trim().isNotEmpty)
+          "country": _countryController.text.trim(),
+        if (_districtController.text.trim().isNotEmpty)
+          "district": _districtController.text.trim(),
         if (selectedArea != null) "area": selectedArea,
         if (_latitude != null) "latitude": _latitude,
         if (_longitude != null) "longitude": _longitude,
@@ -628,6 +654,23 @@ class _EditUserScreenState extends State<EditUserScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20.0),
                 children: [
+                  // Contact Number
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      labelText: "Contact Number *",
+                      prefixIcon: const Icon(Icons.phone),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      counterText: "",
+                    ),
+                    validator: validatePhone,
+                  ),
+                  const SizedBox(height: 15),
+
                   // Full Name
                   TextFormField(
                     controller: _nameController,
@@ -665,40 +708,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // Contact Number
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    decoration: InputDecoration(
-                      labelText: "Contact Number *",
-                      prefixIcon: const Icon(Icons.phone),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      counterText: "",
-                    ),
-                    validator: validatePhone,
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Alternative Number
-                  TextFormField(
-                    controller: _alternativePhoneController,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    decoration: InputDecoration(
-                      labelText: "Alternative Number",
-                      prefixIcon: const Icon(Icons.phone_android),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      counterText: "",
-                    ),
-                    validator: validateAlternativePhone,
-                  ),
-                  const SizedBox(height: 15),
-
                   // Gender
                   DropdownButtonFormField<String>(
                     value: selectedGender,
@@ -719,6 +728,51 @@ class _EditUserScreenState extends State<EditUserScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Date of Birth
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    leading: const Icon(Icons.cake),
+                    title: const Text("Date of Birth"),
+                    subtitle: Text(
+                      _selectedDateOfBirth == null
+                          ? "Tap to select"
+                          : "${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}",
+                    ),
+                    trailing: _selectedDateOfBirth != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.red),
+                            onPressed: () {
+                              setState(() => _selectedDateOfBirth = null);
+                            },
+                          )
+                        : const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDateOfBirth ?? DateTime(2000),
+                        firstDate: DateTime(1950),
+                        lastDate: DateTime.now(),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Color(0xFFD7BE69),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setState(() => _selectedDateOfBirth = picked);
+                      }
+                    },
                   ),
                   const SizedBox(height: 15),
 
@@ -759,224 +813,56 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // Select Role (Single)
-                  DropdownButtonFormField<String>(
-                    value: selectedRoleId,
-                    items: roles.map((role) {
-                      return DropdownMenuItem<String>(
-                        value: role['id'],
-                        child: Text(role['name']),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedRoleId = value;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      labelText: "Select Primary Role",
-                      prefixIcon: const Icon(Icons.badge),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Multiple Roles (Checkboxes)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.checklist, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              "Additional Roles (Multiple Selection)",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (roles.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Text(
-                              "Loading roles...",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          )
-                        else
-                          ...roles.map((role) {
-                            final roleId = role['id'] as String;
-                            return CheckboxListTile(
-                              title: Text(role['name']),
-                              value: selectedRoles.contains(roleId),
-                              onChanged: (bool? value) {
-                                setState(() {
-                                  if (value == true) {
-                                    selectedRoles.add(roleId);
-                                  } else {
-                                    selectedRoles.remove(roleId);
-                                  }
-                                });
-                              },
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                            );
-                          }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Department
-                  DropdownButtonFormField<String>(
-                    value: selectedDepartmentId,
-                    items: departments.map((dept) {
-                      return DropdownMenuItem<String>(
-                        value: dept['id'],
-                        child: Text(dept['name']),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedDepartmentId = value;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      labelText: "Department/Team",
-                      prefixIcon: const Icon(Icons.business),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Status
-                  SwitchListTile(
-                    title: const Text("Status"),
-                    subtitle: Text(isActive ? "Active" : "Inactive"),
-                    value: isActive,
-                    onChanged: (value) {
-                      setState(() {
-                        isActive = value;
-                      });
-                    },
-                    secondary: Icon(
-                      isActive ? Icons.check_circle : Icons.cancel,
-                      color: isActive ? Colors.green : Colors.red,
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Password Section
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          enabled: !autoGeneratePassword,
-                          decoration: InputDecoration(
-                            labelText:
-                                "New Password (Leave blank to keep current)",
-                            prefixIcon: const Icon(Icons.lock),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (!autoGeneratePassword &&
-                                value != null &&
-                                value.isNotEmpty &&
-                                value.length < 6) {
-                              return 'Password must be at least 6 characters';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        children: [
-                          const Text(
-                            "Auto Generate",
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          Checkbox(
-                            value: autoGeneratePassword,
-                            onChanged: (value) {
-                              setState(() {
-                                autoGeneratePassword = value ?? false;
-                                if (autoGeneratePassword) {
-                                  _passwordController.clear();
-                                }
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Address
+                  // Alternative Number
                   TextFormField(
-                    controller: _addressController,
-                    maxLines: 2,
-                    textCapitalization: TextCapitalization.words,
+                    controller: _alternativePhoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
                     decoration: InputDecoration(
-                      labelText: "Address",
-                      prefixIcon: const Icon(Icons.home),
+                      labelText: "Alternative Number",
+                      prefixIcon: const Icon(Icons.phone_android),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      counterText: "",
                     ),
+                    validator: validateAlternativePhone,
                   ),
                   const SizedBox(height: 15),
 
-                  // City, State
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _cityController,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: InputDecoration(
-                            labelText: "City",
-                            prefixIcon: const Icon(Icons.location_city),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
+                  // Aadhar Card
+                  TextFormField(
+                    controller: _aadharController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 12,
+                    decoration: InputDecoration(
+                      labelText: "Aadhar Card Number",
+                      prefixIcon: const Icon(Icons.credit_card),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _stateController,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: InputDecoration(
-                            labelText: "State",
-                            prefixIcon: const Icon(Icons.map),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
+                      counterText: "",
+                      hintText: "XXXX XXXX XXXX",
+                    ),
+                    validator: validateAadhar,
+                  ),
+                  const SizedBox(height: 15),
+
+                  // PAN Card
+                  TextFormField(
+                    controller: _panController,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      labelText: "PAN Card Number",
+                      prefixIcon: const Icon(Icons.account_balance_wallet),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                      counterText: "",
+                      hintText: "ABCDE1234F",
+                    ),
+                    validator: validatePAN,
                   ),
                   const SizedBox(height: 15),
 
@@ -1027,6 +913,62 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   ),
                   const SizedBox(height: 15),
 
+                  // Country
+                  TextFormField(
+                    controller: _countryController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: "Country",
+                      prefixIcon: const Icon(Icons.public),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // State
+                  TextFormField(
+                    controller: _stateController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: "State",
+                      prefixIcon: const Icon(Icons.map),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // District
+                  TextFormField(
+                    controller: _districtController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: "District",
+                      prefixIcon: const Icon(Icons.location_on),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // City
+                  TextFormField(
+                    controller: _cityController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: "City",
+                      prefixIcon: const Icon(Icons.location_city),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
                   // Area Dropdown (if areas available)
                   if (_availableAreas.isNotEmpty)
                     Column(
@@ -1034,7 +976,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
                         DropdownButtonFormField<String>(
                           value: selectedArea,
                           decoration: InputDecoration(
-                            labelText: "Area",
+                            labelText: "Area *",
                             prefixIcon: const Icon(Icons.place),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1057,7 +999,236 @@ class _EditUserScreenState extends State<EditUserScreen> {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 15),
                       child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_pincodeController.text.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      child: Text(
+                        'No areas found for this pincode',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
                     ),
+
+                  // Address
+                  TextFormField(
+                    controller: _addressController,
+                    maxLines: 2,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: "Address",
+                      prefixIcon: const Icon(Icons.home),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+
+                  // Geolocation Section
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.my_location,
+                                color: Color(0xFFD7BE69),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                "Geolocation",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (_latitude != null && _longitude != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Location Captured',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Lat: ${_latitude!.toStringAsFixed(6)}, Lng: ${_longitude!.toStringAsFixed(6)}',
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => setState(() {
+                                      _latitude = null;
+                                      _longitude = null;
+                                    }),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          ElevatedButton.icon(
+                            icon: isLoadingGeolocation
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.my_location),
+                            label: Text(
+                              isLoadingGeolocation
+                                  ? 'Getting Location...'
+                                  : 'Capture Current Location',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD7BE69),
+                              minimumSize: const Size(double.infinity, 50),
+                            ),
+                            onPressed: isLoadingGeolocation
+                                ? null
+                                : _getCurrentLocation,
+                          ),
+
+                          // Google Map Display
+                          if (_latitude != null && _longitude != null) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              height: 250,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFD7BE69),
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Stack(
+                                  children: [
+                                    GoogleMap(
+                                      initialCameraPosition: CameraPosition(
+                                        target: LatLng(_latitude!, _longitude!),
+                                        zoom: 15,
+                                      ),
+                                      markers: {
+                                        Marker(
+                                          markerId: const MarkerId(
+                                            'current_location',
+                                          ),
+                                          position: LatLng(
+                                            _latitude!,
+                                            _longitude!,
+                                          ),
+                                          infoWindow: const InfoWindow(
+                                            title: 'Current Location',
+                                          ),
+                                        ),
+                                      },
+                                      myLocationButtonEnabled: false,
+                                      zoomControlsEnabled: false,
+                                      mapToolbarEnabled: false,
+                                      onTap: (_) => _openInGoogleMaps(),
+                                    ),
+                                    Positioned(
+                                      bottom: 10,
+                                      right: 10,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(
+                                                0.2,
+                                              ),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: _openInGoogleMaps,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(8.0),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.open_in_new,
+                                                    size: 18,
+                                                    color: Color(0xFFD7BE69),
+                                                  ),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'Open in Maps',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: Color(0xFFD7BE69),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
 
                   // Geolocation Section
                   Card(
@@ -1265,39 +1436,128 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // Aadhar Card
-                  TextFormField(
-                    controller: _aadharController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 12,
+                  // Department
+                  DropdownButtonFormField<String>(
+                    value: selectedDepartmentId,
+                    items: departments.map((dept) {
+                      return DropdownMenuItem<String>(
+                        value: dept['id'],
+                        child: Text(dept['name']),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedDepartmentId = value;
+                      });
+                    },
                     decoration: InputDecoration(
-                      labelText: "Aadhar Card Number",
-                      prefixIcon: const Icon(Icons.credit_card),
+                      labelText: "Department",
+                      prefixIcon: const Icon(Icons.business),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      counterText: "",
-                      hintText: "XXXX XXXX XXXX",
                     ),
-                    validator: validateAadhar,
                   ),
                   const SizedBox(height: 15),
 
-                  // PAN Card
-                  TextFormField(
-                    controller: _panController,
-                    textCapitalization: TextCapitalization.characters,
-                    maxLength: 10,
+                  // Primary Role
+                  DropdownButtonFormField<String>(
+                    value: selectedRoleId,
+                    items: roles.map((role) {
+                      return DropdownMenuItem<String>(
+                        value: role['id'],
+                        child: Text(role['name']),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedRoleId = value;
+                      });
+                    },
                     decoration: InputDecoration(
-                      labelText: "PAN Card Number",
-                      prefixIcon: const Icon(Icons.account_balance_wallet),
+                      labelText: "Primary Role",
+                      prefixIcon: const Icon(Icons.badge),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      counterText: "",
-                      hintText: "ABCDE1234F",
                     ),
-                    validator: validatePAN,
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Additional Roles
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    title: const Text("Additional Roles"),
+                    subtitle: Text(
+                      selectedRoles.isEmpty
+                          ? "Tap to select"
+                          : "${selectedRoles.length} roles selected",
+                    ),
+                    trailing: const Icon(Icons.arrow_drop_down),
+                    onTap: () {
+                      showMultiSelectDialog(
+                        context: context,
+                        title: "Select Additional Roles",
+                        items: roles,
+                        selectedValues: selectedRoles,
+                        onConfirm: (values) {
+                          setState(() => selectedRoles = values);
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Status
+                  SwitchListTile(
+                    title: const Text("Status"),
+                    subtitle: Text(isActive ? "Active" : "Inactive"),
+                    value: isActive,
+                    onChanged: (value) {
+                      setState(() {
+                        isActive = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Password Section
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          enabled: !autoGeneratePassword,
+                          decoration: InputDecoration(
+                            labelText: "Password",
+                            prefixIcon: const Icon(Icons.lock),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          const Text("Auto"),
+                          Checkbox(
+                            value: autoGeneratePassword,
+                            onChanged: (value) {
+                              setState(() {
+                                autoGeneratePassword = value ?? false;
+                                if (autoGeneratePassword) {
+                                  _passwordController.clear();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 15),
 
@@ -1314,8 +1574,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       hintText: "e.g., 50000",
-                      helperText: "Update basic salary for the employee",
-                      helperStyle: const TextStyle(fontSize: 12),
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
