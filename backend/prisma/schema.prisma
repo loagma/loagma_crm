@@ -84,6 +84,7 @@ model Role {
 
 model User {
   id                 String        @id
+  employeeCode       String?       @unique
   name               String?
   email              String?       @unique
   contactNumber      String        @unique

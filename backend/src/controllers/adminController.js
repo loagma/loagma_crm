@@ -32,6 +32,35 @@ async function generateNumericUserId() {
   return userId;
 }
 
+// Generate numeric employee code
+async function generateEmployeeCode() {
+  // Get the count of existing users and add 1
+  const userCount = await prisma.user.count();
+  const nextCode = userCount + 1;
+  
+  // Format as 6 digits (e.g., 000001, 000002)
+  const employeeCode = String(nextCode).padStart(6, '0');
+  
+  // Check if code already exists (in case of deletions)
+  const existing = await prisma.user.findUnique({ where: { employeeCode } });
+  if (existing) {
+    // If exists, find the highest numeric code and increment
+    const allUsers = await prisma.user.findMany({
+      where: { employeeCode: { not: null } },
+      select: { employeeCode: true },
+      orderBy: { employeeCode: 'desc' },
+      take: 1,
+    });
+    
+    if (allUsers.length > 0 && allUsers[0].employeeCode) {
+      const lastNumber = parseInt(allUsers[0].employeeCode);
+      return String(lastNumber + 1).padStart(6, '0');
+    }
+  }
+  
+  return employeeCode;
+}
+
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {
   try {
@@ -43,6 +72,7 @@ export const createUserByAdmin = async (req, res) => {
       email, 
       alternativeNumber,
       gender,
+      dateOfBirth,
       preferredLanguages,
       departmentId,
       isActive,
@@ -133,11 +163,14 @@ export const createUserByAdmin = async (req, res) => {
       imageUrl = image;
     }
 
-    // Create user with numeric ID
+    // Create user with numeric ID and employee code
     const userId = await generateNumericUserId();
+    const employeeCode = await generateEmployeeCode();
+    
     const user = await prisma.user.create({
       data: {
         id: userId,
+        employeeCode,
         contactNumber,
         alternativeNumber,
         name,
@@ -145,6 +178,7 @@ export const createUserByAdmin = async (req, res) => {
         roleId,
         roles: roles || [],
         gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         preferredLanguages: preferredLanguages || [],
         departmentId,
         isActive: isActive !== undefined ? isActive : true,
@@ -191,6 +225,7 @@ export const createUserByAdmin = async (req, res) => {
       message: 'User and salary information created successfully',
       user: {
         id: user.id,
+        employeeCode: user.employeeCode,
         name: user.name,
         email: user.email,
         contactNumber: user.contactNumber,
@@ -201,11 +236,15 @@ export const createUserByAdmin = async (req, res) => {
         department: user.department?.name,
         departmentId: user.departmentId,
         gender: user.gender,
+        dateOfBirth: user.dateOfBirth,
         isActive: user.isActive,
         address: user.address,
         city: user.city,
         state: user.state,
         pincode: user.pincode,
+        country: user.country,
+        district: user.district,
+        area: user.area,
         aadharCard: user.aadharCard,
         panCard: user.panCard,
         createdAt: user.createdAt,
@@ -302,6 +341,7 @@ export const getAllUsersByAdmin = async (req, res) => {
 
         return {
           id: u.id,
+          employeeCode: u.employeeCode,
           name: u.name,
           email: u.email,
           contactNumber: u.contactNumber,
@@ -312,6 +352,7 @@ export const getAllUsersByAdmin = async (req, res) => {
           department: u.department?.name,
           departmentId: u.departmentId,
           gender: u.gender,
+          dateOfBirth: u.dateOfBirth,
           preferredLanguages: u.preferredLanguages,
           isActive: u.isActive,
           address: u.address,
@@ -320,6 +361,9 @@ export const getAllUsersByAdmin = async (req, res) => {
           pincode: u.pincode,
           country: u.country,
           district: u.district,
+          area: u.area,
+          latitude: u.latitude,
+          longitude: u.longitude,
           image: u.image,
           notes: u.notes,
           aadharCard: u.aadharCard,
@@ -351,6 +395,7 @@ export const updateUserByAdmin = async (req, res) => {
       name, 
       email,
       gender,
+      dateOfBirth,
       preferredLanguages,
       departmentId,
       isActive,
@@ -408,6 +453,7 @@ export const updateUserByAdmin = async (req, res) => {
         ...(name !== undefined && { name }),
         ...(email !== undefined && { email }),
         ...(gender !== undefined && { gender }),
+        ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
         ...(preferredLanguages !== undefined && { preferredLanguages }),
         ...(departmentId !== undefined && { departmentId }),
         ...(isActive !== undefined && { isActive }),
@@ -437,6 +483,7 @@ export const updateUserByAdmin = async (req, res) => {
       message: 'User updated successfully',
       user: {
         id: user.id,
+        employeeCode: user.employeeCode,
         name: user.name,
         email: user.email,
         contactNumber: user.contactNumber,
@@ -446,6 +493,7 @@ export const updateUserByAdmin = async (req, res) => {
         roleId: user.roleId,
         department: user.department?.name,
         gender: user.gender,
+        dateOfBirth: user.dateOfBirth,
         isActive: user.isActive,
       },
     });

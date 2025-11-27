@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 // Auth screens
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/otp_screen.dart';
+import '../screens/auth/no_role_screen.dart';
 
 // Dashboard
 import '../screens/dashboard/role_dashboard_template.dart';
@@ -49,6 +50,7 @@ final GoRouter appRouter = GoRouter(
     // AUTH
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/otp', builder: (_, __) => const OtpScreen()),
+    GoRoute(path: '/no-role', builder: (_, __) => const NoRoleScreen()),
 
     // DASHBOARD WITH CHILD ROUTES
     GoRoute(
