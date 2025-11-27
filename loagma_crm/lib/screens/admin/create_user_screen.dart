@@ -590,6 +590,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       if (selectedDepartmentId != null) "departmentId": selectedDepartmentId,
       if (selectedGender != null) "gender": selectedGender,
+      if (_selectedDateOfBirth != null)
+        "dateOfBirth": _selectedDateOfBirth!.toIso8601String(),
       if (selectedLanguages.isNotEmpty) "preferredLanguages": selectedLanguages,
 
       "isActive": isActive,
@@ -922,6 +924,52 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 DropdownMenuItem(value: "Other", child: Text("Other")),
               ],
               onChanged: (v) => setState(() => selectedGender = v),
+            ),
+
+            const SizedBox(height: 15),
+
+            // DATE OF BIRTH
+            ListTile(
+              shape: RoundedRectangleBorder(
+                side: const BorderSide(color: Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              leading: const Icon(Icons.cake),
+              title: const Text("Date of Birth"),
+              subtitle: Text(
+                _selectedDateOfBirth == null
+                    ? "Tap to select"
+                    : "${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}",
+              ),
+              trailing: _selectedDateOfBirth != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.red),
+                      onPressed: () {
+                        setState(() => _selectedDateOfBirth = null);
+                      },
+                    )
+                  : const Icon(Icons.calendar_today),
+              onTap: () async {
+                final DateTime? picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDateOfBirth ?? DateTime(2000),
+                  firstDate: DateTime(1950),
+                  lastDate: DateTime.now(),
+                  builder: (context, child) {
+                    return Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.light(
+                          primary: Color(0xFFD7BE69),
+                        ),
+                      ),
+                      child: child!,
+                    );
+                  },
+                );
+                if (picked != null) {
+                  setState(() => _selectedDateOfBirth = picked);
+                }
+              },
             ),
 
             const SizedBox(height: 15),

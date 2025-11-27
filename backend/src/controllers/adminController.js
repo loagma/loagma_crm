@@ -9,7 +9,7 @@ async function generateNumericUserId() {
   const nextId = userCount + 1;
   
   // Format as EMP followed by 6 digits (e.g., EMP000001, EMP000002)
-  const userId = `EMP${String(nextId).padStart(6, '0')}`;
+  const userId = `${String(nextId).padStart(6, '0')}`;
   
   // Check if ID already exists (in case of deletions)
   const existing = await prisma.user.findUnique({ where: { id: userId } });
@@ -24,8 +24,8 @@ async function generateNumericUserId() {
     
     if (allUsers.length > 0) {
       const lastId = allUsers[0].id;
-      const lastNumber = parseInt(lastId.replace('EMP', ''));
-      return `EMP${String(lastNumber + 1).padStart(6, '0')}`;
+      const lastNumber = parseInt(lastId.replace('', ''));
+      return `${String(lastNumber + 1).padStart(6, '0')}`;
     }
   }
   
@@ -34,32 +34,32 @@ async function generateNumericUserId() {
 
 // Generate numeric employee code
 async function generateEmployeeCode() {
-  // Get the count of existing users and add 1
   const userCount = await prisma.user.count();
-  const nextCode = userCount + 1;
-  
-  // Format as 6 digits (e.g., 000001, 000002)
-  const employeeCode = String(nextCode).padStart(6, '0');
-  
-  // Check if code already exists (in case of deletions)
-  const existing = await prisma.user.findUnique({ where: { employeeCode } });
+  let nextCode = userCount + 1;
+
+  let employeeCode = String(nextCode).padStart(6, '0');
+
+  // Check if code exists
+  const existing = await prisma.user.findUnique({
+    where: { employeeCode }
+  });
+
   if (existing) {
-    // If exists, find the highest numeric code and increment
     const allUsers = await prisma.user.findMany({
       where: { employeeCode: { not: null } },
       select: { employeeCode: true },
       orderBy: { employeeCode: 'desc' },
-      take: 1,
+      take: 1
     });
-    
+
     if (allUsers.length > 0 && allUsers[0].employeeCode) {
-      const lastNumber = parseInt(allUsers[0].employeeCode);
-      return String(lastNumber + 1).padStart(6, '0');
+      employeeCode = String(parseInt(allUsers[0].employeeCode) + 1).padStart(6, '0');
     }
   }
-  
+
   return employeeCode;
 }
+
 
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {

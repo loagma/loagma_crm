@@ -155,6 +155,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             _buildInfoCard([
               if (widget.user['gender'] != null)
                 _buildInfoRow(Icons.wc, "Gender", widget.user['gender']),
+              if (widget.user['dateOfBirth'] != null)
+                _buildInfoRow(
+                  Icons.cake,
+                  "Date of Birth",
+                  _formatDate(widget.user['dateOfBirth']),
+                ),
               if (widget.user['preferredLanguages'] != null &&
                   (widget.user['preferredLanguages'] as List).isNotEmpty)
                 _buildInfoRow(

@@ -213,83 +213,18 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     itemCount: filteredUsers.length,
                     itemBuilder: (context, index) {
                       final user = filteredUsers[index];
                       return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            radius: 28,
-                            backgroundColor: const Color(0xFFD7BE69),
-                            backgroundImage:
-                                user['image'] != null &&
-                                    user['image'].toString().isNotEmpty
-                                ? NetworkImage(user['image'])
-                                : null,
-                            child:
-                                user['image'] == null ||
-                                    user['image'].toString().isEmpty
-                                ? Text(
-                                    (user['name'] ?? 'U')[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          title: Text(
-                            user['name'] ?? user['contactNumber'],
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text("📞 ${user['contactNumber']}"),
-                              if (user['email'] != null)
-                                Text("📧 ${user['email']}"),
-                              Text("👤 ${user['role'] ?? 'No Role'}"),
-                              if (user['department'] != null)
-                                Text("🏢 ${user['department']}"),
-                              if (user['salaryDetails'] != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  "💰 Salary: ₹${_formatNumber(user['salaryDetails']['netSalary'] ?? user['salaryDetails']['basicSalary'])}",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: user['isActive'] == true
-                                  ? Colors.green.shade100
-                                  : Colors.red.shade100,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              user['isActive'] == true ? 'Active' : 'Inactive',
-                              style: TextStyle(
-                                color: user['isActive'] == true
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
                           onTap: () async {
                             final result = await Navigator.push(
                               context,
@@ -304,6 +239,160 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
                               fetchUsers();
                             }
                           },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                // Profile Image
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                  backgroundImage:
+                                      user['image'] != null &&
+                                          user['image'].toString().isNotEmpty
+                                      ? NetworkImage(user['image'])
+                                      : null,
+                                  child:
+                                      user['image'] == null ||
+                                          user['image'].toString().isEmpty
+                                      ? Text(
+                                          (user['name'] ?? 'U')[0]
+                                              .toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 12),
+
+                                // Employee Info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Name
+                                      Text(
+                                        user['name'] ?? user['contactNumber'],
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+
+                                      // Employee Code
+                                      if (user['employeeCode'] != null)
+                                        Text(
+                                          'ID: ${user['employeeCode']}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      const SizedBox(height: 4),
+
+                                      // Role & Department
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.badge,
+                                            size: 14,
+                                            color: Colors.grey[600],
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              user['role'] ?? 'No Role',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey[700],
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+
+                                      // Contact
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.phone,
+                                            size: 14,
+                                            color: Colors.grey[600],
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            user['contactNumber'] ?? '',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Status Badge
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: user['isActive'] == true
+                                            ? Colors.green.shade50
+                                            : Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: user['isActive'] == true
+                                              ? Colors.green.shade300
+                                              : Colors.red.shade300,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        user['isActive'] == true
+                                            ? 'Active'
+                                            : 'Inactive',
+                                        style: TextStyle(
+                                          color: user['isActive'] == true
+                                              ? Colors.green.shade700
+                                              : Colors.red.shade700,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+
+                                    // Salary (if available)
+                                    if (user['salaryDetails'] != null)
+                                      Text(
+                                        '₹${_formatNumber(user['salaryDetails']['netSalary'] ?? user['salaryDetails']['basicSalary'])}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFD7BE69),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     },
