@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
@@ -161,6 +163,12 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
 
       // populate form fields
       _populateFromAccount(account);
+
+      // Debug: Print image URLs
+      if (kDebugMode) {
+        print('🖼️ Owner Image: ${account.ownerImage}');
+        print('🖼️ Shop Image: ${account.shopImage}');
+      }
 
       setState(() {
         _account = account;
@@ -498,11 +506,6 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         title: Text(_account?.personName ?? 'Account Details'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
-          if (!_isEditing)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => setState(() => _isEditing = true),
-            ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
         ],
         leading: IconButton(
@@ -541,60 +544,193 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           if (acc.ownerImage != null)
-                            Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: const Color(0xFFD7BE69),
-                                  backgroundImage:
-                                      acc.ownerImage!.startsWith('http')
-                                      ? NetworkImage(acc.ownerImage!)
-                                      : null,
-                                  child: !acc.ownerImage!.startsWith('http')
-                                      ? const Icon(
-                                          Icons.person,
-                                          size: 50,
-                                          color: Colors.white,
-                                        )
-                                      : null,
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _showImageDialog(
+                                  acc.ownerImage!,
+                                  'Owner Image',
                                 ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Owner',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 120,
+                                      height: 120,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFFD7BE69),
+                                          width: 3,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.1,
+                                            ),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipOval(
+                                        child:
+                                            acc.ownerImage!.startsWith('http')
+                                            ? Image.network(
+                                                acc.ownerImage!,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return Container(
+                                                        color: const Color(
+                                                          0xFFD7BE69,
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.person,
+                                                          size: 50,
+                                                          color: Colors.white,
+                                                        ),
+                                                      );
+                                                    },
+                                                loadingBuilder:
+                                                    (
+                                                      context,
+                                                      child,
+                                                      loadingProgress,
+                                                    ) {
+                                                      if (loadingProgress ==
+                                                          null)
+                                                        return child;
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      );
+                                                    },
+                                              )
+                                            : Container(
+                                                color: const Color(0xFFD7BE69),
+                                                child: const Icon(
+                                                  Icons.person,
+                                                  size: 50,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Owner Photo',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Tap to view',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           if (acc.shopImage != null)
-                            Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: const Color(0xFFD7BE69),
-                                  backgroundImage:
-                                      acc.shopImage!.startsWith('http')
-                                      ? NetworkImage(acc.shopImage!)
-                                      : null,
-                                  child: !acc.shopImage!.startsWith('http')
-                                      ? const Icon(
-                                          Icons.store,
-                                          size: 50,
-                                          color: Colors.white,
-                                        )
-                                      : null,
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _showImageDialog(
+                                  acc.shopImage!,
+                                  'Shop Image',
                                 ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Shop',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 120,
+                                      height: 120,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFFD7BE69),
+                                          width: 3,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.1,
+                                            ),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipOval(
+                                        child: acc.shopImage!.startsWith('http')
+                                            ? Image.network(
+                                                acc.shopImage!,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return Container(
+                                                        color: const Color(
+                                                          0xFFD7BE69,
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.store,
+                                                          size: 50,
+                                                          color: Colors.white,
+                                                        ),
+                                                      );
+                                                    },
+                                                loadingBuilder:
+                                                    (
+                                                      context,
+                                                      child,
+                                                      loadingProgress,
+                                                    ) {
+                                                      if (loadingProgress ==
+                                                          null)
+                                                        return child;
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      );
+                                                    },
+                                              )
+                                            : Container(
+                                                color: const Color(0xFFD7BE69),
+                                                child: const Icon(
+                                                  Icons.store,
+                                                  size: 50,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Shop Photo',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Tap to view',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                         ],
                       ),
@@ -701,33 +837,234 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             if (acc.state != null) _buildDetailRow('State', acc.state!),
             if (acc.country != null) _buildDetailRow('Country', acc.country!),
             if (acc.address != null) _buildDetailRow('Address', acc.address!),
+
+            // Google Map Display
             if (acc.latitude != null && acc.longitude != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.my_location,
-                    color: Color(0xFFD7BE69),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Latitude: ${acc.latitude!.toStringAsFixed(6)}',
-                        style: const TextStyle(fontFamily: 'monospace'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Location Captured',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Lat: ${acc.latitude!.toStringAsFixed(6)}, Lng: ${acc.longitude!.toStringAsFixed(6)}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Longitude: ${acc.longitude!.toStringAsFixed(6)}',
-                        style: const TextStyle(fontFamily: 'monospace'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                height: 250,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFD7BE69), width: 2),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Stack(
+                    children: [
+                      GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(acc.latitude!, acc.longitude!),
+                          zoom: 15,
+                        ),
+                        markers: {
+                          Marker(
+                            markerId: const MarkerId('account_location'),
+                            position: LatLng(acc.latitude!, acc.longitude!),
+                            infoWindow: InfoWindow(
+                              title: acc.personName,
+                              snippet: acc.businessName,
+                            ),
+                          ),
+                        },
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
+                        onTap: (_) =>
+                            _openInGoogleMaps(acc.latitude!, acc.longitude!),
+                      ),
+                      Positioned(
+                        bottom: 10,
+                        right: 10,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _openInGoogleMaps(
+                                acc.latitude!,
+                                acc.longitude!,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.open_in_new,
+                                      size: 18,
+                                      color: Color(0xFFD7BE69),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Open in Maps',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFD7BE69),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openInGoogleMaps(double lat, double lng) async {
+    final url = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
+    final uri = Uri.parse(url);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showError('Could not open Google Maps');
+      }
+    } catch (e) {
+      _showError('Error opening Google Maps: $e');
+    }
+  }
+
+  void _showImageDialog(String imageUrl, String title) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: imageUrl.startsWith('http')
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                height: 200,
+                                color: Colors.grey[300],
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.error_outline,
+                                    size: 50,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                height: 200,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    value:
+                                        loadingProgress.expectedTotalBytes !=
+                                            null
+                                        ? loadingProgress
+                                                  .cumulativeBytesLoaded /
+                                              loadingProgress
+                                                  .expectedTotalBytes!
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            height: 200,
+                            color: Colors.grey[300],
+                            child: const Center(
+                              child: Icon(
+                                Icons.image_not_supported,
+                                size: 50,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
