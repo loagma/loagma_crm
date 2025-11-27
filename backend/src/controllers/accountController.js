@@ -280,6 +280,18 @@ export const createAccount = async (req, res) => {
     let ownerImageUrl = null;
     let shopImageUrl = null;
 
+    console.log('🖼️ Image upload check:');
+    console.log('  - Owner image provided:', !!ownerImage);
+    console.log('  - Shop image provided:', !!shopImage);
+    if (ownerImage) {
+      console.log('  - Owner image starts with data:image:', ownerImage.startsWith('data:image'));
+      console.log('  - Owner image length:', ownerImage.length);
+    }
+    if (shopImage) {
+      console.log('  - Shop image starts with data:image:', shopImage.startsWith('data:image'));
+      console.log('  - Shop image length:', shopImage.length);
+    }
+
     if (ownerImage && ownerImage.startsWith('data:image')) {
       try {
         console.log('📸 Uploading owner image to Cloudinary...');
@@ -292,6 +304,7 @@ export const createAccount = async (req, res) => {
         ownerImageUrl = null;
       }
     } else if (ownerImage && ownerImage.startsWith('http')) {
+      console.log('📎 Using existing owner image URL');
       ownerImageUrl = ownerImage;
     }
 
@@ -307,8 +320,13 @@ export const createAccount = async (req, res) => {
         shopImageUrl = null;
       }
     } else if (shopImage && shopImage.startsWith('http')) {
+      console.log('📎 Using existing shop image URL');
       shopImageUrl = shopImage;
     }
+
+    console.log('🖼️ Final image URLs:');
+    console.log('  - Owner image URL:', ownerImageUrl);
+    console.log('  - Shop image URL:', shopImageUrl);
 
     console.log('✅ Creating account in database...');
     const account = await prisma.account.create({

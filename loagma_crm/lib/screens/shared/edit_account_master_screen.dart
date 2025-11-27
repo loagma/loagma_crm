@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import '../../models/account_model.dart';
@@ -108,38 +111,76 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
 
   void _initializeControllers() {
     // Initialize controllers with existing account data
-    _businessNameController =
-        TextEditingController(text: widget.account.businessName ?? '');
-    _businessTypeController =
-        TextEditingController(text: widget.account.businessType ?? '');
-    _personNameController =
-        TextEditingController(text: widget.account.personName);
-    _contactNumberController =
-        TextEditingController(text: widget.account.contactNumber);
-    _gstNumberController =
-        TextEditingController(text: widget.account.gstNumber ?? '');
-    _panCardController =
-        TextEditingController(text: widget.account.panCard ?? '');
-    _pincodeController =
-        TextEditingController(text: widget.account.pincode ?? '');
-    _countryController =
-        TextEditingController(text: widget.account.country ?? '');
+    _businessNameController = TextEditingController(
+      text: widget.account.businessName ?? '',
+    );
+    _businessTypeController = TextEditingController(
+      text: widget.account.businessType ?? '',
+    );
+    _personNameController = TextEditingController(
+      text: widget.account.personName,
+    );
+    _contactNumberController = TextEditingController(
+      text: widget.account.contactNumber,
+    );
+    _gstNumberController = TextEditingController(
+      text: widget.account.gstNumber ?? '',
+    );
+    _panCardController = TextEditingController(
+      text: widget.account.panCard ?? '',
+    );
+    _pincodeController = TextEditingController(
+      text: widget.account.pincode ?? '',
+    );
+    _countryController = TextEditingController(
+      text: widget.account.country ?? '',
+    );
     _stateController = TextEditingController(text: widget.account.state ?? '');
-    _districtController =
-        TextEditingController(text: widget.account.district ?? '');
+    _districtController = TextEditingController(
+      text: widget.account.district ?? '',
+    );
     _cityController = TextEditingController(text: widget.account.city ?? '');
     _areaController = TextEditingController(text: widget.account.area ?? '');
-    _addressController =
-        TextEditingController(text: widget.account.address ?? '');
+    _addressController = TextEditingController(
+      text: widget.account.address ?? '',
+    );
 
+    _selectedBusinessType = widget.account.businessType;
+    _selectedBusinessSize = widget.account.businessSize;
     _selectedCustomerStage = widget.account.customerStage;
     _selectedFunnelStage = widget.account.funnelStage;
+    _selectedArea = widget.account.area;
     _dateOfBirth = widget.account.dateOfBirth;
     _isActive = widget.account.isActive ?? true;
+
+    // Load existing geolocation
+    _latitude = widget.account.latitude;
+    _longitude = widget.account.longitude;
 
     // Load existing images if available
     _ownerImageBase64 = widget.account.ownerImage;
     _shopImageBase64 = widget.account.shopImage;
+
+    // Load areas if pincode exists
+    if (widget.account.pincode != null && widget.account.pincode!.isNotEmpty) {
+      _loadAreasForPincode(widget.account.pincode!);
+    }
+  }
+
+  Future<void> _loadAreasForPincode(String pincode) async {
+    try {
+      final result = await PincodeService.getAreasByPincode(pincode);
+      if (result['success'] == true && mounted) {
+        final data = result['data'];
+        setState(() {
+          _availableAreas = List<Map<String, dynamic>>.from(
+            data['areas'] ?? [],
+          );
+        });
+      }
+    } catch (e) {
+      // Silently fail, areas will just not be available
+    }
   }
 
   @override
@@ -205,10 +246,13 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
       return;
     }
 
-    setState(() => isLoadingLocation = true);
+    setState(() {
+      isLoadingLocation = true;
+      isLoadingAreas = true;
+    });
 
     try {
-      final result = await PincodeService.getLocationByPincode(pincode);
+      final result = await PincodeService.getAreasByPincode(pincode);
 
       if (result['success'] == true) {
         final data = result['data'];
@@ -217,18 +261,100 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
           _stateController.text = data['state'] ?? '';
           _districtController.text = data['district'] ?? '';
           _cityController.text = data['city'] ?? '';
-          _areaController.text = data['area'] ?? '';
+
+          // Load areas
+          _availableAreas = List<Map<String, dynamic>>.from(
+            data['areas'] ?? [],
+          );
+          _selectedArea = null; // Reset area selection
         });
         _showSuccess('Location details fetched successfully');
       } else {
         _showError(result['message'] ?? 'Failed to fetch location');
+        setState(() {
+          _availableAreas = [];
+          _selectedArea = null;
+        });
       }
     } catch (e) {
       _showError('Error: $e');
+      setState(() {
+        _availableAreas = [];
+        _selectedArea = null;
+      });
     } finally {
       if (mounted) {
-        setState(() => isLoadingLocation = false);
+        setState(() {
+          isLoadingLocation = false;
+          isLoadingAreas = false;
+        });
       }
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => isLoadingGeolocation = true);
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showError('Location services are disabled');
+        setState(() => isLoadingGeolocation = false);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showError('Location permission denied');
+          setState(() => isLoadingGeolocation = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showError('Location permissions are permanently denied');
+        setState(() => isLoadingGeolocation = false);
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+      });
+
+      _showSuccess(
+        'Location captured: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+      );
+    } catch (e) {
+      _showError('Failed to get location: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingGeolocation = false);
+      }
+    }
+  }
+
+  Future<void> _openInGoogleMaps() async {
+    if (_latitude == null || _longitude == null) return;
+
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
+    final uri = Uri.parse(url);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showError('Could not open Google Maps');
+      }
+    } catch (e) {
+      _showError('Error opening Google Maps: $e');
     }
   }
 
@@ -264,8 +390,11 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
             widget.account.contactNumber) {
           updates['contactNumber'] = _contactNumberController.text.trim();
         }
-        if (_businessTypeController.text.trim().isNotEmpty) {
-          updates['businessType'] = _businessTypeController.text.trim();
+        if (_selectedBusinessType != null) {
+          updates['businessType'] = _selectedBusinessType;
+        }
+        if (_selectedBusinessSize != null) {
+          updates['businessSize'] = _selectedBusinessSize;
         }
         if (_dateOfBirth != null) {
           updates['dateOfBirth'] = _dateOfBirth!.toIso8601String();
@@ -277,8 +406,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
           updates['funnelStage'] = _selectedFunnelStage;
         }
         if (_gstNumberController.text.trim().isNotEmpty) {
-          updates['gstNumber'] =
-              _gstNumberController.text.trim().toUpperCase();
+          updates['gstNumber'] = _gstNumberController.text.trim().toUpperCase();
         }
         if (_panCardController.text.trim().isNotEmpty) {
           updates['panCard'] = _panCardController.text.trim().toUpperCase();
@@ -306,11 +434,17 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
         if (_cityController.text.trim().isNotEmpty) {
           updates['city'] = _cityController.text.trim();
         }
-        if (_areaController.text.trim().isNotEmpty) {
-          updates['area'] = _areaController.text.trim();
+        if (_selectedArea != null) {
+          updates['area'] = _selectedArea;
         }
         if (_addressController.text.trim().isNotEmpty) {
           updates['address'] = _addressController.text.trim();
+        }
+        if (_latitude != null) {
+          updates['latitude'] = _latitude;
+        }
+        if (_longitude != null) {
+          updates['longitude'] = _longitude;
         }
 
         await AccountService.updateAccount(widget.account.id, updates);
@@ -352,11 +486,20 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 hint: 'Enter business name',
               ),
               const SizedBox(height: 15),
-              _buildTextField(
-                controller: _businessTypeController,
+              _buildDropdown(
+                value: _selectedBusinessType,
                 label: 'Business Type',
                 icon: Icons.category,
-                hint: 'e.g., Retail, Wholesale',
+                items: _businessTypes,
+                onChanged: (v) => setState(() => _selectedBusinessType = v),
+              ),
+              const SizedBox(height: 15),
+              _buildDropdown(
+                value: _selectedBusinessSize,
+                label: 'Business Size',
+                icon: Icons.business_center,
+                items: _businessSizes,
+                onChanged: (v) => setState(() => _selectedBusinessSize = v),
               ),
               const SizedBox(height: 15),
               _buildTextField(
@@ -377,6 +520,50 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                   if (v?.isEmpty ?? true) return 'Contact number is required';
                   if (v!.length != 10) return 'Must be 10 digits';
                   return null;
+                },
+              ),
+              const SizedBox(height: 15),
+              // Date of Birth
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                leading: const Icon(Icons.cake, color: Color(0xFFD7BE69)),
+                title: const Text("Date of Birth"),
+                subtitle: Text(
+                  _dateOfBirth == null
+                      ? "Tap to select"
+                      : "${_dateOfBirth!.day}/${_dateOfBirth!.month}/${_dateOfBirth!.year}",
+                ),
+                trailing: _dateOfBirth != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.red),
+                        onPressed: () {
+                          setState(() => _dateOfBirth = null);
+                        },
+                      )
+                    : const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: _dateOfBirth ?? DateTime(2000),
+                    firstDate: DateTime(1950),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: Color(0xFFD7BE69),
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setState(() => _dateOfBirth = picked);
+                  }
                 },
               ),
               const SizedBox(height: 15),
@@ -522,14 +709,35 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 filled: true,
               ),
               const SizedBox(height: 15),
-              _buildTextField(
-                controller: _areaController,
-                label: 'Area',
-                icon: Icons.place,
-                readOnly: true,
-                filled: true,
-              ),
-              const SizedBox(height: 15),
+              // Area Dropdown (if areas available)
+              if (_availableAreas.isNotEmpty)
+                Column(
+                  children: [
+                    _buildDropdown(
+                      value: _selectedArea,
+                      label: 'Area *',
+                      icon: Icons.place,
+                      items: _availableAreas
+                          .map((a) => a['name'] as String)
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedArea = v),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+                )
+              else if (isLoadingAreas)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_pincodeController.text.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  child: Text(
+                    'No areas found for this pincode',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
               _buildTextField(
                 controller: _addressController,
                 label: 'Address',
@@ -537,6 +745,157 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 maxLines: 3,
                 hint: 'Enter complete address manually',
               ),
+              const SizedBox(height: 25),
+              // Geolocation Section
+              _buildSectionHeader('Geolocation', Icons.my_location),
+              const SizedBox(height: 15),
+              if (_latitude != null && _longitude != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Location Captured',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Lat: ${_latitude!.toStringAsFixed(6)}, Lng: ${_longitude!.toStringAsFixed(6)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() {
+                          _latitude = null;
+                          _longitude = null;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ElevatedButton.icon(
+                icon: isLoadingGeolocation
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.my_location),
+                label: Text(
+                  isLoadingGeolocation
+                      ? 'Getting Location...'
+                      : 'Capture Current Location',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7BE69),
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                onPressed: isLoadingGeolocation ? null : _getCurrentLocation,
+              ),
+              // Google Map Display
+              if (_latitude != null && _longitude != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  height: 250,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFD7BE69),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      children: [
+                        GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(_latitude!, _longitude!),
+                            zoom: 15,
+                          ),
+                          markers: {
+                            Marker(
+                              markerId: const MarkerId('account_location'),
+                              position: LatLng(_latitude!, _longitude!),
+                              infoWindow: InfoWindow(
+                                title: widget.account.personName,
+                                snippet: widget.account.businessName,
+                              ),
+                            ),
+                          },
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          mapToolbarEnabled: false,
+                          onTap: (_) => _openInGoogleMaps(),
+                        ),
+                        Positioned(
+                          bottom: 10,
+                          right: 10,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _openInGoogleMaps,
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.open_in_new,
+                                        size: 18,
+                                        color: Color(0xFFD7BE69),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Open in Maps',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFFD7BE69),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 30),
               Row(
                 children: [
@@ -702,37 +1061,37 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 ),
               )
             : (imageBase64 != null && kIsWeb)
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      base64Decode(imageBase64.split(',')[1]),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.add_photo_alternate,
-                        size: 40,
-                        color: Color(0xFFD7BE69),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          color: Color(0xFFD7BE69),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Tap to select',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  base64Decode(imageBase64.split(',')[1]),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.add_photo_alternate,
+                    size: 40,
+                    color: Color(0xFFD7BE69),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFD7BE69),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to select',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
       ),
     );
   }

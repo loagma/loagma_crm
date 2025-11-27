@@ -6,9 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
-import 'view_all_masters_screen.dart';
+import '../../services/user_service.dart';
 import 'edit_account_master_screen.dart';
 
 class AccountMasterScreen extends StatefulWidget {
@@ -594,16 +595,22 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                 side: const BorderSide(color: Colors.blue),
                                 foregroundColor: Colors.blue,
                               ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ViewAllMastersScreen(
-                                      initialAccountCode:
-                                          existingAccountData!['accountCode'],
-                                    ),
-                                  ),
+                              onPressed: () async {
+                                // Navigate directly to account detail screen using GoRouter
+                                final role =
+                                    UserService.currentRole?.toLowerCase() ??
+                                    'admin';
+                                final result = await context.push(
+                                  '/dashboard/$role/account/view/${existingAccountData!['id']}',
                                 );
+
+                                // Refresh if account was updated/deleted
+                                if (result == true) {
+                                  setState(() {
+                                    contactNumberError = null;
+                                    existingAccountData = null;
+                                  });
+                                }
                               },
                             ),
                           ),
