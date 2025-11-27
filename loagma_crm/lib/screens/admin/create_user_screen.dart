@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
 import 'user_detail_screen.dart';
 import 'edit_user_screen.dart';
@@ -50,17 +53,25 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   String? selectedRoleId;
   String? selectedDepartmentId;
   String? selectedGender;
-  String? selectedLanguage;
   bool isActive = true;
   bool autoGeneratePassword = false;
   bool manualAddress = false;
   bool fetchingPincode = false;
 
   List<String> selectedRoles = []; // MULTI SELECT
+  List<String> selectedLanguages = []; // MULTI SELECT LANGUAGES
+  String? selectedArea; // AREA SELECTION
+
+  // Geolocation
+  double? _latitude;
+  double? _longitude;
+  bool isLoadingGeolocation = false;
 
   // ---------------- Data from API ----------------
   List<Map<String, dynamic>> roles = [];
   List<Map<String, dynamic>> departments = [];
+  List<Map<String, dynamic>> _availableAreas = [];
+  bool isLoadingAreas = false;
 
   // ---------------- Image Upload ----------------
   File? _profileImage;
@@ -298,33 +309,127 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       return;
     }
 
-    setState(() => fetchingPincode = true);
+    setState(() {
+      fetchingPincode = true;
+      isLoadingAreas = true;
+    });
 
     try {
       final response = await http.get(
-        Uri.parse("https://api.postalpincode.in/pincode/$pincode"),
+        Uri.parse("${ApiConfig.baseUrl}/masters/pincode/$pincode/areas"),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data[0]["Status"] == "Success") {
-          final postOffice = data[0]["PostOffice"][0];
+        if (data["success"] == true) {
+          final locationData = data["data"];
           setState(() {
-            _city.text = postOffice["District"] ?? "";
-            _state.text = postOffice["State"] ?? "";
-            _country.text = postOffice["Country"] ?? "India";
-            _district.text = postOffice["District"] ?? "";
+            _country.text = locationData["country"] ?? "India";
+            _state.text = locationData["state"] ?? "";
+            _district.text = locationData["district"] ?? "";
+            _city.text = locationData["city"] ?? "";
+
+            // Load areas
+            _availableAreas = List<Map<String, dynamic>>.from(
+              locationData["areas"] ?? [],
+            );
+            selectedArea = null; // Reset area selection
           });
           Fluttertoast.showToast(msg: "Location fetched successfully");
         } else {
-          Fluttertoast.showToast(msg: "Invalid pincode");
+          Fluttertoast.showToast(msg: data["message"] ?? "Invalid pincode");
+          setState(() {
+            _availableAreas = [];
+            selectedArea = null;
+          });
         }
       }
     } catch (e) {
       Fluttertoast.showToast(msg: "Error fetching location: $e");
+      setState(() {
+        _availableAreas = [];
+        selectedArea = null;
+      });
     }
 
-    setState(() => fetchingPincode = false);
+    setState(() {
+      fetchingPincode = false;
+      isLoadingAreas = false;
+    });
+  }
+
+  // ---------------- Geolocation ----------------
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => isLoadingGeolocation = true);
+
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        Fluttertoast.showToast(msg: 'Location services are disabled');
+        setState(() => isLoadingGeolocation = false);
+        return;
+      }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          Fluttertoast.showToast(msg: 'Location permission denied');
+          setState(() => isLoadingGeolocation = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        Fluttertoast.showToast(
+          msg: 'Location permissions are permanently denied',
+        );
+        setState(() => isLoadingGeolocation = false);
+        return;
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+      });
+
+      Fluttertoast.showToast(
+        msg:
+            'Location captured: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+      );
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'Failed to get location: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingGeolocation = false);
+      }
+    }
+  }
+
+  Future<void> _openInGoogleMaps() async {
+    if (_latitude == null || _longitude == null) return;
+
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
+    final uri = Uri.parse(url);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        Fluttertoast.showToast(msg: 'Could not open Google Maps');
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'Error opening Google Maps: $e');
+    }
   }
 
   // ---------------- Image Upload to Cloudinary ----------------
@@ -483,7 +588,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       if (selectedDepartmentId != null) "departmentId": selectedDepartmentId,
       if (selectedGender != null) "gender": selectedGender,
-      if (selectedLanguage != null) "preferredLanguages": [selectedLanguage],
+      if (selectedLanguages.isNotEmpty) "preferredLanguages": selectedLanguages,
 
       "isActive": isActive,
 
@@ -494,10 +599,13 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (_pincode.text.isNotEmpty) "pincode": _pincode.text.trim(),
       if (_country.text.isNotEmpty) "country": _country.text.trim(),
       if (_district.text.isNotEmpty) "district": _district.text.trim(),
+      if (selectedArea != null) "area": selectedArea,
       if (_aadhar.text.isNotEmpty) "aadharCard": _aadhar.text.trim(),
       if (_pan.text.isNotEmpty) "panCard": _pan.text.trim().toUpperCase(),
       if (_notes.text.isNotEmpty) "notes": _notes.text.trim(),
       if (_uploadedImageUrl != null) "image": _uploadedImageUrl,
+      if (_latitude != null) "latitude": _latitude,
+      if (_longitude != null) "longitude": _longitude,
     };
 
     try {
@@ -545,13 +653,17 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
         setState(() {
           selectedRoles.clear();
+          selectedLanguages.clear();
           selectedRoleId = null;
           selectedDepartmentId = null;
           selectedGender = null;
-          selectedLanguage = null;
+          selectedArea = null;
           _profileImage = null;
           _uploadedImageUrl = null;
           existingUser = null;
+          _latitude = null;
+          _longitude = null;
+          _availableAreas = [];
         });
 
         // Scroll to top after successful submission
@@ -811,16 +923,40 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             const SizedBox(height: 15),
 
-            // LANGUAGE
-            DropdownButtonFormField(
-              decoration: _input("Preferred Language", Icons.language),
-              items: const [
-                DropdownMenuItem(value: "English", child: Text("English")),
-                DropdownMenuItem(value: "Hindi", child: Text("Hindi")),
-                DropdownMenuItem(value: "Marathi", child: Text("Marathi")),
-                DropdownMenuItem(value: "Gujarati", child: Text("Gujarati")),
-              ],
-              onChanged: (v) => setState(() => selectedLanguage = v),
+            // MULTI-SELECT LANGUAGES
+            ListTile(
+              shape: RoundedRectangleBorder(
+                side: const BorderSide(color: Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Text("Preferred Languages"),
+              subtitle: Text(
+                selectedLanguages.isEmpty
+                    ? "Tap to select"
+                    : selectedLanguages.join(", "),
+              ),
+              leading: const Icon(Icons.language),
+              trailing: const Icon(Icons.arrow_drop_down),
+              onTap: () {
+                showMultiSelectDialog(
+                  context: context,
+                  title: "Select Preferred Languages",
+                  items: const [
+                    {"id": "English", "name": "English"},
+                    {"id": "Hindi", "name": "Hindi"},
+                    {"id": "Marathi", "name": "Marathi"},
+                    {"id": "Gujarati", "name": "Gujarati"},
+                    {"id": "Tamil", "name": "Tamil"},
+                    {"id": "Telugu", "name": "Telugu"},
+                    {"id": "Kannada", "name": "Kannada"},
+                    {"id": "Bengali", "name": "Bengali"},
+                  ],
+                  selectedValues: selectedLanguages,
+                  onConfirm: (values) {
+                    setState(() => selectedLanguages = values);
+                  },
+                );
+              },
             ),
             const SizedBox(height: 15),
             // ALT PHONE
@@ -955,11 +1091,234 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             const SizedBox(height: 15),
 
+            // AREA DROPDOWN (if areas available)
+            if (_availableAreas.isNotEmpty)
+              Column(
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedArea,
+                    decoration: _input("Area *", Icons.place),
+                    items: _availableAreas
+                        .map(
+                          (area) => DropdownMenuItem<String>(
+                            value: area['name'],
+                            child: Text(area['name']),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() => selectedArea = v),
+                    validator: (v) =>
+                        v == null ? 'Please select an area' : null,
+                  ),
+                  const SizedBox(height: 15),
+                ],
+              )
+            else if (isLoadingAreas)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 15),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_pincode.text.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                child: Text(
+                  'No areas found for this pincode',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              ),
+
             // ADDRESS
             TextFormField(
               controller: _address,
               maxLines: 2,
               decoration: _input("Address", Icons.home),
+            ),
+
+            const SizedBox(height: 25),
+
+            // GEOLOCATION SECTION
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.my_location, color: Color(0xFFD7BE69)),
+                        const SizedBox(width: 10),
+                        const Text(
+                          "Geolocation",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_latitude != null && _longitude != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.green[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Location Captured',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Lat: ${_latitude!.toStringAsFixed(6)}, Lng: ${_longitude!.toStringAsFixed(6)}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.red),
+                              onPressed: () => setState(() {
+                                _latitude = null;
+                                _longitude = null;
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    ElevatedButton.icon(
+                      icon: isLoadingGeolocation
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.my_location),
+                      label: Text(
+                        isLoadingGeolocation
+                            ? 'Getting Location...'
+                            : 'Capture Current Location',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD7BE69),
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      onPressed: isLoadingGeolocation
+                          ? null
+                          : _getCurrentLocation,
+                    ),
+
+                    // Google Map Display
+                    if (_latitude != null && _longitude != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        height: 250,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFFD7BE69),
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Stack(
+                            children: [
+                              GoogleMap(
+                                initialCameraPosition: CameraPosition(
+                                  target: LatLng(_latitude!, _longitude!),
+                                  zoom: 15,
+                                ),
+                                markers: {
+                                  Marker(
+                                    markerId: const MarkerId(
+                                      'current_location',
+                                    ),
+                                    position: LatLng(_latitude!, _longitude!),
+                                    infoWindow: const InfoWindow(
+                                      title: 'Current Location',
+                                    ),
+                                  ),
+                                },
+                                myLocationButtonEnabled: false,
+                                zoomControlsEnabled: false,
+                                mapToolbarEnabled: false,
+                                onTap: (_) => _openInGoogleMaps(),
+                              ),
+                              Positioned(
+                                bottom: 10,
+                                right: 10,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: _openInGoogleMaps,
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(8.0),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.open_in_new,
+                                              size: 18,
+                                              color: Color(0xFFD7BE69),
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Open in Maps',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: Color(0xFFD7BE69),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
 
             const SizedBox(height: 15),
