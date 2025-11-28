@@ -95,6 +95,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.list_alt_outlined,
             "/dashboard/admin/tasks/view",
           ),
+          SidebarItem(
+            "Performance Reports",
+            Icons.analytics_outlined,
+            "/dashboard/admin/reports",
+          ),
         ];
 
       case "employee":
