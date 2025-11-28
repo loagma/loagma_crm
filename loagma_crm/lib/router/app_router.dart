@@ -16,6 +16,8 @@ import '../screens/admin/manage_roles_screen.dart';
 import '../screens/admin/schedule_task_screen.dart';
 import '../screens/admin/view_tasks_screen.dart';
 import '../screens/admin/reports_screen.dart';
+import '../screens/admin/task_assignment_screen.dart';
+import '../screens/admin/enhanced_task_assignment_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -118,6 +120,10 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'employees/list',
           builder: (_, __) => const EmployeeListScreen(),
+        ),
+        GoRoute(
+          path: 'task-assignment',
+          builder: (_, __) => const EnhancedTaskAssignmentScreen(),
         ),
       ],
     ),
