@@ -181,7 +181,7 @@ Once you're on the Task Assignment screen, you should see:
 
 ---
 
-## 🐛 Troubleshooting
+## 🐛 Troubleshootin
 
 ### Issue: Can't find the screen
 **Solution**: Make sure you're navigating to the correct route:
