@@ -15,6 +15,7 @@ import '../screens/admin/create_user_screen.dart';
 import '../screens/admin/manage_roles_screen.dart';
 import '../screens/admin/schedule_task_screen.dart';
 import '../screens/admin/view_tasks_screen.dart';
+import '../screens/admin/reports_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -89,6 +90,7 @@ final GoRouter appRouter = GoRouter(
           path: 'tasks/view',
           builder: (_, __) => const ViewTasksScreen(),
         ),
+        GoRoute(path: 'reports', builder: (_, __) => const ReportsScreen()),
         GoRoute(
           path: 'account/master',
           builder: (_, __) => const AccountMasterScreen(),
