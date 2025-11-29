@@ -25,17 +25,28 @@ class MapTaskAssignmentService {
   Future<Map<String, dynamic>> fetchSalesmen() async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/task-assignments/salesmen'),
-        headers: headers,
-      );
+      final url = '$baseUrl/task-assignments/salesmen';
+      print('🔍 Fetching salesmen from: $url');
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      print('📡 Response status: ${response.statusCode}');
+      print('📡 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        print('✅ Salesmen data: $data');
+        return data;
       } else {
-        return {'success': false, 'message': 'Failed to fetch salesmen'};
+        print('❌ Failed with status: ${response.statusCode}');
+        return {
+          'success': false,
+          'message':
+              'Failed to fetch salesmen (Status: ${response.statusCode})',
+        };
       }
     } catch (e) {
+      print('❌ Error fetching salesmen: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
