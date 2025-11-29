@@ -55,9 +55,14 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
       final result = await _service.fetchSalesmen();
       if (result['success']) {
         setState(() => _salesmen = result['salesmen']);
+        print('✅ Loaded ${_salesmen.length} salesmen');
+      } else {
+        _showError(result['message'] ?? 'Failed to load salesmen');
+        print('❌ Failed to load salesmen: ${result['message']}');
       }
     } catch (e) {
       _showError('Failed to load salesmen: $e');
+      print('❌ Error loading salesmen: $e');
     } finally {
       setState(() => _isLoading = false);
     }
