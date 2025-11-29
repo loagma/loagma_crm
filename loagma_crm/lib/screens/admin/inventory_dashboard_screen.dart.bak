@@ -1,0 +1,396 @@
+import 'package:flutter/material.dart';
+import '../../models/salesman_model.dart';
+import '../../models/shop_model.dart';
+import '../../models/task_model.dart';
+import '../../services/enhanced_task_assignment_service.dart';
+import '../../services/inventory_tracking_service.dart';
+import 'map_view_screen.dart';
+import 'shop_list_screen.dart';
+import 'task_scheduler_screen.dart';
+import 'activity_feed_screen.dart';
+
+class InventoryDashboardScreen extends StatefulWidget {
+  const InventoryDashboardScreen({super.key});
+
+  @override
+  State<InventoryDashboardScreen> createState() =>
+      _InventoryDashboardScreenState();
+}
+
+class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
+  bool isLoading = true;
+  List<Salesman> salesmen = [];
+  List<Shop> shops = [];
+  List<Task> todayTasks = [];
+
+  int activeSalesmen = 0;
+  int totalShops = 0;
+  int pendingTasks = 0;
+  int completedTasks = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    setState(() => isLoading = true);
+    try {
+      final fetchedSalesmen =
+          await EnhancedTaskAssignmentService.fetchAllSalesmen();
+      final fetchedShops = await InventoryTrackingService.getAllShops();
+      final fetchedTasks = await InventoryTrackingService.getTasksByDate(
+        DateTime.now(),
+      );
+
+      setState(() {
+        salesmen = fetchedSalesmen;
+        shops = fetchedShops;
+        todayTasks = fetchedTasks;
+
+        activeSalesmen = salesmen.length;
+        totalShops = shops.length;
+        pendingTasks = todayTasks
+            .where((t) => t.status == TaskStatus.pending)
+            .length;
+        completedTasks = todayTasks
+            .where((t) => t.status == TaskStatus.completed)
+            .length;
+
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Inventory Dashboard'),
+        backgroundColor: const Color(0xFFD7BE69),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadDashboardData,
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadDashboardData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatsCards(),
+                    const SizedBox(height: 24),
+                    _buildQuickActions(),
+                    const SizedBox(height: 24),
+                    _buildSalesmenList(),
+                    const SizedBox(height: 24),
+                    _buildTodayTasks(),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildStatsCards() {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.5,
+      children: [
+        _buildStatCard(
+          'Active Salesmen',
+          activeSalesmen.toString(),
+          Icons.people,
+          Colors.blue,
+        ),
+        _buildStatCard(
+          'Total Shops',
+          totalShops.toString(),
+          Icons.store,
+          Colors.green,
+        ),
+        _buildStatCard(
+          'Pending Tasks',
+          pendingTasks.toString(),
+          Icons.pending_actions,
+          Colors.orange,
+        ),
+        _buildStatCard(
+          'Completed Today',
+          completedTasks.toString(),
+          Icons.check_circle,
+          Colors.purple,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: color),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Quick Actions',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 2,
+          children: [
+            _buildActionButton(
+              'Map View',
+              Icons.map,
+              Colors.blue,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MapViewScreen()),
+              ),
+            ),
+            _buildActionButton(
+              'Shop List',
+              Icons.list,
+              Colors.green,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ShopListScreen()),
+              ),
+            ),
+            _buildActionButton(
+              'Task Scheduler',
+              Icons.calendar_today,
+              Colors.orange,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TaskSchedulerScreen()),
+              ),
+            ),
+            _buildActionButton(
+              'Activity Feed',
+              Icons.feed,
+              Colors.purple,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ActivityFeedScreen()),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSalesmenList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Salesmen Status',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            TextButton(onPressed: () {}, child: const Text('View All')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        salesmen.isEmpty
+            ? const Center(child: Text('No salesmen found'))
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: salesmen.length > 5 ? 5 : salesmen.length,
+                itemBuilder: (context, index) {
+                  final salesman = salesmen[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFD7BE69),
+                        child: Text(
+                          salesman.name[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      title: Text(salesman.name),
+                      subtitle: Text(salesman.contactNumber),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: const Text(
+                          'Online',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  Widget _buildTodayTasks() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "Today's Tasks",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TaskSchedulerScreen()),
+              ),
+              child: const Text('View All'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        todayTasks.isEmpty
+            ? const Center(child: Text('No tasks for today'))
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: todayTasks.length > 5 ? 5 : todayTasks.length,
+                itemBuilder: (context, index) {
+                  final task = todayTasks[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.task_alt,
+                        color: Color(task.status.colorValue),
+                      ),
+                      title: Text(task.shopName),
+                      subtitle: Text(
+                        '${task.salesmanName} • ${task.scheduledTime}',
+                      ),
+                      trailing: Chip(
+                        label: Text(
+                          task.status.displayName,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        backgroundColor: Color(
+                          task.status.colorValue,
+                        ).withOpacity(0.2),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+}

@@ -1140,7 +1140,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedBusinessType,
+              initialValue: _selectedBusinessType,
               decoration: const InputDecoration(
                 labelText: 'Business Type',
                 border: OutlineInputBorder(),
@@ -1152,7 +1152,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedBusinessSize,
+              initialValue: _selectedBusinessSize,
               decoration: const InputDecoration(
                 labelText: 'Business Size',
                 border: OutlineInputBorder(),
@@ -1216,7 +1216,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
             const SizedBox(height: 12),
             if (_availableAreas.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: _selectedArea,
+                initialValue: _selectedArea,
                 decoration: const InputDecoration(
                   labelText: 'Area',
                   border: OutlineInputBorder(),

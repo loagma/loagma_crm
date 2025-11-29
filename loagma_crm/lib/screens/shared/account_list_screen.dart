@@ -173,7 +173,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: tmpStage,
+                    initialValue: tmpStage,
                     decoration: const InputDecoration(
                       labelText: 'Customer Stage',
                     ),
@@ -190,7 +190,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   ),
                   const SizedBox(height: 15),
                   DropdownButtonFormField<bool>(
-                    value: tmpApproved,
+                    initialValue: tmpApproved,
                     decoration: const InputDecoration(
                       labelText: 'Approval Status',
                     ),

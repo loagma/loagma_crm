@@ -262,3 +262,53 @@ model Expense {
   @@index([expenseDate])
   @@index([expenseType])
 }
+
+model TaskAssignment {
+  id              String    @id @default(cuid())
+  salesmanId      String
+  salesmanName    String
+  pincode         String
+  country         String?
+  state           String?
+  district        String?
+  city            String?
+  areas           String[]  // Array of area names
+  businessTypes   String[]  // Array of business types: grocery, cafe, hotel, etc.
+  totalBusinesses Int?      @default(0)
+  assignedDate    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([salesmanId])
+  @@index([pincode])
+  @@index([assignedDate])
+}
+
+model Shop {
+  id              String    @id @default(cuid())
+  placeId         String?   @unique // Google Places ID
+  name            String
+  businessType    String    // grocery, cafe, hotel, dairy, restaurant, bakery, pharmacy, supermarket, others
+  address         String?
+  pincode         String
+  area            String?
+  city            String?
+  state           String?
+  country         String?
+  latitude        Float?
+  longitude       Float?
+  phoneNumber     String?
+  rating          Float?
+  stage           String    @default("new") // new, follow-up, converted, lost
+  assignedTo      String?   // Salesman ID
+  notes           String?
+  lastContactDate DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([pincode])
+  @@index([businessType])
+  @@index([stage])
+  @@index([assignedTo])
+  @@index([area])
+}

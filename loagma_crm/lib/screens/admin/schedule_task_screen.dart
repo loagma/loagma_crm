@@ -171,7 +171,7 @@ class _ScheduleTaskScreenState extends State<ScheduleTaskScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedSalesman,
+                initialValue: _selectedSalesman,
                 decoration: InputDecoration(
                   hintText: 'Choose a salesman',
                   prefixIcon: const Icon(Icons.person),
@@ -224,7 +224,7 @@ class _ScheduleTaskScreenState extends State<ScheduleTaskScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedTaskType,
+                initialValue: _selectedTaskType,
                 decoration: InputDecoration(
                   hintText: 'Select task type',
                   prefixIcon: const Icon(Icons.category),
@@ -259,7 +259,7 @@ class _ScheduleTaskScreenState extends State<ScheduleTaskScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedPriority,
+                initialValue: _selectedPriority,
                 decoration: InputDecoration(
                   hintText: 'Select priority',
                   prefixIcon: const Icon(Icons.flag),

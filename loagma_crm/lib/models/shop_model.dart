@@ -1,0 +1,101 @@
+class Shop {
+  final String id;
+  final String? placeId;
+  final String name;
+  final String businessType;
+  final String? address;
+  final String pincode;
+  final String? area;
+  final String? city;
+  final String? state;
+  final String? country;
+  final double? latitude;
+  final double? longitude;
+  final String? phoneNumber;
+  final double? rating;
+  final String stage;
+  final String? assignedTo;
+  final String? notes;
+  final DateTime? lastContactDate;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  Shop({
+    required this.id,
+    this.placeId,
+    required this.name,
+    required this.businessType,
+    this.address,
+    required this.pincode,
+    this.area,
+    this.city,
+    this.state,
+    this.country,
+    this.latitude,
+    this.longitude,
+    this.phoneNumber,
+    this.rating,
+    this.stage = 'new',
+    this.assignedTo,
+    this.notes,
+    this.lastContactDate,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory Shop.fromJson(Map<String, dynamic> json) {
+    return Shop(
+      id: json['id'] ?? '',
+      placeId: json['placeId'],
+      name: json['name'] ?? '',
+      businessType: json['businessType'] ?? '',
+      address: json['address'],
+      pincode: json['pincode'] ?? '',
+      area: json['area'],
+      city: json['city'],
+      state: json['state'],
+      country: json['country'],
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
+      phoneNumber: json['phoneNumber'],
+      rating: json['rating']?.toDouble(),
+      stage: json['stage'] ?? 'new',
+      assignedTo: json['assignedTo'],
+      notes: json['notes'],
+      lastContactDate: json['lastContactDate'] != null
+          ? DateTime.parse(json['lastContactDate'])
+          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'placeId': placeId,
+      'name': name,
+      'businessType': businessType,
+      'address': address,
+      'pincode': pincode,
+      'area': area,
+      'city': city,
+      'state': state,
+      'country': country,
+      'latitude': latitude,
+      'longitude': longitude,
+      'phoneNumber': phoneNumber,
+      'rating': rating,
+      'stage': stage,
+      'assignedTo': assignedTo,
+      'notes': notes,
+      'lastContactDate': lastContactDate?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
