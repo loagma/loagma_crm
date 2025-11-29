@@ -133,7 +133,7 @@ class _CreateExpenseScreenState extends State<CreateExpenseScreen> {
           children: [
             // Expense Type
             DropdownButtonFormField<String>(
-              value: _selectedExpenseType,
+              initialValue: _selectedExpenseType,
               decoration: InputDecoration(
                 labelText: 'Expense Type *',
                 prefixIcon: const Icon(Icons.category),

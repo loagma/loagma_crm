@@ -854,7 +854,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 subtitle: Text(_isActive ? 'Active' : 'Inactive'),
                 value: _isActive,
                 onChanged: (value) => setState(() => _isActive = value),
-                activeColor: const Color(0xFFD7BE69),
+                activeThumbColor: const Color(0xFFD7BE69),
                 secondary: Icon(
                   _isActive ? Icons.check_circle : Icons.cancel,
                   color: _isActive ? Colors.green : Colors.red,
@@ -1261,7 +1261,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     String? Function(String?)? validator,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),

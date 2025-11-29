@@ -280,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     )
                   else
                     DropdownButtonFormField<String>(
-                      value: selectedDevRole,
+                      initialValue: selectedDevRole,
                       items: roles.map((role) {
                         return DropdownMenuItem<String>(
                           value: role['name'],

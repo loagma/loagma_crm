@@ -207,7 +207,7 @@ class _ViewAllMastersScreenState extends State<ViewAllMastersScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: filterCustomerStage ?? 'All',
+                        initialValue: filterCustomerStage ?? 'All',
                         decoration: InputDecoration(
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),

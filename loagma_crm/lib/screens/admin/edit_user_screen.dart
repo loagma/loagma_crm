@@ -710,7 +710,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
                   // Gender
                   DropdownButtonFormField<String>(
-                    value: selectedGender,
+                    initialValue: selectedGender,
                     items: const [
                       DropdownMenuItem(value: "Male", child: Text("Male")),
                       DropdownMenuItem(value: "Female", child: Text("Female")),
@@ -974,7 +974,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
                     Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: selectedArea,
+                          initialValue: selectedArea,
                           decoration: InputDecoration(
                             labelText: "Area *",
                             prefixIcon: const Icon(Icons.place),
@@ -1232,7 +1232,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
                   // Department
                   DropdownButtonFormField<String>(
-                    value: selectedDepartmentId,
+                    initialValue: selectedDepartmentId,
                     items: departments.map((dept) {
                       return DropdownMenuItem<String>(
                         value: dept['id'],
@@ -1256,7 +1256,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
                   // Primary Role
                   DropdownButtonFormField<String>(
-                    value: selectedRoleId,
+                    initialValue: selectedRoleId,
                     items: roles.map((role) {
                       return DropdownMenuItem<String>(
                         value: role['id'],

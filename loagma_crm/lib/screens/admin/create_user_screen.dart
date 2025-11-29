@@ -1147,7 +1147,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               Column(
                 children: [
                   DropdownButtonFormField<String>(
-                    value: selectedArea,
+                    initialValue: selectedArea,
                     decoration: _input("Area *", Icons.place),
                     items: _availableAreas
                         .map(
