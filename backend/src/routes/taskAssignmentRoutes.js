@@ -11,12 +11,12 @@ import {
   updateShopStage,
   getShopsByPincode
 } from '../controllers/taskAssignmentController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+// import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(authMiddleware);
+// All routes require authentication (DISABLED FOR DEV)
+// router.use(authMiddleware);
 
 // Salesmen routes
 router.get('/salesmen', getAllSalesmen);
