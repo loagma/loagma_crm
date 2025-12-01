@@ -333,6 +333,13 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
             .where((shop) => shop.pincode == pincode)
             .length;
 
+        print('📤 Sending assignment request:');
+        print('   Salesman: $_selectedSalesmanId ($_selectedSalesmanName)');
+        print('   Pincode: $pincode');
+        print('   Areas: $areasToAssign');
+        print('   Business Types: ${_selectedBusinessTypes.toList()}');
+        print('   Total Businesses: $businessesForPincode');
+
         final result = await _service.assignAreasToSalesman(
           _selectedSalesmanId!,
           _selectedSalesmanName!,
@@ -346,8 +353,16 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           totalBusinesses: businessesForPincode,
         );
 
+        print('📥 Assignment result: $result');
+
         if (result['success'] == true) {
           successCount++;
+          print('✅ Assignment successful for pincode $pincode');
+        } else {
+          print(
+            '❌ Assignment failed for pincode $pincode: ${result['message']}',
+          );
+          _showError('Failed to assign pincode $pincode: ${result['message']}');
         }
       }
 
@@ -1385,7 +1400,40 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           return const Center(child: CircularProgressIndicator());
         }
 
+        // Debug logging
+        print('📊 History Tab - Salesman ID: $_selectedSalesmanId');
+        print('📊 History Tab - Has Data: ${snapshot.hasData}');
+        print('📊 History Tab - Data: ${snapshot.data}');
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 80, color: Colors.red[400]),
+                const SizedBox(height: 16),
+                const Text(
+                  'Error loading assignments',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: TextStyle(color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
         if (!snapshot.hasData ||
+            snapshot.data!['success'] != true ||
             (snapshot.data!['assignments'] as List).isEmpty) {
           return Center(
             child: Column(
@@ -1401,6 +1449,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                 Text(
                   'Assign tasks to $_selectedSalesmanName',
                   style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() {}),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                  ),
                 ),
               ],
             ),
