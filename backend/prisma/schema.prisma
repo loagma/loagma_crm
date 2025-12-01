@@ -91,8 +91,6 @@ model User {
   alternativeNumber  String?
   roleId             String?
   roles              String[]      @default([])
-  primaryRole        String?
-  otherRoles         String[]      @default([])
   departmentId       String?
   otp                String?
   otpExpiry          DateTime?
