@@ -83,29 +83,47 @@ class MapTaskAssignmentService {
   }) async {
     try {
       final headers = await _getHeaders();
+      final url = '$baseUrl/task-assignments/assignments/areas';
+      final payload = {
+        'salesmanId': salesmanId,
+        'salesmanName': salesmanName,
+        'pincode': pincode,
+        'country': country,
+        'state': state,
+        'district': district,
+        'city': city,
+        'areas': areas,
+        'businessTypes': businessTypes,
+        'totalBusinesses': totalBusinesses,
+      };
+
+      print('🌐 API Call: POST $url');
+      print('📦 Payload: $payload');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/task-assignments/assignments/areas'),
+        Uri.parse(url),
         headers: headers,
-        body: json.encode({
-          'salesmanId': salesmanId,
-          'salesmanName': salesmanName,
-          'pincode': pincode,
-          'country': country,
-          'state': state,
-          'district': district,
-          'city': city,
-          'areas': areas,
-          'businessTypes': businessTypes,
-          'totalBusinesses': totalBusinesses,
-        }),
+        body: json.encode(payload),
       );
 
+      print('📡 Response Status: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        print('✅ Assignment API Success: $data');
+        return data;
       } else {
-        return {'success': false, 'message': 'Failed to assign areas'};
+        print(
+          '❌ Assignment API Failed: ${response.statusCode} - ${response.body}',
+        );
+        return {
+          'success': false,
+          'message': 'Failed to assign areas (Status: ${response.statusCode})',
+        };
       }
     } catch (e) {
+      print('❌ Assignment API Error: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
@@ -163,8 +181,12 @@ class MapTaskAssignmentService {
   ) async {
     try {
       final headers = await _getHeaders();
+      final url = '$baseUrl/task-assignments/shops';
+
+      print('💾 Saving ${shops.length} shops for salesman: $salesmanId');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/task-assignments/shops'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({
           'shops': shops.map((s) => s.toJson()).toList(),
@@ -172,12 +194,19 @@ class MapTaskAssignmentService {
         }),
       );
 
+      print('📡 Save Shops Response: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        print('✅ Shops saved successfully');
+        return data;
       } else {
+        print('❌ Failed to save shops: ${response.statusCode}');
         return {'success': false, 'message': 'Failed to save shops'};
       }
     } catch (e) {
+      print('❌ Save shops error: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
