@@ -105,23 +105,48 @@ export const assignAreasToSalesman = async (req, res) => {
       totalBusinesses
     } = req.body;
 
+    console.log('📥 Received assignment request:', {
+      salesmanId,
+      salesmanName,
+      pincode,
+      areasCount: areas?.length,
+      businessTypes,
+      totalBusinesses
+    });
+
     // Validation
     if (!salesmanId || !pincode || !areas || areas.length === 0) {
+      console.log('❌ Validation failed: Missing required fields');
       return res.status(400).json({
         success: false,
         message: 'salesmanId, pincode, and areas are required'
       });
     }
 
-    // Check if salesman exists
+    // Check if salesman exists (only check basic fields)
     const salesman = await prisma.user.findUnique({
-      where: { id: salesmanId }
+      where: { id: salesmanId },
+      select: {
+        id: true,
+        name: true,
+        employeeCode: true,
+        isActive: true
+      }
     });
 
     if (!salesman) {
+      console.log('❌ Salesman not found:', salesmanId);
       return res.status(404).json({
         success: false,
         message: 'Salesman not found'
+      });
+    }
+
+    if (!salesman.isActive) {
+      console.log('❌ Salesman is not active:', salesmanId);
+      return res.status(400).json({
+        success: false,
+        message: 'Salesman is not active'
       });
     }
 
