@@ -78,8 +78,9 @@ class MapTaskAssignmentService {
     String district,
     String city,
     List<String> areas,
-    List<String> businessTypes,
-  ) async {
+    List<String> businessTypes, {
+    int totalBusinesses = 0,
+  }) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
@@ -95,6 +96,7 @@ class MapTaskAssignmentService {
           'city': city,
           'areas': areas,
           'businessTypes': businessTypes,
+          'totalBusinesses': totalBusinesses,
         }),
       );
 

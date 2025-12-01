@@ -5,11 +5,11 @@ import { searchBusinessesByPincode } from '../services/googlePlacesService.js';
 const prisma = new PrismaClient();
 
 /**
- * Get all salesmen (users with salesman role in any case variation)
+ * Get all salesmen (users with salesman role in primaryRole, otherRoles, roles array, or roleId)
  */
 export const getAllSalesmen = async (req, res) => {
   try {
-    // Fetch all active users WITH roleId
+    // Fetch all active users with all role-related fields
     const allUsers = await prisma.user.findMany({
       where: {
         isActive: true
@@ -21,23 +21,41 @@ export const getAllSalesmen = async (req, res) => {
         employeeCode: true,
         email: true,
         roles: true,
-        roleId: true   // ✅ MUST INCLUDE THIS
+        roleId: true,
+        primaryRole: true,
+        otherRoles: true
       }
     });
 
     const salesmen = allUsers
       .filter(user => {
-        const { roles, roleId } = user;
-
-        const hasRoleInArray =
-          Array.isArray(roles) &&
-          roles.some(role => role?.toLowerCase() === "salesman");
-
-        const hasRoleInRoleId =
-          roleId &&
-          roleId.toString().toLowerCase() === "salesman";
-
-        return hasRoleInArray || hasRoleInRoleId;
+        const salesmanLower = 'salesman';
+        
+        // Check primaryRole
+        if (user.primaryRole && user.primaryRole.toLowerCase() === salesmanLower) {
+          return true;
+        }
+        
+        // Check otherRoles array
+        if (Array.isArray(user.otherRoles) && user.otherRoles.length > 0) {
+          if (user.otherRoles.some(role => role?.toLowerCase() === salesmanLower)) {
+            return true;
+          }
+        }
+        
+        // Check roles array (backward compatibility)
+        if (Array.isArray(user.roles) && user.roles.length > 0) {
+          if (user.roles.some(role => role?.toLowerCase() === salesmanLower)) {
+            return true;
+          }
+        }
+        
+        // Check roleId (backward compatibility)
+        if (user.roleId && user.roleId.toString().toLowerCase() === salesmanLower) {
+          return true;
+        }
+        
+        return false;
       })
       .map(user => ({
         id: user.id,
@@ -110,7 +128,8 @@ export const assignAreasToSalesman = async (req, res) => {
       district,
       city,
       areas,
-      businessTypes
+      businessTypes,
+      totalBusinesses
     } = req.body;
 
     // Validation
@@ -133,20 +152,45 @@ export const assignAreasToSalesman = async (req, res) => {
       });
     }
 
-    // Create task assignment
-    const assignment = await prisma.taskAssignment.create({
-      data: {
+    // Check if assignment already exists for this pincode and salesman
+    const existingAssignment = await prisma.taskAssignment.findFirst({
+      where: {
         salesmanId,
-        salesmanName: salesmanName || salesman.name,
-        pincode,
-        country,
-        state,
-        district,
-        city,
-        areas,
-        businessTypes: businessTypes || []
+        pincode
       }
     });
+
+    let assignment;
+    if (existingAssignment) {
+      // Update existing assignment
+      assignment = await prisma.taskAssignment.update({
+        where: { id: existingAssignment.id },
+        data: {
+          areas,
+          businessTypes: businessTypes || [],
+          totalBusinesses: totalBusinesses || 0,
+          updatedAt: new Date()
+        }
+      });
+      console.log(`✅ Updated assignment for ${salesmanName} in pincode ${pincode}`);
+    } else {
+      // Create new task assignment
+      assignment = await prisma.taskAssignment.create({
+        data: {
+          salesmanId,
+          salesmanName: salesmanName || salesman.name,
+          pincode,
+          country,
+          state,
+          district,
+          city,
+          areas,
+          businessTypes: businessTypes || [],
+          totalBusinesses: totalBusinesses || 0
+        }
+      });
+      console.log(`✅ Created new assignment for ${salesmanName} in pincode ${pincode}`);
+    }
 
     res.status(201).json({
       success: true,
@@ -239,6 +283,7 @@ export const saveShops = async (req, res) => {
     }
 
     const savedShops = [];
+    const shopsByPincode = {};
 
     for (const shop of shops) {
       // Check if shop already exists by placeId
@@ -249,19 +294,19 @@ export const saveShops = async (req, res) => {
         });
       }
 
+      let savedShop;
       if (existingShop) {
         // Update existing shop
-        const updated = await prisma.shop.update({
+        savedShop = await prisma.shop.update({
           where: { id: existingShop.id },
           data: {
             assignedTo: salesmanId || existingShop.assignedTo,
             updatedAt: new Date()
           }
         });
-        savedShops.push(updated);
       } else {
         // Create new shop
-        const created = await prisma.shop.create({
+        savedShop = await prisma.shop.create({
           data: {
             placeId: shop.placeId,
             name: shop.name,
@@ -280,14 +325,36 @@ export const saveShops = async (req, res) => {
             stage: 'new'
           }
         });
-        savedShops.push(created);
+      }
+      
+      savedShops.push(savedShop);
+      
+      // Count shops by pincode
+      const pincode = savedShop.pincode;
+      shopsByPincode[pincode] = (shopsByPincode[pincode] || 0) + 1;
+    }
+
+    // Update totalBusinesses count in task assignments
+    if (salesmanId) {
+      for (const [pincode, count] of Object.entries(shopsByPincode)) {
+        await prisma.taskAssignment.updateMany({
+          where: {
+            salesmanId,
+            pincode
+          },
+          data: {
+            totalBusinesses: count
+          }
+        });
+        console.log(`✅ Updated assignment for pincode ${pincode}: ${count} businesses`);
       }
     }
 
     res.status(201).json({
       success: true,
       message: `Saved ${savedShops.length} shops`,
-      shops: savedShops
+      shops: savedShops,
+      breakdown: shopsByPincode
     });
   } catch (error) {
     console.error('Save shops error:', error);
