@@ -23,7 +23,7 @@ class _UnifiedTaskAssignmentScreenState
   String? _selectedSalesmanId;
   String? _selectedSalesmanName;
   List<dynamic> _salesmen = [];
-  Map<String, dynamic>? _locationInfo;
+  List<Map<String, dynamic>> _pincodeLocations = []; // Multiple pincodes
   List<String> _selectedAreas = [];
   Set<String> _selectedBusinessTypes = {};
   bool _isLoading = false;
@@ -76,17 +76,22 @@ class _UnifiedTaskAssignmentScreenState
       return;
     }
 
+    // Check if pincode already added
+    final pincode = _pincodeController.text;
+    if (_pincodeLocations.any((loc) => loc['pincode'] == pincode)) {
+      _showError('Pincode already added');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final result = await _service.fetchLocationByPincode(
-        _pincodeController.text,
-      );
+      final result = await _service.fetchLocationByPincode(pincode);
       if (result['success']) {
         setState(() {
-          _locationInfo = result['location'];
-          _selectedAreas = [];
+          _pincodeLocations.add(result['location']);
+          _pincodeController.clear();
         });
-        Fluttertoast.showToast(msg: 'Location fetched successfully');
+        Fluttertoast.showToast(msg: 'Pincode added successfully');
       } else {
         _showError(result['message'] ?? 'Failed to fetch location');
       }
@@ -97,35 +102,57 @@ class _UnifiedTaskAssignmentScreenState
     }
   }
 
+  void _removePincode(int index) {
+    setState(() {
+      _pincodeLocations.removeAt(index);
+      _selectedAreas.clear();
+    });
+  }
+
   Future<void> _fetchBusinesses() async {
-    if (_pincodeController.text.isEmpty || _selectedBusinessTypes.isEmpty) {
-      _showError('Please enter pincode and select business types');
+    if (_pincodeLocations.isEmpty || _selectedBusinessTypes.isEmpty) {
+      _showError('Please add pincodes and select business types');
       return;
     }
 
     setState(() => _isFetchingBusinesses = true);
     try {
-      final result = await _service.searchBusinesses(
-        _pincodeController.text,
-        _selectedAreas,
-        _selectedBusinessTypes.toList(),
-      );
+      List<Shop> allShops = [];
+      Map<String, dynamic> totalBreakdown = {};
 
-      if (result['success']) {
-        final businesses = result['businesses'] as List;
-        setState(() {
-          _shops = businesses.map((b) => Shop.fromJson(b)).toList();
-        });
-
-        _showSuccessDialog(
-          'Found ${result['totalBusinesses']} businesses',
-          result['breakdown'],
+      // Fetch businesses for each pincode
+      for (var location in _pincodeLocations) {
+        final result = await _service.searchBusinesses(
+          location['pincode'],
+          _selectedAreas.isEmpty
+              ? (location['areas'] as List).cast<String>()
+              : _selectedAreas,
+          _selectedBusinessTypes.toList(),
         );
 
-        _updateMapMarkers();
-      } else {
-        _showError(result['message'] ?? 'Failed to fetch businesses');
+        if (result['success']) {
+          final businesses = result['businesses'] as List;
+          allShops.addAll(businesses.map((b) => Shop.fromJson(b)).toList());
+
+          // Merge breakdown
+          if (result['breakdown'] != null) {
+            (result['breakdown'] as Map<String, dynamic>).forEach((key, value) {
+              totalBreakdown[key] = (totalBreakdown[key] ?? 0) + (value ?? 0);
+            });
+          }
+        }
       }
+
+      setState(() {
+        _shops = allShops;
+      });
+
+      _showSuccessDialog(
+        'Found ${allShops.length} businesses across ${_pincodeLocations.length} pincodes',
+        totalBreakdown,
+      );
+
+      _updateMapMarkers();
     } catch (e) {
       _showError('Error: $e');
     } finally {
@@ -264,38 +291,48 @@ class _UnifiedTaskAssignmentScreenState
   }
 
   Future<void> _assignAreas() async {
-    if (_selectedSalesmanId == null || _selectedAreas.isEmpty) {
-      _showError('Please select salesman and areas');
+    if (_selectedSalesmanId == null || _pincodeLocations.isEmpty) {
+      _showError('Please select salesman and add pincodes');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      final result = await _service.assignAreasToSalesman(
-        _selectedSalesmanId!,
-        _selectedSalesmanName!,
-        _pincodeController.text,
-        _locationInfo!['country'],
-        _locationInfo!['state'],
-        _locationInfo!['district'],
-        _locationInfo!['city'],
-        _selectedAreas,
-        _selectedBusinessTypes.toList(),
-      );
+      int totalAssignments = 0;
 
-      if (result['success']) {
-        if (_shops.isNotEmpty) {
-          await _service.saveShops(_shops, _selectedSalesmanId!);
+      // Create assignment for each pincode
+      for (var location in _pincodeLocations) {
+        final areasToAssign = _selectedAreas.isEmpty
+            ? (location['areas'] as List).cast<String>()
+            : _selectedAreas;
+
+        final result = await _service.assignAreasToSalesman(
+          _selectedSalesmanId!,
+          _selectedSalesmanName!,
+          location['pincode'],
+          location['country'],
+          location['state'],
+          location['district'],
+          location['city'],
+          areasToAssign,
+          _selectedBusinessTypes.toList(),
+        );
+
+        if (result['success']) {
+          totalAssignments++;
         }
-
-        _showSuccessDialog('Assignment Successful', {
-          'Areas': _selectedAreas.length.toString(),
-          'Shops': _shops.length.toString(),
-        });
-        _resetForm();
-      } else {
-        _showError(result['message'] ?? 'Failed to assign areas');
       }
+
+      // Save all shops
+      if (_shops.isNotEmpty) {
+        await _service.saveShops(_shops, _selectedSalesmanId!);
+      }
+
+      _showSuccessDialog('Assignment Successful', {
+        'Pincodes': totalAssignments.toString(),
+        'Shops': _shops.length.toString(),
+      });
+      _resetForm();
     } catch (e) {
       _showError('Error: $e');
     } finally {
@@ -308,7 +345,7 @@ class _UnifiedTaskAssignmentScreenState
       _pincodeController.clear();
       _selectedSalesmanId = null;
       _selectedSalesmanName = null;
-      _locationInfo = null;
+      _pincodeLocations = [];
       _selectedAreas = [];
       _selectedBusinessTypes = {};
       _shops = [];
@@ -436,55 +473,59 @@ class _UnifiedTaskAssignmentScreenState
             ],
           ),
           const SizedBox(height: 16),
-          if (_locationInfo != null) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Location Details',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const Divider(),
-                    Text('Country: ${_locationInfo!['country']}'),
-                    Text('State: ${_locationInfo!['state']}'),
-                    Text('District: ${_locationInfo!['district']}'),
-                    Text('City: ${_locationInfo!['city']}'),
-                  ],
-                ),
-              ),
+          if (_pincodeLocations.isNotEmpty) ...[
+            const Text(
+              'Added Pincodes',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
+            const SizedBox(height: 8),
+            ..._pincodeLocations.asMap().entries.map((entry) {
+              final index = entry.key;
+              final location = entry.value;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text('${location['pincode']} - ${location['city']}'),
+                  subtitle: Text(
+                    '${location['state']}, ${location['district']}\n${(location['areas'] as List).length} areas available',
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _removePincode(index),
+                  ),
+                  isThreeLine: true,
+                ),
+              );
+            }).toList(),
             const SizedBox(height: 16),
             const Text(
-              'Select Areas',
+              'Select Specific Areas (Optional - Leave empty to use all areas)',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: (_locationInfo!['areas'] as List)
-                  .map(
-                    (area) => FilterChip(
-                      label: Text(area),
-                      selected: _selectedAreas.contains(area),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedAreas.add(area);
-                          } else {
-                            _selectedAreas.remove(area);
-                          }
-                        });
-                      },
-                    ),
-                  )
-                  .toList(),
-            ),
+            if (_pincodeLocations.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                children: _pincodeLocations
+                    .expand((loc) => (loc['areas'] as List).cast<String>())
+                    .toSet()
+                    .map(
+                      (area) => FilterChip(
+                        label: Text(area),
+                        selected: _selectedAreas.contains(area),
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedAreas.add(area);
+                            } else {
+                              _selectedAreas.remove(area);
+                            }
+                          });
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
             const SizedBox(height: 16),
             const Text(
               'Select Business Types',
@@ -502,7 +543,11 @@ class _UnifiedTaskAssignmentScreenState
                         'restaurant',
                         'bakery',
                         'pharmacy',
-                        'supermarket',
+                        'supermarket'
+                            'hostel'
+                            'schools',
+                        'colleges',
+                        'Hospitals',
                         'others',
                       ]
                       .map(

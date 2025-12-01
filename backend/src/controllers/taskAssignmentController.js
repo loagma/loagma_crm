@@ -5,16 +5,13 @@ import { searchBusinessesByPincode } from '../services/googlePlacesService.js';
 const prisma = new PrismaClient();
 
 /**
- * Get all salesmen (users with salesman role)
+ * Get all salesmen (users with salesman role in any case variation)
  */
 export const getAllSalesmen = async (req, res) => {
   try {
-    const salesmen = await prisma.user.findMany({
+    // Fetch all active users WITH roleId
+    const allUsers = await prisma.user.findMany({
       where: {
-        OR: [
-          { roles: { has: 'salesman' } },
-          { roles: { has: 'Salesman' } }
-        ],
         isActive: true
       },
       select: {
@@ -22,17 +19,43 @@ export const getAllSalesmen = async (req, res) => {
         name: true,
         contactNumber: true,
         employeeCode: true,
-        email: true
-      },
-      orderBy: { name: 'asc' }
+        email: true,
+        roles: true,
+        roleId: true   // ✅ MUST INCLUDE THIS
+      }
     });
 
+    const salesmen = allUsers
+      .filter(user => {
+        const { roles, roleId } = user;
+
+        const hasRoleInArray =
+          Array.isArray(roles) &&
+          roles.some(role => role?.toLowerCase() === "salesman");
+
+        const hasRoleInRoleId =
+          roleId &&
+          roleId.toString().toLowerCase() === "salesman";
+
+        return hasRoleInArray || hasRoleInRoleId;
+      })
+      .map(user => ({
+        id: user.id,
+        name: user.name,
+        contactNumber: user.contactNumber,
+        employeeCode: user.employeeCode,
+        email: user.email
+      }));
+
+    console.log(`✅ Found ${salesmen.length} salesmen out of ${allUsers.length} active users`);
     res.json({ success: true, salesmen });
+
   } catch (error) {
     console.error('Get salesmen error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 /**
  * Get location details by pincode
