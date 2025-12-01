@@ -9,11 +9,8 @@ const prisma = new PrismaClient();
  */
 export const getAllSalesmen = async (req, res) => {
   try {
-    // Fetch all active users with all role-related fields
     const allUsers = await prisma.user.findMany({
-      where: {
-        isActive: true
-      },
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
@@ -21,58 +18,34 @@ export const getAllSalesmen = async (req, res) => {
         employeeCode: true,
         email: true,
         roles: true,
-        roleId: true,
-        primaryRole: true,
-        otherRoles: true
+        roleId: true
       }
     });
 
-    const salesmen = allUsers
-      .filter(user => {
-        const salesmanLower = 'salesman';
-        
-        // Check primaryRole
-        if (user.primaryRole && user.primaryRole.toLowerCase() === salesmanLower) {
-          return true;
-        }
-        
-        // Check otherRoles array
-        if (Array.isArray(user.otherRoles) && user.otherRoles.length > 0) {
-          if (user.otherRoles.some(role => role?.toLowerCase() === salesmanLower)) {
-            return true;
-          }
-        }
-        
-        // Check roles array (backward compatibility)
-        if (Array.isArray(user.roles) && user.roles.length > 0) {
-          if (user.roles.some(role => role?.toLowerCase() === salesmanLower)) {
-            return true;
-          }
-        }
-        
-        // Check roleId (backward compatibility)
-        if (user.roleId && user.roleId.toString().toLowerCase() === salesmanLower) {
-          return true;
-        }
-        
-        return false;
-      })
-      .map(user => ({
-        id: user.id,
-        name: user.name,
-        contactNumber: user.contactNumber,
-        employeeCode: user.employeeCode,
-        email: user.email
-      }));
+    const salesmen = allUsers.filter(user => {
+      const rId = user.roleId?.toLowerCase();
+      const rArr = Array.isArray(user.roles)
+        ? user.roles.map(r => r.toLowerCase())
+        : [];
 
-    console.log(`✅ Found ${salesmen.length} salesmen out of ${allUsers.length} active users`);
-    res.json({ success: true, salesmen });
+      return (
+        rId === "salesman" ||
+        rArr.includes("salesman")
+      );
+    });
+
+    res.json({
+      success: true,
+      count: salesmen.length,
+      salesmen
+    });
 
   } catch (error) {
-    console.error('Get salesmen error:', error);
+    console.error("Error fetching salesmen:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 /**
