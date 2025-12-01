@@ -7,44 +7,46 @@ async function testTaskAssignmentFlow() {
   console.log('='.repeat(60));
 
   try {
-    // Test 1: Check salesmen
+    // -------------------------------------------------------------------
+    // ✅ TEST 1: Fetch all ACTIVE SALESMEN
+    // -------------------------------------------------------------------
     console.log('\n📋 Test 1: Fetching Salesmen');
     console.log('-'.repeat(60));
-    const salesmen = await prisma.user.findMany({
-      where: { isActive: true },
+
+    // ❗ Best way: let Prisma filter (roles[] OR roleId === "salesman")
+    const salesmanUsers = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { roles: { has: "salesman" } },
+          { roleId: "salesman" }
+        ]
+      },
       select: {
         id: true,
         name: true,
         employeeCode: true,
         roles: true,
-        primaryRole: true,
-        otherRoles: true
+        roleId: true
       }
     });
 
-    const salesmanUsers = salesmen.filter(user => {
-      const salesmanLower = 'salesman';
-      return (
-        (user.primaryRole && user.primaryRole.toLowerCase() === salesmanLower) ||
-        (user.otherRoles && user.otherRoles.some(r => r?.toLowerCase() === salesmanLower)) ||
-        (user.roles && user.roles.some(r => r?.toLowerCase() === salesmanLower))
-      );
-    });
-
-    console.log(`✅ Total active users: ${salesmen.length}`);
     console.log(`✅ Salesmen found: ${salesmanUsers.length}`);
     salesmanUsers.forEach((s, i) => {
-      console.log(`   ${i + 1}. ${s.name} (${s.employeeCode})`);
+      console.log(`   ${i + 1}. ${s.name} (${s.employeeCode}) | roleId: ${s.roleId} | roles: ${JSON.stringify(s.roles)}`);
     });
 
     if (salesmanUsers.length === 0) {
-      console.log('\n⚠️  No salesmen found. Please create a salesman user first.');
+      console.log('\n⚠️  No salesmen found. Please add a salesman first.');
       return;
     }
 
-    // Test 2: Check task assignments
+    // -------------------------------------------------------------------
+    // ✅ TEST 2: Fetch recent task assignments
+    // -------------------------------------------------------------------
     console.log('\n📋 Test 2: Checking Task Assignments');
     console.log('-'.repeat(60));
+
     const assignments = await prisma.taskAssignment.findMany({
       orderBy: { assignedDate: 'desc' },
       take: 10
@@ -62,15 +64,19 @@ async function testTaskAssignmentFlow() {
       console.log('   No assignments yet.');
     }
 
-    // Test 3: Check shops
+    // -------------------------------------------------------------------
+    // ✅ TEST 3: Fetch top recent shops
+    // -------------------------------------------------------------------
     console.log('\n📋 Test 3: Checking Shops');
     console.log('-'.repeat(60));
+
     const shops = await prisma.shop.findMany({
       orderBy: { createdAt: 'desc' },
       take: 10
     });
 
-    console.log(`✅ Total shops: ${shops.length}`);
+    console.log(`✅ Total shops fetched: ${shops.length}`);
+
     if (shops.length > 0) {
       console.log('\nRecent shops:');
       shops.forEach((s, i) => {
@@ -98,15 +104,18 @@ async function testTaskAssignmentFlow() {
 
       console.log('\n📊 Shops by Stage:');
       Object.entries(shopsByStage).forEach(([stage, count]) => {
-        console.log(`   ${stage}: ${count} shops`);
+        console.log(`   ${stage}: ${count}`);
       });
     } else {
       console.log('   No shops yet.');
     }
 
-    // Test 4: Check assignments with shops
+    // -------------------------------------------------------------------
+    // ✅ TEST 4: Validate assignments vs shop count
+    // -------------------------------------------------------------------
     console.log('\n📋 Test 4: Assignments vs Actual Shops');
     console.log('-'.repeat(60));
+
     for (const assignment of assignments.slice(0, 5)) {
       const shopsForAssignment = await prisma.shop.count({
         where: {
@@ -117,10 +126,12 @@ async function testTaskAssignmentFlow() {
 
       const match = shopsForAssignment === assignment.totalBusinesses;
       const icon = match ? '✅' : '⚠️';
+
       console.log(`${icon} ${assignment.salesmanName} - ${assignment.pincode}`);
       console.log(`   Recorded: ${assignment.totalBusinesses || 0}, Actual: ${shopsForAssignment}`);
     }
 
+    // -------------------------------------------------------------------
     console.log('\n' + '='.repeat(60));
     console.log('✅ Test completed successfully!');
 
