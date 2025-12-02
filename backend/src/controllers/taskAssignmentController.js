@@ -221,16 +221,53 @@ export const getAssignmentsBySalesman = async (req, res) => {
 };
 
 /**
+ * Update assignment
+ */
+export const updateAssignment = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { areas, businessTypes, totalBusinesses } = req.body;
+
+    console.log('📝 Updating assignment:', assignmentId, req.body);
+
+    // Build update data object
+    const updateData = {};
+    if (areas !== undefined) updateData.areas = areas;
+    if (businessTypes !== undefined) updateData.businessTypes = businessTypes;
+    if (totalBusinesses !== undefined) updateData.totalBusinesses = totalBusinesses;
+    updateData.updatedAt = new Date();
+
+    const assignment = await prisma.taskAssignment.update({
+      where: { id: assignmentId },
+      data: updateData
+    });
+
+    console.log('✅ Assignment updated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Assignment updated successfully',
+      assignment 
+    });
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Delete assignment
  */
 export const deleteAssignment = async (req, res) => {
   try {
     const { assignmentId } = req.params;
 
+    console.log('🗑️ Deleting assignment:', assignmentId);
+
     await prisma.taskAssignment.delete({
       where: { id: assignmentId }
     });
 
+    console.log('✅ Assignment deleted successfully');
     res.json({ success: true, message: 'Assignment deleted successfully' });
   } catch (error) {
     console.error('Delete assignment error:', error);

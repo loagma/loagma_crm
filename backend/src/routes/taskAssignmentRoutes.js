@@ -4,6 +4,7 @@ import {
   getLocationByPincode,
   assignAreasToSalesman,
   getAssignmentsBySalesman,
+  updateAssignment,
   deleteAssignment,
   searchBusinesses,
   saveShops,
@@ -27,6 +28,7 @@ router.get('/location/pincode/:pincode', getLocationByPincode);
 // Assignment routes
 router.post('/assignments/areas', assignAreasToSalesman);
 router.get('/assignments/salesman/:salesmanId', getAssignmentsBySalesman);
+router.patch('/assignments/:assignmentId', updateAssignment);
 router.delete('/assignments/:assignmentId', deleteAssignment);
 
 // Business search routes
