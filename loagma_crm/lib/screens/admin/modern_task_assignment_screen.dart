@@ -23,12 +23,16 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   // Form data
   final _pincodeController = TextEditingController();
+  final _salesmanSearchController = TextEditingController();
   String? _selectedSalesmanId;
   String? _selectedSalesmanName;
   List<dynamic> _salesmen = [];
+  List<dynamic> _filteredSalesmen = [];
   List<Map<String, dynamic>> _pincodeLocations = [];
   Map<String, List<String>> _selectedAreasByPincode = {};
   Set<String> _selectedBusinessTypes = {};
+  Set<String> _mapBusinessTypeFilter = {};
+  Set<String> _mapStageFilter = {};
   bool _isLoading = false;
   bool _isFetchingBusinesses = false;
 
@@ -54,6 +58,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   void dispose() {
     _tabController.dispose();
     _pincodeController.dispose();
+    _salesmanSearchController.dispose();
     _pageController.dispose();
     _mapController?.dispose();
     super.dispose();
@@ -65,7 +70,10 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     try {
       final result = await _service.fetchSalesmen();
       if (result['success'] == true) {
-        setState(() => _salesmen = result['salesmen'] ?? []);
+        setState(() {
+          _salesmen = result['salesmen'] ?? [];
+          _filteredSalesmen = _salesmen;
+        });
       } else {
         _showError(result['message'] ?? 'Failed to load salesmen');
       }
@@ -74,6 +82,25 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  // Filter salesmen based on search
+  void _filterSalesmen(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredSalesmen = _salesmen;
+      } else {
+        _filteredSalesmen = _salesmen.where((salesman) {
+          final name = (salesman['name'] ?? '').toLowerCase();
+          final code = (salesman['employeeCode'] ?? '').toLowerCase();
+          final phone = (salesman['contactNumber'] ?? '').toLowerCase();
+          final searchLower = query.toLowerCase();
+          return name.contains(searchLower) ||
+              code.contains(searchLower) ||
+              phone.contains(searchLower);
+        }).toList();
+      }
+    });
   }
 
   // Fetch location by pincode
@@ -176,8 +203,9 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         _showError('No businesses found. Try different business types.');
       } else {
         _showSuccess('Found ${allShops.length} businesses!');
+        _mapBusinessTypeFilter = Set.from(_selectedBusinessTypes);
         _updateMapMarkers();
-        _tabController.animateTo(1); // Switch to map tab
+        _tabController.animateTo(2); // Switch to map tab
       }
     } catch (e) {
       _showError('Error: $e');
@@ -191,6 +219,18 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     final markers = <Marker>{};
 
     for (var shop in _shops) {
+      // Filter by business type if filter is active
+      if (_mapBusinessTypeFilter.isNotEmpty &&
+          !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase())) {
+        continue;
+      }
+
+      // Filter by stage if filter is active
+      if (_mapStageFilter.isNotEmpty &&
+          !_mapStageFilter.contains(shop.stage.toLowerCase())) {
+        continue;
+      }
+
       if (shop.latitude != null && shop.longitude != null) {
         markers.add(
           Marker(
@@ -227,8 +267,12 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     switch (stage.toLowerCase()) {
       case 'new':
         return BitmapDescriptor.hueYellow;
-      case 'follow-up':
+      case 'lead':
+        return BitmapDescriptor.hueOrange;
+      case 'prospect':
         return BitmapDescriptor.hueBlue;
+      case 'follow-up':
+        return BitmapDescriptor.hueCyan;
       case 'converted':
         return BitmapDescriptor.hueGreen;
       case 'lost':
@@ -388,7 +432,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     }
   }
 
-  // Reset form (keep salesman selected to view history)
+  // Reset form (keep salesman selected to view assignments)
   void _resetForm() {
     setState(() {
       _currentStep = 0;
@@ -401,8 +445,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       _markers = {};
     });
     _pageController.jumpToPage(0);
-    // Switch to history tab to show the new assignment
-    _tabController.animateTo(2);
+    // Switch to assignments tab to show the new assignment
+    _tabController.animateTo(1);
   }
 
   // Show error
@@ -506,15 +550,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           controller: _tabController,
           indicatorColor: Colors.white,
           tabs: const [
-            Tab(icon: Icon(Icons.assignment_turned_in), text: 'Assign'),
-            Tab(icon: Icon(Icons.map), text: 'Map'),
-            Tab(icon: Icon(Icons.history), text: 'History'),
+            Tab(text: 'Assign'),
+            Tab(text: 'Assignments'),
+            Tab(text: 'Map'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildAssignTab(), _buildMapTab(), _buildHistoryTab()],
+        children: [_buildAssignTab(), _buildAssignmentsTab(), _buildMapTab()],
       ),
     );
   }
@@ -664,9 +708,32 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 16),
+          // Search field
+          TextField(
+            controller: _salesmanSearchController,
+            decoration: InputDecoration(
+              labelText: 'Search Salesman',
+              hintText: 'Search by name, code, or phone',
+              prefixIcon: const Icon(Icons.search, color: primaryColor),
+              suffixIcon: _salesmanSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _salesmanSearchController.clear();
+                        _filterSalesmen('');
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onChanged: _filterSalesmen,
+          ),
+          const SizedBox(height: 16),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
-          else if (_salesmen.isEmpty)
+          else if (_filteredSalesmen.isEmpty)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -674,13 +741,17 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   children: [
                     Icon(Icons.person_off, size: 64, color: Colors.grey[400]),
                     const SizedBox(height: 16),
-                    const Text('No salesmen found'),
+                    Text(
+                      _salesmen.isEmpty
+                          ? 'No salesmen found'
+                          : 'No matching salesmen',
+                    ),
                   ],
                 ),
               ),
             )
           else
-            ...(_salesmen.map((salesman) {
+            ...(_filteredSalesmen.map((salesman) {
               final isSelected = _selectedSalesmanId == salesman['id'];
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -1257,6 +1328,18 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       );
     }
 
+    final filteredShopsCount = _shops.where((shop) {
+      if (_mapBusinessTypeFilter.isNotEmpty &&
+          !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase())) {
+        return false;
+      }
+      if (_mapStageFilter.isNotEmpty &&
+          !_mapStageFilter.contains(shop.stage.toLowerCase())) {
+        return false;
+      }
+      return true;
+    }).length;
+
     return Stack(
       children: [
         GoogleMap(
@@ -1272,10 +1355,17 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           myLocationEnabled: true,
           myLocationButtonEnabled: true,
           mapType: MapType.normal,
+          zoomGesturesEnabled: true,
+          scrollGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+          rotateGesturesEnabled: true,
+          zoomControlsEnabled: false,
         ),
+        // Filters
         Positioned(
-          top: 16,
-          right: 16,
+          top: 8,
+          left: 8,
+          right: 8,
           child: Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
@@ -1285,45 +1375,143 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Legend',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  // Header with clear all button
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.filter_list,
+                        size: 18,
+                        color: primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Filters',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_mapBusinessTypeFilter.isNotEmpty ||
+                          _mapStageFilter.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _mapBusinessTypeFilter.clear();
+                              _mapStageFilter.clear();
+                              _updateMapMarkers();
+                            });
+                          },
+                          child: const Text(
+                            'Clear All',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                    ],
                   ),
-                  const Divider(height: 16),
-                  _buildLegendItem('New', Colors.yellow),
-                  _buildLegendItem('Follow-up', Colors.blue),
-                  _buildLegendItem('Converted', Colors.green),
-                  _buildLegendItem('Lost', Colors.red),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: 16,
-          left: 16,
-          right: 16,
-          child: Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatItem(Icons.business, 'Total', '${_shops.length}'),
-                  _buildStatItem(
-                    Icons.location_on,
-                    'Pincodes',
-                    '${_pincodeLocations.length}',
+                  const SizedBox(height: 8),
+                  // Stage Filter (Funnel)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.trending_up,
+                        size: 14,
+                        color: primaryColor,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Stage:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  _buildStatItem(
-                    Icons.category,
-                    'Types',
-                    '${_selectedBusinessTypes.length}',
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildStageFilterChip('New', 'new', Colors.yellow),
+                      _buildStageFilterChip('Lead', 'lead', Colors.orange),
+                      _buildStageFilterChip(
+                        'Prospect',
+                        'prospect',
+                        Colors.blue,
+                      ),
+                      _buildStageFilterChip(
+                        'Follow-up',
+                        'follow-up',
+                        Colors.cyan,
+                      ),
+                      _buildStageFilterChip(
+                        'Converted',
+                        'converted',
+                        Colors.green,
+                      ),
+                      _buildStageFilterChip('Lost', 'lost', Colors.red),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 10),
+                  // Business Type Filter
+                  Row(
+                    children: [
+                      const Icon(Icons.business, size: 14, color: primaryColor),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Business Type:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _selectedBusinessTypes.map((type) {
+                      final isSelected = _mapBusinessTypeFilter.contains(type);
+                      return FilterChip(
+                        label: Text(
+                          type[0].toUpperCase() + type.substring(1),
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _mapBusinessTypeFilter.add(type);
+                            } else {
+                              _mapBusinessTypeFilter.remove(type);
+                            }
+                            _updateMapMarkers();
+                          });
+                        },
+                        selectedColor: primaryColor.withOpacity(0.3),
+                        checkmarkColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Showing $filteredShopsCount of ${_shops.length} businesses',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -1331,6 +1519,43 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStageFilterChip(String label, String value, Color color) {
+    final isSelected = _mapStageFilter.contains(value);
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey.shade400, width: 0.5),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() {
+          if (selected) {
+            _mapStageFilter.add(value);
+          } else {
+            _mapStageFilter.remove(value);
+          }
+          _updateMapMarkers();
+        });
+      },
+      selectedColor: color.withOpacity(0.3),
+      checkmarkColor: color,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
@@ -1369,13 +1594,157 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     );
   }
 
-  Widget _buildHistoryTab() {
+  // Delete assignment
+  Future<void> _deleteAssignment(Map<String, dynamic> assignment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 12),
+            Text('Delete Assignment'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete the assignment for ${assignment['city']}, ${assignment['pincode']}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final result = await _service.deleteAssignment(assignment['id']);
+      if (result['success'] == true) {
+        _showSuccess('Assignment deleted successfully');
+        setState(() {}); // Refresh the list
+      } else {
+        _showError(result['message'] ?? 'Failed to delete assignment');
+      }
+    } catch (e) {
+      _showError('Error: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Edit assignment
+  Future<void> _editAssignment(Map<String, dynamic> assignment) async {
+    final areas = (assignment['areas'] as List).cast<String>();
+    final businessTypes = (assignment['businessTypes'] as List).cast<String>();
+
+    final areasController = TextEditingController(text: areas.join(', '));
+    final businessTypesController = TextEditingController(
+      text: businessTypes.join(', '),
+    );
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit, color: primaryColor),
+            SizedBox(width: 12),
+            Text('Edit Assignment'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: areasController,
+                decoration: const InputDecoration(
+                  labelText: 'Areas (comma-separated)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: businessTypesController,
+                decoration: const InputDecoration(
+                  labelText: 'Business Types (comma-separated)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newAreas = areasController.text
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              final newBusinessTypes = businessTypesController.text
+                  .split(',')
+                  .map((e) => e.trim().toLowerCase())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+
+              Navigator.pop(context, {
+                'areas': newAreas,
+                'businessTypes': newBusinessTypes,
+              });
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final updateResult = await _service.updateAssignment(
+        assignment['id'],
+        result,
+      );
+      if (updateResult['success'] == true) {
+        _showSuccess('Assignment updated successfully');
+        setState(() {}); // Refresh the list
+      } else {
+        _showError(updateResult['message'] ?? 'Failed to update assignment');
+      }
+    } catch (e) {
+      _showError('Error: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildAssignmentsTab() {
     if (_selectedSalesmanId == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history, size: 80, color: Colors.grey[400]),
+            Icon(Icons.assignment, size: 80, color: Colors.grey[400]),
             const SizedBox(height: 16),
             const Text(
               'No salesman selected',
@@ -1393,7 +1762,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
     // Use a key to force rebuild when switching tabs
     return FutureBuilder(
-      key: ValueKey('history_$_selectedSalesmanId'),
+      key: ValueKey('assignments_$_selectedSalesmanId'),
       future: _service.getAssignmentsBySalesman(_selectedSalesmanId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1401,9 +1770,9 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         }
 
         // Debug logging
-        print('📊 History Tab - Salesman ID: $_selectedSalesmanId');
-        print('📊 History Tab - Has Data: ${snapshot.hasData}');
-        print('📊 History Tab - Data: ${snapshot.data}');
+        print('📊 Assignments Tab - Salesman ID: $_selectedSalesmanId');
+        print('📊 Assignments Tab - Has Data: ${snapshot.hasData}');
+        print('📊 Assignments Tab - Data: ${snapshot.data}');
 
         if (snapshot.hasError) {
           return Center(
@@ -1497,6 +1866,29 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                 ),
                 subtitle: Text(
                   'Pincode: ${assignment['pincode']} • ${areas.length} areas',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
+                      onPressed: () => _editAssignment(assignment),
+                      tooltip: 'Edit',
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                        size: 20,
+                      ),
+                      onPressed: () => _deleteAssignment(assignment),
+                      tooltip: 'Delete',
+                    ),
+                  ],
                 ),
                 children: [
                   Padding(

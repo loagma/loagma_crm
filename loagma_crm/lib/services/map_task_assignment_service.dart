@@ -250,4 +250,70 @@ class MapTaskAssignmentService {
       return {'success': false, 'message': 'Error: $e'};
     }
   }
+
+  Future<Map<String, dynamic>> deleteAssignment(String assignmentId) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$baseUrl/task-assignments/assignments/$assignmentId';
+      print('🗑️ Deleting assignment: $url');
+
+      final response = await http.delete(Uri.parse(url), headers: headers);
+
+      print('📡 Delete Response: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Assignment deleted successfully');
+        return data;
+      } else {
+        print('❌ Failed to delete: ${response.statusCode}');
+        return {
+          'success': false,
+          'message':
+              'Failed to delete assignment (Status: ${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      print('❌ Delete error: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateAssignment(
+    String assignmentId,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$baseUrl/task-assignments/assignments/$assignmentId';
+      print('✏️ Updating assignment: $url');
+      print('📦 Updates: $updates');
+
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: headers,
+        body: json.encode(updates),
+      );
+
+      print('📡 Update Response: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Assignment updated successfully');
+        return data;
+      } else {
+        print('❌ Failed to update: ${response.statusCode}');
+        return {
+          'success': false,
+          'message':
+              'Failed to update assignment (Status: ${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      print('❌ Update error: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
 }
