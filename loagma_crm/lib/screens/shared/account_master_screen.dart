@@ -29,6 +29,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   bool isCheckingContact = false;
   String? contactNumberError;
   Map<String, dynamic>? existingAccountData;
+  int _formResetKey = 0; // Key to force form rebuild on clear
 
   // Controllers
   final _businessNameController = TextEditingController();
@@ -122,10 +123,10 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(bool isOwnerImage) async {
+  Future<void> _pickImage(bool isOwnerImage, ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -146,12 +147,58 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         });
 
         _showSuccess(
-          isOwnerImage ? 'Owner image selected' : 'Shop image selected',
+          isOwnerImage ? 'Incharge image selected' : 'Outlet image selected',
         );
       }
     } catch (e) {
       _showError('Failed to pick image: $e');
     }
+  }
+
+  Future<void> _showImageSourceDialog(bool isOwnerImage) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Select Image Source',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFFD7BE69)),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(isOwnerImage, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library,
+                  color: Color(0xFFD7BE69),
+                ),
+                title: const Text('Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(isOwnerImage, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _checkContactNumber(String contactNumber) async {
@@ -337,6 +384,32 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         return;
       }
 
+      // Validate mandatory fields
+      if (_latitude == null || _longitude == null) {
+        _showError('Geolocation is required. Please capture current location.');
+        return;
+      }
+
+      if (_ownerImageBase64 == null) {
+        _showError('Incharge image is required');
+        return;
+      }
+
+      if (_shopImageBase64 == null) {
+        _showError('Outlet image is required');
+        return;
+      }
+
+      if (_pincodeController.text.trim().isEmpty) {
+        _showError('Pincode is required');
+        return;
+      }
+
+      if (_selectedArea == null) {
+        _showError('Area selection is required');
+        return;
+      }
+
       setState(() => isSubmitting = true);
 
       try {
@@ -403,19 +476,36 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   }
 
   void _clearForm() {
+    // Unfocus any focused field first
+    FocusScope.of(context).unfocus();
+
+    // Clear all controllers first
+    _businessNameController.clear();
+    _personNameController.clear();
+    _contactNumberController.clear();
+    _gstNumberController.clear();
+    _panCardController.clear();
+    _pincodeController.clear();
+    _countryController.clear();
+    _stateController.clear();
+    _districtController.clear();
+    _cityController.clear();
+    _addressController.clear();
+
+    // Clear the form state
     _formKey.currentState?.reset();
+
+    // Update state to clear everything in one setState
     setState(() {
-      _businessNameController.clear();
-      _personNameController.clear();
-      _contactNumberController.clear();
-      _gstNumberController.clear();
-      _panCardController.clear();
-      _pincodeController.clear();
-      _countryController.clear();
-      _stateController.clear();
-      _districtController.clear();
-      _cityController.clear();
-      _addressController.clear();
+      // Increment form reset key to force rebuild
+      _formResetKey++;
+
+      // Clear errors and checking state
+      contactNumberError = null;
+      existingAccountData = null;
+      isCheckingContact = false;
+
+      // Clear all selections
       _selectedBusinessType = null;
       _selectedBusinessSize = null;
       _selectedArea = null;
@@ -430,8 +520,6 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       _ownerImageFile = null;
       _shopImageFile = null;
       _availableAreas = [];
-      contactNumberError = null;
-      existingAccountData = null;
     });
   }
 
@@ -467,6 +555,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
               _buildSectionHeader('Business Information', Icons.business),
               const SizedBox(height: 15),
               TextFormField(
+                key: ValueKey('contact_field_$_formResetKey'),
                 controller: _contactNumberController,
                 keyboardType: TextInputType.phone,
                 maxLength: 10,
@@ -747,9 +836,11 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
               _buildTextField(
                 controller: _businessNameController,
-                label: 'Business Name',
+                label: 'Business Name *',
                 icon: Icons.store,
                 hint: 'Enter business name',
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Business name is required' : null,
               ),
               const SizedBox(height: 15),
 
@@ -786,19 +877,22 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
               _buildDropdown(
                 value: _selectedCustomerStage,
-                label: 'Customer Stage',
+                label: 'Customer Stage *',
                 icon: Icons.stairs,
                 items: _customerStages,
                 onChanged: (v) => setState(() => _selectedCustomerStage = v),
+                validator: (v) =>
+                    v == null ? 'Customer stage is required' : null,
               ),
               const SizedBox(height: 15),
 
               _buildDropdown(
                 value: _selectedFunnelStage,
-                label: 'Funnel Stage',
+                label: 'Funnel Stage *',
                 icon: Icons.filter_list,
                 items: _funnelStages,
                 onChanged: (v) => setState(() => _selectedFunnelStage = v),
+                validator: (v) => v == null ? 'Funnel stage is required' : null,
               ),
               const SizedBox(height: 15),
 
@@ -828,19 +922,21 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 children: [
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Outlet Image',
+                      label: 'Outlet Image *',
                       imageFile: _shopImageFile,
                       imageBase64: _shopImageBase64,
-                      onTap: () => _pickImage(false),
+                      onTap: () => _showImageSourceDialog(false),
+                      isRequired: true,
                     ),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Incharge Image',
+                      label: 'Incharge Image *',
                       imageFile: _ownerImageFile,
                       imageBase64: _ownerImageBase64,
-                      onTap: () => _pickImage(true),
+                      onTap: () => _showImageSourceDialog(true),
+                      isRequired: true,
                     ),
                   ),
                 ],
@@ -871,11 +967,13 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     flex: 2,
                     child: _buildTextField(
                       controller: _pincodeController,
-                      label: 'Pincode',
+                      label: 'Pincode *',
                       icon: Icons.pin_drop,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
-                      hint: '400001',
+                      hint: 'Enter 6 digits',
+                      validator: (v) =>
+                          v?.isEmpty ?? true ? 'Pincode is required' : null,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -973,14 +1071,16 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
               _buildTextField(
                 controller: _addressController,
-                label: 'Enter Main Area',
+                label: 'Enter Main Area *',
                 icon: Icons.home,
                 maxLines: 3,
                 hint: 'Enter complete address manually',
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Address is required' : null,
               ),
               const SizedBox(height: 25),
 
-              _buildSectionHeader('Geolocation', Icons.my_location),
+              _buildSectionHeader('Geolocation *', Icons.my_location),
               const SizedBox(height: 15),
 
               if (_latitude != null && _longitude != null)
@@ -1011,7 +1111,10 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Color.fromARGB(255, 244, 216, 54),
+                        ),
                         onPressed: () => setState(() {
                           _latitude = null;
                           _longitude = null;
@@ -1284,54 +1387,129 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     required File? imageFile,
     required String? imageBase64,
     required VoidCallback onTap,
+    bool isRequired = false,
   }) {
+    final hasImage = (imageFile != null && !kIsWeb) || (imageBase64 != null);
+
     return InkWell(
       onTap: onTap,
       child: Container(
         height: 150,
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFD7BE69)),
+          border: Border.all(
+            color: isRequired && !hasImage
+                ? Colors.red
+                : const Color(0xFFD7BE69),
+            width: isRequired && !hasImage ? 2 : 1,
+          ),
           borderRadius: BorderRadius.circular(10),
           color: Colors.grey[50],
         ),
         child: (imageFile != null && !kIsWeb)
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  imageFile,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      imageFile,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: onTap,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ),
+                ],
               )
             : (imageBase64 != null && kIsWeb)
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(
-                  base64Decode(imageBase64.split(',')[1]),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(imageBase64.split(',')[1]),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: onTap,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ),
+                ],
               )
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.add_photo_alternate,
                     size: 40,
-                    color: Color(0xFFD7BE69),
+                    color: isRequired && !hasImage
+                        ? Colors.red
+                        : const Color(0xFFD7BE69),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Color(0xFFD7BE69),
+                    style: TextStyle(
+                      color: isRequired && !hasImage
+                          ? Colors.red
+                          : const Color(0xFFD7BE69),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Tap to select',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.camera_alt, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.photo_library,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tap to select',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
                   ),
                 ],
               ),

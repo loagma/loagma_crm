@@ -558,6 +558,14 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       return;
     }
 
+    // Validate geolocation
+    if (_latitude == null || _longitude == null) {
+      Fluttertoast.showToast(
+        msg: 'Geolocation is required. Please capture current location.',
+      );
+      return;
+    }
+
     setState(() => isLoading = true);
 
     // Convert image to base64 if selected
@@ -901,7 +909,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             // NAME
             TextFormField(
               controller: _name,
-              decoration: _input("Full Name", Icons.person),
+              decoration: _input("Full Name *", Icons.person),
+              validator: (v) =>
+                  v?.isEmpty ?? true ? 'Full name is required' : null,
             ),
 
             const SizedBox(height: 15),
@@ -909,21 +919,28 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             // EMAIL
             TextFormField(
               controller: _email,
-              decoration: _input("Email", Icons.email),
-              validator: validateEmail,
+              decoration: _input("Email *", Icons.email),
+              validator: (v) {
+                if (v?.isEmpty ?? true) return 'Email is required';
+                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v!)) {
+                  return "Invalid Email";
+                }
+                return null;
+              },
             ),
 
             const SizedBox(height: 15),
 
             // GENDER
             DropdownButtonFormField(
-              decoration: _input("Gender", Icons.wc),
+              decoration: _input("Gender *", Icons.wc),
               items: const [
                 DropdownMenuItem(value: "Male", child: Text("Male")),
                 DropdownMenuItem(value: "Female", child: Text("Female")),
                 DropdownMenuItem(value: "Other", child: Text("Other")),
               ],
               onChanged: (v) => setState(() => selectedGender = v),
+              validator: (v) => v == null ? 'Gender is required' : null,
             ),
 
             const SizedBox(height: 15),
@@ -1025,8 +1042,13 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               controller: _aadhar,
               maxLength: 12,
               keyboardType: TextInputType.number,
-              decoration: _input("Aadhar Number", Icons.credit_card),
-              validator: validateAadhar,
+              decoration: _input("Aadhar Number *", Icons.credit_card),
+              validator: (v) {
+                if (v?.isEmpty ?? true) return 'Aadhar number is required';
+                return RegExp(r'^\d{12}$').hasMatch(v!)
+                    ? null
+                    : "Invalid Aadhar";
+              },
             ),
 
             const SizedBox(height: 15),
@@ -1052,8 +1074,13 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                     controller: _pincode,
                     maxLength: 6,
                     keyboardType: TextInputType.number,
-                    decoration: _input("Pincode", Icons.pin_drop),
-                    validator: validatePincode,
+                    decoration: _input("Pincode *", Icons.pin_drop),
+                    validator: (v) {
+                      if (v?.isEmpty ?? true) return 'Pincode is required';
+                      return RegExp(r'^\d{6}$').hasMatch(v!)
+                          ? null
+                          : "Invalid pincode";
+                    },
                     enabled: !manualAddress,
                   ),
                 ),
@@ -1203,7 +1230,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                         const Icon(Icons.my_location, color: Color(0xFFD7BE69)),
                         const SizedBox(width: 10),
                         const Text(
-                          "Geolocation",
+                          "Geolocation *",
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1376,7 +1403,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
             // DEPARTMENT
             DropdownButtonFormField(
-              decoration: _input("Department", Icons.business),
+              decoration: _input("Department *", Icons.business),
               items: departments
                   .map(
                     (d) => DropdownMenuItem(
@@ -1390,13 +1417,14 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                   selectedDepartmentId = v as String?;
                 });
               },
+              validator: (v) => v == null ? 'Department is required' : null,
             ),
 
             const SizedBox(height: 15),
 
             // PRIMARY ROLE
             DropdownButtonFormField(
-              decoration: _input("Primary Role", Icons.badge),
+              decoration: _input("Primary Role *", Icons.badge),
               items: roles
                   .map(
                     (r) => DropdownMenuItem(
@@ -1410,6 +1438,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                   selectedRoleId = v as String?;
                 });
               },
+              validator: (v) => v == null ? 'Primary role is required' : null,
             ),
 
             const SizedBox(height: 15),
@@ -1488,11 +1517,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             TextFormField(
               controller: _salary,
               keyboardType: TextInputType.number,
-              decoration: _input("Salary Per Month *", Icons.currency_rupee),
-              validator: (v) {
-                if (v == null || v.isEmpty) return "Required";
-                return double.tryParse(v) == null ? "Invalid amount" : null;
-              },
+              decoration: _input("Salary Per Month ", Icons.currency_rupee),
             ),
 
             const SizedBox(height: 15),

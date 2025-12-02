@@ -1644,76 +1644,61 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   // Edit assignment
   Future<void> _editAssignment(Map<String, dynamic> assignment) async {
-    final areas = (assignment['areas'] as List).cast<String>();
-    final businessTypes = (assignment['businessTypes'] as List).cast<String>();
+    final currentAreas = (assignment['areas'] as List).cast<String>();
+    final currentBusinessTypes = (assignment['businessTypes'] as List)
+        .cast<String>();
+    final pincode = assignment['pincode'];
 
-    final areasController = TextEditingController(text: areas.join(', '));
-    final businessTypesController = TextEditingController(
-      text: businessTypes.join(', '),
+    // Show loading dialog while fetching areas
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading areas...'),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
 
+    // Fetch all available areas for this pincode
+    List<String> availableAreas = [];
+    try {
+      final locationResult = await _service.fetchLocationByPincode(pincode);
+      if (locationResult['success'] == true &&
+          locationResult['location'] != null) {
+        availableAreas = (locationResult['location']['areas'] as List)
+            .cast<String>();
+      }
+    } catch (e) {
+      print('Error fetching areas: $e');
+    }
+
+    // Close loading dialog
+    if (mounted) Navigator.pop(context);
+
+    if (availableAreas.isEmpty) {
+      _showError('Could not load areas for pincode $pincode');
+      return;
+    }
+
+    // Show edit dialog
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.edit, color: primaryColor),
-            SizedBox(width: 12),
-            Text('Edit Assignment'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: areasController,
-                decoration: const InputDecoration(
-                  labelText: 'Areas (comma-separated)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: businessTypesController,
-                decoration: const InputDecoration(
-                  labelText: 'Business Types (comma-separated)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newAreas = areasController.text
-                  .split(',')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-              final newBusinessTypes = businessTypesController.text
-                  .split(',')
-                  .map((e) => e.trim().toLowerCase())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-
-              Navigator.pop(context, {
-                'areas': newAreas,
-                'businessTypes': newBusinessTypes,
-              });
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => _EditAssignmentDialog(
+        assignment: assignment,
+        availableAreas: availableAreas,
+        currentAreas: currentAreas,
+        currentBusinessTypes: currentBusinessTypes,
       ),
     );
 
@@ -1973,6 +1958,294 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           ),
         ),
       ],
+    );
+  }
+}
+
+// Edit Assignment Dialog Widget
+class _EditAssignmentDialog extends StatefulWidget {
+  final Map<String, dynamic> assignment;
+  final List<String> availableAreas;
+  final List<String> currentAreas;
+  final List<String> currentBusinessTypes;
+
+  const _EditAssignmentDialog({
+    required this.assignment,
+    required this.availableAreas,
+    required this.currentAreas,
+    required this.currentBusinessTypes,
+  });
+
+  @override
+  State<_EditAssignmentDialog> createState() => _EditAssignmentDialogState();
+}
+
+class _EditAssignmentDialogState extends State<_EditAssignmentDialog> {
+  late Set<String> selectedAreas;
+  late Set<String> selectedBusinessTypes;
+
+  final List<Map<String, dynamic>> businessTypeOptions = [
+    {'name': 'Grocery', 'value': 'grocery'},
+    {'name': 'Cafe', 'value': 'cafe'},
+    {'name': 'Hotel', 'value': 'hotel'},
+    {'name': 'Dairy', 'value': 'dairy'},
+    {'name': 'Restaurant', 'value': 'restaurant'},
+    {'name': 'Bakery', 'value': 'bakery'},
+    {'name': 'Pharmacy', 'value': 'pharmacy'},
+    {'name': 'Supermarket', 'value': 'supermarket'},
+    {'name': 'Hostel', 'value': 'hostel'},
+    {'name': 'Schools', 'value': 'schools'},
+    {'name': 'Colleges', 'value': 'colleges'},
+    {'name': 'Hospitals', 'value': 'hospitals'},
+    {'name': 'Others', 'value': 'others'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    selectedAreas = Set.from(widget.currentAreas);
+    selectedBusinessTypes = Set.from(widget.currentBusinessTypes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Color(0xFFD7BE69),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Edit Assignment',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${widget.assignment['city']} - ${widget.assignment['pincode']}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Areas Section
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          size: 20,
+                          color: Color(0xFFD7BE69),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Select Areas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${selectedAreas.length}/${widget.availableAreas.length}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              selectedAreas = Set.from(widget.availableAreas);
+                            });
+                          },
+                          icon: const Icon(Icons.check_box, size: 16),
+                          label: const Text(
+                            'Select All',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              selectedAreas.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text(
+                            'Clear All',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: widget.availableAreas.length,
+                        itemBuilder: (context, index) {
+                          final area = widget.availableAreas[index];
+                          final isSelected = selectedAreas.contains(area);
+                          return CheckboxListTile(
+                            dense: true,
+                            title: Text(
+                              area,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            value: isSelected,
+                            activeColor: const Color(0xFFD7BE69),
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedAreas.add(area);
+                                } else {
+                                  selectedAreas.remove(area);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Business Types Section
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.business,
+                          size: 20,
+                          color: Color(0xFFD7BE69),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Select Business Types',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: businessTypeOptions.map((type) {
+                        final isSelected = selectedBusinessTypes.contains(
+                          type['value'],
+                        );
+                        return FilterChip(
+                          label: Text(type['name']!),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedBusinessTypes.add(type['value']!);
+                              } else {
+                                selectedBusinessTypes.remove(type['value']!);
+                              }
+                            });
+                          },
+                          selectedColor: const Color(
+                            0xFFD7BE69,
+                          ).withOpacity(0.3),
+                          checkmarkColor: const Color(0xFFD7BE69),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed:
+                        selectedAreas.isEmpty || selectedBusinessTypes.isEmpty
+                        ? null
+                        : () {
+                            Navigator.pop(context, {
+                              'areas': selectedAreas.toList(),
+                              'businessTypes': selectedBusinessTypes.toList(),
+                            });
+                          },
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Changes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD7BE69),
+                      disabledBackgroundColor: Colors.grey[300],
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
