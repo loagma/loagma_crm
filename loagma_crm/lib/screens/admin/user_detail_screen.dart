@@ -403,34 +403,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             const SizedBox(height: 30),
 
             // EDIT BUTTON
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: const Color(0xFFD7BE69),
-                ),
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => EditUserScreen(user: widget.user),
-                    ),
-                  );
-                  if (result == true) {
-                    widget.onUpdate();
-                    if (context.mounted) {
-                      Navigator.pop(context, true);
-                    }
-                  }
-                },
-                icon: const Icon(Icons.edit),
-                label: const Text(
-                  "Edit Employee",
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
           ],
         ),
       ),

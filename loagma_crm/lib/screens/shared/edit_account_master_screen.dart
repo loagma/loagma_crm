@@ -201,10 +201,10 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(bool isOwnerImage) async {
+  Future<void> _pickImage(bool isOwnerImage, ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -225,12 +225,58 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
         });
 
         _showSuccess(
-          isOwnerImage ? 'Owner image updated' : 'Shop image updated',
+          isOwnerImage ? 'Incharge image updated' : 'Outlet image updated',
         );
       }
     } catch (e) {
       _showError('Failed to pick image: $e');
     }
+  }
+
+  Future<void> _showImageSourceDialog(bool isOwnerImage) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Select Image Source',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFFD7BE69)),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(isOwnerImage, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library,
+                  color: Color(0xFFD7BE69),
+                ),
+                title: const Text('Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(isOwnerImage, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _lookupPincode() async {
@@ -374,6 +420,32 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
 
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
+      // Validate mandatory fields
+      if (_latitude == null || _longitude == null) {
+        _showError('Geolocation is required. Please capture current location.');
+        return;
+      }
+
+      if (_ownerImageBase64 == null) {
+        _showError('Incharge image is required');
+        return;
+      }
+
+      if (_shopImageBase64 == null) {
+        _showError('Outlet image is required');
+        return;
+      }
+
+      if (_pincodeController.text.trim().isEmpty) {
+        _showError('Pincode is required');
+        return;
+      }
+
+      if (_selectedArea == null) {
+        _showError('Area selection is required');
+        return;
+      }
+
       setState(() => isSubmitting = true);
 
       try {
@@ -481,25 +553,31 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
               const SizedBox(height: 15),
               _buildTextField(
                 controller: _businessNameController,
-                label: 'Business Name',
+                label: 'Business Name *',
                 icon: Icons.store,
                 hint: 'Enter business name',
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Business name is required' : null,
               ),
               const SizedBox(height: 15),
               _buildDropdown(
                 value: _selectedBusinessType,
-                label: 'Business Type',
+                label: 'Business Type *',
                 icon: Icons.category,
                 items: _businessTypes,
                 onChanged: (v) => setState(() => _selectedBusinessType = v),
+                validator: (v) =>
+                    v == null ? 'Business type is required' : null,
               ),
               const SizedBox(height: 15),
               _buildDropdown(
                 value: _selectedBusinessSize,
-                label: 'Business Size',
+                label: 'Business Size *',
                 icon: Icons.business_center,
                 items: _businessSizes,
                 onChanged: (v) => setState(() => _selectedBusinessSize = v),
+                validator: (v) =>
+                    v == null ? 'Business size is required' : null,
               ),
               const SizedBox(height: 15),
               _buildTextField(
@@ -569,18 +647,21 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
               const SizedBox(height: 15),
               _buildDropdown(
                 value: _selectedCustomerStage,
-                label: 'Customer Stage',
+                label: 'Customer Stage *',
                 icon: Icons.stairs,
                 items: _customerStages,
                 onChanged: (v) => setState(() => _selectedCustomerStage = v),
+                validator: (v) =>
+                    v == null ? 'Customer stage is required' : null,
               ),
               const SizedBox(height: 15),
               _buildDropdown(
                 value: _selectedFunnelStage,
-                label: 'Funnel Stage',
+                label: 'Funnel Stage *',
                 icon: Icons.filter_list,
                 items: _funnelStages,
                 onChanged: (v) => setState(() => _selectedFunnelStage = v),
+                validator: (v) => v == null ? 'Funnel stage is required' : null,
               ),
               const SizedBox(height: 15),
               _buildTextField(
@@ -606,19 +687,21 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 children: [
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Owner Image',
+                      label: 'Incharge Image *',
                       imageFile: _ownerImageFile,
                       imageBase64: _ownerImageBase64,
-                      onTap: () => _pickImage(true),
+                      onTap: () => _showImageSourceDialog(true),
+                      isRequired: true,
                     ),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
                     child: _buildImagePicker(
-                      label: 'Shop Image',
+                      label: 'Outlet Image *',
                       imageFile: _shopImageFile,
                       imageBase64: _shopImageBase64,
-                      onTap: () => _pickImage(false),
+                      onTap: () => _showImageSourceDialog(false),
+                      isRequired: true,
                     ),
                   ),
                 ],
@@ -646,11 +729,13 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                     flex: 2,
                     child: _buildTextField(
                       controller: _pincodeController,
-                      label: 'Pincode',
+                      label: 'Pincode *',
                       icon: Icons.pin_drop,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
                       hint: '400001',
+                      validator: (v) =>
+                          v?.isEmpty ?? true ? 'Pincode is required' : null,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -721,6 +806,8 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                           .map((a) => a['name'] as String)
                           .toList(),
                       onChanged: (v) => setState(() => _selectedArea = v),
+                      validator: (v) =>
+                          v == null ? 'Please select an area' : null,
                     ),
                     const SizedBox(height: 15),
                   ],
@@ -740,14 +827,16 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
                 ),
               _buildTextField(
                 controller: _addressController,
-                label: 'Address',
+                label: 'Enter Main Area *',
                 icon: Icons.home,
                 maxLines: 3,
                 hint: 'Enter complete address manually',
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Address is required' : null,
               ),
               const SizedBox(height: 25),
               // Geolocation Section
-              _buildSectionHeader('Geolocation', Icons.my_location),
+              _buildSectionHeader('Geolocation *', Icons.my_location),
               const SizedBox(height: 15),
               if (_latitude != null && _longitude != null)
                 Container(
@@ -1017,6 +1106,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
     required IconData icon,
     required List<String> items,
     required void Function(String?) onChanged,
+    String? Function(String?)? validator,
   }) {
     return DropdownButtonFormField<String>(
       initialValue: value,
@@ -1033,6 +1123,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
         return DropdownMenuItem(value: item, child: Text(item));
       }).toList(),
       onChanged: onChanged,
+      validator: validator,
     );
   }
 
@@ -1041,54 +1132,129 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
     required File? imageFile,
     required String? imageBase64,
     required VoidCallback onTap,
+    bool isRequired = false,
   }) {
+    final hasImage = (imageFile != null && !kIsWeb) || (imageBase64 != null);
+
     return InkWell(
       onTap: onTap,
       child: Container(
         height: 150,
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFD7BE69)),
+          border: Border.all(
+            color: isRequired && !hasImage
+                ? Colors.red
+                : const Color(0xFFD7BE69),
+            width: isRequired && !hasImage ? 2 : 1,
+          ),
           borderRadius: BorderRadius.circular(10),
           color: Colors.grey[50],
         ),
         child: (imageFile != null && !kIsWeb)
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  imageFile,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      imageFile,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: onTap,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ),
+                ],
               )
             : (imageBase64 != null && kIsWeb)
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(
-                  base64Decode(imageBase64.split(',')[1]),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(imageBase64.split(',')[1]),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: onTap,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ),
+                ],
               )
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.add_photo_alternate,
                     size: 40,
-                    color: Color(0xFFD7BE69),
+                    color: isRequired && !hasImage
+                        ? Colors.red
+                        : const Color(0xFFD7BE69),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Color(0xFFD7BE69),
+                    style: TextStyle(
+                      color: isRequired && !hasImage
+                          ? Colors.red
+                          : const Color(0xFFD7BE69),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Tap to select',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.camera_alt, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.photo_library,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tap to select',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
                   ),
                 ],
               ),

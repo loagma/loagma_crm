@@ -85,17 +85,17 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.list_alt,
             "/dashboard/admin/account/all",
           ),
-
-          SidebarItem(
-            "Tasks Management",
-            Icons.list_alt_outlined,
-            "/dashboard/admin/tasks/view",
-          ),
           SidebarItem(
             "Task Assignment",
             Icons.assignment,
             "/dashboard/admin/task-assignment",
           ),
+          SidebarItem(
+            "Tasks Management",
+            Icons.list_alt_outlined,
+            "/dashboard/admin/tasks/view",
+          ),
+
           SidebarItem(
             "Performance Reports",
             Icons.analytics_outlined,
