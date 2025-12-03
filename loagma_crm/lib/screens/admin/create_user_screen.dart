@@ -15,6 +15,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
+import '../../utils/custom_toast.dart';
 import 'user_detail_screen.dart';
 import 'edit_user_screen.dart';
 
@@ -85,12 +86,21 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   bool checkingPhone = false;
 
   bool isLoading = false;
+  bool _isFormDirty = false; // Track if form has been modified
 
   @override
   void initState() {
     super.initState();
     fetchRoles();
     fetchDepartments();
+    _setupFormListeners();
+  }
+
+  void _setupFormListeners() {
+    // Add listeners to track form changes
+    _phone.addListener(() => setState(() => _isFormDirty = true));
+    _name.addListener(() => setState(() => _isFormDirty = true));
+    _email.addListener(() => setState(() => _isFormDirty = true));
   }
 
   @override
@@ -653,11 +663,17 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         print("📦 Response: ${data.toString().substring(0, 200)}...");
 
       if (data["success"] == true) {
-        Fluttertoast.showToast(msg: "User created successfully");
+        // Show success toast
+        if (mounted) {
+          CustomToast.showSuccess(context, "✅ Employee Created Successfully!");
+        }
 
         if (autoGeneratePassword) {
           Fluttertoast.showToast(msg: "Password: $password");
         }
+
+        // Reset form dirty flag
+        _isFormDirty = false;
 
         // Reset form
         _formKey.currentState!.reset();
@@ -713,942 +729,972 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Create Employee"),
-        backgroundColor: const Color(0xFFD7BE69),
-      ),
+    return PopScope(
+      canPop: !_isFormDirty,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
 
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(20),
-          children: [
-            // PHONE WITH CHECK
-            TextFormField(
-              controller: _phone,
-              maxLength: 10,
-              keyboardType: TextInputType.phone,
-              onChanged: (value) {
-                if (value.length == 10) {
-                  checkExistingUser(value);
-                } else {
-                  setState(() {
-                    existingUser = null;
-                  });
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Contact Number *',
-                prefixIcon: const Icon(Icons.phone, color: Color(0xFFD7BE69)),
-                suffixIcon: checkingPhone
-                    ? const Padding(
-                        padding: EdgeInsets.all(12.0),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFFD7BE69),
+        final shouldPop = await CustomToast.showConfirmation(
+          context,
+          "You are filling the form.\nAre you sure you want to go back?",
+        );
+
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Create Employee"),
+          backgroundColor: const Color(0xFFD7BE69),
+        ),
+
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(20),
+            children: [
+              // PHONE WITH CHECK
+              TextFormField(
+                controller: _phone,
+                maxLength: 10,
+                keyboardType: TextInputType.phone,
+                onChanged: (value) {
+                  if (value.length == 10) {
+                    checkExistingUser(value);
+                  } else {
+                    setState(() {
+                      existingUser = null;
+                    });
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Contact Number *',
+                  prefixIcon: const Icon(Icons.phone, color: Color(0xFFD7BE69)),
+                  suffixIcon: checkingPhone
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFFD7BE69),
+                            ),
                           ),
-                        ),
-                      )
-                    : existingUser != null
-                    ? const Icon(Icons.error, color: Colors.green)
-                    : _phone.text.length == 10
-                    ? const Icon(Icons.check_circle, color: Colors.green)
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: existingUser != null
-                        ? Colors.green
-                        : const Color(0xFFD7BE69),
-                    width: 2,
+                        )
+                      : existingUser != null
+                      ? const Icon(Icons.error, color: Colors.green)
+                      : _phone.text.length == 10
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: existingUser != null
+                          ? Colors.green
+                          : const Color(0xFFD7BE69),
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.green, width: 2),
+                  ),
+                  counterText: '',
                 ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.green, width: 2),
-                ),
-                counterText: '',
+                validator: (v) {
+                  if (v?.isEmpty ?? true) return 'Contact number is required';
+                  if (v!.length != 10) return 'Must be 10 digits';
+                  if (existingUser != null)
+                    return 'Contact number already exists';
+                  return null;
+                },
               ),
-              validator: (v) {
-                if (v?.isEmpty ?? true) return 'Contact number is required';
-                if (v!.length != 10) return 'Must be 10 digits';
-                if (existingUser != null)
-                  return 'Contact number already exists';
-                return null;
-              },
-            ),
 
-            // EXISTING USER WARNING
-            if (existingUser != null)
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.warning,
-                          color: Colors.green,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Employee Already Exists',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                  fontSize: 12,
+              // EXISTING USER WARNING
+              if (existingUser != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Employee Already Exists',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Name: ${existingUser!['name'] ?? 'N/A'}',
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              if (existingUser!['email'] != null)
                                 Text(
-                                  'Email: ${existingUser!['email']}',
+                                  'Name: ${existingUser!['name'] ?? 'N/A'}',
                                   style: const TextStyle(fontSize: 11),
                                 ),
-                              Text(
-                                'Role: ${existingUser!['role'] ?? 'N/A'}',
-                                style: const TextStyle(fontSize: 11),
+                                if (existingUser!['email'] != null)
+                                  Text(
+                                    'Email: ${existingUser!['email']}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                Text(
+                                  'Role: ${existingUser!['role'] ?? 'N/A'}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.visibility, size: 16),
+                              label: const Text(
+                                'View',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                side: const BorderSide(color: Colors.blue),
+                                foregroundColor: Colors.blue,
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UserDetailScreen(
+                                      user: existingUser!,
+                                      onUpdate: () {},
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.edit, size: 16),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                side: const BorderSide(color: Colors.orange),
+                                foregroundColor: Colors.orange,
+                              ),
+                              onPressed: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        EditUserScreen(user: existingUser!),
+                                  ),
+                                );
+
+                                // If edit was successful, clear the form
+                                if (result == true) {
+                                  Fluttertoast.showToast(
+                                    msg: 'Employee updated successfully',
+                                  );
+                                  setState(() {
+                                    existingUser = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.delete, size: 16),
+                              label: const Text(
+                                'Delete',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () =>
+                                  _confirmDelete(existingUser!['id']),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 15),
+
+              // NAME
+              TextFormField(
+                controller: _name,
+                decoration: _input("Full Name *", Icons.person),
+                validator: (v) =>
+                    v?.isEmpty ?? true ? 'Full name is required' : null,
+              ),
+
+              const SizedBox(height: 15),
+
+              // EMAIL
+              TextFormField(
+                controller: _email,
+                decoration: _input("Email *", Icons.email),
+                validator: (v) {
+                  if (v?.isEmpty ?? true) return 'Email is required';
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v!)) {
+                    return "Invalid Email";
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 15),
+
+              // GENDER
+              DropdownButtonFormField(
+                decoration: _input("Gender *", Icons.wc),
+                items: const [
+                  DropdownMenuItem(value: "Male", child: Text("Male")),
+                  DropdownMenuItem(value: "Female", child: Text("Female")),
+                  DropdownMenuItem(value: "Other", child: Text("Other")),
+                ],
+                onChanged: (v) => setState(() => selectedGender = v),
+                validator: (v) => v == null ? 'Gender is required' : null,
+              ),
+
+              const SizedBox(height: 15),
+
+              // DATE OF BIRTH
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leading: const Icon(Icons.cake),
+                title: const Text("Date of Birth"),
+                subtitle: Text(
+                  _selectedDateOfBirth == null
+                      ? "Tap to select"
+                      : "${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}",
+                ),
+                trailing: _selectedDateOfBirth != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.red),
+                        onPressed: () {
+                          setState(() => _selectedDateOfBirth = null);
+                        },
+                      )
+                    : const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDateOfBirth ?? DateTime(2000),
+                    firstDate: DateTime(1950),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: Color(0xFFD7BE69),
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setState(() => _selectedDateOfBirth = picked);
+                  }
+                },
+              ),
+
+              const SizedBox(height: 15),
+
+              // MULTI-SELECT LANGUAGES
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: const Text("Preferred Languages"),
+                subtitle: Text(
+                  selectedLanguages.isEmpty
+                      ? "Tap to select"
+                      : selectedLanguages.join(", "),
+                ),
+                leading: const Icon(Icons.language),
+                trailing: const Icon(Icons.arrow_drop_down),
+                onTap: () {
+                  showMultiSelectDialog(
+                    context: context,
+                    title: "Select Preferred Languages",
+                    items: const [
+                      {"id": "English", "name": "English"},
+                      {"id": "Hindi", "name": "Hindi"},
+                      {"id": "Marathi", "name": "Marathi"},
+                      {"id": "Gujarati", "name": "Gujarati"},
+                      {"id": "Tamil", "name": "Tamil"},
+                      {"id": "Telugu", "name": "Telugu"},
+                      {"id": "Kannada", "name": "Kannada"},
+                      {"id": "Bengali", "name": "Bengali"},
+                    ],
+                    selectedValues: selectedLanguages,
+                    onConfirm: (values) {
+                      setState(() => selectedLanguages = values);
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 15),
+              // ALT PHONE
+              TextFormField(
+                controller: _altPhone,
+                maxLength: 10,
+                keyboardType: TextInputType.phone,
+                decoration: _input("Alternative Number", Icons.phone_android),
+              ),
+
+              const SizedBox(height: 15),
+
+              // AADHAR
+              TextFormField(
+                controller: _aadhar,
+                maxLength: 12,
+                keyboardType: TextInputType.number,
+                decoration: _input("Aadhar Number *", Icons.credit_card),
+                validator: (v) {
+                  if (v?.isEmpty ?? true) return 'Aadhar number is required';
+                  return RegExp(r'^\d{12}$').hasMatch(v!)
+                      ? null
+                      : "Invalid Aadhar";
+                },
+              ),
+
+              const SizedBox(height: 15),
+
+              // PAN
+              TextFormField(
+                controller: _pan,
+                maxLength: 10,
+                decoration: _input(
+                  "PAN Number (ABCDE1234F)",
+                  Icons.account_balance,
+                ),
+                validator: validatePAN,
+              ),
+
+              const SizedBox(height: 15),
+
+              // PINCODE WITH LOOKUP
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _pincode,
+                      maxLength: 6,
+                      keyboardType: TextInputType.number,
+                      decoration: _input("Pincode *", Icons.pin_drop),
+                      validator: (v) {
+                        if (v?.isEmpty ?? true) return 'Pincode is required';
+                        return RegExp(r'^\d{6}$').hasMatch(v!)
+                            ? null
+                            : "Invalid pincode";
+                      },
+                      enabled: !manualAddress,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: fetchingPincode || manualAddress
+                        ? null
+                        : fetchLocationFromPincode,
+                    icon: fetchingPincode
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.search, size: 20),
+                    label: const Text("Lookup"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD7BE69),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // MANUAL ADDRESS TOGGLE
+              // CheckboxListTile(
+              //   title: const Text("Enter address manually"),
+              //   value: manualAddress,
+              //   onChanged: (v) {
+              //     setState(() {
+              //       manualAddress = v ?? false;
+              //       if (!manualAddress) {
+              //         _country.clear();
+              //         _district.clear();
+              //         _city.clear();
+              //         _state.clear();
+              //       }
+              //     });
+              //   },
+              //   controlAffinity: ListTileControlAffinity.leading,
+              //   contentPadding: EdgeInsets.zero,
+              // ),
+              const SizedBox(height: 15),
+
+              // COUNTRY
+              TextFormField(
+                controller: _country,
+                decoration: _input("Country", Icons.public),
+                enabled: manualAddress,
+              ),
+
+              const SizedBox(height: 15),
+
+              // STATE
+              TextFormField(
+                controller: _state,
+                decoration: _input("State", Icons.map),
+                enabled: manualAddress,
+              ),
+
+              const SizedBox(height: 15),
+
+              // DISTRICT
+              TextFormField(
+                controller: _district,
+                decoration: _input("District", Icons.location_on),
+                enabled: manualAddress,
+              ),
+
+              const SizedBox(height: 15),
+
+              // CITY
+              TextFormField(
+                controller: _city,
+                decoration: _input("City", Icons.location_city),
+                enabled: manualAddress,
+              ),
+
+              const SizedBox(height: 15),
+
+              // AREA DROPDOWN (if areas available)
+              if (_availableAreas.isNotEmpty)
+                Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedArea,
+                      decoration: _input("Area *", Icons.place),
+                      items: _availableAreas
+                          .map(
+                            (area) => DropdownMenuItem<String>(
+                              value: area['name'],
+                              child: Text(area['name']),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => selectedArea = v),
+                      validator: (v) =>
+                          v == null ? 'Please select an area' : null,
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+                )
+              else if (isLoadingAreas)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_pincode.text.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  child: Text(
+                    'No areas found for this pincode',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+
+              // ADDRESS
+              TextFormField(
+                controller: _address,
+                maxLines: 2,
+                decoration: _input("Address", Icons.home),
+              ),
+
+              const SizedBox(height: 25),
+
+              // GEOLOCATION SECTION
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.my_location,
+                            color: Color(0xFFD7BE69),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            "Geolocation *",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      if (_latitude != null && _longitude != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Location Captured',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Lat: ${_latitude!.toStringAsFixed(6)}, Lng: ${_longitude!.toStringAsFixed(6)}',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => setState(() {
+                                  _latitude = null;
+                                  _longitude = null;
+                                }),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.visibility, size: 16),
-                            label: const Text(
-                              'View',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              side: const BorderSide(color: Colors.blue),
-                              foregroundColor: Colors.blue,
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => UserDetailScreen(
-                                    user: existingUser!,
-                                    onUpdate: () {},
-                                  ),
+
+                      ElevatedButton.icon(
+                        icon: isLoadingGeolocation
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
                                 ),
-                              );
-                            },
-                          ),
+                              )
+                            : const Icon(Icons.my_location),
+                        label: Text(
+                          isLoadingGeolocation
+                              ? 'Getting Location...'
+                              : 'Capture Current Location',
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.edit, size: 16),
-                            label: const Text(
-                              'Edit',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              side: const BorderSide(color: Colors.orange),
-                              foregroundColor: Colors.orange,
-                            ),
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      EditUserScreen(user: existingUser!),
-                                ),
-                              );
-
-                              // If edit was successful, clear the form
-                              if (result == true) {
-                                Fluttertoast.showToast(
-                                  msg: 'Employee updated successfully',
-                                );
-                                setState(() {
-                                  existingUser = null;
-                                });
-                              }
-                            },
-                          ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD7BE69),
+                          minimumSize: const Size(double.infinity, 50),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            icon: const Icon(Icons.delete, size: 16),
-                            label: const Text(
-                              'Delete',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () =>
-                                _confirmDelete(existingUser!['id']),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 15),
-
-            // NAME
-            TextFormField(
-              controller: _name,
-              decoration: _input("Full Name *", Icons.person),
-              validator: (v) =>
-                  v?.isEmpty ?? true ? 'Full name is required' : null,
-            ),
-
-            const SizedBox(height: 15),
-
-            // EMAIL
-            TextFormField(
-              controller: _email,
-              decoration: _input("Email *", Icons.email),
-              validator: (v) {
-                if (v?.isEmpty ?? true) return 'Email is required';
-                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v!)) {
-                  return "Invalid Email";
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 15),
-
-            // GENDER
-            DropdownButtonFormField(
-              decoration: _input("Gender *", Icons.wc),
-              items: const [
-                DropdownMenuItem(value: "Male", child: Text("Male")),
-                DropdownMenuItem(value: "Female", child: Text("Female")),
-                DropdownMenuItem(value: "Other", child: Text("Other")),
-              ],
-              onChanged: (v) => setState(() => selectedGender = v),
-              validator: (v) => v == null ? 'Gender is required' : null,
-            ),
-
-            const SizedBox(height: 15),
-
-            // DATE OF BIRTH
-            ListTile(
-              shape: RoundedRectangleBorder(
-                side: const BorderSide(color: Colors.grey),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              leading: const Icon(Icons.cake),
-              title: const Text("Date of Birth"),
-              subtitle: Text(
-                _selectedDateOfBirth == null
-                    ? "Tap to select"
-                    : "${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}",
-              ),
-              trailing: _selectedDateOfBirth != null
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.red),
-                      onPressed: () {
-                        setState(() => _selectedDateOfBirth = null);
-                      },
-                    )
-                  : const Icon(Icons.calendar_today),
-              onTap: () async {
-                final DateTime? picked = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDateOfBirth ?? DateTime(2000),
-                  firstDate: DateTime(1950),
-                  lastDate: DateTime.now(),
-                  builder: (context, child) {
-                    return Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: const ColorScheme.light(
-                          primary: Color(0xFFD7BE69),
-                        ),
+                        onPressed: isLoadingGeolocation
+                            ? null
+                            : _getCurrentLocation,
                       ),
-                      child: child!,
-                    );
-                  },
-                );
-                if (picked != null) {
-                  setState(() => _selectedDateOfBirth = picked);
-                }
-              },
-            ),
 
-            const SizedBox(height: 15),
-
-            // MULTI-SELECT LANGUAGES
-            ListTile(
-              shape: RoundedRectangleBorder(
-                side: const BorderSide(color: Colors.grey),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              title: const Text("Preferred Languages"),
-              subtitle: Text(
-                selectedLanguages.isEmpty
-                    ? "Tap to select"
-                    : selectedLanguages.join(", "),
-              ),
-              leading: const Icon(Icons.language),
-              trailing: const Icon(Icons.arrow_drop_down),
-              onTap: () {
-                showMultiSelectDialog(
-                  context: context,
-                  title: "Select Preferred Languages",
-                  items: const [
-                    {"id": "English", "name": "English"},
-                    {"id": "Hindi", "name": "Hindi"},
-                    {"id": "Marathi", "name": "Marathi"},
-                    {"id": "Gujarati", "name": "Gujarati"},
-                    {"id": "Tamil", "name": "Tamil"},
-                    {"id": "Telugu", "name": "Telugu"},
-                    {"id": "Kannada", "name": "Kannada"},
-                    {"id": "Bengali", "name": "Bengali"},
-                  ],
-                  selectedValues: selectedLanguages,
-                  onConfirm: (values) {
-                    setState(() => selectedLanguages = values);
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 15),
-            // ALT PHONE
-            TextFormField(
-              controller: _altPhone,
-              maxLength: 10,
-              keyboardType: TextInputType.phone,
-              decoration: _input("Alternative Number", Icons.phone_android),
-            ),
-
-            const SizedBox(height: 15),
-
-            // AADHAR
-            TextFormField(
-              controller: _aadhar,
-              maxLength: 12,
-              keyboardType: TextInputType.number,
-              decoration: _input("Aadhar Number *", Icons.credit_card),
-              validator: (v) {
-                if (v?.isEmpty ?? true) return 'Aadhar number is required';
-                return RegExp(r'^\d{12}$').hasMatch(v!)
-                    ? null
-                    : "Invalid Aadhar";
-              },
-            ),
-
-            const SizedBox(height: 15),
-
-            // PAN
-            TextFormField(
-              controller: _pan,
-              maxLength: 10,
-              decoration: _input(
-                "PAN Number (ABCDE1234F)",
-                Icons.account_balance,
-              ),
-              validator: validatePAN,
-            ),
-
-            const SizedBox(height: 15),
-
-            // PINCODE WITH LOOKUP
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _pincode,
-                    maxLength: 6,
-                    keyboardType: TextInputType.number,
-                    decoration: _input("Pincode *", Icons.pin_drop),
-                    validator: (v) {
-                      if (v?.isEmpty ?? true) return 'Pincode is required';
-                      return RegExp(r'^\d{6}$').hasMatch(v!)
-                          ? null
-                          : "Invalid pincode";
-                    },
-                    enabled: !manualAddress,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: fetchingPincode || manualAddress
-                      ? null
-                      : fetchLocationFromPincode,
-                  icon: fetchingPincode
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                      // Google Map Display
+                      if (_latitude != null && _longitude != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          height: 250,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFFD7BE69),
+                              width: 2,
+                            ),
                           ),
-                        )
-                      : const Icon(Icons.search, size: 20),
-                  label: const Text("Lookup"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD7BE69),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            // MANUAL ADDRESS TOGGLE
-            // CheckboxListTile(
-            //   title: const Text("Enter address manually"),
-            //   value: manualAddress,
-            //   onChanged: (v) {
-            //     setState(() {
-            //       manualAddress = v ?? false;
-            //       if (!manualAddress) {
-            //         _country.clear();
-            //         _district.clear();
-            //         _city.clear();
-            //         _state.clear();
-            //       }
-            //     });
-            //   },
-            //   controlAffinity: ListTileControlAffinity.leading,
-            //   contentPadding: EdgeInsets.zero,
-            // ),
-            const SizedBox(height: 15),
-
-            // COUNTRY
-            TextFormField(
-              controller: _country,
-              decoration: _input("Country", Icons.public),
-              enabled: manualAddress,
-            ),
-
-            const SizedBox(height: 15),
-
-            // STATE
-            TextFormField(
-              controller: _state,
-              decoration: _input("State", Icons.map),
-              enabled: manualAddress,
-            ),
-
-            const SizedBox(height: 15),
-
-            // DISTRICT
-            TextFormField(
-              controller: _district,
-              decoration: _input("District", Icons.location_on),
-              enabled: manualAddress,
-            ),
-
-            const SizedBox(height: 15),
-
-            // CITY
-            TextFormField(
-              controller: _city,
-              decoration: _input("City", Icons.location_city),
-              enabled: manualAddress,
-            ),
-
-            const SizedBox(height: 15),
-
-            // AREA DROPDOWN (if areas available)
-            if (_availableAreas.isNotEmpty)
-              Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedArea,
-                    decoration: _input("Area *", Icons.place),
-                    items: _availableAreas
-                        .map(
-                          (area) => DropdownMenuItem<String>(
-                            value: area['name'],
-                            child: Text(area['name']),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => selectedArea = v),
-                    validator: (v) =>
-                        v == null ? 'Please select an area' : null,
-                  ),
-                  const SizedBox(height: 15),
-                ],
-              )
-            else if (isLoadingAreas)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 15),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_pincode.text.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                child: Text(
-                  'No areas found for this pincode',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ),
-
-            // ADDRESS
-            TextFormField(
-              controller: _address,
-              maxLines: 2,
-              decoration: _input("Address", Icons.home),
-            ),
-
-            const SizedBox(height: 25),
-
-            // GEOLOCATION SECTION
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.my_location, color: Color(0xFFD7BE69)),
-                        const SizedBox(width: 10),
-                        const Text(
-                          "Geolocation *",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    if (_latitude != null && _longitude != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.green[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Location Captured',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(
+                              children: [
+                                GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: LatLng(_latitude!, _longitude!),
+                                    zoom: 15,
                                   ),
-                                  Text(
-                                    'Lat: ${_latitude!.toStringAsFixed(6)}, Lng: ${_longitude!.toStringAsFixed(6)}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.red),
-                              onPressed: () => setState(() {
-                                _latitude = null;
-                                _longitude = null;
-                              }),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    ElevatedButton.icon(
-                      icon: isLoadingGeolocation
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.my_location),
-                      label: Text(
-                        isLoadingGeolocation
-                            ? 'Getting Location...'
-                            : 'Capture Current Location',
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD7BE69),
-                        minimumSize: const Size(double.infinity, 50),
-                      ),
-                      onPressed: isLoadingGeolocation
-                          ? null
-                          : _getCurrentLocation,
-                    ),
-
-                    // Google Map Display
-                    if (_latitude != null && _longitude != null) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        height: 250,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(0xFFD7BE69),
-                            width: 2,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Stack(
-                            children: [
-                              GoogleMap(
-                                initialCameraPosition: CameraPosition(
-                                  target: LatLng(_latitude!, _longitude!),
-                                  zoom: 15,
-                                ),
-                                markers: {
-                                  Marker(
-                                    markerId: const MarkerId(
-                                      'current_location',
-                                    ),
-                                    position: LatLng(_latitude!, _longitude!),
-                                    infoWindow: const InfoWindow(
-                                      title: 'Current Location',
-                                    ),
-                                  ),
-                                },
-                                myLocationButtonEnabled: false,
-                                zoomControlsEnabled: false,
-                                mapToolbarEnabled: false,
-                                onTap: (_) => _openInGoogleMaps(),
-                              ),
-                              Positioned(
-                                bottom: 10,
-                                right: 10,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
+                                  markers: {
+                                    Marker(
+                                      markerId: const MarkerId(
+                                        'current_location',
                                       ),
-                                    ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: _openInGoogleMaps,
+                                      position: LatLng(_latitude!, _longitude!),
+                                      infoWindow: const InfoWindow(
+                                        title: 'Current Location',
+                                      ),
+                                    ),
+                                  },
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                  mapToolbarEnabled: false,
+                                  onTap: (_) => _openInGoogleMaps(),
+                                ),
+                                Positioned(
+                                  bottom: 10,
+                                  right: 10,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
-                                      child: const Padding(
-                                        padding: EdgeInsets.all(8.0),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.open_in_new,
-                                              size: 18,
-                                              color: Color(0xFFD7BE69),
-                                            ),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'Open in Maps',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: _openInGoogleMaps,
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.open_in_new,
+                                                size: 18,
                                                 color: Color(0xFFD7BE69),
                                               ),
-                                            ),
-                                          ],
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Open in Maps',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Color(0xFFD7BE69),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              // DEPARTMENT
+              DropdownButtonFormField(
+                decoration: _input("Department *", Icons.business),
+                items: departments
+                    .map(
+                      (d) => DropdownMenuItem(
+                        value: d["id"],
+                        child: Text(d["name"]),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  setState(() {
+                    selectedDepartmentId = v as String?;
+                  });
+                },
+                validator: (v) => v == null ? 'Department is required' : null,
+              ),
+
+              const SizedBox(height: 15),
+
+              // PRIMARY ROLE
+              DropdownButtonFormField(
+                decoration: _input("Primary Role *", Icons.badge),
+                items: roles
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r["id"],
+                        child: Text(r["name"]),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  setState(() {
+                    selectedRoleId = v as String?;
+                  });
+                },
+                validator: (v) => v == null ? 'Primary role is required' : null,
+              ),
+
+              const SizedBox(height: 15),
+
+              // MULTI SELECT DROPDOWN
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: const Text("Additional Roles"),
+                subtitle: Text(
+                  selectedRoles.isEmpty
+                      ? "Tap to select"
+                      : "${selectedRoles.length} roles selected",
+                ),
+                trailing: const Icon(Icons.arrow_drop_down),
+                onTap: () {
+                  showMultiSelectDialog(
+                    context: context,
+                    title: "Select Additional Roles",
+                    items: roles,
+                    selectedValues: selectedRoles,
+                    onConfirm: (values) {
+                      setState(() => selectedRoles = values);
+                    },
+                  );
+                },
+              ),
+
+              const SizedBox(height: 15),
+
+              // STATUS
+              SwitchListTile(
+                title: const Text("Status"),
+                subtitle: Text(isActive ? "Active" : "Inactive"),
+                value: isActive,
+                onChanged: (v) => setState(() => isActive = v),
+              ),
+
+              const SizedBox(height: 15),
+
+              // PASSWORD
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _password,
+                      obscureText: true,
+                      enabled: !autoGeneratePassword,
+                      decoration: _input("Password", Icons.lock),
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      const Text("Auto"),
+                      Checkbox(
+                        value: autoGeneratePassword,
+                        onChanged: (v) {
+                          setState(() {
+                            autoGeneratePassword = v ?? false;
+                            if (autoGeneratePassword) _password.clear();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 15),
+
+              const SizedBox(height: 15),
+
+              // SALARY
+              TextFormField(
+                controller: _salary,
+                keyboardType: TextInputType.number,
+                decoration: _input("Salary Per Month ", Icons.currency_rupee),
+              ),
+
+              const SizedBox(height: 15),
+
+              // NOTES
+              TextFormField(
+                controller: _notes,
+                maxLines: 3,
+                decoration: _input("Notes", Icons.note),
+              ),
+
+              const SizedBox(height: 25),
+
+              // PROFILE PICTURE UPLOAD
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Profile Picture",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 60,
+                              backgroundColor: const Color(0xFFD7BE69),
+                              backgroundImage: _profileImage != null
+                                  ? FileImage(_profileImage!)
+                                  : null,
+                              child: _profileImage == null
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.white,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: pickImage,
+                                  icon: const Icon(Icons.photo_library),
+                                  label: const Text("Choose Photo"),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFD7BE69),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 8),
+
+                                // ✅ CAMERA BUTTON ADDED
+                                ElevatedButton.icon(
+                                  onPressed: pickFromCamera,
+                                  icon: const Icon(Icons.camera_alt),
+                                  label: const Text("Camera"),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFD7BE69),
+                                  ),
+                                ),
+
+                                if (_profileImage != null) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _profileImage = null;
+                                        _uploadedImageUrl = null;
+                                      });
+                                    },
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // DEPARTMENT
-            DropdownButtonFormField(
-              decoration: _input("Department *", Icons.business),
-              items: departments
-                  .map(
-                    (d) => DropdownMenuItem(
-                      value: d["id"],
-                      child: Text(d["name"]),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  selectedDepartmentId = v as String?;
-                });
-              },
-              validator: (v) => v == null ? 'Department is required' : null,
-            ),
-
-            const SizedBox(height: 15),
-
-            // PRIMARY ROLE
-            DropdownButtonFormField(
-              decoration: _input("Primary Role *", Icons.badge),
-              items: roles
-                  .map(
-                    (r) => DropdownMenuItem(
-                      value: r["id"],
-                      child: Text(r["name"]),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  selectedRoleId = v as String?;
-                });
-              },
-              validator: (v) => v == null ? 'Primary role is required' : null,
-            ),
-
-            const SizedBox(height: 15),
-
-            // MULTI SELECT DROPDOWN
-            ListTile(
-              shape: RoundedRectangleBorder(
-                side: const BorderSide(color: Colors.grey),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              title: const Text("Additional Roles"),
-              subtitle: Text(
-                selectedRoles.isEmpty
-                    ? "Tap to select"
-                    : "${selectedRoles.length} roles selected",
-              ),
-              trailing: const Icon(Icons.arrow_drop_down),
-              onTap: () {
-                showMultiSelectDialog(
-                  context: context,
-                  title: "Select Additional Roles",
-                  items: roles,
-                  selectedValues: selectedRoles,
-                  onConfirm: (values) {
-                    setState(() => selectedRoles = values);
-                  },
-                );
-              },
-            ),
-
-            const SizedBox(height: 15),
-
-            // STATUS
-            SwitchListTile(
-              title: const Text("Status"),
-              subtitle: Text(isActive ? "Active" : "Inactive"),
-              value: isActive,
-              onChanged: (v) => setState(() => isActive = v),
-            ),
-
-            const SizedBox(height: 15),
-
-            // PASSWORD
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _password,
-                    obscureText: true,
-                    enabled: !autoGeneratePassword,
-                    decoration: _input("Password", Icons.lock),
                   ),
                 ),
-                Column(
-                  children: [
-                    const Text("Auto"),
-                    Checkbox(
-                      value: autoGeneratePassword,
-                      onChanged: (v) {
-                        setState(() {
-                          autoGeneratePassword = v ?? false;
-                          if (autoGeneratePassword) _password.clear();
-                        });
-                      },
-                    ),
-                  ],
+              ),
+
+              const SizedBox(height: 25),
+
+              // SUBMIT BUTTON
+              ElevatedButton(
+                onPressed: isLoading ? null : createUser,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7BE69),
+                  minimumSize: const Size(double.infinity, 50),
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 15),
-
-            const SizedBox(height: 15),
-
-            // SALARY
-            TextFormField(
-              controller: _salary,
-              keyboardType: TextInputType.number,
-              decoration: _input("Salary Per Month ", Icons.currency_rupee),
-            ),
-
-            const SizedBox(height: 15),
-
-            // NOTES
-            TextFormField(
-              controller: _notes,
-              maxLines: 3,
-              decoration: _input("Notes", Icons.note),
-            ),
-
-            const SizedBox(height: 25),
-
-            // PROFILE PICTURE UPLOAD
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("Create Employee"),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Profile Picture",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 60,
-                            backgroundColor: const Color(0xFFD7BE69),
-                            backgroundImage: _profileImage != null
-                                ? FileImage(_profileImage!)
-                                : null,
-                            child: _profileImage == null
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: pickImage,
-                                icon: const Icon(Icons.photo_library),
-                                label: const Text("Choose Photo"),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFD7BE69),
-                                ),
-                              ),
-
-                              const SizedBox(width: 8),
-
-                              // ✅ CAMERA BUTTON ADDED
-                              ElevatedButton.icon(
-                                onPressed: pickFromCamera,
-                                icon: const Icon(Icons.camera_alt),
-                                label: const Text("Camera"),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFD7BE69),
-                                ),
-                              ),
-
-                              if (_profileImage != null) ...[
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _profileImage = null;
-                                      _uploadedImageUrl = null;
-                                    });
-                                  },
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // SUBMIT BUTTON
-            ElevatedButton(
-              onPressed: isLoading ? null : createUser,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFD7BE69),
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              child: isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Create Employee"),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
