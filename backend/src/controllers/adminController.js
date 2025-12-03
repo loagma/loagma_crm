@@ -26,30 +26,25 @@ async function generateNumericUserId() {
 
 // Generate numeric employee code
 async function generateEmployeeCode() {
-  const userCount = await prisma.user.count();
-  let nextCode = userCount + 1;
-
-  let employeeCode = String(nextCode).padStart(6, '0');
-
-  // Check if code exists
-  const existing = await prisma.user.findUnique({
-    where: { employeeCode }
+  // Find all users with employee codes
+  const allUsers = await prisma.user.findMany({
+    where: { employeeCode: { not: null } },
+    select: { employeeCode: true },
   });
 
-  if (existing) {
-    const allUsers = await prisma.user.findMany({
-      where: { employeeCode: { not: null } },
-      select: { employeeCode: true },
-      orderBy: { employeeCode: 'desc' },
-      take: 1
-    });
+  // Filter only numeric employee codes and convert to numbers
+  const numericCodes = allUsers
+    .map(u => parseInt(u.employeeCode))
+    .filter(code => !isNaN(code));
 
-    if (allUsers.length > 0 && allUsers[0].employeeCode) {
-      employeeCode = String(parseInt(allUsers[0].employeeCode) + 1).padStart(6, '0');
-    }
-  }
+  // Find the highest numeric code, or start from 0
+  const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 0;
 
-  return employeeCode;
+  // Generate next code
+  const nextCode = maxCode + 1;
+
+  // Format as 6 digits (e.g., 000001, 000002)
+  return String(nextCode).padStart(6, '0');
 }
 
 
