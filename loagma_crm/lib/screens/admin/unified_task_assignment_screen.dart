@@ -267,6 +267,8 @@ class _UnifiedTaskAssignmentScreenState
       ),
       body: TabBarView(
         controller: _tabController,
+        physics:
+            const NeverScrollableScrollPhysics(), // Disable swipe to prevent map conflict
         children: [_buildAssignTab(), _buildMapTab(), _buildHistoryTab()],
       ),
     );
@@ -390,49 +392,148 @@ class _UnifiedTaskAssignmentScreenState
   }
 
   Widget _buildBusinessTypesStep() {
+    // Official Google Maps API Place Types
     final types = [
-      'grocery',
-      'cafe',
-      'hotel',
-      'restaurant',
-      'bakery',
-      'pharmacy',
+      'supermarket', // Grocery stores, supermarkets
+      'convenience_store', // Small grocery/convenience stores
+      'restaurant', // Restaurants
+      'cafe', // Cafes, coffee shops
+      'bakery', // Bakeries
+      'meal_takeaway', // Takeaway/delivery restaurants
+      'food', // General food establishments
+      'bar', // Bars, pubs
+      'lodging', // Hotels, lodging
+      'pharmacy', // Pharmacies, drugstores
+      'store', // General retail stores
+      'shopping_mall', // Shopping malls
+      'clothing_store', // Clothing/apparel stores
+      'electronics_store', // Electronics shops
+      'furniture_store', // Furniture stores
+      'home_goods_store', // Home goods/hardware stores
+      'jewelry_store', // Jewelry shops
+      'shoe_store', // Shoe stores
+      'book_store', // Book stores
+      'liquor_store', // Liquor/wine shops
     ];
-    return Column(
-      children: [
-        Wrap(
-          spacing: 8,
-          children: types
-              .map(
-                (type) => FilterChip(
-                  label: Text(type),
-                  selected: _selectedBusinessTypes.contains(type),
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedBusinessTypes.add(type);
-                      } else {
-                        _selectedBusinessTypes.remove(type);
-                      }
-                    });
-                  },
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          const Text(
+            'Select business types to fetch',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+
+          // Business type chips
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: types
+                .map(
+                  (type) => FilterChip(
+                    label: Text(
+                      type.replaceAll('_', ' ').toUpperCase(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    selected: _selectedBusinessTypes.contains(type),
+                    selectedColor: const Color.fromRGBO(215, 190, 105, 0.3),
+                    checkmarkColor: const Color.fromRGBO(215, 190, 105, 1),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedBusinessTypes.add(type);
+                        } else {
+                          _selectedBusinessTypes.remove(type);
+                        }
+                      });
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Selected count
+          if (_selectedBusinessTypes.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${_selectedBusinessTypes.length} business type(s) selected',
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w500,
                 ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: _isFetchingBusinesses ? null : _fetchBusinesses,
-          child: Text(
-            _isFetchingBusinesses ? 'Fetching...' : 'Fetch Businesses',
+              ),
+            ),
+
+          const SizedBox(height: 24),
+
+          // Fetch Businesses Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isFetchingBusinesses ? null : _fetchBusinesses,
+              icon: _isFetchingBusinesses
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.search),
+              label: Text(
+                _isFetchingBusinesses
+                    ? 'Fetching Businesses...'
+                    : 'Fetch Businesses',
+                style: const TextStyle(fontSize: 16),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromRGBO(215, 190, 105, 1),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
           ),
-        ),
-        if (_shops.isNotEmpty)
-          Text(
-            'Found ${_shops.length} businesses',
-            style: const TextStyle(color: Colors.green),
-          ),
-      ],
+
+          const SizedBox(height: 16),
+
+          // Success message
+          if (_shops.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Found ${_shops.length} businesses',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -460,6 +561,14 @@ class _UnifiedTaskAssignmentScreenState
       initialCameraPosition: CameraPosition(target: _initialPosition, zoom: 12),
       markers: _markers,
       onMapCreated: (controller) => _mapController = controller,
+      myLocationButtonEnabled: true,
+      zoomControlsEnabled: true,
+      zoomGesturesEnabled: true,
+      scrollGesturesEnabled: true,
+      tiltGesturesEnabled: false,
+      rotateGesturesEnabled: false,
+      mapToolbarEnabled: false,
+      compassEnabled: false,
     );
   }
 
