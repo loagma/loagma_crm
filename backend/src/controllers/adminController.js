@@ -7,28 +7,27 @@ async function generateNumericUserId() {
   // Get the count of existing users and add 1
   const userCount = await prisma.user.count();
   const nextId = userCount + 1;
-  
-  // Format as EMP followed by 6 digits (e.g., EMP000001, EMP000002)
-  const userId = `${String(nextId).padStart(6, '0')}`;
-  
+
+  // Format as 6 digits (e.g., 000001, 000002)
+  const userId = String(nextId).padStart(6, '0');
+
   // Check if ID already exists (in case of deletions)
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (existing) {
     // If exists, find the highest numeric ID and increment
     const allUsers = await prisma.user.findMany({
-      where: { id: { startsWith: 'EMP' } },
       select: { id: true },
       orderBy: { id: 'desc' },
       take: 1,
     });
-    
+
     if (allUsers.length > 0) {
       const lastId = allUsers[0].id;
-      const lastNumber = parseInt(lastId.replace('', ''));
-      return `${String(lastNumber + 1).padStart(6, '0')}`;
+      const lastNumber = parseInt(lastId);
+      return String(lastNumber + 1).padStart(6, '0');
     }
   }
-  
+
   return userId;
 }
 
@@ -64,12 +63,12 @@ async function generateEmployeeCode() {
 // Admin creates a user with contact number and role
 export const createUserByAdmin = async (req, res) => {
   try {
-    let { 
-      contactNumber, 
-      roleId, 
+    let {
+      contactNumber,
+      roleId,
       roles,
-      name, 
-      email, 
+      name,
+      email,
       alternativeNumber,
       gender,
       dateOfBirth,
@@ -166,7 +165,7 @@ export const createUserByAdmin = async (req, res) => {
     // Create user with numeric ID and employee code
     const userId = await generateNumericUserId();
     const employeeCode = await generateEmployeeCode();
-    
+
     const user = await prisma.user.create({
       data: {
         id: userId,
@@ -301,18 +300,18 @@ export const getAllUsersByAdmin = async (req, res) => {
         // Calculate salary totals if salary exists
         let salaryDetails = null;
         if (u.salaryInformation) {
-          const grossSalary = u.salaryInformation.basicSalary + 
-                             (u.salaryInformation.hra || 0) + 
-                             (u.salaryInformation.travelAllowance || 0) + 
-                             (u.salaryInformation.dailyAllowance || 0) + 
-                             (u.salaryInformation.medicalAllowance || 0) + 
-                             (u.salaryInformation.specialAllowance || 0) + 
-                             (u.salaryInformation.otherAllowances || 0);
+          const grossSalary = u.salaryInformation.basicSalary +
+            (u.salaryInformation.hra || 0) +
+            (u.salaryInformation.travelAllowance || 0) +
+            (u.salaryInformation.dailyAllowance || 0) +
+            (u.salaryInformation.medicalAllowance || 0) +
+            (u.salaryInformation.specialAllowance || 0) +
+            (u.salaryInformation.otherAllowances || 0);
 
-          const totalDeductions = (u.salaryInformation.providentFund || 0) + 
-                                 (u.salaryInformation.professionalTax || 0) + 
-                                 (u.salaryInformation.incomeTax || 0) + 
-                                 (u.salaryInformation.otherDeductions || 0);
+          const totalDeductions = (u.salaryInformation.providentFund || 0) +
+            (u.salaryInformation.professionalTax || 0) +
+            (u.salaryInformation.incomeTax || 0) +
+            (u.salaryInformation.otherDeductions || 0);
 
           const netSalary = grossSalary - totalDeductions;
 
@@ -387,12 +386,12 @@ export const getAllUsersByAdmin = async (req, res) => {
 export const updateUserByAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    let { 
-      contactNumber, 
+    let {
+      contactNumber,
       alternativeNumber,
-      roleId, 
+      roleId,
       roles,
-      name, 
+      name,
       email,
       gender,
       dateOfBirth,
