@@ -4,31 +4,24 @@ import { uploadBase64Image } from '../services/cloudinaryService.js';
 
 // Generate numeric user ID
 async function generateNumericUserId() {
-  // Get the count of existing users and add 1
-  const userCount = await prisma.user.count();
-  const nextId = userCount + 1;
+  // Find all users with numeric IDs only
+  const allUsers = await prisma.user.findMany({
+    select: { id: true },
+  });
+
+  // Filter only numeric IDs and convert to numbers
+  const numericIds = allUsers
+    .map(u => parseInt(u.id))
+    .filter(id => !isNaN(id));
+
+  // Find the highest numeric ID, or start from 0
+  const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+
+  // Generate next ID
+  const nextId = maxId + 1;
 
   // Format as 6 digits (e.g., 000001, 000002)
-  const userId = String(nextId).padStart(6, '0');
-
-  // Check if ID already exists (in case of deletions)
-  const existing = await prisma.user.findUnique({ where: { id: userId } });
-  if (existing) {
-    // If exists, find the highest numeric ID and increment
-    const allUsers = await prisma.user.findMany({
-      select: { id: true },
-      orderBy: { id: 'desc' },
-      take: 1,
-    });
-
-    if (allUsers.length > 0) {
-      const lastId = allUsers[0].id;
-      const lastNumber = parseInt(lastId);
-      return String(lastNumber + 1).padStart(6, '0');
-    }
-  }
-
-  return userId;
+  return String(nextId).padStart(6, '0');
 }
 
 // Generate numeric employee code

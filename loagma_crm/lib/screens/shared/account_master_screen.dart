@@ -585,7 +585,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                           ),
                         )
                       : contactNumberError != null
-                      ? const Icon(Icons.error, color: Colors.red)
+                      ? const Icon(Icons.error, color: Colors.green)
                       : _contactNumberController.text.length == 10
                       ? const Icon(Icons.check_circle, color: Colors.green)
                       : null,
@@ -596,14 +596,14 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
                       color: contactNumberError != null
-                          ? Colors.red
+                          ? Colors.green
                           : const Color(0xFFD7BE69),
                       width: 2,
                     ),
                   ),
                   errorBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.red, width: 2),
+                    borderSide: const BorderSide(color: Colors.green, width: 2),
                   ),
                   counterText: '',
                   errorText: contactNumberError,
@@ -621,9 +621,9 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                   margin: const EdgeInsets.only(top: 8),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red[50],
+                    color: Colors.green[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red),
+                    border: Border.all(color: Colors.green),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,7 +632,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                         children: [
                           const Icon(
                             Icons.warning,
-                            color: Colors.red,
+                            color: Colors.green,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -644,7 +644,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                   'Account Already Exists',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.red,
+                                    color: Colors.green,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -1398,7 +1398,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         decoration: BoxDecoration(
           border: Border.all(
             color: isRequired && !hasImage
-                ? Colors.red
+                ? const Color(0xFFD7BE69)
                 : const Color(0xFFD7BE69),
             width: isRequired && !hasImage ? 2 : 1,
           ),
@@ -1480,7 +1480,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     Icons.add_photo_alternate,
                     size: 40,
                     color: isRequired && !hasImage
-                        ? Colors.red
+                        ? const Color(0xFFD7BE69)
                         : const Color(0xFFD7BE69),
                   ),
                   const SizedBox(height: 8),
@@ -1488,7 +1488,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     label,
                     style: TextStyle(
                       color: isRequired && !hasImage
-                          ? Colors.red
+                          ? const Color(0xFFD7BE69)
                           : const Color(0xFFD7BE69),
                       fontWeight: FontWeight.w500,
                     ),
