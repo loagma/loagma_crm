@@ -450,6 +450,20 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     }
   }
 
+  Future<void> pickFromCamera() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() => _profileImage = File(pickedFile.path));
+    }
+  }
+
   Future<String?> convertImageToBase64(File imageFile) async {
     try {
       final bytes = await imageFile.readAsBytes();
@@ -741,7 +755,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                         ),
                       )
                     : existingUser != null
-                    ? const Icon(Icons.error, color: Colors.red)
+                    ? const Icon(Icons.error, color: Colors.green)
                     : _phone.text.length == 10
                     ? const Icon(Icons.check_circle, color: Colors.green)
                     : null,
@@ -752,14 +766,14 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
                     color: existingUser != null
-                        ? Colors.red
+                        ? Colors.green
                         : const Color(0xFFD7BE69),
                     width: 2,
                   ),
                 ),
                 errorBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                  borderSide: const BorderSide(color: Colors.green, width: 2),
                 ),
                 counterText: '',
               ),
@@ -778,16 +792,20 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
+                  color: Colors.green[50],
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red),
+                  border: Border.all(color: Colors.green),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.warning, color: Colors.red, size: 20),
+                        const Icon(
+                          Icons.warning,
+                          color: Colors.green,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
@@ -797,7 +815,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                 'Employee Already Exists',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.red,
+                                  color: Colors.green,
                                   fontSize: 12,
                                 ),
                               ),
@@ -1579,6 +1597,19 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                   backgroundColor: const Color(0xFFD7BE69),
                                 ),
                               ),
+
+                              const SizedBox(width: 8),
+
+                              // ✅ CAMERA BUTTON ADDED
+                              ElevatedButton.icon(
+                                onPressed: pickFromCamera,
+                                icon: const Icon(Icons.camera_alt),
+                                label: const Text("Camera"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFD7BE69),
+                                ),
+                              ),
+
                               if (_profileImage != null) ...[
                                 const SizedBox(width: 8),
                                 IconButton(
