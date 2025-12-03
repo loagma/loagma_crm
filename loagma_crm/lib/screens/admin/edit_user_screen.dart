@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
+import '../../utils/custom_toast.dart';
 
 class EditUserScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -606,10 +607,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
           );
         }
 
-        Fluttertoast.showToast(
-          msg: "User updated successfully",
-          toastLength: Toast.LENGTH_LONG,
-        );
+        // Show success toast
+        if (mounted) {
+          CustomToast.showSuccess(context, "✅ Employee Updated Successfully!");
+        }
 
         if (autoGeneratePassword && password.isNotEmpty) {
           Fluttertoast.showToast(
@@ -617,6 +618,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
             toastLength: Toast.LENGTH_LONG,
           );
         }
+
+        // Wait for toast to show before popping
+        await Future.delayed(const Duration(milliseconds: 500));
 
         if (!mounted) return;
         Navigator.pop(context, true);

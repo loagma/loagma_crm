@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
 import '../../models/account_model.dart';
+import '../../utils/custom_toast.dart';
 
 class EditAccountMasterScreen extends StatefulWidget {
   final Account account;
@@ -521,9 +522,17 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
 
         await AccountService.updateAccount(widget.account.id, updates);
 
-        _showSuccess('Account updated successfully!');
+        // Show success toast
         if (mounted) {
-          Navigator.pop(context, true); // Return true to indicate success
+          CustomToast.showSuccess(
+            context,
+            "✅ Account Master Updated Successfully!",
+          );
+          // Wait for toast to show before popping
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.pop(context, true); // Return true to indicate success
+          }
         }
       } catch (e) {
         _showError('Failed to update account: $e');
