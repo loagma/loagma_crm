@@ -12,6 +12,7 @@ import roleRoutes from './routes/roleRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import pincodeRoutes from './routes/pincodeRoutes.js';
 import taskAssignmentRoutes from './routes/taskAssignmentRoutes.js';
+import salesmanRoutes from './routes/salesmanRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -53,6 +54,7 @@ app.use('/roles', roleRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/pincode', pincodeRoutes);
 app.use('/task-assignments', taskAssignmentRoutes);
+app.use('/salesman', salesmanRoutes);
 
 // 404 Handler - Must be after all routes
 app.use((req, res) => {

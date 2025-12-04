@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/user_service.dart';
 import '../../widgets/enterprise_sidebar.dart';
+import '../salesman/salesman_dashboard_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
   final String roleName;
@@ -117,24 +118,29 @@ class RoleDashboardTemplate extends StatelessWidget {
         return [
           SidebarItem("Dashboard", Icons.dashboard, "/dashboard/salesman"),
           SidebarItem(
-            "Account Master",
-            Icons.account_tree_outlined,
+            "Create Account",
+            Icons.person_add_outlined,
             "/dashboard/salesman/account/master",
           ),
           SidebarItem(
-            "Accounts Master Management",
-            Icons.folder_special_outlined,
-            "/dashboard/salesman/account/all",
+            "My Accounts",
+            Icons.folder_open_outlined,
+            "/dashboard/salesman/accounts",
           ),
           SidebarItem(
-            "My Expenses",
-            Icons.receipt_long_outlined,
-            "/dashboard/salesman/expense/my",
+            "Area Allotments",
+            Icons.map_outlined,
+            "/dashboard/salesman/assignments",
           ),
           SidebarItem(
             "Create Expense",
             Icons.add_card_outlined,
             "/dashboard/salesman/expense/create",
+          ),
+          SidebarItem(
+            "My Expenses",
+            Icons.receipt_long_outlined,
+            "/dashboard/salesman/expense/my",
           ),
         ];
 
@@ -248,6 +254,11 @@ class RoleDashboardTemplate extends StatelessWidget {
     Color color,
     List<DashboardCard> cards,
   ) {
+    // Show custom dashboard for salesman
+    if (roleName.toLowerCase() == 'salesman') {
+      return const SalesmanDashboardScreen();
+    }
+
     return Column(
       children: [
         _header(color),
