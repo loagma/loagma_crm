@@ -26,6 +26,10 @@ import '../screens/shared/create_expense_screen.dart';
 import '../screens/shared/my_expenses_screen.dart';
 import '../screens/shared/employee_list_screen.dart';
 
+// Salesman screens
+import '../screens/salesman/salesman_accounts_screen.dart';
+import '../screens/salesman/salesman_assignments_screen.dart';
+
 // Guards & Services
 import 'auth_guard.dart';
 import 'role_guard.dart';
@@ -64,6 +68,24 @@ final GoRouter appRouter = GoRouter(
       },
       builder: (context, state) {
         final role = state.pathParameters['role']!.toLowerCase();
+
+        // For salesman, show custom dashboard with stats
+        if (role == 'salesman') {
+          return RoleDashboardTemplate(
+            roleName: role,
+            roleDisplayName: role.toUpperCase(),
+            roleIcon: Icons.dashboard_customize_outlined,
+            userContactNumber: UserService.contactNumber,
+            cards: [
+              DashboardCard(
+                title: 'Dashboard',
+                icon: Icons.dashboard,
+                onTap: () {}, // Already on dashboard
+              ),
+            ],
+          );
+        }
+
         return RoleDashboardTemplate(
           roleName: role,
           roleDisplayName: role.toUpperCase(),
@@ -125,6 +147,16 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'expense/my',
           builder: (_, __) => const MyExpensesScreen(),
+        ),
+
+        // Salesman-specific routes
+        GoRoute(
+          path: 'accounts',
+          builder: (_, __) => const SalesmanAccountsScreen(),
+        ),
+        GoRoute(
+          path: 'assignments',
+          builder: (_, __) => const SalesmanAssignmentsScreen(),
         ),
       ],
     ),
