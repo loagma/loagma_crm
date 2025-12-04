@@ -57,48 +57,48 @@ class RoleDashboardTemplate extends StatelessWidget {
         return [
           SidebarItem(
             "Dashboard",
-            Icons.dashboard_outlined,
+            Icons.space_dashboard_outlined,
             "/dashboard/admin",
           ),
           SidebarItem(
             "Manage Roles",
-            Icons.admin_panel_settings,
+            Icons.manage_accounts_outlined,
             "/dashboard/admin/roles",
           ),
           SidebarItem(
             "Create Employee",
-            Icons.person_add,
+            Icons.person_add_alt_1_outlined,
             "/dashboard/admin/employees/create",
           ),
           SidebarItem(
             "Employees Management",
-            Icons.people_outline,
+            Icons.group_outlined,
             "/dashboard/admin/employees",
           ),
           SidebarItem(
             "Account Master",
-            Icons.account_box,
+            Icons.account_tree_outlined,
             "/dashboard/admin/account/master",
           ),
           SidebarItem(
             "Accounts Master Management",
-            Icons.list_alt,
+            Icons.folder_special_outlined, // cleaner than list_alt
             "/dashboard/admin/account/all",
           ),
           SidebarItem(
-            "Task Assignment",
-            Icons.assignment,
+            "SR Area Allotment",
+            Icons.map_outlined, // visually represents allotment/area
             "/dashboard/admin/task-assignment",
           ),
           SidebarItem(
-            "Tasks Management",
-            Icons.list_alt_outlined,
+            "Allotments Management",
+            Icons
+                .route_outlined, // route-based visualization for assigned tasks
             "/dashboard/admin/tasks/view",
           ),
-
           SidebarItem(
             "Performance Reports",
-            Icons.analytics_outlined,
+            Icons.stacked_line_chart, // great for analytics
             "/dashboard/admin/reports",
           ),
         ];
@@ -111,6 +111,30 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Settings",
             Icons.settings,
             "/dashboard/employee/settings",
+          ),
+        ];
+      case "salesman":
+        return [
+          SidebarItem("Dashboard", Icons.dashboard, "/dashboard/salesman"),
+          SidebarItem(
+            "Account Master",
+            Icons.account_tree_outlined,
+            "/dashboard/salesman/account/master",
+          ),
+          SidebarItem(
+            "Accounts Master Management",
+            Icons.folder_special_outlined,
+            "/dashboard/salesman/account/all",
+          ),
+          SidebarItem(
+            "My Expenses",
+            Icons.receipt_long_outlined,
+            "/dashboard/salesman/expense/my",
+          ),
+          SidebarItem(
+            "Create Expense",
+            Icons.add_card_outlined,
+            "/dashboard/salesman/expense/create",
           ),
         ];
 

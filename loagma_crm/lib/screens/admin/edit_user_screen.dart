@@ -40,6 +40,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   late TextEditingController _passwordController;
   late TextEditingController _notesController;
   late TextEditingController _salaryController;
+  late TextEditingController _locationSearchController;
 
   // Dropdown values
   String? selectedRoleId;
@@ -58,6 +59,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   double? _latitude;
   double? _longitude;
   bool isLoadingGeolocation = false;
+  GoogleMapController? _mapController;
 
   // Data lists
   List<Map<String, dynamic>> roles = [];
@@ -113,6 +115,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
           ? widget.user['salary']['basicSalary'].toString()
           : '',
     );
+    _locationSearchController = TextEditingController();
 
     // Initialize dropdown values
     selectedRoleId = widget.user['roleId'];
@@ -177,6 +180,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _passwordController.dispose();
     _notesController.dispose();
     _salaryController.dispose();
+    _locationSearchController.dispose();
     super.dispose();
   }
 
@@ -432,6 +436,173 @@ class _EditUserScreenState extends State<EditUserScreen> {
     } catch (e) {
       Fluttertoast.showToast(msg: 'Error opening Google Maps: $e');
     }
+  }
+
+  // Location search functionality
+  Future<void> _searchAndMoveToLocation(String query) async {
+    setState(() => isLoadingGeolocation = true);
+
+    try {
+      double lat = 20.5937; // Default to India center
+      double lng = 78.9629;
+      String locationName = 'Location not found';
+      bool foundLocation = false;
+
+      // First, check if it's a pincode (6 digits)
+      if (RegExp(r'^\d{6}$').hasMatch(query.trim())) {
+        final response = await http.get(
+          Uri.parse(
+            "${ApiConfig.baseUrl}/masters/pincode/${query.trim()}/areas",
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          final result = jsonDecode(response.body);
+          if (result['success'] == true) {
+            final data = result['data'];
+
+            // Use real geocoding to get coordinates for the city
+            final cityName = data['city'] ?? data['district'];
+            final geocodingResult = await _performGeocodingSearch(cityName);
+
+            if (geocodingResult != null) {
+              lat = geocodingResult['lat'];
+              lng = geocodingResult['lng'];
+              locationName =
+                  '${data['city'] ?? data['district']}, ${data['state']}, India';
+              foundLocation = true;
+
+              setState(() {
+                _countryController.text = data['country'] ?? 'India';
+                _stateController.text = data['state'] ?? '';
+                _districtController.text = data['district'] ?? '';
+                _cityController.text = data['city'] ?? '';
+                _pincodeController.text = query.trim();
+              });
+            }
+          }
+        }
+      }
+
+      // If not found by pincode, try real geocoding search
+      if (!foundLocation) {
+        final geocodingResult = await _performGeocodingSearch(query);
+        if (geocodingResult != null) {
+          lat = geocodingResult['lat'];
+          lng = geocodingResult['lng'];
+          locationName = geocodingResult['name'];
+          foundLocation = true;
+        }
+      }
+
+      // Move map camera to the location with smooth animation
+      if (_mapController != null && foundLocation) {
+        await _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(lat, lng),
+            _getAppropriateZoomLevel(locationName, query),
+          ),
+        );
+      }
+
+      setState(() {
+        _latitude = lat;
+        _longitude = lng;
+      });
+
+      if (foundLocation) {
+        Fluttertoast.showToast(
+          msg: 'Found: $locationName',
+          toastLength: Toast.LENGTH_LONG,
+        );
+      } else {
+        Fluttertoast.showToast(
+          msg: 'Location not found. Try a different search term.',
+          toastLength: Toast.LENGTH_LONG,
+        );
+      }
+
+      // Clear search field
+      _locationSearchController.clear();
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'Failed to search location: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingGeolocation = false);
+      }
+    }
+  }
+
+  // Real geocoding search using OpenStreetMap Nominatim API
+  Future<Map<String, dynamic>?> _performGeocodingSearch(String query) async {
+    try {
+      // Use OpenStreetMap Nominatim API for geocoding
+      final encodedQuery = Uri.encodeComponent('$query, India');
+      final url =
+          'https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&limit=1&addressdetails=1';
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'User-Agent': 'LoagmaCRM/1.0 (Flutter App)',
+              'Accept-Language': 'en',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> results = jsonDecode(response.body);
+        if (results.isNotEmpty) {
+          final result = results[0];
+          final lat = double.parse(result['lat']);
+          final lng = double.parse(result['lon']);
+          final displayName = result['display_name'] ?? query;
+
+          return {'lat': lat, 'lng': lng, 'name': displayName};
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Geocoding error: $e');
+    }
+    return null;
+  }
+
+  // Get appropriate zoom level based on location type
+  double _getAppropriateZoomLevel(String locationName, String query) {
+    final lowerName = locationName.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+
+    // Very specific locations (buildings, shops, etc.)
+    if (lowerName.contains('hotel') ||
+        lowerName.contains('restaurant') ||
+        lowerName.contains('shop') ||
+        lowerName.contains('mall') ||
+        lowerQuery.contains('nagar') ||
+        lowerQuery.contains('colony')) {
+      return 17.0; // Very high zoom for specific places
+    }
+
+    // Areas and localities
+    if (lowerName.contains('area') ||
+        lowerName.contains('sector') ||
+        lowerQuery.contains('area') ||
+        lowerQuery.contains('sector')) {
+      return 15.0; // High zoom for areas
+    }
+
+    // Districts and suburbs
+    if (lowerName.contains('district') || lowerName.contains('suburb')) {
+      return 13.0; // Medium zoom for districts
+    }
+
+    // Cities
+    if (lowerName.contains('city') || lowerName.contains(',')) {
+      return 11.0; // Lower zoom for cities
+    }
+
+    // Default for localities
+    return 14.0;
   }
 
   // Multi-select dialog
@@ -1130,46 +1301,207 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                 : _getCurrentLocation,
                           ),
 
-                          // Google Map Display
-                          if (_latitude != null && _longitude != null) ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              height: 250,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFFD7BE69),
-                                  width: 2,
-                                ),
+                          // Interactive Map for Location Selection
+                          const SizedBox(height: 16),
+                          Container(
+                            height: 300,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFFD7BE69),
+                                width: 2,
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Stack(
-                                  children: [
-                                    GoogleMap(
-                                      initialCameraPosition: CameraPosition(
-                                        target: LatLng(_latitude!, _longitude!),
-                                        zoom: 15,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Stack(
+                                children: [
+                                  GoogleMap(
+                                    onMapCreated:
+                                        (GoogleMapController controller) {
+                                          _mapController = controller;
+                                        },
+                                    initialCameraPosition: CameraPosition(
+                                      target:
+                                          _latitude != null &&
+                                              _longitude != null
+                                          ? LatLng(_latitude!, _longitude!)
+                                          : const LatLng(
+                                              20.5937,
+                                              78.9629,
+                                            ), // India center
+                                      zoom: _latitude != null ? 15 : 5,
+                                    ),
+                                    markers:
+                                        _latitude != null && _longitude != null
+                                        ? {
+                                            Marker(
+                                              markerId: const MarkerId(
+                                                'selected_location',
+                                              ),
+                                              position: LatLng(
+                                                _latitude!,
+                                                _longitude!,
+                                              ),
+                                              infoWindow: const InfoWindow(
+                                                title: 'Employee Location',
+                                                snippet:
+                                                    'Tap to change location',
+                                              ),
+                                            ),
+                                          }
+                                        : {},
+                                    onTap: (LatLng position) {
+                                      setState(() {
+                                        _latitude = position.latitude;
+                                        _longitude = position.longitude;
+                                      });
+                                      Fluttertoast.showToast(
+                                        msg:
+                                            'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+                                      );
+                                    },
+                                    myLocationButtonEnabled: false,
+                                    zoomControlsEnabled: true,
+                                    mapToolbarEnabled: false,
+                                    zoomGesturesEnabled: true,
+                                    scrollGesturesEnabled: true,
+                                    tiltGesturesEnabled: false,
+                                    rotateGesturesEnabled: false,
+                                    compassEnabled: false,
+                                    indoorViewEnabled: false,
+                                    trafficEnabled: false,
+                                    buildingsEnabled: false,
+                                    liteModeEnabled: false,
+                                    mapType: MapType.normal,
+                                  ),
+
+                                  // Search overlay
+                                  Positioned(
+                                    top: 10,
+                                    left: 10,
+                                    right: 60, // Leave space for zoom controls
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.2,
+                                            ),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
-                                      markers: {
-                                        Marker(
-                                          markerId: const MarkerId(
-                                            'current_location',
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller:
+                                                  _locationSearchController,
+                                              decoration: InputDecoration(
+                                                hintText:
+                                                    'Search places, hotels, shops, areas...',
+                                                prefixIcon: const Icon(
+                                                  Icons.search,
+                                                ),
+                                                suffixIcon: isLoadingGeolocation
+                                                    ? const Padding(
+                                                        padding: EdgeInsets.all(
+                                                          12.0,
+                                                        ),
+                                                        child: SizedBox(
+                                                          width: 20,
+                                                          height: 20,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                                color: Color(
+                                                                  0xFFD7BE69,
+                                                                ),
+                                                              ),
+                                                        ),
+                                                      )
+                                                    : null,
+                                                border: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 12,
+                                                    ),
+                                              ),
+                                              onSubmitted: (value) {
+                                                if (value.trim().isNotEmpty) {
+                                                  _searchAndMoveToLocation(
+                                                    value.trim(),
+                                                  );
+                                                }
+                                              },
+                                            ),
                                           ),
-                                          position: LatLng(
-                                            _latitude!,
-                                            _longitude!,
+                                          IconButton(
+                                            icon: const Icon(Icons.search),
+                                            onPressed: isLoadingGeolocation
+                                                ? null
+                                                : () {
+                                                    final query =
+                                                        _locationSearchController
+                                                            .text
+                                                            .trim();
+                                                    if (query.isNotEmpty) {
+                                                      _searchAndMoveToLocation(
+                                                        query,
+                                                      );
+                                                    } else {
+                                                      Fluttertoast.showToast(
+                                                        msg:
+                                                            'Enter city name or pincode to search',
+                                                      );
+                                                    }
+                                                  },
+                                            tooltip: 'Search location',
                                           ),
-                                          infoWindow: const InfoWindow(
-                                            title: 'Current Location',
+                                          IconButton(
+                                            icon: const Icon(Icons.my_location),
+                                            onPressed: isLoadingGeolocation
+                                                ? null
+                                                : _getCurrentLocation,
+                                            tooltip: 'Use current location',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Instructions overlay
+                                  if (_latitude == null || _longitude == null)
+                                    Positioned(
+                                      bottom: 10,
+                                      left: 10,
+                                      right: 10,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black87,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
                                           ),
                                         ),
-                                      },
-                                      myLocationButtonEnabled: false,
-                                      zoomControlsEnabled: false,
-                                      mapToolbarEnabled: false,
-                                      onTap: (_) => _openInGoogleMaps(),
+                                        child: const Text(
+                                          'Tap on the map to select employee location or search above',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
                                     ),
+
+                                  // Open in Maps button (when location is set)
+                                  if (_latitude != null && _longitude != null)
                                     Positioned(
                                       bottom: 10,
                                       right: 10,
@@ -1223,11 +1555,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
