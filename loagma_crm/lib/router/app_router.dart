@@ -72,8 +72,9 @@ final GoRouter appRouter = GoRouter(
         );
       },
 
-      /// ALL ADMIN & SHARED ROUTES NESTED HERE
+      /// ALL ADMIN, SALESMAN & SHARED ROUTES NESTED HERE
       routes: [
+        // Admin-only routes
         GoRoute(
           path: 'employees',
           builder: (_, __) => const AdminViewUsersScreen(),
@@ -93,10 +94,19 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(path: 'reports', builder: (_, __) => const ReportsScreen()),
         GoRoute(
+          path: 'task-assignment',
+          builder: (_, __) => const ModernTaskAssignmentScreen(),
+        ),
+        GoRoute(
+          path: 'employees/list',
+          builder: (_, __) => const EmployeeListScreen(),
+        ),
+
+        // Shared routes (Admin, Salesman, etc.)
+        GoRoute(
           path: 'account/master',
           builder: (_, __) => const AccountMasterScreen(),
         ),
-
         GoRoute(
           path: 'account/all',
           builder: (_, __) => const AccountListScreen(),
@@ -115,14 +125,6 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'expense/my',
           builder: (_, __) => const MyExpensesScreen(),
-        ),
-        GoRoute(
-          path: 'employees/list',
-          builder: (_, __) => const EmployeeListScreen(),
-        ),
-        GoRoute(
-          path: 'task-assignment',
-          builder: (_, __) => const ModernTaskAssignmentScreen(),
         ),
       ],
     ),
