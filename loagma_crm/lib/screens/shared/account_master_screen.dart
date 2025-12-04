@@ -188,9 +188,9 @@
 //           child: Column(
 //             mainAxisSize: MainAxisSize.min,
 //             children: [
-//               Text(
+//               const Text(
 //                 'Select Image Source',
-//                 style: const TextStyle(
+//                 style: TextStyle(
 //                   fontSize: 18,
 //                   fontWeight: FontWeight.bold,
 //                 ),
@@ -222,8 +222,13 @@
 //     );
 //   }
 
+//   /// ✅ FIXED: now ignores stale async responses after form clear / change
 //   Future<void> _checkContactNumber(String contactNumber) async {
+//     // Only validate when 10 digits
 //     if (contactNumber.length != 10) return;
+
+//     // Snapshot of the number being validated now
+//     final String requestedNumber = contactNumber;
 
 //     setState(() {
 //       isCheckingContact = true;
@@ -232,7 +237,14 @@
 //     });
 
 //     try {
-//       final result = await AccountService.checkContactNumber(contactNumber);
+//       final result = await AccountService.checkContactNumber(requestedNumber);
+
+//       if (!mounted) return;
+
+//       // If user changed/cleared the field while API was in-flight, ignore this result
+//       if (_contactNumberController.text != requestedNumber) {
+//         return;
+//       }
 
 //       if (result['exists'] == true && result['data'] != null) {
 //         final account = result['data'];
@@ -247,6 +259,8 @@
 //         });
 //       }
 //     } catch (e) {
+//       // Keep UX quiet unless needed; just log
+//       // ignore: avoid_print
 //       print('Error checking contact number: $e');
 //     } finally {
 //       if (mounted) {
@@ -574,20 +588,6 @@
 //         appBar: AppBar(
 //           title: const Text('Account Master'),
 //           backgroundColor: const Color(0xFFD7BE69),
-//           // actions: [
-//           //   IconButton(
-//           //     icon: const Icon(Icons.list_alt),
-//           //     tooltip: 'View All Accounts',
-//           //     onPressed: () async {
-//           //       await Navigator.push(
-//           //         context,
-//           //         MaterialPageRoute(
-//           //           builder: (context) => const ViewAllMastersScreen(),
-//           //         ),
-//           //       );
-//           //     },
-//           //   ),
-//           // ],
 //         ),
 //         body: SingleChildScrollView(
 //           controller: _scrollController,
@@ -633,10 +633,11 @@
 //                             ),
 //                           )
 //                         : contactNumberError != null
-//                         ? const Icon(Icons.error, color: Colors.green)
-//                         : _contactNumberController.text.length == 10
-//                         ? const Icon(Icons.check_circle, color: Colors.green)
-//                         : null,
+//                             ? const Icon(Icons.error, color: Colors.green)
+//                             : _contactNumberController.text.length == 10
+//                                 ? const Icon(Icons.check_circle,
+//                                     color: Colors.green)
+//                                 : null,
 //                     border: OutlineInputBorder(
 //                       borderRadius: BorderRadius.circular(10),
 //                     ),
@@ -661,7 +662,9 @@
 //                     errorMaxLines: 2,
 //                   ),
 //                   validator: (v) {
-//                     if (v?.isEmpty ?? true) return 'Contact number is required';
+//                     if (v?.isEmpty ?? true) {
+//                       return 'Contact number is required';
+//                     }
 //                     if (v!.length != 10) return 'Must be 10 digits';
 //                     if (contactNumberError != null) return contactNumberError;
 //                     return null;
@@ -739,7 +742,7 @@
 //                                   // Navigate directly to account detail screen using GoRouter
 //                                   final role =
 //                                       UserService.currentRole?.toLowerCase() ??
-//                                       'admin';
+//                                           'admin';
 //                                   final result = await context.push(
 //                                     '/dashboard/$role/account/view/${existingAccountData!['id']}',
 //                                   );
@@ -783,8 +786,8 @@
 //                                     // Fetch full account details
 //                                     final account =
 //                                         await AccountService.fetchAccountById(
-//                                           existingAccountData!['id'],
-//                                         );
+//                                       existingAccountData!['id'],
+//                                     );
 
 //                                     // Close loading dialog
 //                                     if (mounted) Navigator.pop(context);
@@ -795,8 +798,8 @@
 //                                       MaterialPageRoute(
 //                                         builder: (context) =>
 //                                             EditAccountMasterScreen(
-//                                               account: account,
-//                                             ),
+//                                           account: account,
+//                                         ),
 //                                       ),
 //                                     );
 
@@ -1266,14 +1269,14 @@
 //                                     padding: const EdgeInsets.all(8.0),
 //                                     child: Row(
 //                                       mainAxisSize: MainAxisSize.min,
-//                                       children: [
-//                                         const Icon(
+//                                       children: const [
+//                                         Icon(
 //                                           Icons.open_in_new,
 //                                           size: 18,
 //                                           color: Color(0xFFD7BE69),
 //                                         ),
-//                                         const SizedBox(width: 4),
-//                                         const Text(
+//                                         SizedBox(width: 4),
+//                                         Text(
 //                                           'Open in Maps',
 //                                           style: TextStyle(
 //                                             fontSize: 12,
@@ -1495,85 +1498,85 @@
 //                 ],
 //               )
 //             : (imageBase64 != null && kIsWeb)
-//             ? Stack(
-//                 children: [
-//                   ClipRRect(
-//                     borderRadius: BorderRadius.circular(10),
-//                     child: Image.memory(
-//                       base64Decode(imageBase64.split(',')[1]),
-//                       fit: BoxFit.cover,
-//                       width: double.infinity,
-//                       height: double.infinity,
-//                     ),
-//                   ),
-//                   Positioned(
-//                     top: 5,
-//                     right: 5,
-//                     child: Container(
-//                       decoration: BoxDecoration(
-//                         color: Colors.black54,
-//                         borderRadius: BorderRadius.circular(15),
-//                       ),
-//                       child: IconButton(
-//                         icon: const Icon(
-//                           Icons.edit,
-//                           color: Colors.white,
-//                           size: 18,
+//                 ? Stack(
+//                     children: [
+//                       ClipRRect(
+//                         borderRadius: BorderRadius.circular(10),
+//                         child: Image.memory(
+//                           base64Decode(imageBase64.split(',')[1]),
+//                           fit: BoxFit.cover,
+//                           width: double.infinity,
+//                           height: double.infinity,
 //                         ),
-//                         onPressed: onTap,
-//                         padding: const EdgeInsets.all(4),
-//                         constraints: const BoxConstraints(),
 //                       ),
-//                     ),
-//                   ),
-//                 ],
-//               )
-//             : Column(
-//                 mainAxisAlignment: MainAxisAlignment.center,
-//                 children: [
-//                   Icon(
-//                     Icons.add_photo_alternate,
-//                     size: 40,
-//                     color: isRequired && !hasImage
-//                         ? const Color(0xFFD7BE69)
-//                         : const Color(0xFFD7BE69),
-//                   ),
-//                   const SizedBox(height: 8),
-//                   Text(
-//                     label,
-//                     style: TextStyle(
-//                       color: isRequired && !hasImage
-//                           ? const Color(0xFFD7BE69)
-//                           : const Color(0xFFD7BE69),
-//                       fontWeight: FontWeight.w500,
-//                     ),
-//                   ),
-//                   const SizedBox(height: 4),
-//                   Row(
+//                       Positioned(
+//                         top: 5,
+//                         right: 5,
+//                         child: Container(
+//                           decoration: BoxDecoration(
+//                             color: Colors.black54,
+//                             borderRadius: BorderRadius.circular(15),
+//                           ),
+//                           child: IconButton(
+//                             icon: const Icon(
+//                               Icons.edit,
+//                               color: Colors.white,
+//                               size: 18,
+//                             ),
+//                             onPressed: onTap,
+//                             padding: const EdgeInsets.all(4),
+//                             constraints: const BoxConstraints(),
+//                           ),
+//                         ),
+//                       ),
+//                     ],
+//                   )
+//                 : Column(
 //                     mainAxisAlignment: MainAxisAlignment.center,
 //                     children: [
-//                       Icon(Icons.camera_alt, size: 14, color: Colors.grey[600]),
-//                       const SizedBox(width: 4),
 //                       Icon(
-//                         Icons.photo_library,
-//                         size: 14,
-//                         color: Colors.grey[600],
+//                         Icons.add_photo_alternate,
+//                         size: 40,
+//                         color: isRequired && !hasImage
+//                             ? const Color(0xFFD7BE69)
+//                             : const Color(0xFFD7BE69),
 //                       ),
-//                       const SizedBox(width: 4),
+//                       const SizedBox(height: 8),
 //                       Text(
-//                         'Tap to select',
-//                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+//                         label,
+//                         style: TextStyle(
+//                           color: isRequired && !hasImage
+//                               ? const Color(0xFFD7BE69)
+//                               : const Color(0xFFD7BE69),
+//                           fontWeight: FontWeight.w500,
+//                         ),
+//                       ),
+//                       const SizedBox(height: 4),
+//                       Row(
+//                         mainAxisAlignment: MainAxisAlignment.center,
+//                         children: [
+//                           Icon(Icons.camera_alt,
+//                               size: 14, color: Colors.grey[600]),
+//                           const SizedBox(width: 4),
+//                           Icon(
+//                             Icons.photo_library,
+//                             size: 14,
+//                             color: Colors.grey[600],
+//                           ),
+//                           const SizedBox(width: 4),
+//                           Text(
+//                             'Tap to select',
+//                             style: TextStyle(
+//                                 fontSize: 12, color: Colors.grey[600]),
+//                           ),
+//                         ],
 //                       ),
 //                     ],
 //                   ),
-//                 ],
-//               ),
 //       ),
 //     );
 //   }
 // }
-
-
 
 import 'dart:convert';
 import 'dart:io';
@@ -1622,6 +1625,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   final _districtController = TextEditingController();
   final _cityController = TextEditingController();
   final _addressController = TextEditingController();
+  bool _isClearingForm = false;
 
   // Dropdown values
   String? _selectedBusinessType;
@@ -1767,10 +1771,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
             children: [
               const Text(
                 'Select Image Source',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
               ListTile(
@@ -1801,49 +1802,37 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
   /// ✅ FIXED: now ignores stale async responses after form clear / change
   Future<void> _checkContactNumber(String contactNumber) async {
-    // Only validate when 10 digits
+    if (_isClearingForm) return; // <--- ignore callback during clear
     if (contactNumber.length != 10) return;
 
-    // Snapshot of the number being validated now
-    final String requestedNumber = contactNumber;
-
+    final requestedNumber = contactNumber;
     setState(() {
       isCheckingContact = true;
       contactNumberError = null;
       existingAccountData = null;
     });
 
-    try {
-      final result = await AccountService.checkContactNumber(requestedNumber);
+    final result = await AccountService.checkContactNumber(requestedNumber);
 
-      if (!mounted) return;
+    // ignore stale or clearing results
+    if (!mounted ||
+        _isClearingForm ||
+        _contactNumberController.text != requestedNumber)
+      return;
 
-      // If user changed/cleared the field while API was in-flight, ignore this result
-      if (_contactNumberController.text != requestedNumber) {
-        return;
-      }
-
-      if (result['exists'] == true && result['data'] != null) {
-        final account = result['data'];
-        setState(() {
-          contactNumberError = 'Contact number already exists';
-          existingAccountData = account;
-        });
-      } else {
-        setState(() {
-          contactNumberError = null;
-          existingAccountData = null;
-        });
-      }
-    } catch (e) {
-      // Keep UX quiet unless needed; just log
-      // ignore: avoid_print
-      print('Error checking contact number: $e');
-    } finally {
-      if (mounted) {
-        setState(() => isCheckingContact = false);
-      }
+    if (result['exists'] == true && result['data'] != null) {
+      setState(() {
+        contactNumberError = 'Contact number already exists';
+        existingAccountData = result['data'];
+      });
+    } else {
+      setState(() {
+        contactNumberError = null;
+        existingAccountData = null;
+      });
     }
+
+    setState(() => isCheckingContact = false);
   }
 
   Future<void> _getCurrentLocation() async {
@@ -2098,6 +2087,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
   }
 
   void _clearForm() {
+    _isClearingForm = true;
     // Unfocus any focused field first
     FocusScope.of(context).unfocus();
 
@@ -2210,11 +2200,10 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                             ),
                           )
                         : contactNumberError != null
-                            ? const Icon(Icons.error, color: Colors.green)
-                            : _contactNumberController.text.length == 10
-                                ? const Icon(Icons.check_circle,
-                                    color: Colors.green)
-                                : null,
+                        ? const Icon(Icons.error, color: Colors.green)
+                        : _contactNumberController.text.length == 10
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : null,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -2319,7 +2308,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                   // Navigate directly to account detail screen using GoRouter
                                   final role =
                                       UserService.currentRole?.toLowerCase() ??
-                                          'admin';
+                                      'admin';
                                   final result = await context.push(
                                     '/dashboard/$role/account/view/${existingAccountData!['id']}',
                                   );
@@ -2363,8 +2352,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                     // Fetch full account details
                                     final account =
                                         await AccountService.fetchAccountById(
-                                      existingAccountData!['id'],
-                                    );
+                                          existingAccountData!['id'],
+                                        );
 
                                     // Close loading dialog
                                     if (mounted) Navigator.pop(context);
@@ -2375,8 +2364,8 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                       MaterialPageRoute(
                                         builder: (context) =>
                                             EditAccountMasterScreen(
-                                          account: account,
-                                        ),
+                                              account: account,
+                                            ),
                                       ),
                                     );
 
@@ -3075,81 +3064,79 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                 ],
               )
             : (imageBase64 != null && kIsWeb)
-                ? Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.memory(
-                          base64Decode(imageBase64.split(',')[1]),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                        ),
+            ? Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(imageBase64.split(',')[1]),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(15),
                       ),
-                      Positioned(
-                        top: 5,
-                        right: 5,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.edit,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            onPressed: onTap,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(),
-                          ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 18,
                         ),
+                        onPressed: onTap,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
                       ),
-                    ],
-                  )
-                : Column(
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate,
+                    size: 40,
+                    color: isRequired && !hasImage
+                        ? const Color(0xFFD7BE69)
+                        : const Color(0xFFD7BE69),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isRequired && !hasImage
+                          ? const Color(0xFFD7BE69)
+                          : const Color(0xFFD7BE69),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      Icon(Icons.camera_alt, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
                       Icon(
-                        Icons.add_photo_alternate,
-                        size: 40,
-                        color: isRequired && !hasImage
-                            ? const Color(0xFFD7BE69)
-                            : const Color(0xFFD7BE69),
+                        Icons.photo_library,
+                        size: 14,
+                        color: Colors.grey[600],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(width: 4),
                       Text(
-                        label,
-                        style: TextStyle(
-                          color: isRequired && !hasImage
-                              ? const Color(0xFFD7BE69)
-                              : const Color(0xFFD7BE69),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.camera_alt,
-                              size: 14, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.photo_library,
-                            size: 14,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Tap to select',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[600]),
-                          ),
-                        ],
+                        'Tap to select',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
                   ),
+                ],
+              ),
       ),
     );
   }
