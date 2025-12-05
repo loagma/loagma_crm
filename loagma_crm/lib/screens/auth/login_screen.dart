@@ -141,15 +141,86 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ----------------------------------------------------------------
-  // DEV MODE: DIRECT LOGIN WITHOUT OTP
+  // DEV MODE: DIRECT LOGIN WITHOUT OTP (with user lookup)
   // ----------------------------------------------------------------
-  void _devModeLogin() {
+  Future<void> _devModeLogin() async {
     if (selectedDevRole == null) return;
 
-    // Fake login – required for router guards
-    UserService.login(role: selectedDevRole!, contactNumber: "9999999999");
+    setState(() => isLoading = true);
 
-    context.go('/dashboard/$selectedDevRole');
+    try {
+      // Try to find a real user with this role
+      final url = Uri.parse('${ApiConfig.baseUrl}/admin/users');
+      final response = await http.get(url).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['users'] != null) {
+          final users = List<Map<String, dynamic>>.from(data['users']);
+
+          // Find first user with selected role
+          final userWithRole = users.firstWhere(
+            (user) =>
+                user['role']?.toString().toLowerCase() ==
+                selectedDevRole!.toLowerCase(),
+            orElse: () => {},
+          );
+
+          if (userWithRole.isNotEmpty) {
+            // Save real user data
+            await UserService.loginFromApi({
+              'success': true,
+              'data': {
+                '_id': userWithRole['id'],
+                'role': selectedDevRole,
+                'contactNumber': userWithRole['contactNumber'] ?? '9999999999',
+                'name': userWithRole['name'] ?? 'Dev User',
+              },
+              'token': 'dev_mode_token',
+            });
+
+            if (mounted) {
+              Fluttertoast.showToast(
+                msg: "Dev Login: ${userWithRole['name']}",
+                backgroundColor: Colors.green,
+              );
+              context.go('/dashboard/$selectedDevRole');
+            }
+            return;
+          }
+        }
+      }
+
+      // Fallback: Create fake session if no user found
+      await UserService.login(
+        role: selectedDevRole!,
+        contactNumber: "9999999999",
+      );
+
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: "Dev Mode: No real user found, using fake session",
+          backgroundColor: Colors.orange,
+        );
+        context.go('/dashboard/$selectedDevRole');
+      }
+    } catch (e) {
+      if (kDebugMode) print('Dev login error: $e');
+
+      // Fallback on error
+      await UserService.login(
+        role: selectedDevRole!,
+        contactNumber: "9999999999",
+      );
+
+      if (mounted) {
+        context.go('/dashboard/$selectedDevRole');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   // ----------------------------------------------------------------
