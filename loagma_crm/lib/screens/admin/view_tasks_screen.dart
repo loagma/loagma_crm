@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/map_task_assignment_service.dart';
 import 'admin_assignments_map_screen.dart';
+import 'assignment_map_detail_screen.dart';
 
 class ViewTasksScreen extends StatefulWidget {
   const ViewTasksScreen({super.key});
@@ -55,6 +56,18 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
       print('Error loading assignments: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  void _viewAssignmentOnMap(Map<String, dynamic> assignment) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentMapViewScreen(
+          assignment: assignment,
+          salesmanName: assignment['salesmanName'] ?? 'Salesman',
+        ),
+      ),
+    );
   }
 
   @override
@@ -254,6 +267,24 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
                   ),
                 ],
               ),
+            const SizedBox(height: 16),
+            // View in Map Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _viewAssignmentOnMap(assignment),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7BE69),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.map, size: 20),
+                label: const Text('View in Map'),
+              ),
+            ),
           ],
         ),
       ),
