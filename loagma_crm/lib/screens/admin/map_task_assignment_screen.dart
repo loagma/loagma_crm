@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../models/shop_model.dart';
+import 'assignment_map_detail_screen.dart';
 
 class MapTaskAssignmentScreen extends StatefulWidget {
   const MapTaskAssignmentScreen({super.key});
@@ -622,6 +623,40 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
     );
   }
 
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _viewAssignmentOnMap(Map<String, dynamic> assignment) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentMapViewScreen(
+          assignment: assignment,
+          salesmanName: _selectedSalesmanName ?? 'Salesman',
+        ),
+      ),
+    );
+  }
+
   Widget _buildAssignmentsTab() {
     if (_selectedSalesmanId == null) {
       return const Center(child: Text('Select a salesman to view assignments'));
@@ -657,16 +692,101 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Country: ${assignment['country']}'),
-                        Text('District: ${assignment['district']}'),
-                        Text(
-                          'Areas: ${(assignment['areas'] as List).join(', ')}',
+                        _buildDetailRow(
+                          Icons.public,
+                          'Country',
+                          assignment['country'],
                         ),
-                        Text(
-                          'Business Types: ${(assignment['businessTypes'] as List).join(', ')}',
+                        _buildDetailRow(
+                          Icons.location_city,
+                          'District',
+                          assignment['district'],
                         ),
-                        Text(
-                          'Total Businesses: ${assignment['totalBusinesses'] ?? 0}',
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Areas:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: (assignment['areas'] as List)
+                              .map(
+                                (area) => Chip(
+                                  label: Text(
+                                    area,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  backgroundColor: const Color.fromRGBO(
+                                    215,
+                                    190,
+                                    105,
+                                    0.2,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Business Types:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: (assignment['businessTypes'] as List)
+                              .map(
+                                (type) => Chip(
+                                  label: Text(
+                                    type,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  backgroundColor: Colors.blue[50],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total Businesses:'),
+                              Text(
+                                '${assignment['totalBusinesses'] ?? 0}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _viewAssignmentOnMap(assignment),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD7BE69),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: const Icon(Icons.map, size: 20),
+                            label: const Text('View in Map'),
+                          ),
                         ),
                       ],
                     ),
