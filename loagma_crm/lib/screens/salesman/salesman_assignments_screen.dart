@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
+import 'salesman_assignments_map_screen.dart';
 
 class SalesmanAssignmentsScreen extends StatefulWidget {
   const SalesmanAssignmentsScreen({super.key});
@@ -61,6 +62,18 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
         title: const Text('My Area Allotments'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'Map View',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SalesmanAssignmentsMapScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: fetchMyAssignments,

@@ -2339,6 +2339,24 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                   foregroundColor: Colors.orange,
                                 ),
                                 onPressed: () async {
+                                  // Check if salesman is trying to edit someone else's account
+                                  final currentRole = UserService.currentRole
+                                      ?.toLowerCase();
+                                  final currentUserId =
+                                      UserService.currentUserId;
+                                  final accountCreatorId =
+                                      existingAccountData!['createdBy']?['id'] ??
+                                      existingAccountData!['createdById'];
+
+                                  if (currentRole == 'salesman' &&
+                                      accountCreatorId != null &&
+                                      accountCreatorId != currentUserId) {
+                                    _showError(
+                                      'Access Denied: You can only edit accounts you created',
+                                    );
+                                    return;
+                                  }
+
                                   try {
                                     // Show loading
                                     showDialog(
@@ -2357,6 +2375,19 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
 
                                     // Close loading dialog
                                     if (mounted) Navigator.pop(context);
+
+                                    // Double-check access after fetching full details
+                                    final fullAccountCreatorId =
+                                        account.createdById;
+
+                                    if (currentRole == 'salesman' &&
+                                        fullAccountCreatorId != null &&
+                                        fullAccountCreatorId != currentUserId) {
+                                      _showError(
+                                        'Access Denied: You can only edit accounts you created',
+                                      );
+                                      return;
+                                    }
 
                                     // Navigate to edit screen
                                     final result = await Navigator.push<bool>(
@@ -2403,6 +2434,24 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                   foregroundColor: Colors.white,
                                 ),
                                 onPressed: () async {
+                                  // Check if salesman is trying to delete someone else's account
+                                  final currentRole = UserService.currentRole
+                                      ?.toLowerCase();
+                                  final currentUserId =
+                                      UserService.currentUserId;
+                                  final accountCreatorId =
+                                      existingAccountData!['createdBy']?['id'] ??
+                                      existingAccountData!['createdById'];
+
+                                  if (currentRole == 'salesman' &&
+                                      accountCreatorId != null &&
+                                      accountCreatorId != currentUserId) {
+                                    _showError(
+                                      'Access Denied: You can only delete accounts you created',
+                                    );
+                                    return;
+                                  }
+
                                   final confirm = await showDialog<bool>(
                                     context: context,
                                     builder: (context) => AlertDialog(

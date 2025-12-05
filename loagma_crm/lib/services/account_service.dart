@@ -8,13 +8,17 @@ class AccountService {
   // Get auth token from shared preferences
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    return prefs.getString(
+      'token',
+    ); // Fixed: was 'auth_token', should be 'token'
   }
 
   // Get user ID from shared preferences
   static Future<String?> _getUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_id');
+    return prefs.getString(
+      'userId',
+    ); // Fixed: was 'user_id', should be 'userId'
   }
 
   // Get headers with auth token
@@ -57,6 +61,11 @@ class AccountService {
     try {
       final userId = await _getUserId();
       final headers = await _getHeaders();
+
+      print('🔍 Creating account with:');
+      print('   User ID (createdById): $userId');
+      print('   Person Name: $personName');
+      print('   Contact: $contactNumber');
 
       final response = await http.post(
         Uri.parse(ApiConfig.accountsUrl),

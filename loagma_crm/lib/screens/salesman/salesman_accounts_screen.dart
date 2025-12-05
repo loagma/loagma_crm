@@ -30,20 +30,61 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
 
     try {
       final userId = UserService.currentUserId;
+
+      print('🔍 Fetching accounts for user: $userId');
+
+      if (userId == null || userId.isEmpty) {
+        print('❌ User ID is null or empty');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error: User not logged in'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => isLoading = false);
+        return;
+      }
+
       final url = Uri.parse(
         '${ApiConfig.baseUrl}/accounts?createdById=$userId',
       );
 
+      print('📡 Fetching from: $url');
+
       final response = await http.get(url);
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
       final data = jsonDecode(response.body);
 
       if (data['success'] == true) {
+        final accountsList = List<Map<String, dynamic>>.from(
+          data['data'] ?? [],
+        );
+        print('✅ Fetched ${accountsList.length} accounts');
+
         setState(() {
-          accounts = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          accounts = accountsList;
         });
+      } else {
+        print('❌ API returned success: false');
+        print('   Message: ${data['message']}');
       }
-    } catch (e) {
-      print('Error fetching accounts: $e');
+    } catch (e, stackTrace) {
+      print('❌ Error fetching accounts: $e');
+      print('❌ Stack trace: $stackTrace');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading accounts: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       setState(() => isLoading = false);
     }

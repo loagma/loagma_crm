@@ -24,7 +24,9 @@ class UserService {
 
     if (user == null) return;
 
-    await _prefs?.setString(_keyUserId, user['_id'] ?? "");
+    // Handle both 'id' and '_id' formats from backend
+    final userId = user['id'] ?? user['_id'] ?? "";
+    await _prefs?.setString(_keyUserId, userId);
     await _prefs?.setString(_keyRole, user['role'] ?? "");
     await _prefs?.setString(_keyContact, user['contactNumber'] ?? "");
     await _prefs?.setString(_keyName, user['name'] ?? "");
@@ -35,15 +37,23 @@ class UserService {
   }
 
   /// -------------------------------------------------------------
-  /// DEV MODE LOGIN
+  /// DEV MODE LOGIN (with optional user ID)
   /// -------------------------------------------------------------
   static Future<void> login({
     required String role,
     String? contactNumber,
+    String? userId,
+    String? name,
   }) async {
     await _prefs?.setString(_keyRole, role);
     if (contactNumber != null) {
       await _prefs?.setString(_keyContact, contactNumber);
+    }
+    if (userId != null) {
+      await _prefs?.setString(_keyUserId, userId);
+    }
+    if (name != null) {
+      await _prefs?.setString(_keyName, name);
     }
   }
 

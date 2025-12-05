@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/map_task_assignment_service.dart';
+import 'admin_assignments_map_screen.dart';
 
 class ViewTasksScreen extends StatefulWidget {
   const ViewTasksScreen({super.key});
@@ -70,6 +71,18 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
         backgroundColor: const Color(0xFFD7BE69),
         elevation: 2,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'Map View',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AdminAssignmentsMapScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadAllAssignments,

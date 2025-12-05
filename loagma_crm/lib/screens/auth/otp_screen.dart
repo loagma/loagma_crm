@@ -80,6 +80,16 @@ class _OtpScreenState extends State<OtpScreen> {
       await UserService.loginFromApi(data);
 
       final userRole = UserService.currentRole;
+      final userId = UserService.currentUserId;
+      final userName = UserService.name;
+
+      if (kDebugMode) {
+        print('✅ Login successful:');
+        print('   User ID: $userId');
+        print('   Role: $userRole');
+        print('   Name: $userName');
+        print('   Contact: $contactNumber');
+      }
 
       if (userRole == null || userRole.isEmpty) {
         // Navigate to no role screen
