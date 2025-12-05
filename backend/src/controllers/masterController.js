@@ -19,9 +19,9 @@ export const getAllDepartments = async (req, res) => {
 export const getAllFunctionalRoles = async (req, res) => {
   try {
     const { departmentId } = req.query;
-    
+
     const where = departmentId ? { departmentId } : {};
-    
+
     const roles = await prisma.functionalRole.findMany({
       where,
       include: {
@@ -40,7 +40,7 @@ export const getAllFunctionalRoles = async (req, res) => {
 export const getAllRoles = async (req, res) => {
   try {
     const roles = await prisma.role.findMany({
-      orderBy: { level: 'asc' }
+      orderBy: { name: 'asc' }
     });
     res.json({ success: true, data: roles });
   } catch (error) {
