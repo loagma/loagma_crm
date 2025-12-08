@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../services/map_task_assignment_service.dart';
@@ -39,60 +41,86 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   Future<void> _loadAssignmentBusinesses() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      final pincode = widget.assignment['pincode'];
-      final areas = (widget.assignment['areas'] as List).cast<String>();
-      final businessTypes = (widget.assignment['businessTypes'] as List)
-          .cast<String>();
+      // Check if this is multiple assignments
+      final isMultiple = widget.assignment['isMultiple'] == true;
+      List<Shop> allShops = [];
 
-      // Fetch businesses for this assignment
-      final result = await _service.searchBusinesses(
-        pincode,
-        areas,
-        businessTypes.isEmpty
-            ? ['grocery', 'cafe', 'restaurant']
-            : businessTypes,
-      );
+      if (isMultiple) {
+        // Handle multiple assignments
+        final assignments =
+            (widget.assignment['assignments'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
 
-      if (result['success'] == true) {
-        final businesses = result['businesses'] as List?;
-        if (businesses != null) {
-          List<Shop> shops = [];
+        for (var assignment in assignments) {
+          final pincode = assignment['pincode'];
+          final areas = (assignment['areas'] as List?)?.cast<String>() ?? [];
+          final businessTypes =
+              (assignment['businessTypes'] as List?)?.cast<String>() ?? [];
+
+          // Fetch businesses for this assignment
+          final result = await _service.searchBusinesses(
+            pincode,
+            areas,
+            businessTypes.isEmpty
+                ? ['grocery', 'cafe', 'restaurant']
+                : businessTypes,
+          );
+
+          if (result['success'] == true) {
+            final businesses = (result['businesses'] as List?) ?? [];
+            for (var business in businesses) {
+              try {
+                allShops.add(Shop.fromGooglePlaces(business, pincode));
+              } catch (e) {
+                // Skip invalid shops
+              }
+            }
+          }
+        }
+      } else {
+        // Handle single assignment
+        final pincode = widget.assignment['pincode'];
+        final areas =
+            (widget.assignment['areas'] as List?)?.cast<String>() ?? [];
+        final businessTypes =
+            (widget.assignment['businessTypes'] as List?)?.cast<String>() ?? [];
+
+        // Fetch businesses for this assignment
+        final result = await _service.searchBusinesses(
+          pincode,
+          areas,
+          businessTypes.isEmpty
+              ? ['grocery', 'cafe', 'restaurant']
+              : businessTypes,
+        );
+
+        if (result['success'] == true) {
+          final businesses = (result['businesses'] as List?) ?? [];
           for (var business in businesses) {
             try {
-              shops.add(Shop.fromGooglePlaces(business, pincode));
+              allShops.add(Shop.fromGooglePlaces(business, pincode));
             } catch (e) {
               // Skip invalid shops
             }
           }
+        }
+      }
 
-          setState(() {
-            _shops = shops;
-            _createMarkers();
-            _isLoading = false;
-          });
-        } else {
-          setState(() => _isLoading = false);
-        }
-      } else {
-        setState(() => _isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Failed to load businesses'),
-            ),
-          );
-        }
-      }
+      if (!mounted) return;
+      setState(() {
+        _shops = allShops;
+        _createMarkers();
+        _isLoading = false;
+      });
     } catch (e) {
+      print('Error loading businesses: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
     }
   }
 
@@ -224,18 +252,33 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final areas = (widget.assignment['areas'] as List).cast<String>();
-    final businessTypes = (widget.assignment['businessTypes'] as List)
-        .cast<String>();
+    final isMultiple = widget.assignment['isMultiple'] == true;
+
+    String title;
+    String subtitle;
+
+    if (isMultiple) {
+      final assignments =
+          (widget.assignment['assignments'] as List?)
+              ?.cast<Map<String, dynamic>>() ??
+          [];
+      title = '${widget.salesmanName} - All Assignments';
+      subtitle = '${assignments.length} Pincodes • ${_shops.length} Businesses';
+    } else {
+      final areas = (widget.assignment['areas'] as List?)?.cast<String>() ?? [];
+      title =
+          '${widget.assignment['city'] ?? 'Assignment'} - ${widget.assignment['pincode'] ?? ''}';
+      subtitle = '${areas.length} Areas • ${_shops.length} Businesses';
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Assignment Map', style: TextStyle(fontSize: 18)),
+            Text(title, style: const TextStyle(fontSize: 16)),
             Text(
-              widget.salesmanName,
+              subtitle,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.normal,
@@ -274,6 +317,14 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                       );
                     }
                   },
+
+                  // Fixed gesture recognizers - each type only once
+                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<EagerGestureRecognizer>(
+                      () => EagerGestureRecognizer(),
+                    ),
+                  },
+
                   myLocationEnabled: true,
                   myLocationButtonEnabled: true,
                   zoomControlsEnabled: true,
@@ -281,126 +332,142 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                 ),
 
           // Info Card at bottom
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16,
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(215, 190, 105, 0.2),
-                            borderRadius: BorderRadius.circular(8),
+          if (!_isLoading)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color.fromRGBO(215, 190, 105, 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              isMultiple ? Icons.person : Icons.location_city,
+                              color: const Color(0xFFD7BE69),
+                              size: 24,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.location_city,
-                            color: Color(0xFFD7BE69),
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${widget.assignment['city']}, ${widget.assignment['state']}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Pincode: ${widget.assignment['pincode']}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
+                                Text(
+                                  subtitle,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatItem(
-                          Icons.location_on,
-                          '${areas.length}',
-                          'Areas',
-                          Colors.blue,
-                        ),
-                        _buildStatItem(
-                          Icons.business,
-                          '${_shops.length}',
-                          'Businesses',
-                          Colors.green,
-                        ),
-                        _buildStatItem(
-                          Icons.category,
-                          '${businessTypes.length}',
-                          'Types',
-                          Colors.orange,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Areas list
-                    ExpansionTile(
-                      title: const Text(
-                        'Assigned Areas',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        ],
                       ),
-                      tilePadding: EdgeInsets.zero,
-                      childrenPadding: const EdgeInsets.only(top: 8),
-                      children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: areas
-                              .map(
-                                (area) => Chip(
-                                  label: Text(
-                                    area,
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  backgroundColor: const Color.fromRGBO(
-                                    215,
-                                    190,
-                                    105,
-                                    0.2,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              )
-                              .toList(),
+                      const Divider(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatItem(
+                            Icons.store,
+                            '${_shops.length}',
+                            'Businesses',
+                            Colors.green,
+                          ),
+                          if (isMultiple)
+                            _buildStatItem(
+                              Icons.pin_drop,
+                              '${(widget.assignment['assignments'] as List?)?.length ?? 0}',
+                              'Pincodes',
+                              Colors.blue,
+                            )
+                          else
+                            _buildStatItem(
+                              Icons.location_on,
+                              '${(widget.assignment['areas'] as List?)?.length ?? 0}',
+                              'Areas',
+                              Colors.blue,
+                            ),
+                          _buildStatItem(
+                            Icons.person,
+                            widget.salesmanName.split(' ').first,
+                            'Salesman',
+                            Colors.orange,
+                          ),
+                        ],
+                      ),
+                      if (!isMultiple) ...[
+                        const SizedBox(height: 12),
+                        // Areas list for single assignment
+                        ExpansionTile(
+                          title: const Text(
+                            'Assigned Areas',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(top: 8),
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children:
+                                  ((widget.assignment['areas'] as List?)
+                                              ?.cast<String>() ??
+                                          [])
+                                      .map(
+                                        (area) => Chip(
+                                          label: Text(
+                                            area,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          backgroundColor: const Color.fromRGBO(
+                                            215,
+                                            190,
+                                            105,
+                                            0.2,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      )
+                                      .toList(),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           // Loading overlay
           if (_isLoading)

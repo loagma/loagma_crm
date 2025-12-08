@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, Factory;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
@@ -1361,6 +1362,15 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                             'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
                                       );
                                     },
+
+                                    // Fixed gesture recognizers - each type only once
+                                    gestureRecognizers:
+                                        <Factory<OneSequenceGestureRecognizer>>{
+                                          Factory<EagerGestureRecognizer>(
+                                            () => EagerGestureRecognizer(),
+                                          ),
+                                        },
+
                                     myLocationButtonEnabled: false,
                                     zoomControlsEnabled: true,
                                     mapToolbarEnabled: false,

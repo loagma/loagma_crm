@@ -12,7 +12,9 @@ class ViewTasksScreen extends StatefulWidget {
 
 class _ViewTasksScreenState extends State<ViewTasksScreen> {
   final _service = MapTaskAssignmentService();
-  List<Map<String, dynamic>> _assignments = [];
+  Map<String, List<Map<String, dynamic>>> _salesmenAssignments = {};
+  List<Map<String, dynamic>> _salesmen = [];
+  String _searchQuery = '';
   bool _isLoading = true;
 
   @override
@@ -22,63 +24,78 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
   }
 
   Future<void> _loadAllAssignments() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       // Get all salesmen first
       final salesmenResult = await _service.fetchSalesmen();
       if (salesmenResult['success'] == true) {
-        final salesmen = salesmenResult['salesmen'] as List;
+        final salesmen =
+            (salesmenResult['salesmen'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
 
         // Fetch assignments for each salesman
-        List<Map<String, dynamic>> allAssignments = [];
+        Map<String, List<Map<String, dynamic>>> salesmenAssignments = {};
+
         for (var salesman in salesmen) {
-          final result = await _service.getAssignmentsBySalesman(
-            salesman['id'],
-          );
+          final salesmanId = salesman['id'];
+          final result = await _service.getAssignmentsBySalesman(salesmanId);
+
           if (result['success'] == true) {
-            final assignments = result['assignments'] as List;
-            for (var assignment in assignments) {
-              allAssignments.add({
-                ...assignment,
-                'salesmanName': salesman['name'],
-                'salesmanPhone': salesman['contactNumber'],
-              });
+            final assignments =
+                (result['assignments'] as List?)
+                    ?.cast<Map<String, dynamic>>() ??
+                [];
+
+            if (assignments.isNotEmpty) {
+              salesmenAssignments[salesmanId] = assignments;
             }
           }
         }
 
+        if (!mounted) return;
         setState(() {
-          _assignments = allAssignments;
+          _salesmen = salesmen
+              .where((s) => salesmenAssignments.containsKey(s['id']))
+              .toList();
+          _salesmenAssignments = salesmenAssignments;
           _isLoading = false;
         });
       }
     } catch (e) {
       print('Error loading assignments: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
 
-  void _viewAssignmentOnMap(Map<String, dynamic> assignment) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AssignmentMapViewScreen(
-          assignment: assignment,
-          salesmanName: assignment['salesmanName'] ?? 'Salesman',
-        ),
-      ),
-    );
+  List<Map<String, dynamic>> get _filteredSalesmen {
+    if (_searchQuery.isEmpty) return _salesmen;
+
+    return _salesmen.where((salesman) {
+      final name = (salesman['name'] ?? '').toLowerCase();
+      final phone = (salesman['contactNumber'] ?? '').toLowerCase();
+      final searchLower = _searchQuery.toLowerCase();
+      return name.contains(searchLower) || phone.contains(searchLower);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final totalAssignments = _salesmenAssignments.values.fold<int>(
+      0,
+      (sum, assignments) => sum + assignments.length,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(
           children: [
             Icon(Icons.list_alt_outlined, size: 24),
             SizedBox(width: 10),
-            Text('View All Assignments'),
+            Text('Allotments Management'),
           ],
         ),
         backgroundColor: const Color(0xFFD7BE69),
@@ -104,7 +121,7 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _assignments.isEmpty
+          : _salesmen.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -126,166 +143,297 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
             )
           : Column(
               children: [
-                // Header
-                Container(
+                // Search Bar
+                Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    '${_assignments.length} Assignments',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search by salesman name or phone...',
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFFD7BE69),
+                      ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFD7BE69),
+                          width: 2,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                // List
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _assignments.length,
-                    itemBuilder: (context, index) {
-                      final assignment = _assignments[index];
-                      return _buildAssignmentCard(assignment);
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
                     },
                   ),
+                ),
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_filteredSalesmen.length} Salesmen',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '$totalAssignments Total Assignments',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // List
+                Expanded(
+                  child: _filteredSalesmen.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No salesmen found',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredSalesmen.length,
+                          itemBuilder: (context, index) {
+                            final salesman = _filteredSalesmen[index];
+                            final assignments =
+                                _salesmenAssignments[salesman['id']] ?? [];
+                            return _buildSalesmanCard(salesman, assignments);
+                          },
+                        ),
                 ),
               ],
             ),
     );
   }
 
-  Widget _buildAssignmentCard(Map<String, dynamic> assignment) {
-    final areas = (assignment['areas'] as List?)?.cast<String>() ?? [];
-    final businessTypes =
-        (assignment['businessTypes'] as List?)?.cast<String>() ?? [];
+  Widget _buildSalesmanCard(
+    Map<String, dynamic> salesman,
+    List<Map<String, dynamic>> assignments,
+  ) {
+    final totalPincodes = assignments.length;
+    final totalAreas = assignments.fold<int>(
+      0,
+      (sum, a) => sum + ((a['areas'] as List?)?.length ?? 0),
+    );
+    final totalBusinesses = assignments.fold<int>(
+      0,
+      (sum, a) => sum + ((a['totalBusinesses'] as int?) ?? 0),
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD7BE69).withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
               children: [
-                const CircleAvatar(
-                  backgroundColor: Color(0xFFD7BE69),
-                  child: Icon(Icons.location_on, color: Colors.white),
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: const Color(0xFFD7BE69),
+                  child: Text(
+                    (salesman['name'] ?? 'S')[0].toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${assignment['city']}, ${assignment['state']}',
+                        salesman['name'] ?? 'Unknown',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        'Pincode: ${assignment['pincode']}',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
+                      if (salesman['contactNumber'] != null)
+                        Text(
+                          salesman['contactNumber'],
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ],
             ),
-            const Divider(height: 24),
-            // Salesman
-            Row(
+          ),
+          // Stats
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                const Icon(Icons.person, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  assignment['salesmanName'] ?? 'Unknown',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                _buildStatItem(
+                  Icons.pin_drop,
+                  totalPincodes.toString(),
+                  'Pincodes',
+                ),
+                _buildStatItem(
+                  Icons.location_on,
+                  totalAreas.toString(),
+                  'Areas',
+                ),
+                _buildStatItem(
+                  Icons.store,
+                  totalBusinesses.toString(),
+                  'Businesses',
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Areas
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.map, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Areas: ${areas.join(', ')}',
-                    style: TextStyle(color: Colors.grey[700]),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Business Types
-            if (businessTypes.isNotEmpty)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.business, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Types: ${businessTypes.join(', ')}',
-                      style: TextStyle(color: Colors.grey[700]),
-                    ),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 8),
-            // Total Businesses
-            Row(
-              children: [
-                const Icon(Icons.store, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  'Total Businesses: ${assignment['totalBusinesses'] ?? 0}',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Date
-            if (assignment['assignedDate'] != null)
-              Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Assigned: ${DateTime.parse(assignment['assignedDate']).toString().split(' ')[0]}',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 16),
-            // View in Map Button
-            SizedBox(
+          ),
+          // View All Button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _viewAssignmentOnMap(assignment),
+                onPressed: () =>
+                    _viewAllAssignmentsOnMap(salesman, assignments),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFD7BE69),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                icon: const Icon(Icons.map, size: 20),
-                label: const Text('View in Map'),
+                icon: const Icon(Icons.map, size: 22),
+                label: const Text(
+                  'View All on Map',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
-          ],
+          ),
+          // Pincode List
+          ExpansionTile(
+            title: Text(
+              'View Pincodes ($totalPincodes)',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            children: assignments.map((assignment) {
+              final areas =
+                  (assignment['areas'] as List?)?.cast<String>() ?? [];
+              return ListTile(
+                leading: const Icon(
+                  Icons.location_city,
+                  color: Color(0xFFD7BE69),
+                ),
+                title: Text(
+                  '${assignment['city']} - ${assignment['pincode']}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  '${areas.length} areas • ${assignment['totalBusinesses'] ?? 0} businesses',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.map, color: Color(0xFFD7BE69)),
+                  onPressed: () =>
+                      _viewAssignmentOnMap(assignment, salesman['name']),
+                  tooltip: 'View on Map',
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String value, String label) {
+    return Column(
+      children: [
+        Icon(icon, color: const Color(0xFFD7BE69), size: 28),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFD7BE69),
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  void _viewAllAssignmentsOnMap(
+    Map<String, dynamic> salesman,
+    List<Map<String, dynamic>> assignments,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentMapViewScreen(
+          assignment: {
+            'salesmanName': salesman['name'],
+            'assignments': assignments,
+            'isMultiple': true,
+          },
+          salesmanName: salesman['name'] ?? 'Salesman',
+        ),
+      ),
+    );
+  }
+
+  void _viewAssignmentOnMap(
+    Map<String, dynamic> assignment,
+    String salesmanName,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentMapViewScreen(
+          assignment: assignment,
+          salesmanName: salesmanName,
         ),
       ),
     );
