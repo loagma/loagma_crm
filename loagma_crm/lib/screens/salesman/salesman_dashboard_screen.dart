@@ -174,7 +174,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   child: Column(
                     children: [
                       // Header with gradient
-                      _buildHeader(),
+                      // _buildHeader(),
 
                       // Stats Cards
                       Padding(
@@ -252,41 +252,6 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 ),
               ),
             ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFD7BE69), Color(0xFFC4A952)],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Welcome Back!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                UserService.name ?? 'Salesman',
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -528,7 +493,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 () => context.go('/dashboard/salesman/account/master'),
               ),
               _buildActionCard(
-                'My Accounts',
+                'Lists of Accounts',
                 Icons.folder_open,
                 Colors.blue,
                 () => context.go('/dashboard/salesman/accounts'),
@@ -541,9 +506,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
               ),
               _buildActionCard(
                 'Maps',
-                Icons.receipt_long,
+                Icons.map,
                 Colors.orange,
-                () => context.go('/dashboard/salesman/expense/my'),
+                () => context.go('/dashboard/salesman/map'),
+              ),
+              _buildActionCard(
+                'Punch',
+                Icons.punch_clock,
+                const Color.fromARGB(255, 206, 52, 25),
+                () => context.go('/dashboard/salesman/punch'),
               ),
             ],
           ),

@@ -214,7 +214,9 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         _showError('No businesses found. Try different business types.');
       } else {
         _showSuccess('Found ${allShops.length} businesses!');
-        _mapBusinessTypeFilter = Set.from(_selectedBusinessTypes);
+        // Don't auto-select filters - let user choose
+        _mapBusinessTypeFilter.clear();
+        _mapStageFilter.clear();
         await _updateMapMarkers();
         _tabController.animateTo(2); // Switch to map tab
       }
@@ -1816,8 +1818,14 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                                 _updateMapMarkers();
                               });
                             },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                            ),
                             child: const Text(
-                              'Clear All',
+                              'Clear Filters',
                               style: TextStyle(fontSize: 12),
                             ),
                           ),
@@ -1898,13 +1906,48 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                               color: primaryColor,
                             ),
                             const SizedBox(width: 6),
-                            const Text(
-                              'Business Type:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Text(
+                                'Business Type: ${_mapBusinessTypeFilter.isEmpty ? "All" : "${_mapBusinessTypeFilter.length} selected"}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
+                            if (_selectedBusinessTypes.isNotEmpty) ...[
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    if (_mapBusinessTypeFilter.length ==
+                                        _selectedBusinessTypes.length) {
+                                      _mapBusinessTypeFilter.clear();
+                                    } else {
+                                      _mapBusinessTypeFilter = Set.from(
+                                        _selectedBusinessTypes,
+                                      );
+                                    }
+                                    _updateMapMarkers();
+                                  });
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  _mapBusinessTypeFilter.length ==
+                                          _selectedBusinessTypes.length
+                                      ? 'Deselect All'
+                                      : 'Select All',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -1943,12 +1986,59 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                           }).toList(),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'Showing $filteredShopsCount of ${_shops.length} businesses',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                _mapBusinessTypeFilter.isEmpty &&
+                                    _mapStageFilter.isEmpty
+                                ? Colors.blue[50]
+                                : Colors.green[50],
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color:
+                                  _mapBusinessTypeFilter.isEmpty &&
+                                      _mapStageFilter.isEmpty
+                                  ? Colors.blue[200]!
+                                  : Colors.green[200]!,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _mapBusinessTypeFilter.isEmpty &&
+                                        _mapStageFilter.isEmpty
+                                    ? Icons.info_outline
+                                    : Icons.check_circle_outline,
+                                size: 14,
+                                color:
+                                    _mapBusinessTypeFilter.isEmpty &&
+                                        _mapStageFilter.isEmpty
+                                    ? Colors.blue[700]
+                                    : Colors.green[700],
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _mapBusinessTypeFilter.isEmpty &&
+                                          _mapStageFilter.isEmpty
+                                      ? 'Showing all $filteredShopsCount businesses'
+                                      : 'Filtered: $filteredShopsCount of ${_shops.length} businesses',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color:
+                                        _mapBusinessTypeFilter.isEmpty &&
+                                            _mapStageFilter.isEmpty
+                                        ? Colors.blue[700]
+                                        : Colors.green[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -1996,41 +2086,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       checkmarkColor: color,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-  }
-
-  Widget _buildLegendItem(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 16,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade400),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(IconData icon, String label, String value) {
-    return Column(
-      children: [
-        Icon(icon, color: primaryColor, size: 28),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-      ],
     );
   }
 

@@ -102,6 +102,12 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.stacked_line_chart, // great for analytics
             "/dashboard/admin/reports",
           ),
+
+          SidebarItem(
+            "Attendance Management",
+            Icons.add_chart_sharp, // great for analytics
+            "/dashboard/admin/attendance",
+          ),
         ];
 
       case "employee":
@@ -123,7 +129,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/salesman/account/master",
           ),
           SidebarItem(
-            "My Accounts",
+            "List of Accounts",
             Icons.folder_open_outlined,
             "/dashboard/salesman/accounts",
           ),
@@ -132,16 +138,18 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.map_outlined,
             "/dashboard/salesman/assignments",
           ),
-          SidebarItem(
-            "Create Expense",
-            Icons.add_card_outlined,
-            "/dashboard/salesman/expense/create",
-          ),
-          SidebarItem(
-            "My Expenses",
-            Icons.receipt_long_outlined,
-            "/dashboard/salesman/expense/my",
-          ),
+          // SidebarItem(
+          //   "Create Expense",
+          //   Icons.add_card_outlined,
+          //   "/dashboard/salesman/expense/create",
+          // ),
+          // SidebarItem(
+          //   "My Expenses",
+          //   Icons.receipt_long_outlined,
+          //   "/dashboard/salesman/expense/my",
+          // ),
+          SidebarItem("Maps", Icons.map_outlined, "/dashboard/salesman/map"),
+          SidebarItem("Punch", Icons.map_outlined, "/dashboard/salesman/punch"),
         ];
 
       default:

@@ -17,6 +17,7 @@ import '../screens/admin/schedule_task_screen.dart';
 import '../screens/admin/view_tasks_screen.dart';
 import '../screens/admin/reports_screen.dart';
 import '../screens/admin/modern_task_assignment_screen.dart';
+import '../screens/admin/attendance_management_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -29,6 +30,8 @@ import '../screens/shared/employee_list_screen.dart';
 // Salesman screens
 import '../screens/salesman/salesman_accounts_screen.dart';
 import '../screens/salesman/salesman_assignments_screen.dart';
+import '../screens/salesman/salesman_map_screen.dart';
+import '../screens/salesman/salesman_punch_screen.dart';
 
 // Guards & Services
 import 'auth_guard.dart';
@@ -123,6 +126,10 @@ final GoRouter appRouter = GoRouter(
           path: 'employees/list',
           builder: (_, __) => const EmployeeListScreen(),
         ),
+        GoRoute(
+          path: 'attendance',
+          builder: (_, __) => const AttendanceManagementScreen(),
+        ),
 
         // Shared routes (Admin, Salesman, etc.)
         GoRoute(
@@ -158,6 +165,8 @@ final GoRouter appRouter = GoRouter(
           path: 'assignments',
           builder: (_, __) => const SalesmanAssignmentsScreen(),
         ),
+        GoRoute(path: 'map', builder: (_, __) => const SalesmanMapScreen()),
+        GoRoute(path: 'punch', builder: (_, __) => const SalesmanPunchScreen()),
       ],
     ),
   ],

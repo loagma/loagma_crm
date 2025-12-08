@@ -117,7 +117,7 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Accounts'),
+        title: const Text('Lists of Accounts'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
           IconButton(

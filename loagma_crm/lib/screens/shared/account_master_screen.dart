@@ -1749,7 +1749,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
         });
 
         _showSuccess(
-          isOwnerImage ? 'Incharge image selected' : 'Outlet image selected',
+          isOwnerImage ? 'Shop Owner image selected' : 'Shop Image selected',
         );
       }
     } catch (e) {
@@ -1992,12 +1992,12 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
       }
 
       if (_ownerImageBase64 == null) {
-        _showError('Incharge image is required');
+        _showError('Shop Owner image is required');
         return;
       }
 
       if (_shopImageBase64 == null) {
-        _showError('Outlet image is required');
+        _showError('Shop Image is required');
         return;
       }
 
@@ -2594,7 +2594,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                   children: [
                     Expanded(
                       child: _buildImagePicker(
-                        label: 'Outlet Image *',
+                        label: 'Shop Image *',
                         imageFile: _shopImageFile,
                         imageBase64: _shopImageBase64,
                         onTap: () => _showImageSourceDialog(false),
@@ -2604,7 +2604,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                     const SizedBox(width: 15),
                     Expanded(
                       child: _buildImagePicker(
-                        label: 'Incharge Image *',
+                        label: 'Shop Owner *',
                         imageFile: _ownerImageFile,
                         imageBase64: _ownerImageBase64,
                         onTap: () => _showImageSourceDialog(true),
