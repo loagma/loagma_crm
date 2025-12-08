@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
@@ -1597,10 +1598,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                             _latitude!,
                                             _longitude!,
                                           ),
-                                          infoWindow: const InfoWindow(
-                                            title: 'Employee Location',
-                                            snippet: 'Tap to change location',
-                                          ),
                                         ),
                                       }
                                     : {},
@@ -1609,31 +1606,23 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                     _latitude = position.latitude;
                                     _longitude = position.longitude;
                                   });
-                                  Fluttertoast.showToast(
-                                    msg:
-                                        'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-                                  );
                                 },
+
+                                // Fixed gesture recognizers - each type only once
+                                gestureRecognizers:
+                                    <Factory<OneSequenceGestureRecognizer>>{
+                                      Factory<EagerGestureRecognizer>(
+                                        () => EagerGestureRecognizer(),
+                                      ),
+                                    },
+
                                 myLocationButtonEnabled: false,
                                 zoomControlsEnabled: true,
                                 mapToolbarEnabled: false,
                                 zoomGesturesEnabled: true,
                                 scrollGesturesEnabled: true,
-                                tiltGesturesEnabled:
-                                    false, // Disable for better performance
-                                rotateGesturesEnabled:
-                                    false, // Disable for better performance
-                                compassEnabled:
-                                    false, // Disable for better performance
-                                indoorViewEnabled:
-                                    false, // Disable for better performance
-                                trafficEnabled: false,
-                                buildingsEnabled:
-                                    false, // Disable for better performance
-                                liteModeEnabled:
-                                    false, // Ensure full functionality
-                                mapType: MapType
-                                    .normal, // Use normal map type for best performance
+                                tiltGesturesEnabled: false,
+                                rotateGesturesEnabled: false,
                               ),
 
                               // Search overlay

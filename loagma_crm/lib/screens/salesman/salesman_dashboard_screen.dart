@@ -540,7 +540,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 () => context.go('/dashboard/salesman/assignments'),
               ),
               _buildActionCard(
-                'My Expenses',
+                'Maps',
                 Icons.receipt_long,
                 Colors.orange,
                 () => context.go('/dashboard/salesman/expense/my'),

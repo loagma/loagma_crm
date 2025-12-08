@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -243,6 +245,14 @@ class _SalesmanAssignmentsMapScreenState
                     zoom: 5,
                   ),
                   markers: markers,
+
+                  // Fixed gesture recognizers - each type only once
+                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<EagerGestureRecognizer>(
+                      () => EagerGestureRecognizer(),
+                    ),
+                  },
+
                   myLocationButtonEnabled: true,
                   zoomControlsEnabled: true,
                   mapToolbarEnabled: false,
