@@ -312,3 +312,40 @@ model Shop {
   @@index([assignedTo])
   @@index([area])
 }
+
+model Attendance {
+  id                  String    @id @default(cuid())
+  employeeId          String
+  employeeName        String
+  date                DateTime  @default(now())
+  
+  // Punch In Details
+  punchInTime         DateTime
+  punchInLatitude     Float
+  punchInLongitude    Float
+  punchInPhoto        String?   // Base64 or URL
+  punchInAddress      String?
+  bikeKmStart         String?   // Starting bike odometer reading
+  
+  // Punch Out Details
+  punchOutTime        DateTime?
+  punchOutLatitude    Float?
+  punchOutLongitude   Float?
+  punchOutPhoto       String?   // Base64 or URL
+  punchOutAddress     String?
+  bikeKmEnd           String?   // Ending bike odometer reading
+  
+  // Calculated Fields
+  totalWorkHours      Float?    // In hours
+  totalDistanceKm     Float?    // Distance between punch in and punch out
+  status              String    @default("active") // active, completed
+  
+  // Metadata
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
+  @@index([punchInTime])
+}

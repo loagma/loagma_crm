@@ -6,8 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
+import '../../services/user_service.dart';
 import '../../models/account_model.dart';
 import '../../utils/custom_toast.dart';
 
@@ -522,17 +524,22 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
 
         await AccountService.updateAccount(widget.account.id, updates);
 
-        // Show success toast
+        // Show success toast with 5 seconds duration
         if (mounted) {
           CustomToast.showSuccess(
             context,
-            "✅ Account Master Updated Successfully!",
+            "✅ Account Master Updated Successfully! Redirecting to dashboard...",
+            duration: 5,
           );
-          // Wait for toast to show before popping
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
-            Navigator.pop(context, true); // Return true to indicate success
-          }
+        }
+
+        // Wait for 5 seconds to show the toast
+        await Future.delayed(const Duration(seconds: 5));
+
+        // Navigate back to dashboard smoothly
+        if (mounted) {
+          final role = UserService.currentRole?.toLowerCase() ?? 'salesman';
+          context.go('/dashboard/$role');
         }
       } catch (e) {
         _showError('Failed to update account: $e');

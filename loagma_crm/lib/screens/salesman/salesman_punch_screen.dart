@@ -7,6 +7,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import '../../services/user_service.dart';
+import '../../services/attendance_service.dart';
+import '../../models/attendance_model.dart';
+import 'salesman_attendance_history_screen.dart';
 
 class SalesmanPunchScreen extends StatefulWidget {
   const SalesmanPunchScreen({super.key});
@@ -29,6 +32,10 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   File? punchInPhoto;
   String? punchInPhotoBase64;
   String? bikeKilometers;
+
+  // Current attendance record
+  AttendanceModel? currentAttendance;
+  bool isLoadingAttendance = false;
 
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
@@ -132,13 +139,61 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   }
 
   Future<void> _loadTodayPunchData() async {
-    // TODO: Load today's punch data from backend
-    // For now, using mock data for frontend testing
-    setState(() {
-      // Simulate already punched in (for testing)
-      // isPunchedIn = true;
-      // punchInTime = DateTime.now().subtract(const Duration(hours: 2, minutes: 30));
-    });
+    setState(() => isLoadingAttendance = true);
+
+    try {
+      final employeeId = UserService.currentUserId;
+      if (employeeId == null) {
+        _showError('Employee ID not found');
+        return;
+      }
+
+      final attendance = await AttendanceService.getTodayAttendance(employeeId);
+
+      if (attendance != null) {
+        setState(() {
+          currentAttendance = attendance;
+          isPunchedIn = attendance.isPunchedIn;
+          punchInTime = attendance.punchInTime;
+          punchInLocation = Position(
+            latitude: attendance.punchInLatitude,
+            longitude: attendance.punchInLongitude,
+            timestamp: attendance.punchInTime,
+            accuracy: 0,
+            altitude: 0,
+            heading: 0,
+            speed: 0,
+            speedAccuracy: 0,
+            altitudeAccuracy: 0,
+            headingAccuracy: 0,
+          );
+
+          if (attendance.isPunchedOut) {
+            punchOutTime = attendance.punchOutTime;
+            if (attendance.punchOutLatitude != null &&
+                attendance.punchOutLongitude != null) {
+              punchOutLocation = Position(
+                latitude: attendance.punchOutLatitude!,
+                longitude: attendance.punchOutLongitude!,
+                timestamp: attendance.punchOutTime ?? DateTime.now(),
+                accuracy: 0,
+                altitude: 0,
+                heading: 0,
+                speed: 0,
+                speedAccuracy: 0,
+                altitudeAccuracy: 0,
+                headingAccuracy: 0,
+              );
+            }
+            totalDistanceKm = attendance.totalDistanceKm ?? 0.0;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading attendance: $e');
+    } finally {
+      setState(() => isLoadingAttendance = false);
+    }
   }
 
   Future<void> _handlePunchIn() async {
@@ -164,24 +219,52 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     if (result != null && result['confirmed'] == true) {
       HapticFeedback.heavyImpact();
 
-      setState(() {
-        isPunchedIn = true;
-        punchInTime = DateTime.now();
-        punchInLocation = _currentPosition;
-        punchInPhoto = result['photo'];
-        punchInPhotoBase64 = result['photoBase64'];
-        bikeKilometers = result['bikeKm'];
-        workDuration = Duration.zero;
-      });
-
-      _showSuccess('✓ Punched in successfully! Have a great day!');
-
-      // TODO: Send punch in data to backend
-      print('🟢 Punch In:');
-      print('   Time: $punchInTime');
-      print(
-        '   Location: ${punchInLocation!.latitude}, ${punchInLocation!.longitude}',
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
+
+      // Send to backend
+      final employeeId = UserService.currentUserId;
+      final employeeName = UserService.name;
+
+      if (employeeId == null || employeeName == null) {
+        Navigator.pop(context); // Close loading
+        _showError('Employee information not found');
+        return;
+      }
+
+      final response = await AttendanceService.punchIn(
+        employeeId: employeeId,
+        employeeName: employeeName,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        photo: result['photoBase64'],
+        bikeKmStart: result['bikeKm'],
+      );
+
+      Navigator.pop(context); // Close loading
+
+      if (response['success'] == true) {
+        final attendance = response['data'] as AttendanceModel?;
+
+        setState(() {
+          currentAttendance = attendance;
+          isPunchedIn = true;
+          punchInTime = DateTime.now();
+          punchInLocation = _currentPosition;
+          punchInPhoto = result['photo'];
+          punchInPhotoBase64 = result['photoBase64'];
+          bikeKilometers = result['bikeKm'];
+          workDuration = Duration.zero;
+        });
+
+        _showSuccess('✓ Punched in successfully! Have a great day!');
+      } else {
+        _showError(response['message'] ?? 'Failed to punch in');
+      }
     }
   }
 
@@ -212,37 +295,56 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     if (punchOutData != null) {
       HapticFeedback.heavyImpact();
 
-      // Calculate final distance
-      if (punchInLocation != null && _currentPosition != null) {
-        final distanceInMeters = Geolocator.distanceBetween(
-          punchInLocation!.latitude,
-          punchInLocation!.longitude,
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
-        );
-        totalDistanceKm = distanceInMeters / 1000;
+      if (currentAttendance == null) {
+        _showError('No active attendance record found');
+        return;
       }
 
-      setState(() {
-        isPunchedIn = false;
-        punchOutTime = DateTime.now();
-        punchOutLocation = _currentPosition;
-      });
-
-      _showSuccess(
-        '✓ Punched out successfully! Total distance: ${totalDistanceKm.toStringAsFixed(2)} km',
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // TODO: Send punch out data to backend
-      print('🔴 Punch Out:');
-      print('   Time: $punchOutTime');
-      print(
-        '   Location: ${punchOutLocation!.latitude}, ${punchOutLocation!.longitude}',
+      // Send to backend
+      final response = await AttendanceService.punchOut(
+        attendanceId: currentAttendance!.id,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        photo: punchOutData['photoBase64'],
+        bikeKmEnd: punchOutData['kmReading'],
       );
-      print('   Total Duration: ${_formatDuration(workDuration)}');
-      print('   Total Distance: ${totalDistanceKm.toStringAsFixed(2)} km');
-      print('   Photo: ${punchOutData['photo'] != null ? 'Captured' : 'None'}');
-      print('   KM Reading: ${punchOutData['kmReading']}');
+
+      Navigator.pop(context); // Close loading
+
+      if (response['success'] == true) {
+        final attendance = response['data'] as AttendanceModel?;
+
+        // Calculate final distance
+        if (punchInLocation != null && _currentPosition != null) {
+          final distanceInMeters = Geolocator.distanceBetween(
+            punchInLocation!.latitude,
+            punchInLocation!.longitude,
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          );
+          totalDistanceKm = distanceInMeters / 1000;
+        }
+
+        setState(() {
+          currentAttendance = attendance;
+          isPunchedIn = false;
+          punchOutTime = DateTime.now();
+          punchOutLocation = _currentPosition;
+        });
+
+        _showSuccess(
+          '✓ Punched out successfully! Total distance: ${totalDistanceKm.toStringAsFixed(2)} km',
+        );
+      } else {
+        _showError(response['message'] ?? 'Failed to punch out');
+      }
     }
   }
 
@@ -561,8 +663,12 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             icon: const Icon(Icons.history),
             tooltip: 'Attendance History',
             onPressed: () {
-              // TODO: Navigate to attendance history
-              _showError('Attendance history coming soon!');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SalesmanAttendanceHistoryScreen(),
+                ),
+              );
             },
           ),
         ],
