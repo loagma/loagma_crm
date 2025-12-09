@@ -2585,6 +2585,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         builder: (context) => AssignmentMapViewScreen(
           assignment: {
             'salesmanName': _selectedSalesmanName,
+            'salesmanId': _selectedSalesmanId, // Add salesmanId
             'assignments': assignments,
             'isMultiple': true,
           },
