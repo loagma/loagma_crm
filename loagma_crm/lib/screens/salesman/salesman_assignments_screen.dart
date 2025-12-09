@@ -16,7 +16,6 @@ class SalesmanAssignmentsScreen extends StatefulWidget {
 class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
   List<Map<String, dynamic>> assignments = [];
   bool isLoading = true;
-  String? selectedStatus;
 
   @override
   void initState() {
@@ -29,28 +28,68 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
 
     try {
       final userId = UserService.currentUserId;
+
+      if (userId == null || userId.isEmpty) {
+        print('❌ User ID is null or empty');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error: User not logged in'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => isLoading = false);
+        return;
+      }
+
+      print('📡 Fetching assignments for user: $userId');
+
       final url = Uri.parse(
-        '${ApiConfig.baseUrl}/task-assignments?salesmanId=$userId',
+        '${ApiConfig.baseUrl}/task-assignments/assignments/salesman/$userId',
       );
 
+      print('📡 URL: $url');
+
       final response = await http.get(url);
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
       final data = jsonDecode(response.body);
 
       if (data['success'] == true) {
         setState(() {
-          assignments = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          assignments = List<Map<String, dynamic>>.from(
+            data['assignments'] ?? [],
+          );
         });
+        print('✅ Loaded ${assignments.length} assignments');
+      } else {
+        print('❌ API returned success: false');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(data['message'] ?? 'Failed to load assignments'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
-      print('Error fetching assignments: $e');
+      print('❌ Error fetching assignments: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       setState(() => isLoading = false);
     }
   }
 
   List<Map<String, dynamic>> get filteredAssignments {
-    if (selectedStatus == null) return assignments;
-    return assignments.where((a) => a['status'] == selectedStatus).toList();
+    return assignments;
   }
 
   @override
@@ -82,86 +121,47 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
       ),
       body: Column(
         children: [
-          // Filter Chips
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FilterChip(
-                    label: const Text('All'),
-                    selected: selectedStatus == null,
-                    onSelected: (selected) {
-                      setState(() => selectedStatus = null);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('Active'),
-                    selected: selectedStatus == 'Active',
-                    onSelected: (selected) {
-                      setState(
-                        () => selectedStatus = selected ? 'Active' : null,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('Completed'),
-                    selected: selectedStatus == 'Completed',
-                    onSelected: (selected) {
-                      setState(
-                        () => selectedStatus = selected ? 'Completed' : null,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('Inactive'),
-                    selected: selectedStatus == 'Inactive',
-                    onSelected: (selected) {
-                      setState(
-                        () => selectedStatus = selected ? 'Inactive' : null,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           // Stats Summary
           Container(
             padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.symmetric(horizontal: 16),
+            margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFD7BE69).withOpacity(0.1),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD7BE69), Color(0xFFE8D699)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD7BE69).withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('Total', assignments.length.toString()),
                 _buildStatItem(
-                  'Active',
-                  assignments
-                      .where((a) => a['status'] == 'Active')
-                      .length
-                      .toString(),
+                  'Total Areas',
+                  assignments.length.toString(),
+                  Icons.location_city,
                 ),
+                Container(width: 1, height: 40, color: Colors.white30),
                 _buildStatItem(
-                  'Completed',
+                  'Total Shops',
                   assignments
-                      .where((a) => a['status'] == 'Completed')
-                      .length
+                      .fold<int>(
+                        0,
+                        (sum, a) => sum + (a['totalBusinesses'] as int? ?? 0),
+                      )
                       .toString(),
+                  Icons.store,
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 16),
 
           // Assignments List
           Expanded(
@@ -207,40 +207,35 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  Widget _buildStatItem(String label, String value, IconData icon) {
     return Column(
       children: [
+        Icon(icon, color: Colors.white, size: 28),
+        const SizedBox(height: 8),
         Text(
           value,
           style: const TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Color(0xFFD7BE69),
+            color: Colors.white,
           ),
         ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Colors.white70),
+        ),
       ],
     );
   }
 
   Widget _buildAssignmentCard(Map<String, dynamic> assignment) {
-    final area = assignment['area'];
-    final status = assignment['status'] ?? 'Unknown';
-
-    Color statusColor;
-    switch (status) {
-      case 'Active':
-        statusColor = Colors.green;
-        break;
-      case 'Completed':
-        statusColor = Colors.blue;
-        break;
-      case 'Inactive':
-        statusColor = Colors.grey;
-        break;
-      default:
-        statusColor = Colors.orange;
-    }
+    final pincode = assignment['pincode'] ?? 'N/A';
+    final city = assignment['city'] ?? '';
+    final state = assignment['state'] ?? '';
+    final areas = assignment['areas'] as List<dynamic>? ?? [];
+    final businessTypes = assignment['businessTypes'] as List<dynamic>? ?? [];
+    final totalBusinesses = assignment['totalBusinesses'] ?? 0;
+    final assignedDate = assignment['assignedDate'] ?? assignment['createdAt'];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -251,24 +246,38 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header with Pincode
             Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD7BE69).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Color(0xFFD7BE69),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        area?['name'] ?? 'N/A',
+                        'Pincode: $pincode',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (area?['zone']?['name'] != null)
+                      if (city.isNotEmpty || state.isNotEmpty)
                         Text(
-                          '${area['zone']['name']}, ${area['zone']['city']?['name'] ?? ''}',
+                          [city, state].where((s) => s.isNotEmpty).join(', '),
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -277,58 +286,187 @@ class _SalesmanAssignmentsScreenState extends State<SalesmanAssignmentsScreen> {
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
+                    horizontal: 10,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor,
+                    color: Colors.green,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    status,
+                    '$totalBusinesses Shops',
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
-            if (assignment['startDate'] != null)
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+
+            // Areas
+            if (areas.isNotEmpty) ...[
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Start: ${assignment['startDate'].toString().split('T')[0]}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  if (assignment['endDate'] != null) ...[
-                    const SizedBox(width: 16),
-                    Icon(Icons.event, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      'End: ${assignment['endDate'].toString().split('T')[0]}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  Icon(Icons.place, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Areas (${areas.length}):',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: areas.take(5).map((area) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.blue[200]!),
+                              ),
+                              child: Text(
+                                area.toString(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blue[900],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        if (areas.length > 5)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '+${areas.length - 5} more',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
+                  ),
                 ],
               ),
-            if (assignment['notes'] != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                assignment['notes'],
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                  fontStyle: FontStyle.italic,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              const SizedBox(height: 12),
             ],
+
+            // Business Types
+            if (businessTypes.isNotEmpty) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.business, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Business Types:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: businessTypes.map((type) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.orange[200]!),
+                              ),
+                              child: Text(
+                                type.toString(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.orange[900],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Assigned Date and View on Map Button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (assignedDate != null)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Assigned: ${assignedDate.toString().split('T')[0]}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                      ),
+                    ],
+                  ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const SalesmanAssignmentsMapScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.map, size: 16),
+                  label: const Text('View on Map'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFD7BE69),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

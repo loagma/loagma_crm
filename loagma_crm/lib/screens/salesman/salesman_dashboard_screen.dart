@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
+import '../../services/attendance_service.dart';
+import '../../models/attendance_model.dart';
 
 class SalesmanDashboardScreen extends StatefulWidget {
   const SalesmanDashboardScreen({super.key});
@@ -29,6 +32,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   int totalAccounts = 0;
   bool isLoadingMore = false;
 
+  // Attendance status
+  AttendanceModel? todayAttendance;
+  bool isLoadingAttendance = false;
+
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
 
@@ -44,6 +51,30 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       curve: Curves.easeIn,
     );
     fetchDashboardData();
+    _loadTodayAttendance();
+  }
+
+  Future<void> _loadTodayAttendance() async {
+    setState(() => isLoadingAttendance = true);
+
+    try {
+      final employeeId = UserService.currentUserId;
+      if (employeeId == null) return;
+
+      final attendance = await AttendanceService.getTodayAttendance(employeeId);
+
+      if (mounted) {
+        setState(() {
+          todayAttendance = attendance;
+        });
+      }
+    } catch (e) {
+      print('Error loading attendance: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingAttendance = false);
+      }
+    }
   }
 
   @override
@@ -178,7 +209,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : RefreshIndicator(
-              onRefresh: fetchDashboardData,
+              onRefresh: () async {
+                await fetchDashboardData();
+                await _loadTodayAttendance();
+              },
               color: primaryColor,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -186,7 +220,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   opacity: _fadeAnimation,
                   child: Column(
                     children: [
-                      // Quick Actions Section - FIRST
+                      // Punch Status Widget - FIRST
+                      _buildPunchStatusWidget(),
+
+                      // Quick Actions Section
                       _buildQuickActionsSection(),
 
                       Padding(
@@ -490,6 +527,96 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     );
   }
 
+  Widget _buildPunchStatusWidget() {
+    if (isLoadingAttendance) {
+      return const SizedBox.shrink();
+    }
+
+    final isPunchedIn = todayAttendance?.isPunchedIn ?? false;
+    final hasAttendance = todayAttendance != null;
+
+    Color statusColor;
+    IconData statusIcon;
+    String statusText;
+    IconData actionIcon;
+
+    if (!hasAttendance) {
+      statusColor = Colors.grey;
+      statusIcon = Icons.schedule;
+      statusText = 'Not Punched In';
+      actionIcon = Icons.login;
+    } else if (isPunchedIn) {
+      statusColor = Colors.green;
+      statusIcon = Icons.work;
+      statusText = 'Working';
+      actionIcon = Icons.logout;
+    } else {
+      statusColor = Colors.blue;
+      statusIcon = Icons.check_circle;
+      statusText = 'Completed';
+      actionIcon = Icons.visibility;
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: statusColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => context.go('/dashboard/salesman/punch'),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(statusIcon, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        statusText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (hasAttendance)
+                        Text(
+                          DateFormat(
+                            'hh:mm a',
+                          ).format(todayAttendance!.punchInTime),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(actionIcon, color: Colors.white, size: 18),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right, color: Colors.white, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuickActionsSection() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -577,18 +704,5 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
         ),
       ),
     );
-  }
-
-  Color _getStageColor(String stage) {
-    switch (stage.toLowerCase()) {
-      case 'lead':
-        return const Color(0xFF2196F3);
-      case 'prospect':
-        return const Color(0xFFFF9800);
-      case 'customer':
-        return const Color(0xFF4CAF50);
-      default:
-        return Colors.grey;
-    }
   }
 }
