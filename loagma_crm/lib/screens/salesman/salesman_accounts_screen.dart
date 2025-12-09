@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
-import '../shared/account_detail_screen.dart';
-import '../shared/account_master_screen.dart';
 
 class SalesmanAccountsScreen extends StatefulWidget {
   const SalesmanAccountsScreen({super.key});
@@ -17,12 +16,77 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
   List<Map<String, dynamic>> accounts = [];
   bool isLoading = true;
   String searchQuery = '';
+
+  // Filter states
   String? selectedStage;
+  String? selectedBusinessType;
+  String? selectedBusinessSize;
+  String? selectedFunnelStage;
+  String? selectedCity;
+  String? selectedPincode;
+  bool? selectedApprovalStatus;
+  bool? selectedActiveStatus;
+  bool isFilterExpanded = false;
 
   @override
   void initState() {
     super.initState();
     fetchMyAccounts();
+  }
+
+  List<String> get availableBusinessTypes {
+    final types = accounts
+        .map((a) => a['businessType']?.toString())
+        .where((type) => type != null && type.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    types.sort();
+    return types;
+  }
+
+  List<String> get availableBusinessSizes {
+    final sizes = accounts
+        .map((a) => a['businessSize']?.toString())
+        .where((size) => size != null && size.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    sizes.sort();
+    return sizes;
+  }
+
+  List<String> get availableFunnelStages {
+    final stages = accounts
+        .map((a) => a['funnelStage']?.toString())
+        .where((stage) => stage != null && stage.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    stages.sort();
+    return stages;
+  }
+
+  List<String> get availableCities {
+    final cities = accounts
+        .map((a) => a['city']?.toString())
+        .where((city) => city != null && city.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    cities.sort();
+    return cities;
+  }
+
+  List<String> get availablePincodes {
+    final pincodes = accounts
+        .map((a) => a['pincode']?.toString())
+        .where((pincode) => pincode != null && pincode.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    pincodes.sort();
+    return pincodes;
   }
 
   Future<void> fetchMyAccounts() async {
@@ -102,13 +166,77 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                 searchQuery.toLowerCase(),
               ) ==
               true ||
-          account['contactNumber']?.toString().contains(searchQuery) == true;
+          account['contactNumber']?.toString().contains(searchQuery) == true ||
+          account['accountCode']?.toString().toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              ) ==
+              true;
 
       final matchesStage =
           selectedStage == null || account['customerStage'] == selectedStage;
 
-      return matchesSearch && matchesStage;
+      final matchesBusinessType =
+          selectedBusinessType == null ||
+          account['businessType'] == selectedBusinessType;
+
+      final matchesBusinessSize =
+          selectedBusinessSize == null ||
+          account['businessSize'] == selectedBusinessSize;
+
+      final matchesFunnelStage =
+          selectedFunnelStage == null ||
+          account['funnelStage'] == selectedFunnelStage;
+
+      final matchesCity =
+          selectedCity == null || account['city'] == selectedCity;
+
+      final matchesPincode =
+          selectedPincode == null || account['pincode'] == selectedPincode;
+
+      final matchesApproval =
+          selectedApprovalStatus == null ||
+          account['isApproved'] == selectedApprovalStatus;
+
+      final matchesActive =
+          selectedActiveStatus == null ||
+          account['isActive'] == selectedActiveStatus;
+
+      return matchesSearch &&
+          matchesStage &&
+          matchesBusinessType &&
+          matchesBusinessSize &&
+          matchesFunnelStage &&
+          matchesCity &&
+          matchesPincode &&
+          matchesApproval &&
+          matchesActive;
     }).toList();
+  }
+
+  int get activeFilterCount {
+    int count = 0;
+    if (selectedStage != null) count++;
+    if (selectedBusinessType != null) count++;
+    if (selectedBusinessSize != null) count++;
+    if (selectedFunnelStage != null) count++;
+    if (selectedCity != null) count++;
+    if (selectedPincode != null) count++;
+    if (selectedApprovalStatus != null) count++;
+    if (selectedActiveStatus != null) count++;
+    return count;
+  }
+
+  void clearAllFilters() {
+    setState(() {
+      selectedStage = null;
+      selectedBusinessType = null;
+      selectedBusinessSize = null;
+      selectedFunnelStage = null;
+      selectedCity = null;
+      selectedPincode = null;
+      selectedApprovalStatus = null;
+      selectedActiveStatus = null;
+    });
   }
 
   @override
@@ -130,7 +258,6 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
         children: [
           // Compact Search and Filter Section
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -143,103 +270,474 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
             ),
             child: Column(
               children: [
-                // Search Bar
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search accounts...',
-                    hintStyle: const TextStyle(fontSize: 13),
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 13),
-                  onChanged: (value) {
-                    setState(() => searchQuery = value);
-                  },
-                ),
-                const SizedBox(height: 8),
-
-                // Filters and Stats in one row
-                Row(
-                  children: [
-                    // Filter Chips
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildCompactFilterChip('All', null),
-                            const SizedBox(width: 6),
-                            _buildCompactFilterChip('Lead', 'Lead'),
-                            const SizedBox(width: 6),
-                            _buildCompactFilterChip('Prospect', 'Prospect'),
-                            const SizedBox(width: 6),
-                            _buildCompactFilterChip('Customer', 'Customer'),
-                          ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: Column(
+                    children: [
+                      // Search Bar
+                      TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search accounts...',
+                          hintStyle: const TextStyle(fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          isDense: true,
                         ),
+                        style: const TextStyle(fontSize: 13),
+                        onChanged: (value) {
+                          setState(() => searchQuery = value);
+                        },
                       ),
-                    ),
-                    const SizedBox(width: 8),
+                      const SizedBox(height: 8),
 
-                    // Compact Stats
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD7BE69).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFFD7BE69).withOpacity(0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      // Filter Toggle and Stats Row
+                      Row(
                         children: [
-                          _buildCompactStat(
-                            accounts.length.toString(),
-                            'Total',
+                          // Filter Toggle Button
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                isFilterExpanded = !isFilterExpanded;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: activeFilterCount > 0
+                                    ? const Color(0xFFD7BE69)
+                                    : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: activeFilterCount > 0
+                                      ? const Color(0xFFD7BE69)
+                                      : Colors.grey[300]!,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.filter_list,
+                                    size: 16,
+                                    color: activeFilterCount > 0
+                                        ? Colors.white
+                                        : Colors.grey[700],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Filters',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: activeFilterCount > 0
+                                          ? Colors.white
+                                          : Colors.grey[700],
+                                    ),
+                                  ),
+                                  if (activeFilterCount > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        activeFilterCount.toString(),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFD7BE69),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(width: 2),
+                                  Icon(
+                                    isFilterExpanded
+                                        ? Icons.expand_less
+                                        : Icons.expand_more,
+                                    size: 18,
+                                    color: activeFilterCount > 0
+                                        ? Colors.white
+                                        : Colors.grey[700],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            margin: const EdgeInsets.symmetric(horizontal: 6),
-                            color: Colors.grey[300],
-                          ),
-                          _buildCompactStat(
-                            accounts
-                                .where((a) => a['isApproved'] == true)
-                                .length
-                                .toString(),
-                            'Approved',
-                            Colors.green,
-                          ),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            margin: const EdgeInsets.symmetric(horizontal: 6),
-                            color: Colors.grey[300],
-                          ),
-                          _buildCompactStat(
-                            accounts
-                                .where((a) => a['isApproved'] == false)
-                                .length
-                                .toString(),
-                            'Pending',
-                            Colors.orange,
+                          const SizedBox(width: 8),
+
+                          // Compact Stats
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFFD7BE69,
+                                  ).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(
+                                      0xFFD7BE69,
+                                    ).withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildCompactStat(
+                                      filteredAccounts.length.toString(),
+                                      'Showing',
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      color: Colors.grey[300],
+                                    ),
+                                    _buildCompactStat(
+                                      accounts.length.toString(),
+                                      'Total',
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      color: Colors.grey[300],
+                                    ),
+                                    _buildCompactStat(
+                                      accounts
+                                          .where((a) => a['isApproved'] == true)
+                                          .length
+                                          .toString(),
+                                      'Approved',
+                                      Colors.green,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+
+                // Collapsible Filter Section
+                if (isFilterExpanded)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      border: Border(top: BorderSide(color: Colors.grey[200]!)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        // Clear Filters Button
+                        if (activeFilterCount > 0)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: clearAllFilters,
+                              icon: const Icon(Icons.clear_all, size: 16),
+                              label: const Text('Clear All'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
+
+                        // Customer Stage Filter
+                        Text(
+                          'Customer Stage',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildFilterChip('All', null, 'stage'),
+                            _buildFilterChip('Lead', 'Lead', 'stage'),
+                            _buildFilterChip('Prospect', 'Prospect', 'stage'),
+                            _buildFilterChip('Customer', 'Customer', 'stage'),
+                            _buildFilterChip('Inactive', 'Inactive', 'stage'),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Funnel Stage Filter
+                        if (availableFunnelStages.isNotEmpty) ...[
+                          Text(
+                            'Funnel Stage',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildFilterChip('All', null, 'funnelStage'),
+                              ...availableFunnelStages.map(
+                                (stage) => _buildFilterChip(
+                                  stage,
+                                  stage,
+                                  'funnelStage',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Business Type Filter
+                        Text(
+                          'Business Type',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        availableBusinessTypes.isEmpty
+                            ? Text(
+                                'No business types available',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              )
+                            : Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _buildFilterChip('All', null, 'businessType'),
+                                  ...availableBusinessTypes.map(
+                                    (type) => _buildFilterChip(
+                                      type,
+                                      type,
+                                      'businessType',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                        const SizedBox(height: 12),
+
+                        // Business Size Filter
+                        if (availableBusinessSizes.isNotEmpty) ...[
+                          Text(
+                            'Business Size',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildFilterChip('All', null, 'businessSize'),
+                              ...availableBusinessSizes.map(
+                                (size) => _buildFilterChip(
+                                  size,
+                                  size,
+                                  'businessSize',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // City Filter
+                        if (availableCities.isNotEmpty) ...[
+                          Text(
+                            'City',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildFilterChip('All', null, 'city'),
+                              ...availableCities
+                                  .take(10)
+                                  .map(
+                                    (city) =>
+                                        _buildFilterChip(city, city, 'city'),
+                                  ),
+                              if (availableCities.length > 10)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '+${availableCities.length - 10} more',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Pincode Filter
+                        if (availablePincodes.isNotEmpty) ...[
+                          Text(
+                            'Pincode',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildFilterChip('All', null, 'pincode'),
+                              ...availablePincodes
+                                  .take(10)
+                                  .map(
+                                    (pincode) => _buildFilterChip(
+                                      pincode,
+                                      pincode,
+                                      'pincode',
+                                    ),
+                                  ),
+                              if (availablePincodes.length > 10)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '+${availablePincodes.length - 10} more',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Approval Status Filter
+                        Text(
+                          'Approval Status',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildApprovalFilterChip('All', null),
+                            _buildApprovalFilterChip('Approved', true),
+                            _buildApprovalFilterChip('Pending', false),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Active Status Filter
+                        Text(
+                          'Active Status',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildActiveFilterChip('All', null),
+                            _buildActiveFilterChip('Active', true),
+                            _buildActiveFilterChip('Inactive', false),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -290,22 +788,6 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFFD7BE69),
-          ),
-        ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-      ],
-    );
-  }
-
   Widget _buildCompactStat(String value, String label, [Color? color]) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -323,26 +805,69 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     );
   }
 
-  Widget _buildCompactFilterChip(String label, String? value) {
-    final isSelected = selectedStage == value;
+  Widget _buildFilterChip(String label, String? value, String filterType) {
+    bool isSelected = false;
+    switch (filterType) {
+      case 'stage':
+        isSelected = selectedStage == value;
+        break;
+      case 'businessType':
+        isSelected = selectedBusinessType == value;
+        break;
+      case 'businessSize':
+        isSelected = selectedBusinessSize == value;
+        break;
+      case 'funnelStage':
+        isSelected = selectedFunnelStage == value;
+        break;
+      case 'city':
+        isSelected = selectedCity == value;
+        break;
+      case 'pincode':
+        isSelected = selectedPincode == value;
+        break;
+    }
+
     return InkWell(
       onTap: () {
-        setState(() => selectedStage = value);
+        setState(() {
+          switch (filterType) {
+            case 'stage':
+              selectedStage = value;
+              break;
+            case 'businessType':
+              selectedBusinessType = value;
+              break;
+            case 'businessSize':
+              selectedBusinessSize = value;
+              break;
+            case 'funnelStage':
+              selectedFunnelStage = value;
+              break;
+            case 'city':
+              selectedCity = value;
+              break;
+            case 'pincode':
+              selectedPincode = value;
+              break;
+          }
+        });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFD7BE69) : Colors.grey[200],
+          color: isSelected ? const Color(0xFFD7BE69) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? const Color(0xFFD7BE69) : Colors.grey[300]!,
+            width: 1.5,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             color: isSelected ? Colors.white : Colors.grey[700],
           ),
         ),
@@ -350,29 +875,180 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     );
   }
 
-  Widget _buildAccountCard(Map<String, dynamic> account) {
-    final isApproved = account['isApproved'] == true;
+  Widget _buildActiveFilterChip(String label, bool? value) {
+    final isSelected = selectedActiveStatus == value;
+    Color chipColor = Colors.white;
+    Color borderColor = Colors.grey[300]!;
+    Color textColor = Colors.grey[700]!;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  AccountDetailScreen(accountId: account['id']),
+    if (isSelected) {
+      if (value == true) {
+        chipColor = Colors.blue;
+        borderColor = Colors.blue;
+        textColor = Colors.white;
+      } else if (value == false) {
+        chipColor = Colors.grey;
+        borderColor = Colors.grey;
+        textColor = Colors.white;
+      } else {
+        chipColor = const Color(0xFFD7BE69);
+        borderColor = const Color(0xFFD7BE69);
+        textColor = Colors.white;
+      }
+    }
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          selectedActiveStatus = value;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: chipColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected && value != null)
+              Icon(
+                value ? Icons.check_circle : Icons.cancel,
+                size: 12,
+                color: textColor,
+              ),
+            if (isSelected && value != null) const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: textColor,
+              ),
             ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApprovalFilterChip(String label, bool? value) {
+    final isSelected = selectedApprovalStatus == value;
+    Color chipColor = Colors.white;
+    Color borderColor = Colors.grey[300]!;
+    Color textColor = Colors.grey[700]!;
+
+    if (isSelected) {
+      if (value == true) {
+        chipColor = Colors.green;
+        borderColor = Colors.green;
+        textColor = Colors.white;
+      } else if (value == false) {
+        chipColor = Colors.orange;
+        borderColor = Colors.orange;
+        textColor = Colors.white;
+      } else {
+        chipColor = const Color(0xFFD7BE69);
+        borderColor = const Color(0xFFD7BE69);
+        textColor = Colors.white;
+      }
+    }
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          selectedApprovalStatus = value;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: chipColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected && value != null)
+              Icon(
+                value ? Icons.check_circle : Icons.schedule,
+                size: 12,
+                color: textColor,
+              ),
+            if (isSelected && value != null) const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    // Clean the phone number (remove spaces, dashes, etc.)
+    final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+
+    if (cleanNumber.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid phone number'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    final Uri phoneUri = Uri.parse('tel:$cleanNumber');
+
+    try {
+      // Launch directly without checking canLaunchUrl
+      // This works better on Android devices
+      await launchUrl(phoneUri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('Error launching phone: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open phone dialer'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  void _viewAccountDetails(Map<String, dynamic> account) {
+    // Show account details in a bottom sheet instead of navigating
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
                 children: [
                   Expanded(
@@ -382,7 +1058,7 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                         Text(
                           account['personName'] ?? 'N/A',
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -390,67 +1066,394 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                           Text(
                             account['businessName'],
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 16,
                               color: Colors.grey[600],
                             ),
                           ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isApproved ? Colors.green : Colors.orange,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      isApproved ? 'Approved' : 'Pending',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const Divider(height: 30),
+
+              // Details
+              _buildDetailRow(
+                Icons.phone,
+                'Contact',
+                account['contactNumber'] ?? 'N/A',
+              ),
+              _buildDetailRow(
+                Icons.code,
+                'Account Code',
+                account['accountCode'] ?? 'N/A',
+              ),
+              _buildDetailRow(
+                Icons.flag,
+                'Stage',
+                account['customerStage'] ?? 'N/A',
+              ),
+              _buildDetailRow(
+                Icons.business,
+                'Business Type',
+                account['businessType'] ?? 'N/A',
+              ),
+              if (account['address'] != null)
+                _buildDetailRow(
+                  Icons.location_on,
+                  'Address',
+                  account['address'],
+                ),
+              if (account['pincode'] != null)
+                _buildDetailRow(Icons.pin_drop, 'Pincode', account['pincode']),
+              _buildDetailRow(
+                Icons.check_circle,
+                'Status',
+                account['isApproved'] == true ? 'Approved' : 'Pending',
+              ),
+
+              const SizedBox(height: 20),
+
+              // Action Buttons
               Row(
                 children: [
-                  Icon(Icons.phone, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    account['contactNumber'] ?? 'N/A',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(Icons.code, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    account['accountCode'] ?? 'N/A',
-                    style: TextStyle(color: Colors.grey[600]),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        if (account['contactNumber'] != null) {
+                          _makePhoneCall(account['contactNumber']);
+                        }
+                      },
+                      icon: const Icon(Icons.call),
+                      label: const Text('Call'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              if (account['customerStage'] != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.flag, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      account['customerStage'],
-                      style: TextStyle(
-                        color: const Color(0xFFD7BE69),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: const Color(0xFFD7BE69)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountCard(Map<String, dynamic> account) {
+    final hasPhone =
+        account['contactNumber'] != null &&
+        account['contactNumber'].toString().isNotEmpty;
+
+    // Professional color scheme
+    const primaryGold = Color(0xFFD7BE69);
+    const callGreen = Color(0xFF059669);
+    const textDark = Color(0xFF1F2937);
+    const textMuted = Color(0xFF6B7280);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 1,
+      shadowColor: Colors.black.withOpacity(0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200, width: 1),
+      ),
+      child: InkWell(
+        onTap: () => _viewAccountDetails(account),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row
+              Row(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          primaryGold.withOpacity(0.2),
+                          primaryGold.withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: primaryGold.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        (account['personName'] ?? 'N')[0].toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: primaryGold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          account['personName'] ?? 'N/A',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: textDark,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (account['businessName'] != null)
+                          Text(
+                            account['businessName'],
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: textMuted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Call Button
+                  if (hasPhone)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: callGreen,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: callGreen.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _makePhoneCall(account['contactNumber']),
+                          borderRadius: BorderRadius.circular(12),
+                          child: const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Icon(
+                              Icons.call,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Divider
+              Container(height: 1, color: Colors.grey.shade200),
+              const SizedBox(height: 16),
+
+              // Info Section
+              Column(
+                children: [
+                  // Phone Number
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.phone_rounded,
+                          size: 18,
+                          color: Color(0xFF3B82F6),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Contact Number',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              account['contactNumber'] ?? 'N/A',
+                              style: const TextStyle(
+                                color: textDark,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Account Code & Stage
+                  Row(
+                    children: [
+                      // Account Code
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.badge_rounded,
+                                size: 18,
+                                color: Color(0xFF8B5CF6),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Code',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    account['accountCode'] ?? 'N/A',
+                                    style: const TextStyle(
+                                      color: textDark,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Customer Stage
+                      if (account['customerStage'] != null)
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: primaryGold.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.flag_rounded,
+                                  size: 18,
+                                  color: primaryGold,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Stage',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      account['customerStage'],
+                                      style: const TextStyle(
+                                        color: primaryGold,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ],
           ),
         ),
