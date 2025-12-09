@@ -316,4 +316,51 @@ class MapTaskAssignmentService {
       return {'success': false, 'message': 'Error: $e'};
     }
   }
+
+  // Fetch accounts created by salesman
+  Future<Map<String, dynamic>> getSalesmanCreatedAccounts(
+    String salesmanId,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+
+      // Try the accounts endpoint with createdById filter
+      final url = '$baseUrl/accounts?createdById=$salesmanId';
+      print('👤 Fetching salesman-created accounts: $url');
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      print('📡 Response Status: ${response.statusCode}');
+      print('📡 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // Handle different response formats
+        List<dynamic> accounts = [];
+        if (data['success'] == true && data['data'] != null) {
+          accounts = data['data'] as List;
+        } else if (data['accounts'] != null) {
+          accounts = data['accounts'] as List;
+        } else if (data is List) {
+          accounts = data;
+        }
+
+        print('✅ Fetched ${accounts.length} salesman-created accounts');
+
+        return {'success': true, 'accounts': accounts};
+      } else {
+        print('❌ Failed to fetch salesman accounts: ${response.statusCode}');
+        print('   Response: ${response.body}');
+        return {
+          'success': false,
+          'message': 'Failed to fetch salesman accounts',
+          'accounts': [],
+        };
+      }
+    } catch (e) {
+      print('❌ Error fetching salesman accounts: $e');
+      return {'success': false, 'message': 'Error: $e', 'accounts': []};
+    }
+  }
 }

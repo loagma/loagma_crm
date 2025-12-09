@@ -128,103 +128,121 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
       ),
       body: Column(
         children: [
-          // Search and Filter
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          // Compact Search and Filter Section
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(
               children: [
+                // Search Bar
                 TextField(
                   decoration: InputDecoration(
                     hintText: 'Search accounts...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    hintStyle: const TextStyle(fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    isDense: true,
                   ),
+                  style: const TextStyle(fontSize: 13),
                   onChanged: (value) {
                     setState(() => searchQuery = value);
                   },
                 ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChip(
-                        label: const Text('All'),
-                        selected: selectedStage == null,
-                        onSelected: (selected) {
-                          setState(() => selectedStage = null);
-                        },
+                const SizedBox(height: 8),
+
+                // Filters and Stats in one row
+                Row(
+                  children: [
+                    // Filter Chips
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildCompactFilterChip('All', null),
+                            const SizedBox(width: 6),
+                            _buildCompactFilterChip('Lead', 'Lead'),
+                            const SizedBox(width: 6),
+                            _buildCompactFilterChip('Prospect', 'Prospect'),
+                            const SizedBox(width: 6),
+                            _buildCompactFilterChip('Customer', 'Customer'),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Lead'),
-                        selected: selectedStage == 'Lead',
-                        onSelected: (selected) {
-                          setState(
-                            () => selectedStage = selected ? 'Lead' : null,
-                          );
-                        },
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Compact Stats
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Prospect'),
-                        selected: selectedStage == 'Prospect',
-                        onSelected: (selected) {
-                          setState(
-                            () => selectedStage = selected ? 'Prospect' : null,
-                          );
-                        },
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD7BE69).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFFD7BE69).withOpacity(0.3),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Customer'),
-                        selected: selectedStage == 'Customer',
-                        onSelected: (selected) {
-                          setState(
-                            () => selectedStage = selected ? 'Customer' : null,
-                          );
-                        },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildCompactStat(
+                            accounts.length.toString(),
+                            'Total',
+                          ),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            color: Colors.grey[300],
+                          ),
+                          _buildCompactStat(
+                            accounts
+                                .where((a) => a['isApproved'] == true)
+                                .length
+                                .toString(),
+                            'Approved',
+                            Colors.green,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            color: Colors.grey[300],
+                          ),
+                          _buildCompactStat(
+                            accounts
+                                .where((a) => a['isApproved'] == false)
+                                .length
+                                .toString(),
+                            'Pending',
+                            Colors.orange,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-
-          // Stats Summary
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFD7BE69).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem('Total', accounts.length.toString()),
-                _buildStatItem(
-                  'Approved',
-                  accounts
-                      .where((a) => a['isApproved'] == true)
-                      .length
-                      .toString(),
-                ),
-                _buildStatItem(
-                  'Pending',
-                  accounts
-                      .where((a) => a['isApproved'] == false)
-                      .length
-                      .toString(),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
 
           // Accounts List
           Expanded(
@@ -269,22 +287,6 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AccountMasterScreen(),
-            ),
-          );
-          if (result == true) {
-            fetchMyAccounts();
-          }
-        },
-        backgroundColor: const Color(0xFFD7BE69),
-        icon: const Icon(Icons.add),
-        label: const Text('Create Account'),
-      ),
     );
   }
 
@@ -301,6 +303,50 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
         ),
         Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ],
+    );
+  }
+
+  Widget _buildCompactStat(String value, String label, [Color? color]) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color ?? const Color(0xFFD7BE69),
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildCompactFilterChip(String label, String? value) {
+    final isSelected = selectedStage == value;
+    return InkWell(
+      onTap: () {
+        setState(() => selectedStage = value);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFD7BE69) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFD7BE69) : Colors.grey[300]!,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : Colors.grey[700],
+          ),
+        ),
+      ),
     );
   }
 
