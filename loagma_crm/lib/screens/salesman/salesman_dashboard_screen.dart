@@ -23,6 +23,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
+  // Pagination for recent accounts
+  int currentPage = 1;
+  int itemsPerPage = 2;
+  int totalAccounts = 0;
+  bool isLoadingMore = false;
+
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
 
@@ -87,9 +93,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
 
       final accountStatsData = jsonDecode(accountStatsResponse.body);
 
-      // Fetch all accounts for recent list
+      // Fetch all accounts for recent list with pagination
       final accountsUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/accounts?createdById=$userId&limit=5',
+        '${ApiConfig.baseUrl}/accounts?createdById=$userId&limit=$itemsPerPage&page=$currentPage',
       );
       print('📡 Fetching accounts from: $accountsUrl');
 
@@ -98,6 +104,13 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       print('📥 Accounts Response Body: ${accountsResponse.body}');
 
       final accountsData = jsonDecode(accountsResponse.body);
+
+      // Get total count if available
+      if (accountsData['total'] != null) {
+        totalAccounts = accountsData['total'];
+      } else if (accountsData['data'] != null) {
+        totalAccounts = accountsData['data'].length;
+      }
 
       // Fetch assignments
       final assignmentsUrl = Uri.parse(
@@ -173,14 +186,24 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   opacity: _fadeAnimation,
                   child: Column(
                     children: [
-                      // Header with gradient
-                      // _buildHeader(),
+                      // Quick Actions Section - FIRST
+                      _buildQuickActionsSection(),
 
-                      // Stats Cards
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment
+                              .start, // 👈 THIS ALIGNS TEXT TO START
                           children: [
+                            const Text(
+                              'Stats',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
                             // Main Stats Row
                             Row(
                               children: [
@@ -207,7 +230,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                                 ),
                               ],
                             ),
+
                             const SizedBox(height: 12),
+
                             Row(
                               children: [
                                 Expanded(
@@ -235,16 +260,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                         ),
                       ),
 
-                      // Customer Stage Breakdown
-                      if (customerStageBreakdown.isNotEmpty)
-                        _buildCustomerStageSection(),
-
-                      // Recent Accounts
+                      // Recent Accounts with Pagination
                       if (recentAccounts.isNotEmpty)
                         _buildRecentAccountsSection(),
-
-                      // Quick Actions Section
-                      _buildQuickActionsSection(),
 
                       const SizedBox(height: 20),
                     ],
@@ -290,84 +308,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     );
   }
 
-  Widget _buildCustomerStageSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Customer Stages',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              children: customerStageBreakdown.entries.map((entry) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _getStageColor(entry.key),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          entry.key,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStageColor(entry.key).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          entry.value.toString(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: _getStageColor(entry.key),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildRecentAccountsSection() {
+    final totalPages = (totalAccounts / itemsPerPage).ceil();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -388,9 +331,88 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
           ),
           const SizedBox(height: 12),
           ...recentAccounts.map((account) => _buildRecentAccountCard(account)),
+
+          // Pagination Controls
+          if (totalPages > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: currentPage > 1 && !isLoadingMore
+                        ? () => _loadPage(currentPage - 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_left),
+                    color: primaryColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Page $currentPage of $totalPages',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: currentPage < totalPages && !isLoadingMore
+                        ? () => _loadPage(currentPage + 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right),
+                    color: primaryColor,
+                  ),
+                ],
+              ),
+            ),
+
+          if (isLoadingMore)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: CircularProgressIndicator(color: primaryColor),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _loadPage(int page) async {
+    setState(() {
+      isLoadingMore = true;
+      currentPage = page;
+    });
+
+    try {
+      final userId = UserService.currentUserId;
+      final accountsUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/accounts?createdById=$userId&limit=$itemsPerPage&page=$page',
+      );
+
+      final accountsResponse = await http.get(accountsUrl);
+      final accountsData = jsonDecode(accountsResponse.body);
+
+      setState(() {
+        recentAccounts = List<Map<String, dynamic>>.from(
+          accountsData['data'] ?? [],
+        );
+        if (accountsData['total'] != null) {
+          totalAccounts = accountsData['total'];
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading page: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => isLoadingMore = false);
+    }
   }
 
   Widget _buildRecentAccountCard(Map<String, dynamic> account) {
