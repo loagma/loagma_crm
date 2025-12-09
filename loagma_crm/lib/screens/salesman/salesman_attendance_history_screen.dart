@@ -39,7 +39,7 @@ class _SalesmanAttendanceHistoryScreenState
     setState(() => isLoading = true);
 
     try {
-      final employeeId = UserService.userId;
+      final employeeId = UserService.currentUserId;
       if (employeeId == null) {
         _showError('Employee ID not found');
         return;
@@ -78,7 +78,7 @@ class _SalesmanAttendanceHistoryScreenState
     setState(() => isLoadingStats = true);
 
     try {
-      final employeeId = UserService.userId;
+      final employeeId = UserService.currentUserId;
       if (employeeId == null) return;
 
       final now = DateTime.now();

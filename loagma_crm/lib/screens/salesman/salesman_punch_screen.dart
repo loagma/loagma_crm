@@ -142,7 +142,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     setState(() => isLoadingAttendance = true);
 
     try {
-      final employeeId = UserService.userId;
+      final employeeId = UserService.currentUserId;
       if (employeeId == null) {
         _showError('Employee ID not found');
         return;
@@ -227,7 +227,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       );
 
       // Send to backend
-      final employeeId = UserService.userId;
+      final employeeId = UserService.currentUserId;
       final employeeName = UserService.name;
 
       if (employeeId == null || employeeName == null) {
