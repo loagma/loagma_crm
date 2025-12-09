@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
 class CustomToast {
-  static void showSuccess(BuildContext context, String message) {
+  static void showSuccess(
+    BuildContext context,
+    String message, {
+    int duration = 2,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        // Auto dismiss after 2 seconds
-        Future.delayed(const Duration(seconds: 2), () {
+        // Auto dismiss after specified duration
+        Future.delayed(Duration(seconds: duration), () {
           if (context.mounted) {
             Navigator.of(context).pop();
           }
