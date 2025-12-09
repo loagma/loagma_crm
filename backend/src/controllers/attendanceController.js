@@ -43,10 +43,12 @@ export const punchIn = async (req, res) => {
         }
 
         // Check if already punched in today
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+
+        console.log('Checking existing attendance for:', employeeId);
+        console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
 
         const existingAttendance = await prisma.attendance.findFirst({
             where: {
@@ -57,6 +59,8 @@ export const punchIn = async (req, res) => {
                 }
             }
         });
+
+        console.log('Existing attendance:', existingAttendance ? existingAttendance.id : 'none');
 
         if (existingAttendance) {
             return res.status(400).json({
@@ -189,10 +193,13 @@ export const getTodayAttendance = async (req, res) => {
             });
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Get today's date range in UTC
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+
+        console.log('Fetching attendance for:', employeeId);
+        console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
 
         const attendance = await prisma.attendance.findFirst({
             where: {
@@ -206,6 +213,8 @@ export const getTodayAttendance = async (req, res) => {
                 punchInTime: 'desc'
             }
         });
+
+        console.log('Found attendance:', attendance ? attendance.id : 'none');
 
         res.status(200).json({
             success: true,
