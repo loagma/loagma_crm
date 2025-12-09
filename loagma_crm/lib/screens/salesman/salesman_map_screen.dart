@@ -18,8 +18,21 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
   Set<Marker> _markers = {};
   bool isLoading = true;
   List<Map<String, dynamic>> accounts = [];
+  List<Map<String, dynamic>> allAccounts = []; // Store all accounts
   Position? _currentPosition;
   bool _locationPermissionGranted = false;
+
+  // Filter states
+  bool isFilterExpanded = false;
+  String? selectedCustomerStage;
+  String? selectedBusinessType;
+  String? selectedBusinessSize;
+  String? selectedFunnelStage;
+  String? selectedCity;
+  String? selectedPincode;
+  bool? selectedApprovalStatus;
+  bool? selectedActiveStatus;
+  bool? selectedHasLocation;
 
   static const Color primaryColor = Color(0xFFD7BE69);
 
@@ -33,6 +46,135 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
   void initState() {
     super.initState();
     _initializeMap();
+  }
+
+  // Dynamic filter options
+  List<String> get availableCustomerStages {
+    final stages = allAccounts
+        .map((a) => a['customerStage']?.toString())
+        .where((stage) => stage != null && stage.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    stages.sort();
+    return stages;
+  }
+
+  List<String> get availableBusinessTypes {
+    final types = allAccounts
+        .map((a) => a['businessType']?.toString())
+        .where((type) => type != null && type.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    types.sort();
+    return types;
+  }
+
+  List<String> get availableBusinessSizes {
+    final sizes = allAccounts
+        .map((a) => a['businessSize']?.toString())
+        .where((size) => size != null && size.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    sizes.sort();
+    return sizes;
+  }
+
+  List<String> get availableFunnelStages {
+    final stages = allAccounts
+        .map((a) => a['funnelStage']?.toString())
+        .where((stage) => stage != null && stage.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    stages.sort();
+    return stages;
+  }
+
+  List<String> get availableCities {
+    final cities = allAccounts
+        .map((a) => a['city']?.toString())
+        .where((city) => city != null && city.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    cities.sort();
+    return cities;
+  }
+
+  List<String> get availablePincodes {
+    final pincodes = allAccounts
+        .map((a) => a['pincode']?.toString())
+        .where((pincode) => pincode != null && pincode.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList();
+    pincodes.sort();
+    return pincodes;
+  }
+
+  int get activeFilterCount {
+    int count = 0;
+    if (selectedCustomerStage != null) count++;
+    if (selectedBusinessType != null) count++;
+    if (selectedBusinessSize != null) count++;
+    if (selectedFunnelStage != null) count++;
+    if (selectedCity != null) count++;
+    if (selectedPincode != null) count++;
+    if (selectedApprovalStatus != null) count++;
+    if (selectedActiveStatus != null) count++;
+    if (selectedHasLocation != null) count++;
+    return count;
+  }
+
+  void clearAllFilters() {
+    setState(() {
+      selectedCustomerStage = null;
+      selectedBusinessType = null;
+      selectedBusinessSize = null;
+      selectedFunnelStage = null;
+      selectedCity = null;
+      selectedPincode = null;
+      selectedApprovalStatus = null;
+      selectedActiveStatus = null;
+      selectedHasLocation = null;
+      _applyFilters();
+    });
+  }
+
+  void _applyFilters() {
+    accounts = allAccounts.where((account) {
+      if (selectedCustomerStage != null &&
+          account['customerStage'] != selectedCustomerStage)
+        return false;
+      if (selectedBusinessType != null &&
+          account['businessType'] != selectedBusinessType)
+        return false;
+      if (selectedBusinessSize != null &&
+          account['businessSize'] != selectedBusinessSize)
+        return false;
+      if (selectedFunnelStage != null &&
+          account['funnelStage'] != selectedFunnelStage)
+        return false;
+      if (selectedCity != null && account['city'] != selectedCity) return false;
+      if (selectedPincode != null && account['pincode'] != selectedPincode)
+        return false;
+      if (selectedApprovalStatus != null &&
+          account['isApproved'] != selectedApprovalStatus)
+        return false;
+      if (selectedActiveStatus != null &&
+          account['isActive'] != selectedActiveStatus)
+        return false;
+      if (selectedHasLocation != null) {
+        final hasLocation =
+            account['latitude'] != null && account['longitude'] != null;
+        if (hasLocation != selectedHasLocation) return false;
+      }
+      return true;
+    }).toList();
+    _createMarkers();
   }
 
   Future<void> _initializeMap() async {
@@ -132,8 +274,8 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
         final data = jsonDecode(response.body);
 
         if (data['success'] == true) {
-          accounts = List<Map<String, dynamic>>.from(data['data'] ?? []);
-          _createMarkers();
+          allAccounts = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          _applyFilters();
         }
       }
     } catch (e) {
@@ -813,13 +955,29 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
                       15,
                     ),
                   );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Centered on your location'),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: Colors.blue,
+                    ),
+                  );
                 }
               },
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: _initializeMap,
+            tooltip: 'Refresh map data',
+            onPressed: () {
+              _initializeMap();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Refreshing map data...'),
+                  duration: Duration(seconds: 2),
+                  backgroundColor: primaryColor,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -877,159 +1035,427 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
                   mapToolbarEnabled: true,
                 ),
 
-                // Legend at top
+                // Collapsible Filter Section at top
                 Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
+                  top: 8,
+                  left: 8,
+                  right: 8,
                   child: Card(
                     elevation: 4,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Map Legend',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Filter Toggle Header
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              isFilterExpanded = !isFilterExpanded;
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.filter_list,
+                                  size: 18,
+                                  color: activeFilterCount > 0
+                                      ? primaryColor
+                                      : Colors.grey[700],
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Filters',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: activeFilterCount > 0
+                                        ? primaryColor
+                                        : Colors.grey[800],
+                                  ),
+                                ),
+                                if (activeFilterCount > 0) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      activeFilterCount.toString(),
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const Spacer(),
+                                // Legend inline
+                                if (!isFilterExpanded) ...[
+                                  _buildLegendItem('Me', Colors.blue),
+                                  const SizedBox(width: 8),
+                                  _buildLegendItem('✓', Colors.green),
+                                  const SizedBox(width: 8),
+                                  _buildLegendItem('⏱', Colors.orange),
+                                  const SizedBox(width: 8),
+                                ],
+                                Icon(
+                                  isFilterExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 20,
+                                  color: Colors.grey[700],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _buildLegendItem('My Location', Colors.blue),
-                              _buildLegendItem('Approved', Colors.green),
-                              _buildLegendItem('Pending', Colors.orange),
-                            ],
+                        ),
+
+                        // Expanded Filter Content
+                        if (isFilterExpanded)
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(12),
+                                bottomRight: Radius.circular(12),
+                              ),
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Clear button
+                                  if (activeFilterCount > 0)
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed: clearAllFilters,
+                                        icon: const Icon(
+                                          Icons.clear_all,
+                                          size: 14,
+                                        ),
+                                        label: const Text('Clear All'),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                    ),
+
+                                  // Customer Stage
+                                  if (availableCustomerStages.isNotEmpty) ...[
+                                    Text(
+                                      'Customer Stage',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip(
+                                          'All',
+                                          null,
+                                          'customerStage',
+                                        ),
+                                        ...availableCustomerStages.map(
+                                          (stage) => _buildFilterChip(
+                                            stage,
+                                            stage,
+                                            'customerStage',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // Business Type
+                                  if (availableBusinessTypes.isNotEmpty) ...[
+                                    Text(
+                                      'Business Type',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip(
+                                          'All',
+                                          null,
+                                          'businessType',
+                                        ),
+                                        ...availableBusinessTypes.map(
+                                          (type) => _buildFilterChip(
+                                            type,
+                                            type,
+                                            'businessType',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // Business Size
+                                  if (availableBusinessSizes.isNotEmpty) ...[
+                                    Text(
+                                      'Business Size',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip(
+                                          'All',
+                                          null,
+                                          'businessSize',
+                                        ),
+                                        ...availableBusinessSizes.map(
+                                          (size) => _buildFilterChip(
+                                            size,
+                                            size,
+                                            'businessSize',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // Funnel Stage
+                                  if (availableFunnelStages.isNotEmpty) ...[
+                                    Text(
+                                      'Funnel Stage',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip(
+                                          'All',
+                                          null,
+                                          'funnelStage',
+                                        ),
+                                        ...availableFunnelStages.map(
+                                          (stage) => _buildFilterChip(
+                                            stage,
+                                            stage,
+                                            'funnelStage',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // City
+                                  if (availableCities.isNotEmpty) ...[
+                                    Text(
+                                      'City',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip('All', null, 'city'),
+                                        ...availableCities.map(
+                                          (city) => _buildFilterChip(
+                                            city,
+                                            city,
+                                            'city',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // Pincode
+                                  if (availablePincodes.isNotEmpty) ...[
+                                    Text(
+                                      'Pincode',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildFilterChip(
+                                          'All',
+                                          null,
+                                          'pincode',
+                                        ),
+                                        ...availablePincodes
+                                            .take(10)
+                                            .map(
+                                              (pincode) => _buildFilterChip(
+                                                pincode,
+                                                pincode,
+                                                'pincode',
+                                              ),
+                                            ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+
+                                  // Approval Status
+                                  Text(
+                                    'Approval Status',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: [
+                                      _buildBooleanFilterChip(
+                                        'All',
+                                        null,
+                                        'approval',
+                                        primaryColor,
+                                      ),
+                                      _buildBooleanFilterChip(
+                                        'Approved',
+                                        true,
+                                        'approval',
+                                        Colors.green,
+                                      ),
+                                      _buildBooleanFilterChip(
+                                        'Pending',
+                                        false,
+                                        'approval',
+                                        Colors.orange,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  // Location Status
+                                  Text(
+                                    'Location',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: [
+                                      _buildBooleanFilterChip(
+                                        'All',
+                                        null,
+                                        'location',
+                                        primaryColor,
+                                      ),
+                                      _buildBooleanFilterChip(
+                                        'With GPS',
+                                        true,
+                                        'location',
+                                        Colors.green,
+                                      ),
+                                      _buildBooleanFilterChip(
+                                        'No GPS',
+                                        false,
+                                        'location',
+                                        Colors.red,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
 
                 // Info card at the bottom
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              InkWell(
-                                onTap: _showAllAccountsList,
-                                child: _buildInfoItem(
-                                  'Total',
-                                  accounts.length.toString(),
-                                  Icons.account_circle,
-                                  Colors.blue,
-                                ),
-                              ),
-                              _buildInfoItem(
-                                'On Map',
-                                accountsOnMap.toString(),
-                                Icons.location_on,
-                                Colors.red,
-                              ),
-                              _buildInfoItem(
-                                'Approved',
-                                accounts
-                                    .where((a) => a['isApproved'] == true)
-                                    .length
-                                    .toString(),
-                                Icons.check_circle,
-                                Colors.green,
-                              ),
-                              _buildInfoItem(
-                                'Pending',
-                                accounts
-                                    .where((a) => a['isApproved'] != true)
-                                    .length
-                                    .toString(),
-                                Icons.pending,
-                                Colors.orange,
-                              ),
-                            ],
-                          ),
-                          if (accountsOnMap < accounts.length) ...[
-                            const SizedBox(height: 12),
-                            InkWell(
-                              onTap: _showAccountsWithoutLocation,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange[50],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.orange[200]!,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.warning_amber,
-                                      size: 16,
-                                      color: Colors.orange[700],
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        '${accounts.length - accountsOnMap} account(s) without location',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.orange[700],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 12,
-                                      color: Colors.orange[700],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
       floatingActionButton: _markers.isNotEmpty
-          ? FloatingActionButton(
+          ? FloatingActionButton.extended(
               onPressed: () {
-                print('🎯 Manual fit markers triggered');
+                print('🎯 Recenter map to show all markers');
                 _fitMarkersInView();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Showing ${accounts.length} account${accounts.length != 1 ? 's' : ''} on map',
+                    ),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: primaryColor,
+                  ),
+                );
               },
               backgroundColor: primaryColor,
-              tooltip: 'Show all markers',
-              child: const Icon(Icons.center_focus_strong),
+              icon: const Icon(Icons.center_focus_strong, size: 20),
+              label: const Text(
+                'Show All',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              tooltip: 'Fit all filtered accounts in view',
             )
           : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
@@ -1052,27 +1478,144 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     );
   }
 
-  Widget _buildInfoItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
+  Widget _buildFilterChip(String label, String? value, String filterType) {
+    bool isSelected = false;
+    switch (filterType) {
+      case 'customerStage':
+        isSelected = selectedCustomerStage == value;
+        break;
+      case 'businessType':
+        isSelected = selectedBusinessType == value;
+        break;
+      case 'businessSize':
+        isSelected = selectedBusinessSize == value;
+        break;
+      case 'funnelStage':
+        isSelected = selectedFunnelStage == value;
+        break;
+      case 'city':
+        isSelected = selectedCity == value;
+        break;
+      case 'pincode':
+        isSelected = selectedPincode == value;
+        break;
+    }
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          switch (filterType) {
+            case 'customerStage':
+              selectedCustomerStage = value;
+              break;
+            case 'businessType':
+              selectedBusinessType = value;
+              break;
+            case 'businessSize':
+              selectedBusinessSize = value;
+              break;
+            case 'funnelStage':
+              selectedFunnelStage = value;
+              break;
+            case 'city':
+              selectedCity = value;
+              break;
+            case 'pincode':
+              selectedPincode = value;
+              break;
+          }
+          _applyFilters();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? primaryColor : Colors.grey[300]!,
+            width: 1.5,
           ),
         ),
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-      ],
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            color: isSelected ? Colors.white : Colors.grey[700],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBooleanFilterChip(
+    String label,
+    bool? value,
+    String filterType,
+    Color activeColor,
+  ) {
+    bool isSelected = false;
+    switch (filterType) {
+      case 'approval':
+        isSelected = selectedApprovalStatus == value;
+        break;
+      case 'active':
+        isSelected = selectedActiveStatus == value;
+        break;
+      case 'location':
+        isSelected = selectedHasLocation == value;
+        break;
+    }
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          switch (filterType) {
+            case 'approval':
+              selectedApprovalStatus = value;
+              break;
+            case 'active':
+              selectedActiveStatus = value;
+              break;
+            case 'location':
+              selectedHasLocation = value;
+              break;
+          }
+          _applyFilters();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? activeColor : Colors.grey[300]!,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected && value != null)
+              Icon(
+                value ? Icons.check_circle : Icons.cancel,
+                size: 11,
+                color: Colors.white,
+              ),
+            if (isSelected && value != null) const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
