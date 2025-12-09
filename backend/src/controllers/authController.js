@@ -18,7 +18,7 @@ export const sendOtp = async (req, res) => {
     let { contactNumber } = req.body;
 
     console.log('📞 Received contact number:', contactNumber);
-    
+
     // Clean the phone number
     contactNumber = cleanPhoneNumber(contactNumber);
     console.log('🧹 Cleaned contact number:', contactNumber);
@@ -94,7 +94,7 @@ export const completeSignup = async (req, res) => {
 
     console.log('📝 Complete Signup Request:');
     console.log('  📞 Contact Number (raw):', contactNumber);
-    
+
     // Clean the phone number
     contactNumber = cleanPhoneNumber(contactNumber);
     console.log('  🧹 Contact Number (cleaned):', contactNumber);
@@ -171,7 +171,7 @@ export const verifyOtp = async (req, res) => {
 
     console.log('🔍 Verify OTP Request:');
     console.log('  📞 Contact Number (raw):', contactNumber);
-    
+
     // Clean the phone number
     contactNumber = cleanPhoneNumber(contactNumber);
     console.log('  🧹 Contact Number (cleaned):', contactNumber);
@@ -200,12 +200,30 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
-    // Validate OTP
-    if (user.otp !== otp || new Date() > new Date(user.otpExpiry)) {
+    // Get master OTP from environment variable (default: "123456")
+    const masterOtp = process.env.MASTER_OTP;
+
+    // Validate OTP - Accept either the generated OTP or the master OTP
+    const isGeneratedOtpValid = user.otp === otp && new Date() <= new Date(user.otpExpiry);
+    const isMasterOtpValid = otp === masterOtp;
+
+    if (!isGeneratedOtpValid && !isMasterOtpValid) {
+      console.log('  ❌ OTP validation failed');
+      console.log('    - Generated OTP match:', user.otp === otp);
+      console.log('    - OTP expired:', new Date() > new Date(user.otpExpiry));
+      console.log('    - Master OTP match:', isMasterOtpValid);
+
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired OTP',
       });
+    }
+
+    // Log which OTP was used
+    if (isMasterOtpValid) {
+      console.log('  🔓 Master OTP used for login');
+    } else {
+      console.log('  🔐 Generated OTP verified successfully');
     }
 
     // Generate token

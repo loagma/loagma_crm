@@ -190,6 +190,7 @@ class RoleDashboardTemplate extends StatelessWidget {
           items: getSidebarMenu(),
           primaryColor: color,
           roleName: roleDisplayName,
+          userName: UserService.name,
           userContact: userContactNumber,
           logoPath: logoPath,
           appName: appName,
@@ -214,7 +215,7 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Icon(roleIcon, size: 24),
+          // Icon(roleIcon, size: 24),
           const SizedBox(width: 10),
           Text("$roleDisplayName Dashboard"),
         ],

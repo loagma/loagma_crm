@@ -6,6 +6,7 @@ class EnterpriseSidebar extends StatelessWidget {
   final Color primaryColor;
   final String roleName;
   final String? userContact;
+  final String? userName;
   final String? appName;
   final String? logoPath;
 
@@ -15,6 +16,7 @@ class EnterpriseSidebar extends StatelessWidget {
     required this.primaryColor,
     required this.roleName,
     this.userContact,
+    this.userName,
     this.appName,
     this.logoPath,
   });
@@ -94,15 +96,38 @@ class EnterpriseSidebar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          Text(
-            roleName.toUpperCase(),
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                roleName.toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              if (userName != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  userName!,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              if (userContact != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  userContact!,
+                  style: const TextStyle(color: Colors.white60, fontSize: 13),
+                ),
+              ],
+            ],
           ),
-          if (userContact != null)
-            Text(
-              userContact!,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
         ],
       ),
     );
