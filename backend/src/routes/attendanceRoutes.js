@@ -8,6 +8,7 @@ import {
     getAllAttendance,
     getLiveAttendanceDashboard,
     getAttendanceAnalytics,
+    getDetailedAttendance,
     getEmployeeAttendanceReport
 } from '../controllers/attendanceController.js';
 
@@ -26,6 +27,7 @@ router.get('/stats/:employeeId', getAttendanceStats);
 router.get('/all', getAllAttendance);
 router.get('/admin/dashboard', getLiveAttendanceDashboard);
 router.get('/admin/analytics', getAttendanceAnalytics);
+router.get('/admin/detailed', getDetailedAttendance);
 router.get('/admin/report', getEmployeeAttendanceReport);
 
 export default router;
