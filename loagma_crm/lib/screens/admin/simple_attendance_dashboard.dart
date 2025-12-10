@@ -5,16 +5,15 @@ import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 
-class ComprehensiveAttendanceDashboard extends StatefulWidget {
-  const ComprehensiveAttendanceDashboard({Key? key}) : super(key: key);
+class SimpleAttendanceDashboard extends StatefulWidget {
+  const SimpleAttendanceDashboard({Key? key}) : super(key: key);
 
   @override
-  State<ComprehensiveAttendanceDashboard> createState() =>
-      _ComprehensiveAttendanceDashboardState();
+  State<SimpleAttendanceDashboard> createState() =>
+      _SimpleAttendanceDashboardState();
 }
 
-class _ComprehensiveAttendanceDashboardState
-    extends State<ComprehensiveAttendanceDashboard>
+class _SimpleAttendanceDashboardState extends State<SimpleAttendanceDashboard>
     with TickerProviderStateMixin {
   late PageController _pageController;
   late Timer _refreshTimer;
@@ -151,7 +150,11 @@ class _ComprehensiveAttendanceDashboardState
             snippet:
                 'In: ${DateFormat('HH:mm').format(attendance.punchInTime)}',
           ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            attendance.isPunchedOut
+                ? BitmapDescriptor.hueBlue
+                : BitmapDescriptor.hueBlue,
+          ),
         ),
       );
 
@@ -870,7 +873,9 @@ class _ComprehensiveAttendanceDashboardState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.1),
+              color: attendance.isPunchedOut
+                  ? primaryColor.withOpacity(0.1)
+                  : primaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: primaryColor.withOpacity(0.3)),
             ),
