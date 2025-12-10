@@ -173,10 +173,10 @@ class _EnhancedAttendanceManagementScreenState
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Enhanced Attendance',
+          'Attendance Management',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFD7BE69),
         foregroundColor: Colors.black87,
         elevation: 0,
         actions: [
@@ -199,7 +199,7 @@ class _EnhancedAttendanceManagementScreenState
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.blue,
-          unselectedLabelColor: Colors.grey,
+          unselectedLabelColor: Colors.black,
           indicatorColor: Colors.blue,
           tabs: const [
             Tab(text: 'Dashboard'),
