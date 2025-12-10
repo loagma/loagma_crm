@@ -1,4 +1,15 @@
 import { PrismaClient } from '@prisma/client';
+import {
+    getCurrentISTTime,
+    convertUTCToIST,
+    convertISTToUTC,
+    getISTDateRange,
+    formatISTTime,
+    getISTTimestamp,
+    calculateWorkHoursIST,
+    getCurrentWorkDurationIST,
+    getISTTimezoneInfo
+} from '../utils/timezone.js';
 
 const prisma = new PrismaClient();
 
@@ -13,42 +24,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c; // Distance in kilometers
-}
-
-// Helper function to calculate work hours with proper timezone handling
-function calculateWorkHours(punchInTime, punchOutTime) {
-    const punchIn = new Date(punchInTime);
-    const punchOut = new Date(punchOutTime);
-    
-    // Validate dates
-    if (isNaN(punchIn.getTime()) || isNaN(punchOut.getTime())) {
-        console.error('Invalid date provided for work hours calculation');
-        return 0;
-    }
-    
-    // Calculate difference in milliseconds
-    const diffMs = punchOut.getTime() - punchIn.getTime();
-    
-    // Convert to hours with precision
-    const hours = diffMs / (1000 * 60 * 60);
-    
-    // Round to 2 decimal places and ensure positive
-    return Math.max(0, Math.round(hours * 100) / 100);
-}
-
-// Helper function to get current work duration for active attendance
-function getCurrentWorkDuration(punchInTime) {
-    const now = new Date();
-    const punchIn = new Date(punchInTime);
-    
-    if (isNaN(punchIn.getTime())) {
-        return 0;
-    }
-    
-    const diffMs = now.getTime() - punchIn.getTime();
-    const hours = diffMs / (1000 * 60 * 60);
-    
-    return Math.max(0, Math.round(hours * 100) / 100);
 }
 
 // Punch In
@@ -91,36 +66,50 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Create attendance record with proper date handling
-        const punchInTime = new Date();
+        // Create attendance record with proper IST handling
+        const currentISTTime = getCurrentISTTime();
+        const punchInTimeUTC = convertISTToUTC(currentISTTime);
+        
+        // Get IST date for the date field
+        const istDate = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
+        
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
                 employeeName,
-                date: new Date(punchInTime.getFullYear(), punchInTime.getMonth(), punchInTime.getDate()),
-                punchInTime,
+                date: istDate,
+                punchInTime: punchInTimeUTC, // Store in UTC for consistency
                 punchInLatitude: parseFloat(punchInLatitude),
                 punchInLongitude: parseFloat(punchInLongitude),
                 punchInPhoto,
                 punchInAddress,
                 bikeKmStart,
                 status: 'active',
-                totalWorkHours: 0, // Initialize to 0
-                totalDistanceKm: 0 // Initialize to 0
+                totalWorkHours: 0,
+                totalDistanceKm: 0
             }
         });
 
         console.log('✅ Attendance created:', {
             id: attendance.id,
             employeeId: attendance.employeeId,
-            punchInTime: attendance.punchInTime.toISOString(),
+            punchInTimeUTC: attendance.punchInTime.toISOString(),
+            punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
             status: attendance.status
         });
+
+        // Enhance response with IST information
+        const responseData = {
+            ...attendance,
+            punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
+            timezone: getISTTimezoneInfo()
+        };
 
         res.status(201).json({
             success: true,
             message: 'Punched in successfully',
-            data: attendance
+            data: responseData
         });
     } catch (error) {
         console.error('Punch in error:', error);
@@ -171,7 +160,7 @@ export const punchOut = async (req, res) => {
             });
         }
 
-        // Calculate distance and work hours
+        // Calculate distance and work hours with proper IST handling
         const distance = calculateDistance(
             attendance.punchInLatitude,
             attendance.punchInLongitude,
@@ -179,20 +168,21 @@ export const punchOut = async (req, res) => {
             parseFloat(punchOutLongitude)
         );
 
-        const punchOutTime = new Date();
-        const workHours = calculateWorkHours(attendance.punchInTime, punchOutTime);
+        const currentISTTime = getCurrentISTTime();
+        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
+        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
 
         // Update attendance record with proper calculations
         const updatedAttendance = await prisma.attendance.update({
             where: { id: attendanceId },
             data: {
-                punchOutTime,
+                punchOutTime: punchOutTimeUTC, // Store in UTC
                 punchOutLatitude: parseFloat(punchOutLatitude),
                 punchOutLongitude: parseFloat(punchOutLongitude),
                 punchOutPhoto,
                 punchOutAddress,
                 bikeKmEnd,
-                totalDistanceKm: Math.round(distance * 100) / 100, // Round to 2 decimal places
+                totalDistanceKm: Math.round(distance * 100) / 100,
                 totalWorkHours: workHours,
                 status: 'completed'
             }
@@ -201,17 +191,30 @@ export const punchOut = async (req, res) => {
         console.log('✅ Attendance completed:', {
             id: updatedAttendance.id,
             employeeId: updatedAttendance.employeeId,
-            punchInTime: updatedAttendance.punchInTime.toISOString(),
-            punchOutTime: updatedAttendance.punchOutTime.toISOString(),
+            punchInTimeUTC: updatedAttendance.punchInTime.toISOString(),
+            punchInTimeIST: formatISTTime(updatedAttendance.punchInTime, 'datetime'),
+            punchOutTimeUTC: updatedAttendance.punchOutTime.toISOString(),
+            punchOutTimeIST: formatISTTime(updatedAttendance.punchOutTime, 'datetime'),
             totalWorkHours: updatedAttendance.totalWorkHours,
             totalDistanceKm: updatedAttendance.totalDistanceKm,
             status: updatedAttendance.status
         });
 
+        // Enhance response with IST information
+        const responseData = {
+            ...updatedAttendance,
+            punchInTimeIST: formatISTTime(updatedAttendance.punchInTime, 'datetime'),
+            punchOutTimeIST: formatISTTime(updatedAttendance.punchOutTime, 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(updatedAttendance.punchInTime, 'time'),
+            punchOutTimeISTFormatted: formatISTTime(updatedAttendance.punchOutTime, 'time'),
+            workDurationFormatted: `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`,
+            timezone: getISTTimezoneInfo()
+        };
+
         res.status(200).json({
             success: true,
             message: 'Punched out successfully',
-            data: updatedAttendance
+            data: responseData
         });
     } catch (error) {
         console.error('Punch out error:', error);
@@ -235,21 +238,19 @@ export const getTodayAttendance = async (req, res) => {
             });
         }
 
-        // Get today's date range in UTC
-        const now = new Date();
-        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
-        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0));
+        // Get today's date range in IST
+        const { startOfDay, endOfDay } = getISTDateRange();
 
         console.log('Fetching attendance for:', employeeId);
-        console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
+        console.log('IST Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
 
         // Get all today's attendance sessions
         const todayAttendances = await prisma.attendance.findMany({
             where: {
                 employeeId,
                 punchInTime: {
-                    gte: today,
-                    lt: tomorrow
+                    gte: startOfDay,
+                    lt: endOfDay
                 }
             },
             orderBy: {
@@ -264,25 +265,48 @@ export const getTodayAttendance = async (req, res) => {
         console.log('Found attendances:', todayAttendances.length);
         console.log('Active attendance:', activeAttendance ? activeAttendance.id : 'none');
 
-        // Prepare response data
+        // Prepare response data with IST formatting
         let responseData = activeAttendance || latestAttendance;
-        if (responseData && responseData.status === 'active') {
-            const currentWorkHours = getCurrentWorkDuration(responseData.punchInTime);
+        if (responseData) {
+            let currentWorkHours = 0;
+            if (responseData.status === 'active') {
+                currentWorkHours = getCurrentWorkDurationIST(responseData.punchInTime);
+            }
+            
             responseData = {
                 ...responseData,
-                currentWorkHours: currentWorkHours,
-                isActive: true
+                currentWorkHours,
+                isActive: responseData.status === 'active',
+                punchInTimeIST: formatISTTime(responseData.punchInTime, 'datetime'),
+                punchInTimeISTFormatted: formatISTTime(responseData.punchInTime, 'time'),
+                punchOutTimeIST: responseData.punchOutTime ? formatISTTime(responseData.punchOutTime, 'datetime') : null,
+                punchOutTimeISTFormatted: responseData.punchOutTime ? formatISTTime(responseData.punchOutTime, 'time') : null,
+                workDurationFormatted: currentWorkHours > 0 ? `${Math.floor(currentWorkHours)}h ${Math.round((currentWorkHours % 1) * 60)}m` : null
             };
             
             console.log('Active attendance - current work hours:', currentWorkHours);
         }
 
+        // Enhance all sessions with IST formatting
+        const enhancedSessions = todayAttendances.map(session => ({
+            ...session,
+            punchInTimeIST: formatISTTime(session.punchInTime, 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(session.punchInTime, 'time'),
+            punchOutTimeIST: session.punchOutTime ? formatISTTime(session.punchOutTime, 'datetime') : null,
+            punchOutTimeISTFormatted: session.punchOutTime ? formatISTTime(session.punchOutTime, 'time') : null,
+            currentWorkHours: session.status === 'active' ? getCurrentWorkDurationIST(session.punchInTime) : session.totalWorkHours
+        }));
+
+        const currentISTTime = getCurrentISTTime();
+        
         res.status(200).json({
             success: true,
             data: responseData,
-            allTodaySessions: todayAttendances,
+            allTodaySessions: enhancedSessions,
             totalSessions: todayAttendances.length,
-            serverTime: now.toISOString()
+            serverTime: currentISTTime.toISOString(),
+            serverTimeIST: formatISTTime(convertISTToUTC(currentISTTime), 'datetime'),
+            timezone: getISTTimezoneInfo()
         });
     } catch (error) {
         console.error('Get today attendance error:', error);
@@ -472,17 +496,15 @@ export const getAllAttendance = async (req, res) => {
 // Get Live Attendance Dashboard (Admin)
 export const getLiveAttendanceDashboard = async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Get today's date range in IST
+        const { startOfDay, endOfDay } = getISTDateRange();
 
         // Get today's attendance records with enhanced data
         const todayAttendances = await prisma.attendance.findMany({
             where: {
                 punchInTime: {
-                    gte: today,
-                    lt: tomorrow
+                    gte: startOfDay,
+                    lt: endOfDay
                 }
             },
             orderBy: { punchInTime: 'desc' }
@@ -540,11 +562,11 @@ export const getLiveAttendanceDashboard = async (req, res) => {
         const presentEmployeeIds = Object.keys(employeeAttendanceMap);
         const absentEmployeesList = allEmployees.filter(emp => !presentEmployeeIds.includes(emp.id));
 
-        // Enhance attendance records with current work duration for active sessions
+        // Enhance attendance records with current work duration for active sessions and IST formatting
         const enhancedAttendances = todayAttendances.map(attendance => {
             let currentWorkHours = 0;
             if (attendance.status === 'active') {
-                currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+                currentWorkHours = getCurrentWorkDurationIST(attendance.punchInTime);
             }
 
             return {
@@ -554,7 +576,13 @@ export const getLiveAttendanceDashboard = async (req, res) => {
                 isPunchedOut: attendance.status === 'completed',
                 workDuration: attendance.totalWorkHours || currentWorkHours,
                 punchInFormatted: attendance.punchInTime.toISOString(),
-                punchOutFormatted: attendance.punchOutTime ? attendance.punchOutTime.toISOString() : null
+                punchOutFormatted: attendance.punchOutTime ? attendance.punchOutTime.toISOString() : null,
+                punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
+                punchOutTimeIST: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'datetime') : null,
+                punchOutTimeISTFormatted: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'time') : null,
+                workDurationFormatted: currentWorkHours > 0 || attendance.totalWorkHours > 0 ? 
+                    `${Math.floor(attendance.totalWorkHours || currentWorkHours)}h ${Math.round(((attendance.totalWorkHours || currentWorkHours) % 1) * 60)}m` : null
             };
         });
 
@@ -579,8 +607,11 @@ export const getLiveAttendanceDashboard = async (req, res) => {
                 absentEmployees: absentEmployeesList,
                 allEmployees,
                 employeeAttendanceMap,
-                date: today.toISOString(),
-                lastUpdated: new Date().toISOString()
+                date: startOfDay.toISOString(),
+                dateIST: formatISTTime(startOfDay, 'date'),
+                lastUpdated: new Date().toISOString(),
+                lastUpdatedIST: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime'),
+                timezone: getISTTimezoneInfo()
             }
         });
     } catch (error) {
@@ -694,29 +725,21 @@ export const getDetailedAttendance = async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const where = {};
 
-        // Filter by date (default to today)
+        // Filter by date (default to today) with proper IST handling
+        let dateRange;
         if (date) {
+            // Parse the provided date and get IST range
             const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
-            const nextDay = new Date(targetDate);
-            nextDay.setDate(nextDay.getDate() + 1);
-
-            where.punchInTime = {
-                gte: targetDate,
-                lt: nextDay
-            };
+            dateRange = getISTDateRange(targetDate);
         } else {
-            // Default to today
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-
-            where.punchInTime = {
-                gte: today,
-                lt: tomorrow
-            };
+            // Default to today in IST
+            dateRange = getISTDateRange();
         }
+
+        where.punchInTime = {
+            gte: dateRange.startOfDay,
+            lt: dateRange.endOfDay
+        };
 
         // Filter by employee
         if (employeeId) {
@@ -733,11 +756,11 @@ export const getDetailedAttendance = async (req, res) => {
             prisma.attendance.count({ where })
         ]);
 
-        // Enhance attendance data with calculated fields
+        // Enhance attendance data with calculated fields and IST formatting
         const enhancedAttendances = attendances.map(attendance => {
             let currentWorkHours = 0;
             if (attendance.status === 'active') {
-                currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+                currentWorkHours = getCurrentWorkDurationIST(attendance.punchInTime);
             }
 
             return {
@@ -748,7 +771,15 @@ export const getDetailedAttendance = async (req, res) => {
                 workDuration: attendance.totalWorkHours || currentWorkHours,
                 punchInFormatted: attendance.punchInTime.toISOString(),
                 punchOutFormatted: attendance.punchOutTime ? attendance.punchOutTime.toISOString() : null,
-                dateFormatted: attendance.punchInTime.toISOString().split('T')[0]
+                dateFormatted: attendance.punchInTime.toISOString().split('T')[0],
+                // IST formatted fields
+                punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
+                punchOutTimeIST: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'datetime') : null,
+                punchOutTimeISTFormatted: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'time') : null,
+                dateISTFormatted: formatISTTime(attendance.punchInTime, 'date'),
+                workDurationFormatted: (attendance.totalWorkHours || currentWorkHours) > 0 ? 
+                    `${Math.floor(attendance.totalWorkHours || currentWorkHours)}h ${Math.round(((attendance.totalWorkHours || currentWorkHours) % 1) * 60)}m` : null
             };
         });
 
@@ -763,8 +794,10 @@ export const getDetailedAttendance = async (req, res) => {
             },
             filters: {
                 date: date || new Date().toISOString().split('T')[0],
+                dateIST: formatISTTime(dateRange.startOfDay, 'date'),
                 employeeId: employeeId || 'all'
-            }
+            },
+            timezone: getISTTimezoneInfo()
         });
     } catch (error) {
         console.error('Get detailed attendance error:', error);
