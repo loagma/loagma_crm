@@ -405,11 +405,299 @@ export const getAllAttendance = async (req, res) => {
     }
 };
 
+// Get Live Attendance Dashboard (Admin)
+export const getLiveAttendanceDashboard = async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Get today's attendance records
+        const todayAttendances = await prisma.attendance.findMany({
+            where: {
+                punchInTime: {
+                    gte: today,
+                    lt: tomorrow
+                }
+            },
+            orderBy: { punchInTime: 'desc' }
+        });
+
+        // Get all employees for comparison
+        const allEmployees = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                roles: {
+                    hasSome: ['salesman', 'telecaller', 'marketing']
+                }
+            },
+            select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+                roles: true,
+                departmentId: true
+            }
+        });
+
+        // Calculate statistics
+        const totalEmployees = allEmployees.length;
+        const presentEmployees = todayAttendances.length;
+        const absentEmployees = totalEmployees - presentEmployees;
+        const activeEmployees = todayAttendances.filter(a => a.status === 'active').length;
+        const completedEmployees = todayAttendances.filter(a => a.status === 'completed').length;
+
+        // Calculate average work hours for completed attendances
+        const completedAttendances = todayAttendances.filter(a => a.totalWorkHours);
+        const avgWorkHours = completedAttendances.length > 0
+            ? completedAttendances.reduce((sum, a) => sum + a.totalWorkHours, 0) / completedAttendances.length
+            : 0;
+
+        // Get absent employees
+        const presentEmployeeIds = todayAttendances.map(a => a.employeeId);
+        const absentEmployeesList = allEmployees.filter(emp => !presentEmployeeIds.includes(emp.id));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                statistics: {
+                    totalEmployees,
+                    presentEmployees,
+                    absentEmployees,
+                    activeEmployees,
+                    completedEmployees,
+                    avgWorkHours: parseFloat(avgWorkHours.toFixed(2))
+                },
+                attendances: todayAttendances,
+                absentEmployees: absentEmployeesList,
+                date: today.toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('Get live dashboard error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch live dashboard data',
+            error: error.message
+        });
+    }
+};
+
+// Get Attendance Analytics (Admin)
+export const getAttendanceAnalytics = async (req, res) => {
+    try {
+        const { startDate, endDate, employeeId } = req.query;
+
+        let dateFilter = {};
+        if (startDate && endDate) {
+            dateFilter = {
+                punchInTime: {
+                    gte: new Date(startDate),
+                    lte: new Date(endDate)
+                }
+            };
+        } else {
+            // Default to last 30 days
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            dateFilter = {
+                punchInTime: {
+                    gte: thirtyDaysAgo
+                }
+            };
+        }
+
+        const where = { ...dateFilter };
+        if (employeeId) {
+            where.employeeId = employeeId;
+        }
+
+        const attendances = await prisma.attendance.findMany({
+            where,
+            orderBy: { punchInTime: 'desc' }
+        });
+
+        // Group by date for daily analytics
+        const dailyStats = {};
+        attendances.forEach(attendance => {
+            const date = attendance.punchInTime.toISOString().split('T')[0];
+            if (!dailyStats[date]) {
+                dailyStats[date] = {
+                    date,
+                    totalEmployees: 0,
+                    activeEmployees: 0,
+                    completedEmployees: 0,
+                    totalWorkHours: 0,
+                    totalDistance: 0,
+                    attendances: []
+                };
+            }
+
+            dailyStats[date].totalEmployees++;
+            if (attendance.status === 'active') dailyStats[date].activeEmployees++;
+            if (attendance.status === 'completed') dailyStats[date].completedEmployees++;
+            if (attendance.totalWorkHours) dailyStats[date].totalWorkHours += attendance.totalWorkHours;
+            if (attendance.totalDistanceKm) dailyStats[date].totalDistance += attendance.totalDistanceKm;
+            dailyStats[date].attendances.push(attendance);
+        });
+
+        // Convert to array and sort by date
+        const dailyAnalytics = Object.values(dailyStats).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        // Calculate overall statistics
+        const totalAttendances = attendances.length;
+        const completedAttendances = attendances.filter(a => a.status === 'completed');
+        const totalWorkHours = completedAttendances.reduce((sum, a) => sum + (a.totalWorkHours || 0), 0);
+        const totalDistance = attendances.reduce((sum, a) => sum + (a.totalDistanceKm || 0), 0);
+        const avgWorkHours = completedAttendances.length > 0 ? totalWorkHours / completedAttendances.length : 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                summary: {
+                    totalAttendances,
+                    completedAttendances: completedAttendances.length,
+                    activeAttendances: attendances.filter(a => a.status === 'active').length,
+                    totalWorkHours: parseFloat(totalWorkHours.toFixed(2)),
+                    avgWorkHours: parseFloat(avgWorkHours.toFixed(2)),
+                    totalDistance: parseFloat(totalDistance.toFixed(2))
+                },
+                dailyAnalytics,
+                attendances
+            }
+        });
+    } catch (error) {
+        console.error('Get attendance analytics error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch attendance analytics',
+            error: error.message
+        });
+    }
+};
+
+// Get Employee Attendance Report (Admin)
+export const getEmployeeAttendanceReport = async (req, res) => {
+    try {
+        const { month, year } = req.query;
+
+        const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+        const targetYear = year ? parseInt(year) : new Date().getFullYear();
+
+        const startDate = new Date(targetYear, targetMonth - 1, 1);
+        const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+        // Get all employees
+        const employees = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                roles: {
+                    hasSome: ['salesman', 'telecaller', 'marketing']
+                }
+            },
+            select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+                roles: true,
+                department: {
+                    select: {
+                        name: true
+                    }
+                }
+            }
+        });
+
+        // Get attendance records for the month
+        const attendances = await prisma.attendance.findMany({
+            where: {
+                punchInTime: {
+                    gte: startDate,
+                    lte: endDate
+                }
+            }
+        });
+
+        // Group attendances by employee
+        const employeeAttendances = {};
+        attendances.forEach(attendance => {
+            if (!employeeAttendances[attendance.employeeId]) {
+                employeeAttendances[attendance.employeeId] = [];
+            }
+            employeeAttendances[attendance.employeeId].push(attendance);
+        });
+
+        // Calculate report for each employee
+        const employeeReports = employees.map(employee => {
+            const empAttendances = employeeAttendances[employee.id] || [];
+            const presentDays = empAttendances.length;
+            const completedDays = empAttendances.filter(a => a.status === 'completed').length;
+            const totalWorkHours = empAttendances.reduce((sum, a) => sum + (a.totalWorkHours || 0), 0);
+            const totalDistance = empAttendances.reduce((sum, a) => sum + (a.totalDistanceKm || 0), 0);
+            const avgWorkHours = completedDays > 0 ? totalWorkHours / completedDays : 0;
+
+            // Calculate working days in month (excluding weekends)
+            const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+            let workingDays = 0;
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(targetYear, targetMonth - 1, day);
+                const dayOfWeek = date.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+                    workingDays++;
+                }
+            }
+
+            const attendancePercentage = workingDays > 0 ? (presentDays / workingDays) * 100 : 0;
+
+            return {
+                employee: {
+                    id: employee.id,
+                    name: employee.name,
+                    employeeCode: employee.employeeCode,
+                    roles: employee.roles,
+                    department: employee.department?.name
+                },
+                statistics: {
+                    presentDays,
+                    completedDays,
+                    workingDays,
+                    absentDays: workingDays - presentDays,
+                    attendancePercentage: parseFloat(attendancePercentage.toFixed(2)),
+                    totalWorkHours: parseFloat(totalWorkHours.toFixed(2)),
+                    avgWorkHours: parseFloat(avgWorkHours.toFixed(2)),
+                    totalDistance: parseFloat(totalDistance.toFixed(2))
+                },
+                attendances: empAttendances
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                month: targetMonth,
+                year: targetYear,
+                employeeReports: employeeReports.sort((a, b) => b.statistics.attendancePercentage - a.statistics.attendancePercentage)
+            }
+        });
+    } catch (error) {
+        console.error('Get employee attendance report error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch employee attendance report',
+            error: error.message
+        });
+    }
+};
+
 export default {
     punchIn,
     punchOut,
     getTodayAttendance,
     getAttendanceHistory,
     getAttendanceStats,
-    getAllAttendance
+    getAllAttendance,
+    getLiveAttendanceDashboard,
+    getAttendanceAnalytics,
+    getEmployeeAttendanceReport
 };
