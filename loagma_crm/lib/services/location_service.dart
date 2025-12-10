@@ -82,8 +82,8 @@ class LocationService {
       // Configure location settings for high accuracy and continuous tracking
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
-        timeLimit: Duration(seconds: 30), // Timeout for location request
+        distanceFilter: 5, // Update every 5 meters for better tracking
+        timeLimit: Duration(seconds: 15), // Faster timeout for responsiveness
       );
 
       // Start position stream
@@ -95,7 +95,7 @@ class LocationService {
               _currentPosition = position;
               _locationController.add(position);
               print(
-                '📍 Location updated: ${position.latitude}, ${position.longitude}',
+                '📍 Location updated: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} (accuracy: ${position.accuracy.toStringAsFixed(1)}m)',
               );
             },
             onError: (error) {

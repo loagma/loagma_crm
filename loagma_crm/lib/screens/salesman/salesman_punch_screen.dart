@@ -84,7 +84,13 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       _updateCurrentTime();
       if (isPunchedIn && punchInTime != null) {
         setState(() {
-          workDuration = DateTime.now().difference(punchInTime!);
+          final now = DateTime.now();
+          final newDuration = now.difference(punchInTime!);
+
+          // Only update if duration is positive and different
+          if (!newDuration.isNegative && newDuration != workDuration) {
+            workDuration = newDuration;
+          }
         });
       }
     });
@@ -212,14 +218,29 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
 
-          // Calculate current work duration if punched in
+          // Calculate work duration with proper handling
           if (attendance.isPunchedIn) {
-            workDuration = DateTime.now().difference(attendance.punchInTime);
+            // For active attendance, calculate current duration
+            final now = DateTime.now();
+            workDuration = now.difference(attendance.punchInTime);
+
+            // Ensure duration is not negative (clock sync issues)
+            if (workDuration.isNegative) {
+              workDuration = Duration.zero;
+            }
           } else if (attendance.isPunchedOut &&
               attendance.punchOutTime != null) {
+            // For completed attendance, use the actual work duration
             workDuration = attendance.punchOutTime!.difference(
               attendance.punchInTime,
             );
+
+            // Ensure duration is not negative
+            if (workDuration.isNegative) {
+              workDuration = Duration.zero;
+            }
+          } else {
+            workDuration = Duration.zero;
           }
 
           punchInLocation = Position(

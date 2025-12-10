@@ -15,10 +15,40 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c; // Distance in kilometers
 }
 
-// Helper function to calculate work hours
+// Helper function to calculate work hours with proper timezone handling
 function calculateWorkHours(punchInTime, punchOutTime) {
-    const diff = new Date(punchOutTime) - new Date(punchInTime);
-    return diff / (1000 * 60 * 60); // Convert milliseconds to hours
+    const punchIn = new Date(punchInTime);
+    const punchOut = new Date(punchOutTime);
+    
+    // Validate dates
+    if (isNaN(punchIn.getTime()) || isNaN(punchOut.getTime())) {
+        console.error('Invalid date provided for work hours calculation');
+        return 0;
+    }
+    
+    // Calculate difference in milliseconds
+    const diffMs = punchOut.getTime() - punchIn.getTime();
+    
+    // Convert to hours with precision
+    const hours = diffMs / (1000 * 60 * 60);
+    
+    // Round to 2 decimal places and ensure positive
+    return Math.max(0, Math.round(hours * 100) / 100);
+}
+
+// Helper function to get current work duration for active attendance
+function getCurrentWorkDuration(punchInTime) {
+    const now = new Date();
+    const punchIn = new Date(punchInTime);
+    
+    if (isNaN(punchIn.getTime())) {
+        return 0;
+    }
+    
+    const diffMs = now.getTime() - punchIn.getTime();
+    const hours = diffMs / (1000 * 60 * 60);
+    
+    return Math.max(0, Math.round(hours * 100) / 100);
 }
 
 // Punch In
@@ -42,10 +72,10 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Check if already punched in today
+        // Check if already punched in today (using UTC to avoid timezone issues)
         const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
+        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0));
 
         console.log('Checking existing attendance for:', employeeId);
         console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
@@ -70,19 +100,30 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Create attendance record
+        // Create attendance record with proper date handling
+        const punchInTime = new Date();
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
                 employeeName,
-                punchInTime: new Date(),
+                date: new Date(punchInTime.getFullYear(), punchInTime.getMonth(), punchInTime.getDate()),
+                punchInTime,
                 punchInLatitude: parseFloat(punchInLatitude),
                 punchInLongitude: parseFloat(punchInLongitude),
                 punchInPhoto,
                 punchInAddress,
                 bikeKmStart,
-                status: 'active'
+                status: 'active',
+                totalWorkHours: 0, // Initialize to 0
+                totalDistanceKm: 0 // Initialize to 0
             }
+        });
+
+        console.log('✅ Attendance created:', {
+            id: attendance.id,
+            employeeId: attendance.employeeId,
+            punchInTime: attendance.punchInTime.toISOString(),
+            status: attendance.status
         });
 
         res.status(201).json({
@@ -150,7 +191,7 @@ export const punchOut = async (req, res) => {
         const punchOutTime = new Date();
         const workHours = calculateWorkHours(attendance.punchInTime, punchOutTime);
 
-        // Update attendance record
+        // Update attendance record with proper calculations
         const updatedAttendance = await prisma.attendance.update({
             where: { id: attendanceId },
             data: {
@@ -160,10 +201,20 @@ export const punchOut = async (req, res) => {
                 punchOutPhoto,
                 punchOutAddress,
                 bikeKmEnd,
-                totalDistanceKm: distance,
+                totalDistanceKm: Math.round(distance * 100) / 100, // Round to 2 decimal places
                 totalWorkHours: workHours,
                 status: 'completed'
             }
+        });
+
+        console.log('✅ Attendance completed:', {
+            id: updatedAttendance.id,
+            employeeId: updatedAttendance.employeeId,
+            punchInTime: updatedAttendance.punchInTime.toISOString(),
+            punchOutTime: updatedAttendance.punchOutTime.toISOString(),
+            totalWorkHours: updatedAttendance.totalWorkHours,
+            totalDistanceKm: updatedAttendance.totalDistanceKm,
+            status: updatedAttendance.status
         });
 
         res.status(200).json({
@@ -195,8 +246,8 @@ export const getTodayAttendance = async (req, res) => {
 
         // Get today's date range in UTC
         const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
+        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0));
 
         console.log('Fetching attendance for:', employeeId);
         console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
@@ -216,9 +267,23 @@ export const getTodayAttendance = async (req, res) => {
 
         console.log('Found attendance:', attendance ? attendance.id : 'none');
 
+        // If attendance is active, calculate current work duration
+        let responseData = attendance;
+        if (attendance && attendance.status === 'active') {
+            const currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+            responseData = {
+                ...attendance,
+                currentWorkHours: currentWorkHours,
+                isActive: true
+            };
+            
+            console.log('Active attendance - current work hours:', currentWorkHours);
+        }
+
         res.status(200).json({
             success: true,
-            data: attendance
+            data: responseData,
+            serverTime: now.toISOString() // Include server time for sync
         });
     } catch (error) {
         console.error('Get today attendance error:', error);
