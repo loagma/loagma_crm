@@ -4,7 +4,7 @@ import { generateToken } from '../utils/jwtUtils.js';
 import { sendOtpSMS } from '../utils/smsService.js';
 import { storeOTP, getOTP, deleteOTP } from '../utils/otpStore.js';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
-import { randomUUID } from 'crypto';
+import { generateUserIdentifiers } from '../utils/idGenerator.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -77,50 +77,7 @@ export const sendOtp = async (req, res) => {
   }
 };
 
-// Generate sequential user ID (same as admin controller)
-async function generateSequentialUserId() {
-  // Find all users with numeric IDs only
-  const allUsers = await prisma.user.findMany({
-    select: { id: true },
-  });
 
-  // Filter only numeric IDs and convert to numbers
-  const numericIds = allUsers
-    .map(u => parseInt(u.id))
-    .filter(id => !isNaN(id));
-
-  // Find the highest numeric ID, or start from 0
-  const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
-
-  // Generate next ID
-  const nextId = maxId + 1;
-
-  // Format as 5 digits (e.g., 00001, 00002)
-  return String(nextId).padStart(5, '0');
-}
-
-// Generate sequential employee code (same as admin controller)
-async function generateSequentialEmployeeCode() {
-  // Find all users with employee codes
-  const allUsers = await prisma.user.findMany({
-    where: { employeeCode: { not: null } },
-    select: { employeeCode: true },
-  });
-
-  // Filter only numeric employee codes and convert to numbers
-  const numericCodes = allUsers
-    .map(u => parseInt(u.employeeCode))
-    .filter(code => !isNaN(code));
-
-  // Find the highest numeric code, or start from 0
-  const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 0;
-
-  // Generate next code
-  const nextCode = maxCode + 1;
-
-  // Format as 5 digits (e.g., 00001, 00002)
-  return String(nextCode).padStart(5, '0');
-}
 
 /**
  * @desc Complete signup for new users - FIXED to use sequential IDs
@@ -170,12 +127,8 @@ export const completeSignup = async (req, res) => {
       });
     }
 
-    // ✅ Generate sequential user ID and employee code
-    const userId = await generateSequentialUserId();
-    const employeeCode = await generateSequentialEmployeeCode();
-
-    console.log('  🆔 Generated sequential user ID:', userId);
-    console.log('  👔 Generated sequential employee code:', employeeCode);
+    // ✅ Generate sequential user ID and employee code using shared utility
+    const { userId, employeeCode } = await generateUserIdentifiers();
 
     // Create new user with sequential ID
     const newUser = await prisma.user.create({

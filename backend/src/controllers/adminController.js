@@ -1,51 +1,9 @@
 import prisma from '../config/db.js';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
 import { uploadBase64Image } from '../services/cloudinaryService.js';
+import { generateUserIdentifiers } from '../utils/idGenerator.js';
 
-// Generate numeric user ID
-async function generateNumericUserId() {
-  // Find all users with numeric IDs only
-  const allUsers = await prisma.user.findMany({
-    select: { id: true },
-  });
 
-  // Filter only numeric IDs and convert to numbers
-  const numericIds = allUsers
-    .map(u => parseInt(u.id))
-    .filter(id => !isNaN(id));
-
-  // Find the highest numeric ID, or start from 0
-  const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
-
-  // Generate next ID
-  const nextId = maxId + 1;
-
-  // Format as 5 digits (e.g., 00001, 00002)
-  return String(nextId).padStart(5, '0');
-}
-
-// Generate numeric employee code
-async function generateEmployeeCode() {
-  // Find all users with employee codes
-  const allUsers = await prisma.user.findMany({
-    where: { employeeCode: { not: null } },
-    select: { employeeCode: true },
-  });
-
-  // Filter only numeric employee codes and convert to numbers
-  const numericCodes = allUsers
-    .map(u => parseInt(u.employeeCode))
-    .filter(code => !isNaN(code));
-
-  // Find the highest numeric code, or start from 0
-  const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 0;
-
-  // Generate next code
-  const nextCode = maxCode + 1;
-
-  // Format as 5 digits (e.g., 00001, 00002)
-  return String(nextCode).padStart(5, '0');
-}
 
 
 // Admin creates a user with contact number and role
@@ -150,9 +108,8 @@ export const createUserByAdmin = async (req, res) => {
       imageUrl = image;
     }
 
-    // Create user with numeric ID and employee code
-    const userId = await generateNumericUserId();
-    const employeeCode = await generateEmployeeCode();
+    // Create user with sequential ID and employee code using shared utility
+    const { userId, employeeCode } = await generateUserIdentifiers();
 
     const user = await prisma.user.create({
       data: {
