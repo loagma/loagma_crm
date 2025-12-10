@@ -475,17 +475,15 @@ class _EnhancedAttendanceManagementScreenState
 
   Widget _buildDashboardTab() {
     final stats = dashboardData['statistics'] ?? {};
-    final presentCount = stats['presentCount'] ?? 0;
     final totalEmployees = stats['totalEmployees'] ?? 0;
-    final absentCount = totalEmployees > presentCount
-        ? totalEmployees - presentCount
-        : 0;
-    final activeCount = attendanceRecords
-        .where((a) => a.status == 'active')
-        .length;
-    final completedCount = attendanceRecords
-        .where((a) => a.status == 'completed')
-        .length;
+    final presentEmployees = stats['presentEmployees'] ?? 0;
+    final absentEmployees = stats['absentEmployees'] ?? 0;
+    final activeEmployees = stats['activeEmployees'] ?? 0;
+    final completedEmployees = stats['completedEmployees'] ?? 0;
+    final totalSessions = stats['totalSessions'] ?? 0;
+    final avgWorkHours = stats['avgWorkHours'] ?? 0.0;
+    final totalWorkHours = stats['totalWorkHours'] ?? 0.0;
+    final attendancePercentage = stats['attendancePercentage'] ?? 0.0;
 
     return RefreshIndicator(
       onRefresh: _loadInitialData,
@@ -518,7 +516,7 @@ class _EnhancedAttendanceManagementScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${attendanceRecords.length} Active Employees',
+                    '${presentEmployees} Present • ${totalSessions} Sessions',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: isLiveTrackingEnabled ? Colors.green : Colors.grey,
@@ -600,15 +598,13 @@ class _EnhancedAttendanceManagementScreenState
                         ),
                         decoration: BoxDecoration(
                           color: _getAttendanceColor(
-                            presentCount,
+                            presentEmployees,
                             totalEmployees,
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          totalEmployees > 0
-                              ? '${((presentCount / totalEmployees) * 100).toInt()}%'
-                              : '0%',
+                          '${attendancePercentage.toInt()}%',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -624,29 +620,65 @@ class _EnhancedAttendanceManagementScreenState
                       Expanded(
                         child: _buildStatItem(
                           'Present',
-                          presentCount,
+                          presentEmployees,
                           Colors.green,
                         ),
                       ),
                       Expanded(
                         child: _buildStatItem(
                           'Absent',
-                          absentCount,
+                          absentEmployees,
                           Colors.red,
                         ),
                       ),
                       Expanded(
                         child: _buildStatItem(
                           'Active',
-                          activeCount,
+                          activeEmployees,
                           Colors.orange,
                         ),
                       ),
                       Expanded(
                         child: _buildStatItem(
                           'Done',
-                          completedCount,
+                          completedEmployees,
                           Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Additional Statistics Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatItem(
+                          'Sessions',
+                          totalSessions,
+                          Colors.purple,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildStatItemDouble(
+                          'Avg Hours',
+                          avgWorkHours,
+                          Colors.indigo,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildStatItemDouble(
+                          'Total Hours',
+                          totalWorkHours,
+                          Colors.teal,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildStatItem(
+                          'Total Staff',
+                          totalEmployees,
+                          Colors.grey,
                         ),
                       ),
                     ],
@@ -766,6 +798,41 @@ class _EnhancedAttendanceManagementScreenState
           ),
         ),
 
+        // Summary Stats
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.grey[50],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildQuickStat(
+                'Total Records',
+                detailedAttendanceRecords.length.toString(),
+                Icons.list_alt,
+                Colors.blue,
+              ),
+              _buildQuickStat(
+                'Active Sessions',
+                detailedAttendanceRecords
+                    .where((a) => a.status == 'active')
+                    .length
+                    .toString(),
+                Icons.play_circle,
+                Colors.orange,
+              ),
+              _buildQuickStat(
+                'Completed',
+                detailedAttendanceRecords
+                    .where((a) => a.status == 'completed')
+                    .length
+                    .toString(),
+                Icons.check_circle,
+                Colors.green,
+              ),
+            ],
+          ),
+        ),
+
         // Attendance List
         Expanded(
           child: detailedAttendanceRecords.isEmpty
@@ -779,6 +846,11 @@ class _EnhancedAttendanceManagementScreenState
                         'No attendance records found',
                         style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Try selecting a different date or employee',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
                     ],
                   ),
                 )
@@ -787,7 +859,7 @@ class _EnhancedAttendanceManagementScreenState
                   itemCount: detailedAttendanceRecords.length,
                   itemBuilder: (context, index) {
                     final attendance = detailedAttendanceRecords[index];
-                    return _buildDetailedAttendanceCard(attendance);
+                    return _buildComprehensiveAttendanceCard(attendance);
                   },
                 ),
         ),
@@ -1175,12 +1247,28 @@ class _EnhancedAttendanceManagementScreenState
         Text(
           value.toString(),
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: color,
           ),
         ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildStatItemDouble(String label, double value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value.toStringAsFixed(1),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
       ],
     );
   }
@@ -1287,5 +1375,431 @@ class _EnhancedAttendanceManagementScreenState
     final hours = workDuration.inHours;
     final minutes = workDuration.inMinutes % 60;
     return '${hours}h ${minutes}m';
+  }
+
+  Widget _buildQuickStat(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildComprehensiveAttendanceCard(AttendanceModel attendance) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [
+              Colors.white,
+              attendance.isPunchedOut
+                  ? Colors.green.withValues(alpha: 0.02)
+                  : Colors.blue.withValues(alpha: 0.02),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Employee Header
+              Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: attendance.isPunchedOut
+                          ? Colors.green.withValues(alpha: 0.2)
+                          : Colors.blue.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Center(
+                      child: Text(
+                        attendance.employeeName.substring(0, 1).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: attendance.isPunchedOut
+                              ? Colors.green
+                              : Colors.blue,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          attendance.employeeName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Employee ID: ${attendance.employeeId}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          'Session: ${DateFormat('MMM dd, yyyy').format(attendance.punchInTime)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: attendance.isPunchedOut
+                          ? Colors.green.withValues(alpha: 0.2)
+                          : Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          attendance.isPunchedOut
+                              ? Icons.check_circle
+                              : Icons.access_time,
+                          size: 16,
+                          color: attendance.isPunchedOut
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          attendance.isPunchedOut ? 'Completed' : 'Active',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: attendance.isPunchedOut
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+
+              // Punch In/Out Times Section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Punch In/Out Details',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Punch In Details
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.login,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Punch In',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                DateFormat(
+                                  'hh:mm:ss a',
+                                ).format(attendance.punchInTime),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                              if (attendance.punchInAddress != null)
+                                Text(
+                                  attendance.punchInAddress!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (attendance.punchOutTime != null) ...[
+                      const SizedBox(height: 16),
+
+                      // Punch Out Details
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.logout,
+                              color: Colors.red,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Punch Out',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat(
+                                    'hh:mm:ss a',
+                                  ).format(attendance.punchOutTime!),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                if (attendance.punchOutAddress != null)
+                                  Text(
+                                    attendance.punchOutAddress!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.access_time,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Still Active - Not Punched Out',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Work Duration and Statistics
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDetailStat(
+                      'Work Duration',
+                      _formatDuration(
+                        attendance.totalWorkHours ??
+                            _calculateCurrentWorkHours(attendance),
+                      ),
+                      Icons.schedule,
+                      Colors.blue,
+                    ),
+                  ),
+                  if (attendance.totalDistanceKm != null)
+                    Expanded(
+                      child: _buildDetailStat(
+                        'Distance',
+                        '${attendance.totalDistanceKm!.toStringAsFixed(2)} km',
+                        Icons.directions,
+                        Colors.purple,
+                      ),
+                    ),
+                  if (attendance.bikeKmStart != null ||
+                      attendance.bikeKmEnd != null)
+                    Expanded(
+                      child: _buildDetailStat(
+                        'Vehicle KM',
+                        '${attendance.bikeKmStart ?? 'N/A'} - ${attendance.bikeKmEnd ?? 'Active'}',
+                        Icons.motorcycle,
+                        Colors.indigo,
+                      ),
+                    ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showEmployeeDetails(attendance),
+                      icon: const Icon(Icons.info_outline, size: 18),
+                      label: const Text('Full Details'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showOnMap(attendance),
+                      icon: const Icon(Icons.map, size: 18),
+                      label: const Text('View on Map'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailStat(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 }
