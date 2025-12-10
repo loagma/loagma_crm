@@ -477,7 +477,7 @@ export const getLiveAttendanceDashboard = async (req, res) => {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        // Get today's attendance records
+        // Get today's attendance records with enhanced data
         const todayAttendances = await prisma.attendance.findMany({
             where: {
                 punchInTime: {
@@ -501,41 +501,86 @@ export const getLiveAttendanceDashboard = async (req, res) => {
                 name: true,
                 employeeCode: true,
                 roles: true,
-                departmentId: true
+                departmentId: true,
+                department: {
+                    select: {
+                        name: true
+                    }
+                }
             }
         });
 
-        // Calculate statistics
+        // Group attendances by employee to handle multiple sessions
+        const employeeAttendanceMap = {};
+        todayAttendances.forEach(attendance => {
+            if (!employeeAttendanceMap[attendance.employeeId]) {
+                employeeAttendanceMap[attendance.employeeId] = [];
+            }
+            employeeAttendanceMap[attendance.employeeId].push(attendance);
+        });
+
+        // Calculate enhanced statistics
         const totalEmployees = allEmployees.length;
-        const presentEmployees = todayAttendances.length;
-        const absentEmployees = totalEmployees - presentEmployees;
+        const uniquePresentEmployees = Object.keys(employeeAttendanceMap).length;
+        const absentEmployees = totalEmployees - uniquePresentEmployees;
         const activeEmployees = todayAttendances.filter(a => a.status === 'active').length;
         const completedEmployees = todayAttendances.filter(a => a.status === 'completed').length;
+        const totalSessions = todayAttendances.length;
 
         // Calculate average work hours for completed attendances
-        const completedAttendances = todayAttendances.filter(a => a.totalWorkHours);
+        const completedAttendances = todayAttendances.filter(a => a.totalWorkHours && a.totalWorkHours > 0);
         const avgWorkHours = completedAttendances.length > 0
             ? completedAttendances.reduce((sum, a) => sum + a.totalWorkHours, 0) / completedAttendances.length
             : 0;
 
-        // Get absent employees
-        const presentEmployeeIds = todayAttendances.map(a => a.employeeId);
+        // Calculate total work hours for today
+        const totalWorkHours = completedAttendances.reduce((sum, a) => sum + a.totalWorkHours, 0);
+
+        // Get absent employees with their details
+        const presentEmployeeIds = Object.keys(employeeAttendanceMap);
         const absentEmployeesList = allEmployees.filter(emp => !presentEmployeeIds.includes(emp.id));
+
+        // Enhance attendance records with current work duration for active sessions
+        const enhancedAttendances = todayAttendances.map(attendance => {
+            let currentWorkHours = 0;
+            if (attendance.status === 'active') {
+                currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+            }
+
+            return {
+                ...attendance,
+                currentWorkHours,
+                isActive: attendance.status === 'active',
+                isPunchedOut: attendance.status === 'completed',
+                workDuration: attendance.totalWorkHours || currentWorkHours,
+                punchInFormatted: attendance.punchInTime.toISOString(),
+                punchOutFormatted: attendance.punchOutTime ? attendance.punchOutTime.toISOString() : null
+            };
+        });
+
+        // Calculate attendance percentage
+        const attendancePercentage = totalEmployees > 0 ? (uniquePresentEmployees / totalEmployees) * 100 : 0;
 
         res.status(200).json({
             success: true,
             data: {
                 statistics: {
                     totalEmployees,
-                    presentEmployees,
+                    presentEmployees: uniquePresentEmployees,
                     absentEmployees,
                     activeEmployees,
                     completedEmployees,
-                    avgWorkHours: parseFloat(avgWorkHours.toFixed(2))
+                    totalSessions,
+                    avgWorkHours: parseFloat(avgWorkHours.toFixed(2)),
+                    totalWorkHours: parseFloat(totalWorkHours.toFixed(2)),
+                    attendancePercentage: parseFloat(attendancePercentage.toFixed(2))
                 },
-                attendances: todayAttendances,
+                attendances: enhancedAttendances,
                 absentEmployees: absentEmployeesList,
-                date: today.toISOString()
+                allEmployees,
+                employeeAttendanceMap,
+                date: today.toISOString(),
+                lastUpdated: new Date().toISOString()
             }
         });
     } catch (error) {
