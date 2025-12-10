@@ -323,6 +323,55 @@ class AttendanceService {
     }
   }
 
+  // Admin: Get Detailed Attendance with Full Information
+  static Future<Map<String, dynamic>> getDetailedAttendance({
+    String? date,
+    String? employeeId,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    try {
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+        if (date != null) 'date': date,
+        if (employeeId != null) 'employeeId': employeeId,
+      };
+
+      final uri = Uri.parse(
+        '$baseUrl/admin/detailed',
+      ).replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final attendances = (data['data'] as List)
+            .map((json) => AttendanceModel.fromJson(json))
+            .toList();
+
+        return {
+          'success': true,
+          'data': attendances,
+          'pagination': data['pagination'],
+          'filters': data['filters'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch detailed attendance',
+          'data': [],
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e', 'data': []};
+    }
+  }
+
   // Admin: Get Employee Attendance Report
   static Future<Map<String, dynamic>> getEmployeeAttendanceReport({
     int? month,

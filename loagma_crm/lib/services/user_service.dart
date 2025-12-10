@@ -1,4 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'api_config.dart';
 
 class UserService {
   static SharedPreferences? _prefs;
@@ -77,4 +80,32 @@ class UserService {
   static String? get contactNumber => _prefs?.getString(_keyContact);
   static String? get name => _prefs?.getString(_keyName);
   static String? get token => _prefs?.getString(_keyToken);
+
+  /// -------------------------------------------------------------
+  /// API METHODS
+  /// -------------------------------------------------------------
+
+  // Get All Users (Admin)
+  static Future<Map<String, dynamic>> getAllUsers() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/users'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data'] ?? []};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch users',
+          'data': [],
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e', 'data': []};
+    }
+  }
 }

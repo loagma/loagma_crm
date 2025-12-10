@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:loagma_crm/screens/admin/comprehensive_attendance_dashboard.dart';
 import 'admin_attendance_management.dart';
-import 'minimal_attendance_dashboard.dart';
+
 import 'live_tracking_screen.dart';
 
 class AdminDashboardNavigation extends StatelessWidget {
@@ -178,7 +178,10 @@ class AdminDashboardNavigation extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
-              colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+              colors: [
+                color.withValues(alpha: 0.1),
+                color.withValues(alpha: 0.05),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -240,7 +243,7 @@ class AdminDashboardNavigation extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 28),
@@ -281,7 +284,7 @@ class AdminDashboardNavigation extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 4,
             offset: const Offset(0, 2),
@@ -293,7 +296,7 @@ class AdminDashboardNavigation extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
