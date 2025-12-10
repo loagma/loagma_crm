@@ -58,17 +58,15 @@ class AttendanceModel {
       id: json['id'] ?? '',
       employeeId: json['employeeId'] ?? '',
       employeeName: json['employeeName'] ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'])
-          : DateTime.parse(json['punchInTime']),
-      punchInTime: DateTime.parse(json['punchInTime']),
+      date: _parseDateTime(json['date']) ?? DateTime.now(),
+      punchInTime: _parseDateTime(json['punchInTime']) ?? DateTime.now(),
       punchInLatitude: (json['punchInLatitude'] as num).toDouble(),
       punchInLongitude: (json['punchInLongitude'] as num).toDouble(),
       punchInPhoto: json['punchInPhoto'],
       punchInAddress: json['punchInAddress'],
       bikeKmStart: json['bikeKmStart'],
       punchOutTime: json['punchOutTime'] != null
-          ? DateTime.parse(json['punchOutTime'])
+          ? _parseDateTime(json['punchOutTime'])
           : null,
       punchOutLatitude: json['punchOutLatitude'] != null
           ? (json['punchOutLatitude'] as num).toDouble()
@@ -86,8 +84,8 @@ class AttendanceModel {
           ? (json['totalDistanceKm'] as num).toDouble()
           : null,
       status: json['status'] ?? 'active',
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
+      updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
     );
   }
 
@@ -119,4 +117,52 @@ class AttendanceModel {
 
   bool get isPunchedIn => status == 'active';
   bool get isPunchedOut => status == 'completed';
+
+  // Helper method for safe date parsing
+  static DateTime? _parseDateTime(dynamic dateValue) {
+    if (dateValue == null) return null;
+
+    try {
+      if (dateValue is String) {
+        return DateTime.parse(dateValue);
+      } else if (dateValue is DateTime) {
+        return dateValue;
+      } else {
+        print('Warning: Unexpected date format: $dateValue');
+        return null;
+      }
+    } catch (e) {
+      print('Error parsing date: $dateValue, error: $e');
+      return null;
+    }
+  }
+
+  // Get current work duration for active attendance
+  Duration get currentWorkDuration {
+    if (!isPunchedIn) return Duration.zero;
+
+    final now = DateTime.now();
+    final duration = now.difference(punchInTime);
+
+    // Ensure duration is not negative
+    return duration.isNegative ? Duration.zero : duration;
+  }
+
+  // Get total work duration (for completed attendance)
+  Duration get totalWorkDuration {
+    if (punchOutTime == null) return currentWorkDuration;
+
+    final duration = punchOutTime!.difference(punchInTime);
+    return duration.isNegative ? Duration.zero : duration;
+  }
+
+  // Format work duration as HH:MM
+  String get formattedWorkDuration {
+    final duration = isPunchedIn ? currentWorkDuration : totalWorkDuration;
+
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+  }
 }

@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
+import '../../services/location_service.dart';
 import '../../models/attendance_model.dart';
 import 'salesman_attendance_history_screen.dart';
 
@@ -56,18 +58,24 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   // Travel distance
   double totalDistanceKm = 0.0;
 
+  // Google Map controller
+  GoogleMapController? _mapController;
+  Set<Marker> _markers = {};
+
   @override
   void initState() {
     super.initState();
     _updateCurrentTime();
     _startTimer();
-    _getCurrentLocation();
+    _initializeLocationService();
     _loadTodayPunchData();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    // Stop location tracking when leaving the screen
+    LocationService.instance.stopLocationTracking();
     super.dispose();
   }
 
@@ -76,7 +84,13 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       _updateCurrentTime();
       if (isPunchedIn && punchInTime != null) {
         setState(() {
-          workDuration = DateTime.now().difference(punchInTime!);
+          final now = DateTime.now();
+          final newDuration = now.difference(punchInTime!);
+
+          // Only update if duration is positive and different
+          if (!newDuration.isNegative && newDuration != workDuration) {
+            workDuration = newDuration;
+          }
         });
       }
     });
@@ -90,6 +104,72 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     });
   }
 
+  Future<void> _initializeLocationService() async {
+    setState(() {
+      isLoadingLocation = true;
+      locationStatus = 'Requesting location permissions...';
+    });
+
+    try {
+      // Show WhatsApp-like permission dialog
+      final shouldRequestPermission =
+          await LocationService.showLocationPermissionDialog(context);
+
+      if (!shouldRequestPermission) {
+        setState(() {
+          locationStatus = 'Location permission required for attendance';
+          isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Start location tracking
+      final locationService = LocationService.instance;
+      final success = await locationService.startLocationTracking();
+
+      if (success) {
+        // Listen to location updates
+        locationService.locationStream.listen((Position position) {
+          setState(() {
+            _currentPosition = position;
+            locationStatus = 'Location tracking active';
+            isLoadingLocation = false;
+            _markers = _buildMapMarkers();
+          });
+
+          // Update map camera to follow current location
+          if (_mapController != null) {
+            _mapController!.animateCamera(
+              CameraUpdate.newLatLng(
+                LatLng(position.latitude, position.longitude),
+              ),
+            );
+          }
+        });
+
+        // Get initial position
+        final initialPosition = await locationService.getCurrentLocation();
+        if (initialPosition != null) {
+          setState(() {
+            _currentPosition = initialPosition;
+            locationStatus = 'Location tracking active';
+            isLoadingLocation = false;
+          });
+        }
+      } else {
+        setState(() {
+          locationStatus = 'Failed to start location tracking';
+          isLoadingLocation = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        locationStatus = 'Error: $e';
+        isLoadingLocation = false;
+      });
+    }
+  }
+
   Future<void> _getCurrentLocation() async {
     setState(() {
       isLoadingLocation = true;
@@ -97,39 +177,21 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     });
 
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
+      final locationService = LocationService.instance;
+      final position = await locationService.getCurrentLocation();
+
+      if (position != null) {
         setState(() {
-          locationStatus = 'Location services disabled';
+          _currentPosition = position;
+          locationStatus = 'Location acquired';
           isLoadingLocation = false;
         });
-        return;
+      } else {
+        setState(() {
+          locationStatus = 'Failed to get location';
+          isLoadingLocation = false;
+        });
       }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() {
-            locationStatus = 'Location permission denied';
-            isLoadingLocation = false;
-          });
-          return;
-        }
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      );
-
-      setState(() {
-        _currentPosition = position;
-        locationStatus = 'Location acquired';
-        isLoadingLocation = false;
-      });
     } catch (e) {
       setState(() {
         locationStatus = 'Error: $e';
@@ -155,6 +217,32 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           currentAttendance = attendance;
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
+
+          // Calculate work duration with proper handling
+          if (attendance.isPunchedIn) {
+            // For active attendance, calculate current duration
+            final now = DateTime.now();
+            workDuration = now.difference(attendance.punchInTime);
+
+            // Ensure duration is not negative (clock sync issues)
+            if (workDuration.isNegative) {
+              workDuration = Duration.zero;
+            }
+          } else if (attendance.isPunchedOut &&
+              attendance.punchOutTime != null) {
+            // For completed attendance, use the actual work duration
+            workDuration = attendance.punchOutTime!.difference(
+              attendance.punchInTime,
+            );
+
+            // Ensure duration is not negative
+            if (workDuration.isNegative) {
+              workDuration = Duration.zero;
+            }
+          } else {
+            workDuration = Duration.zero;
+          }
+
           punchInLocation = Position(
             latitude: attendance.punchInLatitude,
             longitude: attendance.punchInLongitude,
@@ -187,6 +275,9 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             }
             totalDistanceKm = attendance.totalDistanceKm ?? 0.0;
           }
+
+          // Update map markers
+          _markers = _buildMapMarkers();
         });
       }
     } catch (e) {
@@ -259,6 +350,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           punchInPhotoBase64 = result['photoBase64'];
           bikeKilometers = result['bikeKm'];
           workDuration = Duration.zero;
+          _markers = _buildMapMarkers();
         });
 
         _showSuccess('✓ Punched in successfully! Have a great day!');
@@ -337,6 +429,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           isPunchedIn = false;
           punchOutTime = DateTime.now();
           punchOutLocation = _currentPosition;
+          _markers = _buildMapMarkers();
         });
 
         _showSuccess(
@@ -450,17 +543,31 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                       else
                         ElevatedButton.icon(
                           onPressed: () async {
-                            final photo = await _imagePicker.pickImage(
-                              source: ImageSource.camera,
-                              imageQuality: 70,
-                            );
-                            if (photo != null) {
-                              final file = File(photo.path);
-                              final bytes = await file.readAsBytes();
-                              setDialogState(() {
-                                punchOutPhoto = file;
-                                punchOutPhotoBase64 = base64Encode(bytes);
-                              });
+                            try {
+                              final photo = await _imagePicker.pickImage(
+                                source: ImageSource.camera,
+                                imageQuality: 70,
+                                preferredCameraDevice: CameraDevice.rear,
+                              );
+                              if (photo != null) {
+                                final file = File(photo.path);
+                                final bytes = await file.readAsBytes();
+                                setDialogState(() {
+                                  punchOutPhoto = file;
+                                  punchOutPhotoBase64 = base64Encode(bytes);
+                                });
+                                HapticFeedback.mediumImpact();
+                              }
+                            } catch (e) {
+                              print('Error capturing photo: $e');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error capturing photo: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                             }
                           },
                           icon: const Icon(Icons.camera_alt),
@@ -637,6 +744,25 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     String minutes = twoDigits(duration.inMinutes.remainder(60));
     String seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$hours:$minutes:$seconds';
+  }
+
+  String _getCurrentDurationText() {
+    if (isPunchedIn && punchInTime != null) {
+      // Currently working - calculate live duration
+      final currentDuration = DateTime.now().difference(punchInTime!);
+      return _formatDuration(currentDuration);
+    } else if (punchInTime != null && punchOutTime != null) {
+      // Already punched out - show total worked duration
+      final totalDuration = punchOutTime!.difference(punchInTime!);
+      return _formatDuration(totalDuration);
+    } else if (currentAttendance?.totalWorkHours != null) {
+      // Use backend calculated hours if available
+      final hours = currentAttendance!.totalWorkHours!;
+      final duration = Duration(milliseconds: (hours * 3600 * 1000).round());
+      return _formatDuration(duration);
+    } else {
+      return '--:--:--';
+    }
   }
 
   void _showSuccess(String message) {
@@ -962,11 +1088,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           _buildSummaryRow(
             Icons.timer,
             'Total Duration',
-            isPunchedIn
-                ? _formatDuration(workDuration)
-                : (punchInTime != null && punchOutTime != null
-                      ? _formatDuration(punchOutTime!.difference(punchInTime!))
-                      : '--:--:--'),
+            _getCurrentDurationText(),
             primaryColor,
           ),
         ],
@@ -1012,7 +1134,6 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   Widget _buildLocationInfo() {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1027,74 +1148,259 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.location_on, color: primaryColor),
-              const SizedBox(width: 8),
-              const Text(
-                'Location Status',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _getCurrentLocation,
-                tooltip: 'Refresh location',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _currentPosition != null ? Colors.green : Colors.red,
-                  shape: BoxShape.circle,
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                const Icon(Icons.map, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
+                  'Live Location',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  locationStatus,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                const Spacer(),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _currentPosition != null
+                            ? Colors.green
+                            : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _currentPosition != null ? 'Active' : 'Inactive',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _currentPosition != null
+                            ? Colors.green
+                            : Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _getCurrentLocation,
+                  tooltip: 'Refresh location',
+                ),
+              ],
+            ),
           ),
-          if (_currentPosition != null) ...[
-            const SizedBox(height: 12),
+
+          // Map Section
+          if (_currentPosition != null)
             Container(
-              padding: const EdgeInsets.all(12),
+              height: 200,
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(
+                      _currentPosition!.latitude,
+                      _currentPosition!.longitude,
+                    ),
+                    zoom: 16,
+                  ),
+                  markers: _markers,
+                  onMapCreated: (GoogleMapController controller) {
+                    _mapController = controller;
+                  },
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  zoomControlsEnabled: true,
+                  mapToolbarEnabled: false,
+                  compassEnabled: true,
+                  rotateGesturesEnabled: true,
+                  scrollGesturesEnabled: true,
+                  tiltGesturesEnabled: true,
+                  zoomGesturesEnabled: true,
+                ),
+              ),
+            )
+          else
+            Container(
+              height: 200,
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               decoration: BoxDecoration(
                 color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Latitude: ${_currentPosition!.latitude.toStringAsFixed(6)}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Longitude: ${_currentPosition!.longitude.toStringAsFixed(6)}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Accuracy: ${_currentPosition!.accuracy.toStringAsFixed(2)}m',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.location_off, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Location not available',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      locationStatus,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
+
+          // Location Details
+          if (_currentPosition != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Coordinates',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Accuracy',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_currentPosition!.accuracy.toStringAsFixed(1)}m',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: _currentPosition!.accuracy < 10
+                                ? Colors.green
+                                : _currentPosition!.accuracy < 50
+                                ? Colors.orange
+                                : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Set<Marker> _buildMapMarkers() {
+    Set<Marker> markers = {};
+
+    if (_currentPosition != null) {
+      // Current location marker
+      markers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: LatLng(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          ),
+          infoWindow: InfoWindow(
+            title: 'Current Location',
+            snippet:
+                'Accuracy: ${_currentPosition!.accuracy.toStringAsFixed(1)}m',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ),
+      );
+    }
+
+    // Punch in location marker
+    if (punchInLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('punch_in_location'),
+          position: LatLng(
+            punchInLocation!.latitude,
+            punchInLocation!.longitude,
+          ),
+          infoWindow: InfoWindow(
+            title: 'Punch In Location',
+            snippet: punchInTime != null
+                ? DateFormat('hh:mm a').format(punchInTime!)
+                : 'Punch In',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+        ),
+      );
+    }
+
+    // Punch out location marker
+    if (punchOutLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('punch_out_location'),
+          position: LatLng(
+            punchOutLocation!.latitude,
+            punchOutLocation!.longitude,
+          ),
+          infoWindow: InfoWindow(
+            title: 'Punch Out Location',
+            snippet: punchOutTime != null
+                ? DateFormat('hh:mm a').format(punchOutTime!)
+                : 'Punch Out',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    }
+
+    return markers;
   }
 }
 
