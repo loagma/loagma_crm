@@ -7,6 +7,7 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
+import '../../widgets/attendance_status_widget.dart';
 
 class SalesmanDashboardScreen extends StatefulWidget {
   const SalesmanDashboardScreen({super.key});
@@ -220,8 +221,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   opacity: _fadeAnimation,
                   child: Column(
                     children: [
-                      // Punch Status Widget - FIRST
-                      _buildPunchStatusWidget(),
+                      // Enhanced Attendance Status Widget - FIRST
+                      AttendanceStatusWidget(
+                        attendance: todayAttendance,
+                        showLiveLocation: true,
+                        onTap: () => context.go('/dashboard/salesman/punch'),
+                      ),
 
                       // Quick Actions Section
                       _buildQuickActionsSection(),
@@ -523,96 +528,6 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPunchStatusWidget() {
-    if (isLoadingAttendance) {
-      return const SizedBox.shrink();
-    }
-
-    final isPunchedIn = todayAttendance?.isPunchedIn ?? false;
-    final hasAttendance = todayAttendance != null;
-
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-    IconData actionIcon;
-
-    if (!hasAttendance) {
-      statusColor = Colors.grey;
-      statusIcon = Icons.schedule;
-      statusText = 'Not Punched In';
-      actionIcon = Icons.login;
-    } else if (isPunchedIn) {
-      statusColor = Colors.green;
-      statusIcon = Icons.work;
-      statusText = 'Working';
-      actionIcon = Icons.logout;
-    } else {
-      statusColor = Colors.blue;
-      statusIcon = Icons.check_circle;
-      statusText = 'Completed';
-      actionIcon = Icons.visibility;
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      decoration: BoxDecoration(
-        color: statusColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: statusColor.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => context.go('/dashboard/salesman/punch'),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(statusIcon, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        statusText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (hasAttendance)
-                        Text(
-                          DateFormat(
-                            'hh:mm a',
-                          ).format(todayAttendance!.punchInTime),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Icon(actionIcon, color: Colors.white, size: 18),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: Colors.white, size: 18),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
