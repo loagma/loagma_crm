@@ -20,8 +20,8 @@ async function generateNumericUserId() {
   // Generate next ID
   const nextId = maxId + 1;
 
-  // Format as 6 digits (e.g., 000001, 000002)
-  return String(nextId).padStart(6, '0');
+  // Format as 5 digits (e.g., 00001, 00002)
+  return String(nextId).padStart(5, '0');
 }
 
 // Generate numeric employee code
@@ -43,8 +43,8 @@ async function generateEmployeeCode() {
   // Generate next code
   const nextCode = maxCode + 1;
 
-  // Format as 6 digits (e.g., 000001, 000002)
-  return String(nextCode).padStart(6, '0');
+  // Format as 5 digits (e.g., 00001, 00002)
+  return String(nextCode).padStart(5, '0');
 }
 
 
