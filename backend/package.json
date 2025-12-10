@@ -12,6 +12,7 @@
     "test:user-fixes": "node scripts/test-user-creation-fixes.js",
     "migrate:user-ids": "node scripts/migrate-user-ids.js",
     "test:attendance": "node scripts/test-attendance-comprehensive.js",
+    "test:new-user": "node scripts/test-new-user-signup.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
