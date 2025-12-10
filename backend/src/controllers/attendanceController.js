@@ -72,31 +72,22 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Check if already punched in today (using UTC to avoid timezone issues)
-        const now = new Date();
-        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
-        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0));
-
-        console.log('Checking existing attendance for:', employeeId);
-        console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
-
-        const existingAttendance = await prisma.attendance.findFirst({
+        // Check if user has any active (not punched out) attendance
+        const activeAttendance = await prisma.attendance.findFirst({
             where: {
                 employeeId,
-                punchInTime: {
-                    gte: today,
-                    lt: tomorrow
-                }
+                status: 'active'
             }
         });
 
-        console.log('Existing attendance:', existingAttendance ? existingAttendance.id : 'none');
+        console.log('Checking active attendance for:', employeeId);
+        console.log('Active attendance:', activeAttendance ? activeAttendance.id : 'none');
 
-        if (existingAttendance) {
+        if (activeAttendance) {
             return res.status(400).json({
                 success: false,
-                message: 'Already punched in today',
-                data: existingAttendance
+                message: 'Please punch out from your current session before starting a new one',
+                data: activeAttendance
             });
         }
 
@@ -232,7 +223,7 @@ export const punchOut = async (req, res) => {
     }
 };
 
-// Get Today's Attendance
+// Get Today's Attendance (Latest Active or All Today's Sessions)
 export const getTodayAttendance = async (req, res) => {
     try {
         const { employeeId } = req.params;
@@ -252,7 +243,8 @@ export const getTodayAttendance = async (req, res) => {
         console.log('Fetching attendance for:', employeeId);
         console.log('Date range:', today.toISOString(), 'to', tomorrow.toISOString());
 
-        const attendance = await prisma.attendance.findFirst({
+        // Get all today's attendance sessions
+        const todayAttendances = await prisma.attendance.findMany({
             where: {
                 employeeId,
                 punchInTime: {
@@ -265,14 +257,19 @@ export const getTodayAttendance = async (req, res) => {
             }
         });
 
-        console.log('Found attendance:', attendance ? attendance.id : 'none');
+        // Get the latest active session or the most recent one
+        const activeAttendance = todayAttendances.find(a => a.status === 'active');
+        const latestAttendance = todayAttendances[0] || null;
 
-        // If attendance is active, calculate current work duration
-        let responseData = attendance;
-        if (attendance && attendance.status === 'active') {
-            const currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+        console.log('Found attendances:', todayAttendances.length);
+        console.log('Active attendance:', activeAttendance ? activeAttendance.id : 'none');
+
+        // Prepare response data
+        let responseData = activeAttendance || latestAttendance;
+        if (responseData && responseData.status === 'active') {
+            const currentWorkHours = getCurrentWorkDuration(responseData.punchInTime);
             responseData = {
-                ...attendance,
+                ...responseData,
                 currentWorkHours: currentWorkHours,
                 isActive: true
             };
@@ -283,7 +280,9 @@ export const getTodayAttendance = async (req, res) => {
         res.status(200).json({
             success: true,
             data: responseData,
-            serverTime: now.toISOString() // Include server time for sync
+            allTodaySessions: todayAttendances,
+            totalSessions: todayAttendances.length,
+            serverTime: now.toISOString()
         });
     } catch (error) {
         console.error('Get today attendance error:', error);
@@ -642,6 +641,96 @@ export const getAttendanceAnalytics = async (req, res) => {
     }
 };
 
+// Get Detailed Attendance with Full Information (Admin)
+export const getDetailedAttendance = async (req, res) => {
+    try {
+        const { date, employeeId, page = 1, limit = 50 } = req.query;
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const where = {};
+
+        // Filter by date (default to today)
+        if (date) {
+            const targetDate = new Date(date);
+            targetDate.setHours(0, 0, 0, 0);
+            const nextDay = new Date(targetDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+
+            where.punchInTime = {
+                gte: targetDate,
+                lt: nextDay
+            };
+        } else {
+            // Default to today
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            where.punchInTime = {
+                gte: today,
+                lt: tomorrow
+            };
+        }
+
+        // Filter by employee
+        if (employeeId) {
+            where.employeeId = employeeId;
+        }
+
+        const [attendances, total] = await Promise.all([
+            prisma.attendance.findMany({
+                where,
+                orderBy: { punchInTime: 'desc' },
+                skip,
+                take: parseInt(limit)
+            }),
+            prisma.attendance.count({ where })
+        ]);
+
+        // Enhance attendance data with calculated fields
+        const enhancedAttendances = attendances.map(attendance => {
+            let currentWorkHours = 0;
+            if (attendance.status === 'active') {
+                currentWorkHours = getCurrentWorkDuration(attendance.punchInTime);
+            }
+
+            return {
+                ...attendance,
+                currentWorkHours,
+                isActive: attendance.status === 'active',
+                isPunchedOut: attendance.status === 'completed',
+                workDuration: attendance.totalWorkHours || currentWorkHours,
+                punchInFormatted: attendance.punchInTime.toISOString(),
+                punchOutFormatted: attendance.punchOutTime ? attendance.punchOutTime.toISOString() : null,
+                dateFormatted: attendance.punchInTime.toISOString().split('T')[0]
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: enhancedAttendances,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit))
+            },
+            filters: {
+                date: date || new Date().toISOString().split('T')[0],
+                employeeId: employeeId || 'all'
+            }
+        });
+    } catch (error) {
+        console.error('Get detailed attendance error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch detailed attendance',
+            error: error.message
+        });
+    }
+};
+
 // Get Employee Attendance Report (Admin)
 export const getEmployeeAttendanceReport = async (req, res) => {
     try {
@@ -764,5 +853,6 @@ export default {
     getAllAttendance,
     getLiveAttendanceDashboard,
     getAttendanceAnalytics,
+    getDetailedAttendance,
     getEmployeeAttendanceReport
 };
