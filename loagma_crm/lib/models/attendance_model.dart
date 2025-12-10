@@ -58,7 +58,9 @@ class AttendanceModel {
       id: json['id'] ?? '',
       employeeId: json['employeeId'] ?? '',
       employeeName: json['employeeName'] ?? '',
-      date: DateTime.parse(json['date']),
+      date: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.parse(json['punchInTime']),
       punchInTime: DateTime.parse(json['punchInTime']),
       punchInLatitude: (json['punchInLatitude'] as num).toDouble(),
       punchInLongitude: (json['punchInLongitude'] as num).toDouble(),

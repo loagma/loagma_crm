@@ -115,7 +115,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
         boxShadow: [
           BoxShadow(
             color: (widget.isLiveTrackingEnabled ? Colors.green : Colors.grey)
-                .withOpacity(0.3),
+                .withValues(alpha: 0.3),
             spreadRadius: 2,
             blurRadius: 8,
             offset: const Offset(0, 4),
@@ -137,7 +137,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -167,7 +167,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
                     Text(
                       widget.isLiveTrackingEnabled ? 'Active' : 'Paused',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 14,
                       ),
                     ),
@@ -177,10 +177,10 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
               Switch(
                 value: widget.isLiveTrackingEnabled,
                 onChanged: (_) => widget.onToggleLiveTracking(),
-                activeColor: Colors.white,
-                activeTrackColor: Colors.white.withOpacity(0.3),
-                inactiveThumbColor: Colors.white.withOpacity(0.7),
-                inactiveTrackColor: Colors.white.withOpacity(0.2),
+                activeThumbColor: Colors.white,
+                activeTrackColor: Colors.white.withValues(alpha: 0.3),
+                inactiveThumbColor: Colors.white.withValues(alpha: 0.7),
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
               ),
             ],
           ),
@@ -197,7 +197,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
               Container(
                 width: 1,
                 height: 40,
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
               ),
               Expanded(
                 child: _buildStatusItem('Last Update', _timeAgo, Icons.update),
@@ -213,7 +213,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2),
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -226,7 +226,7 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: IconButton(
@@ -259,7 +259,10 @@ class _LiveAttendanceStatusState extends State<LiveAttendanceStatus>
         ),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.9),
+            fontSize: 12,
+          ),
           textAlign: TextAlign.center,
         ),
       ],
