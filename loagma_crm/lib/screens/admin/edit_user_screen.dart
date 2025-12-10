@@ -162,6 +162,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
     fetchRoles();
     fetchDepartments();
+
+    // Auto-fetch areas if pincode already exists
+    if (_pincodeController.text.trim().length == 6) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        fetchLocationFromPincode();
+      });
+    }
   }
 
   @override
@@ -337,26 +344,44 @@ class _EditUserScreenState extends State<EditUserScreen> {
         if (data["success"] == true) {
           final locationData = data["data"];
           setState(() {
-            _cityController.text = locationData["city"] ?? "";
+            // Auto-fill all location fields from pincode lookup
+            _countryController.text = locationData["country"] ?? "India";
             _stateController.text = locationData["state"] ?? "";
+            _districtController.text = locationData["district"] ?? "";
+            _cityController.text = locationData["city"] ?? "";
 
-            // Load areas
+            // Load areas and reset selection
             _availableAreas = List<Map<String, dynamic>>.from(
               locationData["areas"] ?? [],
             );
-            selectedArea = null;
+            selectedArea = null; // Reset area selection when pincode changes
           });
-          Fluttertoast.showToast(msg: "Location fetched successfully");
+
+          Fluttertoast.showToast(
+            msg:
+                "✅ Location details fetched successfully!\nCountry: ${locationData["country"] ?? "India"}\nState: ${locationData["state"] ?? ""}\nDistrict: ${locationData["district"] ?? ""}\nCity: ${locationData["city"] ?? ""}",
+            toastLength: Toast.LENGTH_LONG,
+          );
         } else {
           Fluttertoast.showToast(msg: data["message"] ?? "Invalid pincode");
           setState(() {
+            // Clear location fields if pincode is invalid
+            _countryController.text = "";
+            _stateController.text = "";
+            _districtController.text = "";
+            _cityController.text = "";
             _availableAreas = [];
             selectedArea = null;
           });
         }
+      } else {
+        throw Exception("Server returned ${response.statusCode}");
       }
     } catch (e) {
-      Fluttertoast.showToast(msg: "Error fetching location: $e");
+      Fluttertoast.showToast(
+        msg: "❌ Error fetching location: $e",
+        toastLength: Toast.LENGTH_LONG,
+      );
       setState(() {
         _availableAreas = [];
         selectedArea = null;
@@ -1089,9 +1114,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // Country
+                  // Country (Auto-filled from pincode, read-only)
                   TextFormField(
                     controller: _countryController,
+                    enabled: false, // Disabled - only filled via pincode lookup
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       labelText: "Country",
@@ -1099,13 +1125,21 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      helperText: "Auto-filled from pincode lookup",
+                      helperStyle: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 15),
 
-                  // State
+                  // State (Auto-filled from pincode, read-only)
                   TextFormField(
                     controller: _stateController,
+                    enabled: false, // Disabled - only filled via pincode lookup
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       labelText: "State",
@@ -1113,13 +1147,21 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      helperText: "Auto-filled from pincode lookup",
+                      helperStyle: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 15),
 
-                  // District
+                  // District (Auto-filled from pincode, read-only)
                   TextFormField(
                     controller: _districtController,
+                    enabled: false, // Disabled - only filled via pincode lookup
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       labelText: "District",
@@ -1127,19 +1169,34 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      helperText: "Auto-filled from pincode lookup",
+                      helperStyle: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 15),
 
-                  // City
+                  // City (Auto-filled from pincode, read-only)
                   TextFormField(
                     controller: _cityController,
+                    enabled: false, // Disabled - only filled via pincode lookup
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       labelText: "City",
                       prefixIcon: const Icon(Icons.location_city),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      helperText: "Auto-filled from pincode lookup",
+                      helperStyle: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
                       ),
                     ),
                   ),
