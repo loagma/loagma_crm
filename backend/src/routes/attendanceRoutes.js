@@ -5,7 +5,10 @@ import {
     getTodayAttendance,
     getAttendanceHistory,
     getAttendanceStats,
-    getAllAttendance
+    getAllAttendance,
+    getLiveAttendanceDashboard,
+    getAttendanceAnalytics,
+    getEmployeeAttendanceReport
 } from '../controllers/attendanceController.js';
 
 const router = express.Router();
@@ -21,5 +24,8 @@ router.get('/stats/:employeeId', getAttendanceStats);
 
 // Admin routes
 router.get('/all', getAllAttendance);
+router.get('/admin/dashboard', getLiveAttendanceDashboard);
+router.get('/admin/analytics', getAttendanceAnalytics);
+router.get('/admin/report', getEmployeeAttendanceReport);
 
 export default router;

@@ -17,7 +17,7 @@ import '../screens/admin/schedule_task_screen.dart';
 import '../screens/admin/view_tasks_screen.dart';
 import '../screens/admin/reports_screen.dart';
 import '../screens/admin/modern_task_assignment_screen.dart';
-import '../screens/admin/attendance_management_screen.dart';
+import '../screens/admin/enhanced_attendance_management_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -128,7 +128,7 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: 'attendance',
-          builder: (_, __) => const AttendanceManagementScreen(),
+          builder: (_, __) => const EnhancedAttendanceManagementScreen(),
         ),
 
         // Shared routes (Admin, Salesman, etc.)
