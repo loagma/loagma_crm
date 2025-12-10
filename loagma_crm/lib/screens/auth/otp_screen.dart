@@ -67,10 +67,34 @@ class _OtpScreenState extends State<OtpScreen> {
       }
 
       // ---------------------------------------------------------------------
-      // NEW USER → GO TO SIGNUP
+      // NEW USER → CREATE BASIC ACCOUNT AND GO TO NO-ROLE SCREEN
       // ---------------------------------------------------------------------
       if (data['isNewUser'] == true) {
-        context.push('/signup', extra: {'contactNumber': contactNumber});
+        // For new users, we need to create a basic account first
+        // Then they'll be directed to no-role screen until admin assigns role
+
+        // Create a basic user account with minimal info
+        try {
+          final signupData = await ApiService.completeSignup(
+            contactNumber!,
+            'New User', // Default name, admin can update later
+            '$contactNumber@temp.com', // Temporary email, admin can update later
+          );
+
+          if (signupData['success'] == true) {
+            // Save the session
+            await UserService.loginFromApi(signupData);
+
+            // Navigate to no-role screen (admin needs to assign role)
+            context.go('/no-role');
+          } else {
+            Fluttertoast.showToast(
+              msg: signupData['message'] ?? "Failed to create account",
+            );
+          }
+        } catch (e) {
+          Fluttertoast.showToast(msg: "Error creating account: $e");
+        }
         return;
       }
 
