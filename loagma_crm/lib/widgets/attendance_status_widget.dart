@@ -50,9 +50,17 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
       _updateTime();
       if (widget.attendance?.isPunchedIn == true) {
         setState(() {
-          _workDuration = DateTime.now().difference(
-            widget.attendance!.punchInTime,
-          );
+          // Calculate work duration with proper timezone handling
+          final now = DateTime.now();
+          final punchInTime = widget.attendance!.punchInTime;
+
+          // Ensure we're calculating from the correct punch in time
+          _workDuration = now.difference(punchInTime);
+
+          // Ensure duration is not negative (in case of clock sync issues)
+          if (_workDuration.isNegative) {
+            _workDuration = Duration.zero;
+          }
         });
       }
     });
@@ -74,10 +82,23 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   }
 
   String _formatDuration(Duration duration) {
+    // Handle negative durations
+    if (duration.isNegative) {
+      return '00:00';
+    }
+
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    String hours = twoDigits(duration.inHours);
-    String minutes = twoDigits(duration.inMinutes.remainder(60));
-    return '$hours:$minutes';
+
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+
+    // Show hours:minutes for durations over 1 hour, otherwise minutes:seconds
+    if (hours > 0) {
+      return '${twoDigits(hours)}:${twoDigits(minutes)}';
+    } else {
+      return '${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
   }
 
   @override

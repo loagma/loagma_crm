@@ -11,6 +11,7 @@
     "test:api": "node scripts/test-core-apis.js",
     "test:user-fixes": "node scripts/test-user-creation-fixes.js",
     "migrate:user-ids": "node scripts/migrate-user-ids.js",
+    "test:attendance": "node scripts/test-attendance-comprehensive.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
