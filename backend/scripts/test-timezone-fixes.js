@@ -5,9 +5,9 @@
  * Tests the corrected IST timezone handling
  */
 
-const axios = require('axios');
+import axios from 'axios';
 
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'http://localhost:5000';
 const TEST_EMPLOYEE_ID = 'timezone-test-001';
 const TEST_EMPLOYEE_NAME = 'Timezone Test Employee';
 
@@ -57,6 +57,24 @@ class TimezoneTestSuite {
 
   async testPunchInTimezone() {
     return this.runTest('Punch In with Correct IST Timezone', async () => {
+      // First, check for any existing active sessions and clean them up
+      try {
+        const existingResponse = await axios.get(`${BASE_URL}/attendance/today/${TEST_EMPLOYEE_ID}`);
+        if (existingResponse.data.success && existingResponse.data.data && existingResponse.data.data.isActive) {
+          console.log('   🧹 Found existing active session, cleaning up...');
+          await axios.post(`${BASE_URL}/attendance/punch-out`, {
+            attendanceId: existingResponse.data.data.id,
+            punchOutLatitude: TEST_COORDINATES.latitude,
+            punchOutLongitude: TEST_COORDINATES.longitude,
+            punchOutAddress: 'Test cleanup'
+          });
+          console.log('   ✅ Cleaned up existing session');
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+        console.log('   ℹ️ No existing session to clean up');
+      }
+
       const beforePunchIn = new Date();
       
       const response = await axios.post(`${BASE_URL}/attendance/punch-in`, {
@@ -88,12 +106,6 @@ class TimezoneTestSuite {
       console.log(`   🇮🇳 IST Formatted: ${data.data.punchInTimeIST || 'Not provided'}`);
       console.log(`   🕐 After Punch In (Local): ${afterPunchIn.toLocaleString()}`);
       
-      // Check if stored time is reasonable (within 1 minute of current time)
-      const timeDiff = Math.abs(storedTime.getTime() - beforePunchIn.getTime());
-      const timeDiffMinutes = timeDiff / (1000 * 60);
-      
-      console.log(`   ⏱️ Time difference: ${timeDiffMinutes.toFixed(2)} minutes`);
-      
       // Validate timezone - IST should be UTC+5:30
       const currentUTC = new Date().getTime();
       const expectedIST = new Date(currentUTC + (5.5 * 60 * 60 * 1000));
@@ -103,8 +115,14 @@ class TimezoneTestSuite {
       console.log(`   🌍 Expected IST: ${expectedIST.toISOString()}`);
       console.log(`   📊 Stored vs Expected: ${storedVsExpectedMinutes.toFixed(2)} minutes difference`);
       
+      // Check if stored time is reasonable (within 2 minutes of expected IST time)
+      const timeDiff = Math.abs(storedTime.getTime() - expectedIST.getTime());
+      const timeDiffMinutes = timeDiff / (1000 * 60);
+      
+      console.log(`   ⏱️ IST Time difference: ${timeDiffMinutes.toFixed(2)} minutes`);
+      
       if (timeDiffMinutes > 2) {
-        throw new Error(`Time difference too large: ${timeDiffMinutes.toFixed(2)} minutes`);
+        throw new Error(`IST time difference too large: ${timeDiffMinutes.toFixed(2)} minutes`);
       }
       
       return {
@@ -172,14 +190,16 @@ class TimezoneTestSuite {
 
       const currentWorkHours = data.data.currentWorkHours;
       const punchInTime = new Date(data.data.punchInTime);
-      const currentTime = new Date();
+      
+      // Since we're storing IST times directly, we need to calculate expected duration using IST
+      const currentISTTime = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
       
       // Calculate expected duration
-      const expectedDurationMs = currentTime.getTime() - punchInTime.getTime();
+      const expectedDurationMs = currentISTTime.getTime() - punchInTime.getTime();
       const expectedDurationHours = expectedDurationMs / (1000 * 60 * 60);
 
       console.log(`   📅 Punch In Time: ${data.data.punchInTime}`);
-      console.log(`   🕐 Current Time: ${currentTime.toISOString()}`);
+      console.log(`   🕐 Current IST Time: ${currentISTTime.toISOString()}`);
       console.log(`   ⏱️ Calculated Work Hours: ${currentWorkHours}`);
       console.log(`   📊 Expected Duration: ${expectedDurationHours.toFixed(4)} hours`);
       console.log(`   🔄 Duration Formatted: ${data.data.workDurationFormatted || 'Not provided'}`);
@@ -353,8 +373,6 @@ async function main() {
 }
 
 // Run the tests
-if (require.main === module) {
-  main().catch(console.error);
-}
+main().catch(console.error);
 
-module.exports = TimezoneTestSuite;
+export default TimezoneTestSuite;

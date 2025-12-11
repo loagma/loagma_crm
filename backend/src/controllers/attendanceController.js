@@ -127,7 +127,7 @@ export const punchIn = async (req, res) => {
         }
 
         // Create attendance record with proper IST handling
-        const currentISTTime = getCurrentISTTime();
+        // Use the currentISTTime already declared above
         
         // Store IST time directly in database for correct display
         const punchInTimeIST = currentISTTime;
