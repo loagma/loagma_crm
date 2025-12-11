@@ -124,6 +124,7 @@ model User {
   approvedExpenses   Expense[]           @relation("ApprovedExpenses")
   department         Department?         @relation(fields: [departmentId], references: [id])
   role               Role?               @relation(fields: [roleId], references: [id])
+  areaAssignments    AreaAssignment[]
 }
 
 model EmployeeArea {
@@ -348,4 +349,27 @@ model Attendance {
   @@index([date])
   @@index([status])
   @@index([punchInTime])
+}
+
+model AreaAssignment {
+  id              String    @id @default(cuid())
+  salesmanId      String
+  pinCode         String
+  country         String
+  state           String
+  district        String
+  city            String
+  areas           String[]  // Array of area names
+  businessTypes   String[]  // Array of business types to focus on
+  assignedDate    DateTime  @default(now())
+  totalBusinesses Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  salesman        User      @relation(fields: [salesmanId], references: [id], onDelete: Cascade)
+
+  @@index([salesmanId])
+  @@index([pinCode])
+  @@index([city, district])
 }
