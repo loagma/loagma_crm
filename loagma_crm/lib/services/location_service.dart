@@ -20,18 +20,33 @@ class LocationService {
   Position? get currentPosition => _currentPosition;
   bool get isTracking => _isTracking;
 
+  /// Check if location permissions are already granted
+  Future<bool> checkLocationPermission() async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return false;
+      }
+
+      // Check current permission status
+      LocationPermission permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } catch (e) {
+      print('Error checking location permission: $e');
+      return false;
+    }
+  }
+
   /// Request all necessary location permissions like WhatsApp
   Future<bool> requestLocationPermissions() async {
     try {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        // Request user to enable location services
-        await Geolocator.openLocationSettings();
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) {
-          return false;
-        }
+        print('Location services are disabled');
+        return false;
       }
 
       // Request location permission
@@ -39,27 +54,18 @@ class LocationService {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
+          print('Location permission denied');
           return false;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        // Open app settings for user to manually enable
-        await Geolocator.openAppSettings();
+        print('Location permission denied forever');
         return false;
       }
 
-      // Request background location permission for continuous tracking
-      if (permission == LocationPermission.whileInUse) {
-        // Try to get always permission for background tracking
-        final backgroundPermission = await Permission.locationAlways.request();
-        if (backgroundPermission.isDenied) {
-          // Still allow with whileInUse permission
-          print('Background location not granted, using foreground only');
-        }
-      }
-
-      return true;
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
     } catch (e) {
       print('Error requesting location permissions: $e');
       return false;
@@ -69,6 +75,7 @@ class LocationService {
   /// Start continuous location tracking
   Future<bool> startLocationTracking() async {
     if (_isTracking) {
+      print('Location tracking already active');
       return true;
     }
 
@@ -76,14 +83,15 @@ class LocationService {
       // Request permissions first
       final hasPermission = await requestLocationPermissions();
       if (!hasPermission) {
+        print('Location permissions not granted');
         return false;
       }
 
       // Configure location settings for high accuracy and continuous tracking
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // Update every 5 meters for better tracking
-        timeLimit: Duration(seconds: 15), // Faster timeout for responsiveness
+        distanceFilter: 3, // Update every 3 meters for better tracking
+        timeLimit: Duration(seconds: 10), // Faster timeout for responsiveness
       );
 
       // Start position stream
@@ -100,28 +108,52 @@ class LocationService {
             },
             onError: (error) {
               print('❌ Location stream error: $error');
+              _locationController.addError(error);
             },
           );
 
-      // Get initial position
+      // Get initial position with retry logic
       try {
-        _currentPosition = await Geolocator.getCurrentPosition(
-          locationSettings: locationSettings,
-        );
+        _currentPosition = await _getCurrentPositionWithRetry(locationSettings);
         if (_currentPosition != null) {
           _locationController.add(_currentPosition!);
+          print(
+            '✅ Initial location acquired: ${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}',
+          );
         }
       } catch (e) {
-        print('Error getting initial position: $e');
+        print('Warning: Could not get initial position: $e');
+        // Continue anyway, stream might provide location later
       }
 
       _isTracking = true;
-      print('✅ Location tracking started');
+      print('✅ Location tracking started successfully');
       return true;
     } catch (e) {
       print('❌ Error starting location tracking: $e');
       return false;
     }
+  }
+
+  /// Get current position with retry logic
+  Future<Position?> _getCurrentPositionWithRetry(
+    LocationSettings settings, {
+    int maxRetries = 3,
+  }) async {
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: settings,
+        );
+        return position;
+      } catch (e) {
+        print('Attempt ${i + 1} failed: $e');
+        if (i < maxRetries - 1) {
+          await Future.delayed(Duration(seconds: 1 + i)); // Progressive delay
+        }
+      }
+    }
+    return null;
   }
 
   /// Stop location tracking
@@ -133,23 +165,46 @@ class LocationService {
   }
 
   /// Get current location once
-  Future<Position?> getCurrentLocation() async {
+  Future<Position?> getCurrentLocation({bool forceRefresh = false}) async {
     try {
+      // Return cached position if available and not forcing refresh
+      if (!forceRefresh && _currentPosition != null) {
+        final age = DateTime.now().difference(_currentPosition!.timestamp);
+        if (age.inMinutes < 2) {
+          // Use cached if less than 2 minutes old
+          print('Using cached location (${age.inSeconds}s old)');
+          return _currentPosition;
+        }
+      }
+
       final hasPermission = await requestLocationPermissions();
       if (!hasPermission) {
+        print('No location permission for getCurrentLocation');
         return null;
       }
 
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 10),
+        timeLimit: Duration(seconds: 15), // Increased timeout
       );
 
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: locationSettings,
-      );
+      print('Getting fresh location...');
+      final position = await _getCurrentPositionWithRetry(locationSettings);
 
-      _currentPosition = position;
+      if (position != null) {
+        _currentPosition = position;
+        print(
+          '✅ Fresh location acquired: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+        );
+
+        // Add to stream if tracking is active
+        if (_isTracking) {
+          _locationController.add(position);
+        }
+      } else {
+        print('❌ Failed to get current location after retries');
+      }
+
       return position;
     } catch (e) {
       print('Error getting current location: $e');
