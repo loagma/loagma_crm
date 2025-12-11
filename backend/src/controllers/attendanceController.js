@@ -39,84 +39,149 @@ export const punchIn = async (req, res) => {
             bikeKmStart
         } = req.body;
 
-        // Validation
+        // Enhanced validation
         if (!employeeId || !employeeName || !punchInLatitude || !punchInLongitude) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields'
+                message: 'Missing required fields: employeeId, employeeName, latitude, longitude'
             });
         }
 
-        // Check if user has any active (not punched out) attendance
+        // Validate coordinates
+        const lat = parseFloat(punchInLatitude);
+        const lng = parseFloat(punchInLongitude);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid coordinates provided'
+            });
+        }
+
+        // Get current IST time and date range for today
+        const currentISTTime = getCurrentISTTime();
+        const { startOfDay, endOfDay } = getISTDateRange();
+
+        // Check for any active attendance (not just today)
         const activeAttendance = await prisma.attendance.findFirst({
             where: {
                 employeeId,
                 status: 'active'
+            },
+            orderBy: {
+                punchInTime: 'desc'
             }
         });
 
-        console.log('Checking active attendance for:', employeeId);
-        console.log('Active attendance:', activeAttendance ? activeAttendance.id : 'none');
+        console.log('🔍 Checking active attendance for:', employeeId);
+        console.log('📅 IST Date range:', {
+            startOfDay: startOfDay.toISOString(),
+            endOfDay: endOfDay.toISOString(),
+            currentIST: currentISTTime.toISOString()
+        });
 
         if (activeAttendance) {
+            console.log('❌ Active attendance found:', {
+                id: activeAttendance.id,
+                punchInTime: activeAttendance.punchInTime.toISOString(),
+                status: activeAttendance.status
+            });
+
             return res.status(400).json({
                 success: false,
-                message: 'Please punch out from your current session before starting a new one',
-                data: activeAttendance
+                message: 'You have an active session. Please punch out first before starting a new session.',
+                data: {
+                    ...activeAttendance,
+                    punchInTimeIST: formatISTTime(activeAttendance.punchInTime, 'datetime'),
+                    currentWorkHours: getCurrentWorkDurationIST(activeAttendance.punchInTime)
+                }
+            });
+        }
+
+        // Check for multiple sessions today (optional limit)
+        const todaySessionsCount = await prisma.attendance.count({
+            where: {
+                employeeId,
+                punchInTime: {
+                    gte: startOfDay,
+                    lt: endOfDay
+                }
+            }
+        });
+
+        console.log('📊 Today sessions count:', todaySessionsCount);
+
+        // Optional: Limit sessions per day (uncomment if needed)
+        // if (todaySessionsCount >= 3) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: 'Maximum 3 sessions allowed per day. Contact admin if needed.'
+        //     });
+        // }
+
+        // Validate photo size if provided (prevent crashes)
+        if (punchInPhoto && punchInPhoto.length > 5 * 1024 * 1024) { // 5MB limit
+            return res.status(400).json({
+                success: false,
+                message: 'Photo size too large. Please use a smaller image.'
             });
         }
 
         // Create attendance record with proper IST handling
-        const currentISTTime = getCurrentISTTime();
         const punchInTimeUTC = convertISTToUTC(currentISTTime);
         
-        // Get IST date for the date field
-        const istDate = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
+        // Get IST date for the date field (date only, no time)
+        const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
         
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
                 employeeName,
-                date: istDate,
+                date: istDateOnly,
                 punchInTime: punchInTimeUTC, // Store in UTC for consistency
-                punchInLatitude: parseFloat(punchInLatitude),
-                punchInLongitude: parseFloat(punchInLongitude),
-                punchInPhoto,
-                punchInAddress,
-                bikeKmStart,
+                punchInLatitude: lat,
+                punchInLongitude: lng,
+                punchInPhoto: punchInPhoto || null,
+                punchInAddress: punchInAddress || null,
+                bikeKmStart: bikeKmStart || null,
                 status: 'active',
                 totalWorkHours: 0,
                 totalDistanceKm: 0
             }
         });
 
-        console.log('✅ Attendance created:', {
+        console.log('✅ Attendance created successfully:', {
             id: attendance.id,
             employeeId: attendance.employeeId,
             punchInTimeUTC: attendance.punchInTime.toISOString(),
             punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
-            status: attendance.status
+            status: attendance.status,
+            sessionNumber: todaySessionsCount + 1
         });
 
-        // Enhance response with IST information
+        // Enhance response with IST information and session details
         const responseData = {
             ...attendance,
             punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
             punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
-            timezone: getISTTimezoneInfo()
+            sessionNumber: todaySessionsCount + 1,
+            timezone: getISTTimezoneInfo(),
+            serverTime: {
+                utc: new Date().toISOString(),
+                ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
+            }
         };
 
         res.status(201).json({
             success: true,
-            message: 'Punched in successfully',
+            message: `Punched in successfully! Session ${todaySessionsCount + 1} started.`,
             data: responseData
         });
     } catch (error) {
-        console.error('Punch in error:', error);
+        console.error('❌ Punch in error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to punch in',
-            error: error.message
+            message: 'Failed to punch in. Please try again.',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 };
@@ -133,11 +198,21 @@ export const punchOut = async (req, res) => {
             bikeKmEnd
         } = req.body;
 
-        // Validation
+        // Enhanced validation
         if (!attendanceId || !punchOutLatitude || !punchOutLongitude) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields'
+                message: 'Missing required fields: attendanceId, latitude, longitude'
+            });
+        }
+
+        // Validate coordinates
+        const lat = parseFloat(punchOutLatitude);
+        const lng = parseFloat(punchOutLongitude);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid coordinates provided'
             });
         }
 
@@ -149,46 +224,83 @@ export const punchOut = async (req, res) => {
         if (!attendance) {
             return res.status(404).json({
                 success: false,
-                message: 'Attendance record not found'
+                message: 'Attendance record not found. Please contact admin.'
             });
         }
 
         if (attendance.status === 'completed') {
             return res.status(400).json({
                 success: false,
-                message: 'Already punched out'
+                message: 'Session already completed. Cannot punch out again.',
+                data: {
+                    ...attendance,
+                    punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                    punchOutTimeIST: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'datetime') : null
+                }
             });
         }
 
-        // Calculate distance and work hours with proper IST handling
+        // Validate photo size if provided (prevent crashes)
+        if (punchOutPhoto && punchOutPhoto.length > 5 * 1024 * 1024) { // 5MB limit
+            return res.status(400).json({
+                success: false,
+                message: 'Photo size too large. Please use a smaller image.'
+            });
+        }
+
+        // Get current IST time
+        const currentISTTime = getCurrentISTTime();
+        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
+
+        // Validate punch out time (should be after punch in)
+        if (punchOutTimeUTC <= attendance.punchInTime) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid punch out time. Please check your device time.'
+            });
+        }
+
+        // Calculate work hours with proper IST handling
+        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
+
+        // Validate minimum work duration (prevent accidental immediate punch out)
+        if (workHours < 0.017) { // Less than 1 minute
+            return res.status(400).json({
+                success: false,
+                message: 'Minimum work duration is 1 minute. Please wait before punching out.'
+            });
+        }
+
+        // Calculate distance with enhanced accuracy
         const distance = calculateDistance(
             attendance.punchInLatitude,
             attendance.punchInLongitude,
-            parseFloat(punchOutLatitude),
-            parseFloat(punchOutLongitude)
+            lat,
+            lng
         );
 
-        const currentISTTime = getCurrentISTTime();
-        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
-        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
+        // Validate reasonable distance (optional check)
+        if (distance > 1000) { // More than 1000 km seems unrealistic
+            console.log('⚠️ Warning: Large distance calculated:', distance, 'km');
+        }
 
         // Update attendance record with proper calculations
         const updatedAttendance = await prisma.attendance.update({
             where: { id: attendanceId },
             data: {
                 punchOutTime: punchOutTimeUTC, // Store in UTC
-                punchOutLatitude: parseFloat(punchOutLatitude),
-                punchOutLongitude: parseFloat(punchOutLongitude),
-                punchOutPhoto,
-                punchOutAddress,
-                bikeKmEnd,
-                totalDistanceKm: Math.round(distance * 100) / 100,
-                totalWorkHours: workHours,
+                punchOutLatitude: lat,
+                punchOutLongitude: lng,
+                punchOutPhoto: punchOutPhoto || null,
+                punchOutAddress: punchOutAddress || null,
+                bikeKmEnd: bikeKmEnd || null,
+                totalDistanceKm: Math.round(distance * 1000) / 1000, // Round to 3 decimal places
+                totalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
                 status: 'completed'
             }
         });
 
-        console.log('✅ Attendance completed:', {
+        console.log('✅ Attendance completed successfully:', {
             id: updatedAttendance.id,
             employeeId: updatedAttendance.employeeId,
             punchInTimeUTC: updatedAttendance.punchInTime.toISOString(),
@@ -200,28 +312,38 @@ export const punchOut = async (req, res) => {
             status: updatedAttendance.status
         });
 
-        // Enhance response with IST information
+        // Calculate additional metrics
+        const workDurationMinutes = Math.round(workHours * 60);
+        const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
+
+        // Enhance response with IST information and detailed metrics
         const responseData = {
             ...updatedAttendance,
             punchInTimeIST: formatISTTime(updatedAttendance.punchInTime, 'datetime'),
             punchOutTimeIST: formatISTTime(updatedAttendance.punchOutTime, 'datetime'),
             punchInTimeISTFormatted: formatISTTime(updatedAttendance.punchInTime, 'time'),
             punchOutTimeISTFormatted: formatISTTime(updatedAttendance.punchOutTime, 'time'),
-            workDurationFormatted: `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`,
-            timezone: getISTTimezoneInfo()
+            workDurationFormatted,
+            workDurationMinutes,
+            distanceFormatted: `${updatedAttendance.totalDistanceKm.toFixed(2)} km`,
+            timezone: getISTTimezoneInfo(),
+            serverTime: {
+                utc: new Date().toISOString(),
+                ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
+            }
         };
 
         res.status(200).json({
             success: true,
-            message: 'Punched out successfully',
+            message: `Punched out successfully! Worked for ${workDurationFormatted}, traveled ${updatedAttendance.totalDistanceKm.toFixed(2)} km.`,
             data: responseData
         });
     } catch (error) {
-        console.error('Punch out error:', error);
+        console.error('❌ Punch out error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to punch out',
-            error: error.message
+            message: 'Failed to punch out. Please try again.',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 };

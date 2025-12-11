@@ -206,7 +206,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     try {
       final employeeId = UserService.currentUserId;
       if (employeeId == null) {
-        _showError('Employee ID not found');
+        _showError('Employee ID not found. Please login again.');
         return;
       }
 
@@ -218,31 +218,28 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
 
-          // Calculate work duration with proper handling
+          // Calculate work duration with proper handling and timezone consideration
           if (attendance.isPunchedIn) {
             // For active attendance, calculate current duration
             final now = DateTime.now();
-            workDuration = now.difference(attendance.punchInTime);
+            final duration = now.difference(attendance.punchInTime);
 
-            // Ensure duration is not negative (clock sync issues)
-            if (workDuration.isNegative) {
-              workDuration = Duration.zero;
-            }
+            // Ensure duration is not negative (handle clock sync issues)
+            workDuration = duration.isNegative ? Duration.zero : duration;
           } else if (attendance.isPunchedOut &&
               attendance.punchOutTime != null) {
             // For completed attendance, use the actual work duration
-            workDuration = attendance.punchOutTime!.difference(
+            final duration = attendance.punchOutTime!.difference(
               attendance.punchInTime,
             );
 
             // Ensure duration is not negative
-            if (workDuration.isNegative) {
-              workDuration = Duration.zero;
-            }
+            workDuration = duration.isNegative ? Duration.zero : duration;
           } else {
             workDuration = Duration.zero;
           }
 
+          // Create punch in location
           punchInLocation = Position(
             latitude: attendance.punchInLatitude,
             longitude: attendance.punchInLongitude,
@@ -256,6 +253,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             headingAccuracy: 0,
           );
 
+          // Handle punch out data if available
           if (attendance.isPunchedOut) {
             punchOutTime = attendance.punchOutTime;
             if (attendance.punchOutLatitude != null &&
@@ -274,14 +272,41 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
               );
             }
             totalDistanceKm = attendance.totalDistanceKm ?? 0.0;
+          } else {
+            // Reset punch out data for active sessions
+            punchOutTime = null;
+            punchOutLocation = null;
+            totalDistanceKm = 0.0;
           }
 
           // Update map markers
           _markers = _buildMapMarkers();
         });
+
+        // Show session info if active
+        if (attendance.isPunchedIn) {
+          final sessionDuration = workDuration.inMinutes;
+          if (sessionDuration > 0) {
+            print('Active session loaded: ${sessionDuration} minutes worked');
+          }
+        }
+      } else {
+        // No attendance found, reset state
+        setState(() {
+          currentAttendance = null;
+          isPunchedIn = false;
+          punchInTime = null;
+          punchOutTime = null;
+          punchInLocation = null;
+          punchOutLocation = null;
+          workDuration = Duration.zero;
+          totalDistanceKm = 0.0;
+          _markers = _buildMapMarkers();
+        });
       }
     } catch (e) {
       print('Error loading attendance: $e');
+      _showError('Failed to load attendance data. Please refresh.');
     } finally {
       setState(() => isLoadingAttendance = false);
     }
@@ -546,12 +571,48 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                             try {
                               final photo = await _imagePicker.pickImage(
                                 source: ImageSource.camera,
-                                imageQuality: 70,
+                                imageQuality: 50, // Reduced quality
+                                maxWidth: 1024, // Limit dimensions
+                                maxHeight: 1024,
                                 preferredCameraDevice: CameraDevice.rear,
                               );
                               if (photo != null) {
                                 final file = File(photo.path);
+
+                                // Check file size
+                                final fileSize = await file.length();
+                                if (fileSize > 5 * 1024 * 1024) {
+                                  // 5MB limit
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Photo is too large. Please try again.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 final bytes = await file.readAsBytes();
+
+                                // Additional size check
+                                if (bytes.length > 5 * 1024 * 1024) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Photo processing failed. Image too large.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 setState(() {
                                   punchOutPhoto = file;
                                   punchOutPhotoBase64 = base64Encode(bytes);
@@ -563,7 +624,9 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Error capturing photo: $e'),
+                                    content: Text(
+                                      'Error capturing photo: ${e.toString().contains('memory') ? 'Image too large' : 'Camera error'}',
+                                    ),
                                     backgroundColor: Colors.red,
                                   ),
                                 );
@@ -1438,13 +1501,47 @@ class _PunchInDialogState extends State<_PunchInDialog> {
     try {
       final XFile? photo = await widget.imagePicker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 70,
+        imageQuality: 50, // Reduced quality to prevent crashes
+        maxWidth: 1024, // Limit image dimensions
+        maxHeight: 1024,
         preferredCameraDevice: CameraDevice.front,
       );
 
       if (photo != null) {
         final File imageFile = File(photo.path);
+
+        // Check file size before processing
+        final fileSize = await imageFile.length();
+        if (fileSize > 5 * 1024 * 1024) {
+          // 5MB limit
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Photo is too large. Please try again with a smaller image.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
         final bytes = await imageFile.readAsBytes();
+
+        // Additional check on byte array size
+        if (bytes.length > 5 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Photo processing failed. Image too large.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
         final base64Image = base64Encode(bytes);
 
         setState(() {
@@ -1455,10 +1552,13 @@ class _PunchInDialogState extends State<_PunchInDialog> {
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
+      print('Error capturing photo: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error capturing photo: $e'),
+            content: Text(
+              'Error capturing photo: ${e.toString().contains('memory') ? 'Image too large' : 'Camera error'}',
+            ),
             backgroundColor: Colors.red,
           ),
         );

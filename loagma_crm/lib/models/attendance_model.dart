@@ -54,39 +54,45 @@ class AttendanceModel {
   });
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
-    return AttendanceModel(
-      id: json['id'] ?? '',
-      employeeId: json['employeeId'] ?? '',
-      employeeName: json['employeeName'] ?? '',
-      date: _parseDateTime(json['date']) ?? DateTime.now(),
-      punchInTime: _parseDateTime(json['punchInTime']) ?? DateTime.now(),
-      punchInLatitude: (json['punchInLatitude'] as num).toDouble(),
-      punchInLongitude: (json['punchInLongitude'] as num).toDouble(),
-      punchInPhoto: json['punchInPhoto'],
-      punchInAddress: json['punchInAddress'],
-      bikeKmStart: json['bikeKmStart'],
-      punchOutTime: json['punchOutTime'] != null
-          ? _parseDateTime(json['punchOutTime'])
-          : null,
-      punchOutLatitude: json['punchOutLatitude'] != null
-          ? (json['punchOutLatitude'] as num).toDouble()
-          : null,
-      punchOutLongitude: json['punchOutLongitude'] != null
-          ? (json['punchOutLongitude'] as num).toDouble()
-          : null,
-      punchOutPhoto: json['punchOutPhoto'],
-      punchOutAddress: json['punchOutAddress'],
-      bikeKmEnd: json['bikeKmEnd'],
-      totalWorkHours: json['totalWorkHours'] != null
-          ? (json['totalWorkHours'] as num).toDouble()
-          : null,
-      totalDistanceKm: json['totalDistanceKm'] != null
-          ? (json['totalDistanceKm'] as num).toDouble()
-          : null,
-      status: json['status'] ?? 'active',
-      createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
-      updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
-    );
+    try {
+      return AttendanceModel(
+        id: json['id']?.toString() ?? '',
+        employeeId: json['employeeId']?.toString() ?? '',
+        employeeName: json['employeeName']?.toString() ?? '',
+        date: _parseDateTime(json['date']) ?? DateTime.now(),
+        punchInTime: _parseDateTime(json['punchInTime']) ?? DateTime.now(),
+        punchInLatitude: _parseDouble(json['punchInLatitude']) ?? 0.0,
+        punchInLongitude: _parseDouble(json['punchInLongitude']) ?? 0.0,
+        punchInPhoto: json['punchInPhoto']?.toString(),
+        punchInAddress: json['punchInAddress']?.toString(),
+        bikeKmStart: json['bikeKmStart']?.toString(),
+        punchOutTime: json['punchOutTime'] != null
+            ? _parseDateTime(json['punchOutTime'])
+            : null,
+        punchOutLatitude: json['punchOutLatitude'] != null
+            ? _parseDouble(json['punchOutLatitude'])
+            : null,
+        punchOutLongitude: json['punchOutLongitude'] != null
+            ? _parseDouble(json['punchOutLongitude'])
+            : null,
+        punchOutPhoto: json['punchOutPhoto']?.toString(),
+        punchOutAddress: json['punchOutAddress']?.toString(),
+        bikeKmEnd: json['bikeKmEnd']?.toString(),
+        totalWorkHours: json['totalWorkHours'] != null
+            ? _parseDouble(json['totalWorkHours'])
+            : null,
+        totalDistanceKm: json['totalDistanceKm'] != null
+            ? _parseDouble(json['totalDistanceKm'])
+            : null,
+        status: json['status']?.toString() ?? 'active',
+        createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
+        updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
+      );
+    } catch (e) {
+      print('Error parsing AttendanceModel from JSON: $e');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -124,15 +130,55 @@ class AttendanceModel {
 
     try {
       if (dateValue is String) {
-        return DateTime.parse(dateValue);
+        // Handle different date formats
+        if (dateValue.isEmpty) return null;
+
+        // Try parsing ISO format first
+        try {
+          return DateTime.parse(dateValue);
+        } catch (e) {
+          // Try parsing with timezone info
+          if (dateValue.contains('T') && !dateValue.endsWith('Z')) {
+            return DateTime.parse('${dateValue}Z');
+          }
+          throw e;
+        }
       } else if (dateValue is DateTime) {
         return dateValue;
+      } else if (dateValue is int) {
+        // Handle timestamp in milliseconds
+        return DateTime.fromMillisecondsSinceEpoch(dateValue);
       } else {
-        print('Warning: Unexpected date format: $dateValue');
+        print(
+          'Warning: Unexpected date format: $dateValue (${dateValue.runtimeType})',
+        );
         return null;
       }
     } catch (e) {
       print('Error parsing date: $dateValue, error: $e');
+      return null;
+    }
+  }
+
+  // Helper method for safe double parsing
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+
+    try {
+      if (value is double) {
+        return value;
+      } else if (value is int) {
+        return value.toDouble();
+      } else if (value is String) {
+        return double.parse(value);
+      } else {
+        print(
+          'Warning: Unexpected number format: $value (${value.runtimeType})',
+        );
+        return null;
+      }
+    } catch (e) {
+      print('Error parsing double: $value, error: $e');
       return null;
     }
   }

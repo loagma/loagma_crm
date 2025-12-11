@@ -17,19 +17,37 @@ class AttendanceService {
     String? bikeKmStart,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/punch-in'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'employeeId': employeeId,
-          'employeeName': employeeName,
-          'punchInLatitude': latitude,
-          'punchInLongitude': longitude,
-          'punchInPhoto': photo,
-          'punchInAddress': address,
-          'bikeKmStart': bikeKmStart,
-        }),
-      );
+      // Validate photo size before sending
+      if (photo != null && photo.length > 5 * 1024 * 1024) {
+        return {
+          'success': false,
+          'message': 'Photo is too large. Please use a smaller image.',
+        };
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/punch-in'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'employeeId': employeeId,
+              'employeeName': employeeName,
+              'punchInLatitude': latitude,
+              'punchInLongitude': longitude,
+              'punchInPhoto': photo,
+              'punchInAddress': address,
+              'bikeKmStart': bikeKmStart,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 30), // Add timeout
+            onTimeout: () {
+              throw Exception('Request timeout. Please check your connection.');
+            },
+          );
 
       final data = jsonDecode(response.body);
 
@@ -45,10 +63,22 @@ class AttendanceService {
         return {
           'success': false,
           'message': data['message'] ?? 'Failed to punch in',
+          'statusCode': response.statusCode,
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
+      String errorMessage = 'Network error. Please try again.';
+
+      if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timeout. Please check your connection.';
+      } else if (e.toString().contains('memory') ||
+          e.toString().contains('OutOfMemory')) {
+        errorMessage = 'Photo too large. Please use a smaller image.';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      return {'success': false, 'message': errorMessage};
     }
   }
 
@@ -62,18 +92,36 @@ class AttendanceService {
     String? bikeKmEnd,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/punch-out'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'attendanceId': attendanceId,
-          'punchOutLatitude': latitude,
-          'punchOutLongitude': longitude,
-          'punchOutPhoto': photo,
-          'punchOutAddress': address,
-          'bikeKmEnd': bikeKmEnd,
-        }),
-      );
+      // Validate photo size before sending
+      if (photo != null && photo.length > 5 * 1024 * 1024) {
+        return {
+          'success': false,
+          'message': 'Photo is too large. Please use a smaller image.',
+        };
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/punch-out'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'attendanceId': attendanceId,
+              'punchOutLatitude': latitude,
+              'punchOutLongitude': longitude,
+              'punchOutPhoto': photo,
+              'punchOutAddress': address,
+              'bikeKmEnd': bikeKmEnd,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 30), // Add timeout
+            onTimeout: () {
+              throw Exception('Request timeout. Please check your connection.');
+            },
+          );
 
       final data = jsonDecode(response.body);
 
@@ -89,10 +137,22 @@ class AttendanceService {
         return {
           'success': false,
           'message': data['message'] ?? 'Failed to punch out',
+          'statusCode': response.statusCode,
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
+      String errorMessage = 'Network error. Please try again.';
+
+      if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timeout. Please check your connection.';
+      } else if (e.toString().contains('memory') ||
+          e.toString().contains('OutOfMemory')) {
+        errorMessage = 'Photo too large. Please use a smaller image.';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      return {'success': false, 'message': errorMessage};
     }
   }
 
