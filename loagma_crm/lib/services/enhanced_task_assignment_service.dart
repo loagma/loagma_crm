@@ -1,7 +1,7 @@
-// TODO: Uncomment when backend integration is ready
-// import 'dart:convert';
-// import 'package:http/http.dart' as http;
-// import 'api_config.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'api_config.dart';
+import 'user_service.dart';
 
 import '../models/salesman_model.dart';
 import '../models/location_info_model.dart';
@@ -11,53 +11,57 @@ class EnhancedTaskAssignmentService {
   /// Fetch all salesmen from the backend
   static Future<List<Salesman>> fetchAllSalesmen() async {
     try {
-      // TODO: Replace with actual API call
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Mock data
-      return [
-        Salesman(
-          id: '1',
-          name: 'Rajesh Kumar',
-          contactNumber: '9876543210',
-          employeeCode: 'EMP001',
-          email: 'rajesh@example.com',
-        ),
-        Salesman(
-          id: '2',
-          name: 'Priya Sharma',
-          contactNumber: '9876543211',
-          employeeCode: 'EMP002',
-          email: 'priya@example.com',
-        ),
-        Salesman(
-          id: '3',
-          name: 'Amit Patel',
-          contactNumber: '9876543212',
-          employeeCode: 'EMP003',
-          email: 'amit@example.com',
-        ),
-      ];
-
-      // TODO: Uncomment when backend is ready
-      /*
+      print('🔍 Fetching salesmen from API...');
+      print('🔑 Token: ${UserService.token != null ? "Available" : "NULL"}');
+      print('🌐 URL: ${ApiConfig.baseUrl}/users/get-all');
+      
+      // Use dedicated salesmen endpoint
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/salesmen'),
+        Uri.parse('${ApiConfig.baseUrl}/task-assignments/salesmen'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${UserService.token}',
+        },
       );
+
+      print('📡 Response Status: ${response.statusCode}');
+      print('📋 Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          return (data['salesmen'] as List)
-              .map((json) => Salesman.fromJson(json))
+          final List<dynamic> salesmenJson = data['salesmen'] ?? [];
+          print('👨‍💼 Salesmen found: ${salesmenJson.length}');
+          
+          // Debug: Print all salesmen
+          for (var salesman in salesmenJson) {
+            print('   Salesman: ${salesman['id']} | ${salesman['name']} | ${salesman['contactNumber']}');
+          }
+          
+          // Convert to Salesman objects
+          final salesmen = salesmenJson
+              .map((salesman) => Salesman(
+                id: salesman['id'] ?? '',
+                name: salesman['name'] ?? 'Unknown',
+                contactNumber: salesman['contactNumber'] ?? '',
+                employeeCode: salesman['employeeCode'] ?? '',
+                email: salesman['email'] ?? '',
+              ))
               .toList();
+          
+          return salesmen;
+        } else {
+          print('❌ API returned success: false');
+          throw Exception('API returned success: false');
         }
+      } else {
+        print('❌ HTTP Error: ${response.statusCode}');
+        print('❌ Error Body: ${response.body}');
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
-      throw Exception('Failed to fetch salesmen');
-      */
     } catch (e) {
-      print('Error fetching salesmen: $e');
-      rethrow;
+      print('❌ Error fetching salesmen: $e');
+      throw Exception('Failed to fetch salesmen: $e');
     }
   }
 
@@ -149,28 +153,41 @@ class EnhancedTaskAssignmentService {
     required List<String> businessTypes,
   }) async {
     try {
-      // TODO: Replace with actual API call
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Use real API call to create area assignment
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/area-assignments'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${UserService.token}',
+        },
+        body: jsonEncode({
+          'salesmanId': salesmanId,
+          'pinCode': pinCode,
+          'country': country,
+          'state': state,
+          'district': district,
+          'city': city,
+          'areas': selectedAreas,
+          'businessTypes': businessTypes,
+          'totalBusinesses': selectedAreas.length * businessTypes.length * 5,
+        }),
+      );
 
-      return {
-        'success': true,
-        'message':
-            'Successfully assigned ${selectedAreas.length} areas to $salesmanName',
-        'assignment': AreaAssignment(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          salesmanId: salesmanId,
-          salesmanName: salesmanName,
-          pinCode: pinCode,
-          country: country,
-          state: state,
-          district: district,
-          city: city,
-          areas: selectedAreas,
-          businessTypes: businessTypes,
-          assignedDate: DateTime.now(),
-          totalBusinesses: selectedAreas.length * businessTypes.length * 5,
-        ).toJson(),
-      };
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'success': true,
+          'message': 'Successfully assigned ${selectedAreas.length} areas to $salesmanName',
+          'assignment': data['assignment'],
+        };
+      } else {
+        throw Exception(data['message'] ?? 'Failed to assign areas');
+      }
+    } catch (e) {
+      print('Error assigning areas: $e');
+      throw Exception('Failed to assign areas: $e');
+    }
 
       // TODO: Uncomment when backend is ready
       /*

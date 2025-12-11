@@ -9,6 +9,7 @@ const prisma = new PrismaClient();
  */
 export const getAllSalesmen = async (req, res) => {
   try {
+    // Fetch users with their role relation to get role name
     const allUsers = await prisma.user.findMany({
       where: { isActive: true },
       select: {
@@ -18,22 +19,35 @@ export const getAllSalesmen = async (req, res) => {
         employeeCode: true,
         email: true,
         roles: true,
-        roleId: true
+        roleId: true,
+        role: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
 
+    // Filter salesmen by roleId = 'R002' or role.name = 'salesman'
     const salesmen = allUsers.filter(user => {
-      const rId = user.roleId?.toLowerCase();
+      // Check roleId (R002 is salesman)
+      if (user.roleId === 'R002') return true;
+      
+      // Check role relation
+      if (user.role && user.role.name === 'salesman') return true;
+      
+      // Check roles array (for backward compatibility)
       const rArr = Array.isArray(user.roles)
         ? user.roles.map(r => r.toLowerCase())
         : [];
-
-      return (
-        rId === "salesman" ||
-        rArr.includes("salesman")
-      );
+      if (rArr.includes("salesman") || rArr.includes("r002")) return true;
+      
+      return false;
     });
 
+    console.log(`📊 Found ${salesmen.length} salesmen out of ${allUsers.length} users`);
+    
     res.json({
       success: true,
       count: salesmen.length,

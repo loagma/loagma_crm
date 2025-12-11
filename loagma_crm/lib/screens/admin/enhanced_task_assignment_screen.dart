@@ -59,15 +59,28 @@ class _EnhancedTaskAssignmentScreenState
   Future<void> _loadSalesmen() async {
     setState(() => isLoadingSalesmen = true);
     try {
+      print('🔄 Loading salesmen...');
       final fetchedSalesmen =
           await EnhancedTaskAssignmentService.fetchAllSalesmen();
+      print('✅ Loaded ${fetchedSalesmen.length} salesmen');
       setState(() {
         salesmen = fetchedSalesmen;
         isLoadingSalesmen = false;
       });
+
+      if (fetchedSalesmen.isEmpty) {
+        Fluttertoast.showToast(
+          msg: 'No salesmen found. Check user roles in database.',
+          toastLength: Toast.LENGTH_LONG,
+        );
+      }
     } catch (e) {
+      print('❌ Error loading salesmen: $e');
       setState(() => isLoadingSalesmen = false);
-      Fluttertoast.showToast(msg: 'Error loading salesmen: $e');
+      Fluttertoast.showToast(
+        msg: 'Error loading salesmen: $e',
+        toastLength: Toast.LENGTH_LONG,
+      );
     }
   }
 
