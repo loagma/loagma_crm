@@ -8,6 +8,7 @@ import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/attendance_status_widget.dart';
+import 'sr_area_allotment_screen.dart';
 
 class SalesmanDashboardScreen extends StatefulWidget {
   const SalesmanDashboardScreen({super.key});
@@ -563,10 +564,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 () => context.go('/dashboard/salesman/accounts'),
               ),
               _buildActionCard(
-                'Area Allotments',
-                Icons.map_outlined,
+                'SR Area Allotment',
+                Icons.location_city,
                 Colors.purple,
-                () => context.go('/dashboard/salesman/assignments'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SRAreaAllotmentScreen(),
+                  ),
+                ),
               ),
               _buildActionCard(
                 'Maps',

@@ -15,6 +15,7 @@ import taskAssignmentRoutes from './routes/taskAssignmentRoutes.js';
 import salesmanRoutes from './routes/salesmanRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
+import areaAssignmentRoutes from './routes/areaAssignmentRoutes.js';
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use('/task-assignments', taskAssignmentRoutes);
 app.use('/salesman', salesmanRoutes);
 app.use('/salary', salaryRoutes);
 app.use('/attendance', attendanceRoutes);
+app.use('/area-assignments', areaAssignmentRoutes);
 
 // 404 Handler
 app.use((req, res) => {
