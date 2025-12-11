@@ -448,11 +448,11 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     String? punchOutPhotoBase64;
     final kmController = TextEditingController();
 
-    return await showDialog<Map<String, dynamic>>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -531,7 +531,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                                   foregroundColor: Colors.white,
                                 ),
                                 onPressed: () {
-                                  setDialogState(() {
+                                  setState(() {
                                     punchOutPhoto = null;
                                     punchOutPhotoBase64 = null;
                                   });
@@ -552,7 +552,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                               if (photo != null) {
                                 final file = File(photo.path);
                                 final bytes = await file.readAsBytes();
-                                setDialogState(() {
+                                setState(() {
                                   punchOutPhoto = file;
                                   punchOutPhotoBase64 = base64Encode(bytes);
                                 });
