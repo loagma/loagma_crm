@@ -14,7 +14,7 @@ class EnhancedTaskAssignmentService {
       print('🔍 Fetching salesmen from API...');
       print('🔑 Token: ${UserService.token != null ? "Available" : "NULL"}');
       print('🌐 URL: ${ApiConfig.baseUrl}/users/get-all');
-      
+
       // Use users endpoint and filter salesmen on client side
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/users/get-all'),
@@ -32,42 +32,50 @@ class EnhancedTaskAssignmentService {
         if (data['success'] == true) {
           final List<dynamic> usersJson = data['data'] ?? [];
           print('👥 Total users found: ${usersJson.length}');
-          
+
           // Filter salesmen on client side
           final salesmenJson = usersJson.where((user) {
             // Check roleId = 'R002' (salesman role ID)
             if (user['roleId'] == 'R002') return true;
-            
+
             // Check role.name = 'salesman'
-            if (user['role'] != null && user['role']['name'] == 'salesman') return true;
-            
+            if (user['role'] != null && user['role']['name'] == 'salesman')
+              return true;
+
             // Check roles array contains 'salesman' or 'R002'
             if (user['roles'] != null && user['roles'] is List) {
-              final roles = (user['roles'] as List).map((r) => r.toString().toLowerCase()).toList();
-              if (roles.contains('salesman') || roles.contains('r002')) return true;
+              final roles = (user['roles'] as List)
+                  .map((r) => r.toString().toLowerCase())
+                  .toList();
+              if (roles.contains('salesman') || roles.contains('r002'))
+                return true;
             }
-            
+
             return false;
           }).toList();
-          
+
           print('👨‍💼 Salesmen found: ${salesmenJson.length}');
-          
+
           // Debug: Print all salesmen
           for (var salesman in salesmenJson) {
-            print('   Salesman: ${salesman['id']} | ${salesman['name']} | ${salesman['contactNumber']}');
+            print(
+              '   Salesman: ${salesman['id']} | ${salesman['name']} | ${salesman['contactNumber']}',
+            );
           }
-          
+
           // Convert to Salesman objects
           final salesmen = salesmenJson
-              .map((salesman) => Salesman(
-                id: salesman['id'] ?? '',
-                name: salesman['name'] ?? 'Unknown',
-                contactNumber: salesman['contactNumber'] ?? '',
-                employeeCode: salesman['employeeCode'] ?? '',
-                email: salesman['email'] ?? '',
-              ))
+              .map(
+                (salesman) => Salesman(
+                  id: salesman['id'] ?? '',
+                  name: salesman['name'] ?? 'Unknown',
+                  contactNumber: salesman['contactNumber'] ?? '',
+                  employeeCode: salesman['employeeCode'] ?? '',
+                  email: salesman['email'] ?? '',
+                ),
+              )
               .toList();
-          
+
           return salesmen;
         } else {
           print('❌ API returned success: false');
@@ -197,7 +205,8 @@ class EnhancedTaskAssignmentService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {
           'success': true,
-          'message': 'Successfully assigned ${selectedAreas.length} areas to $salesmanName',
+          'message':
+              'Successfully assigned ${selectedAreas.length} areas to $salesmanName',
           'assignment': data['assignment'],
         };
       } else {
@@ -208,8 +217,8 @@ class EnhancedTaskAssignmentService {
       throw Exception('Failed to assign areas: $e');
     }
 
-      // TODO: Uncomment when backend is ready
-      /*
+    // TODO: Uncomment when backend is ready
+    /*
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/task-assignments/areas'),
         headers: {'Content-Type': 'application/json'},
@@ -234,10 +243,6 @@ class EnhancedTaskAssignmentService {
         throw Exception(data['message'] ?? 'Failed to assign areas');
       }
       */
-    } catch (e) {
-      print('Error assigning areas: $e');
-      rethrow;
-    }
   }
 
   /// Fetch all assignments for a salesman

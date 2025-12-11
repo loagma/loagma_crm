@@ -3,7 +3,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../services/map_task_assignment_service.dart';
+import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
+import '../../models/place_model.dart';
+import '../../widgets/place_details_widget.dart';
 
 class AssignmentMapViewScreen extends StatefulWidget {
   final Map<String, dynamic> assignment;
@@ -41,6 +44,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   @override
   void initState() {
     super.initState();
+    GooglePlacesService.instance.initialize();
     _loadAssignmentBusinesses();
   }
 
@@ -344,33 +348,37 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   void _showShopDetails(Shop shop, bool isSalesmanCreated) {
+    if (isSalesmanCreated) {
+      // Show simple dialog for salesman-created shops
+      _showSalesmanShopDetails(shop);
+    } else {
+      // Show enhanced Google Places details for Google Places shops
+      _showGooglePlacesDetails(shop);
+    }
+  }
+
+  void _showSalesmanShopDetails(Shop shop) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(
-              isSalesmanCreated ? Icons.person_pin : Icons.store,
-              color: isSalesmanCreated
-                  ? Colors.purple
-                  : const Color(0xFFD7BE69),
-            ),
+            const Icon(Icons.person_pin, color: Colors.purple),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(shop.name, style: const TextStyle(fontSize: 16)),
-                  if (isSalesmanCreated)
-                    const Text(
-                      'Created by Salesman',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.purple,
-                        fontWeight: FontWeight.normal,
-                      ),
+                  const Text(
+                    'Created by Salesman',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.purple,
+                      fontWeight: FontWeight.normal,
                     ),
+                  ),
                 ],
               ),
             ),
@@ -380,28 +388,194 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isSalesmanCreated)
-              Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.purple.withOpacity(0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.star, size: 16, color: Colors.purple),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This account was created by the salesman',
-                        style: TextStyle(fontSize: 12, color: Colors.purple),
-                      ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.purple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.star, size: 16, color: Colors.purple),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This account was created by the salesman',
+                      style: TextStyle(fontSize: 12, color: Colors.purple),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            _buildDetailRow(Icons.category, 'Type', shop.businessType),
+            _buildDetailRow(Icons.flag, 'Stage', shop.stage),
+            if (shop.address != null && shop.address!.isNotEmpty)
+              _buildDetailRow(Icons.location_on, 'Address', shop.address!),
+            if (shop.rating != null)
+              _buildDetailRow(Icons.star, 'Rating', '${shop.rating} ⭐'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGooglePlacesDetails(Shop shop) async {
+    // Show loading dialog first
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Color(0xFFD7BE69)),
+                SizedBox(height: 16),
+                Text('Loading place details...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      PlaceInfo? placeInfo;
+
+      // Try to get Google Places details if we have a placeId
+      if (shop.placeId != null && shop.placeId!.isNotEmpty) {
+        try {
+          final details = await GooglePlacesService.instance.fetchPlaceDetails(
+            shop.placeId!,
+          );
+          if (details != null) {
+            placeInfo = PlaceInfo.fromPlaceDetails(details);
+          }
+        } catch (e) {
+          print('Error fetching place details: $e');
+        }
+      }
+
+      // If no place details found, try searching by name and location
+      if (placeInfo == null &&
+          shop.latitude != null &&
+          shop.longitude != null) {
+        try {
+          final searchResults = await GooglePlacesService.instance
+              .searchPlacesByText(
+                query: shop.name,
+                lat: shop.latitude,
+                lng: shop.longitude,
+              );
+
+          if (searchResults.isNotEmpty) {
+            final firstResult = searchResults.first;
+            if (firstResult.placeId != null) {
+              final details = await GooglePlacesService.instance
+                  .fetchPlaceDetails(firstResult.placeId!);
+              if (details != null) {
+                placeInfo = PlaceInfo.fromPlaceDetails(details);
+              }
+            }
+          }
+        } catch (e) {
+          print('Error searching for place: $e');
+        }
+      }
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      if (placeInfo != null) {
+        // Show enhanced place details
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              insetPadding: const EdgeInsets.all(16),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                  maxWidth: MediaQuery.of(context).size.width * 0.95,
+                ),
+                child: PlaceDetailsWidget(
+                  place: placeInfo!,
+                  onClose: () => Navigator.pop(context),
                 ),
               ),
+            ),
+          );
+        }
+      } else {
+        // Fallback to basic shop details
+        if (mounted) {
+          _showBasicShopDetails(shop);
+        }
+      }
+    } catch (e) {
+      print('Error loading place details: $e');
+      // Close loading dialog and show basic details
+      if (mounted) {
+        Navigator.pop(context);
+        _showBasicShopDetails(shop);
+      }
+    }
+  }
+
+  void _showBasicShopDetails(Shop shop) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.store, color: Color(0xFFD7BE69)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(shop.name, style: const TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info, size: 16, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Basic information only - Google Places details not available',
+                      style: TextStyle(fontSize: 12, color: Colors.orange),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             _buildDetailRow(Icons.category, 'Type', shop.businessType),
             _buildDetailRow(Icons.flag, 'Stage', shop.stage),
             if (shop.address != null && shop.address!.isNotEmpty)
@@ -691,7 +865,9 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                       _createMarkers();
                                     });
                                   },
-                                  selectedColor: Colors.green.withOpacity(0.2),
+                                  selectedColor: Colors.green.withValues(
+                                    alpha: 0.2,
+                                  ),
                                   checkmarkColor: Colors.green,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 4,
@@ -723,7 +899,9 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                       _createMarkers();
                                     });
                                   },
-                                  selectedColor: Colors.purple.withOpacity(0.2),
+                                  selectedColor: Colors.purple.withValues(
+                                    alpha: 0.2,
+                                  ),
                                   checkmarkColor: Colors.purple,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 4,
@@ -1173,7 +1351,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 20),
@@ -1203,7 +1381,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Icon(icon, color: color, size: 16),
@@ -1231,9 +1409,9 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1259,7 +1437,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -1303,7 +1481,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           _createMarkers();
         });
       },
-      selectedColor: color.withOpacity(0.2),
+      selectedColor: color.withValues(alpha: 0.2),
       checkmarkColor: color,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1328,7 +1506,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           _createMarkers();
         });
       },
-      selectedColor: const Color(0xFFD7BE69).withOpacity(0.2),
+      selectedColor: const Color(0xFFD7BE69).withValues(alpha: 0.2),
       checkmarkColor: const Color(0xFFD7BE69),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
