@@ -15,9 +15,9 @@ class EnhancedTaskAssignmentService {
       print('🔑 Token: ${UserService.token != null ? "Available" : "NULL"}');
       print('🌐 URL: ${ApiConfig.baseUrl}/users/get-all');
       
-      // Use dedicated salesmen endpoint
+      // Use users endpoint and filter salesmen on client side
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/task-assignments/salesmen'),
+        Uri.parse('${ApiConfig.baseUrl}/users/get-all'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${UserService.token}',
@@ -30,7 +30,26 @@ class EnhancedTaskAssignmentService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          final List<dynamic> salesmenJson = data['salesmen'] ?? [];
+          final List<dynamic> usersJson = data['data'] ?? [];
+          print('👥 Total users found: ${usersJson.length}');
+          
+          // Filter salesmen on client side
+          final salesmenJson = usersJson.where((user) {
+            // Check roleId = 'R002' (salesman role ID)
+            if (user['roleId'] == 'R002') return true;
+            
+            // Check role.name = 'salesman'
+            if (user['role'] != null && user['role']['name'] == 'salesman') return true;
+            
+            // Check roles array contains 'salesman' or 'R002'
+            if (user['roles'] != null && user['roles'] is List) {
+              final roles = (user['roles'] as List).map((r) => r.toString().toLowerCase()).toList();
+              if (roles.contains('salesman') || roles.contains('r002')) return true;
+            }
+            
+            return false;
+          }).toList();
+          
           print('👨‍💼 Salesmen found: ${salesmenJson.length}');
           
           // Debug: Print all salesmen
