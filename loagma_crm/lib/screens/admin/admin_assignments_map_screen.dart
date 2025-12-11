@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../services/api_config.dart';
+import '../../services/google_places_service.dart';
+import '../../models/place_model.dart';
+import '../../widgets/place_details_widget.dart';
 
 class AdminAssignmentsMapScreen extends StatefulWidget {
   const AdminAssignmentsMapScreen({super.key});
@@ -20,11 +23,17 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
   String? selectedAssignmentId;
   String? filterStatus;
 
+  // Google Places integration
+  List<PlaceInfo> nearbyPlaces = [];
+  bool isLoadingPlaces = false;
+  PlaceInfo? selectedPlace;
+
   static const Color primaryColor = Color(0xFFD7BE69);
 
   @override
   void initState() {
     super.initState();
+    GooglePlacesService.instance.initialize();
     fetchAllAssignments();
   }
 
@@ -103,6 +112,9 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
             ),
             onTap: () {
               setState(() => selectedAssignmentId = assignment['id']);
+              if (lat != null && lng != null) {
+                _fetchNearbyPlaces(lat, lng);
+              }
             },
           ),
         );
@@ -135,6 +147,83 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
       print('Geocoding error: $e');
     }
     return null;
+  }
+
+  Future<void> _fetchNearbyPlaces(double lat, double lng) async {
+    setState(() => isLoadingPlaces = true);
+
+    try {
+      final places = await GooglePlacesService.instance.fetchNearbyPlaces(
+        lat: lat,
+        lng: lng,
+        radius: 1500,
+        type: "store",
+      );
+
+      List<PlaceInfo> placeInfoList = [];
+
+      for (var place in places.take(10)) {
+        // Limit to 10 places
+        if (place.placeId != null) {
+          try {
+            final details = await GooglePlacesService.instance
+                .fetchPlaceDetails(place.placeId!);
+            if (details != null) {
+              final placeInfo = PlaceInfo.fromPlaceDetails(details);
+              placeInfoList.add(placeInfo);
+            }
+          } catch (e) {
+            print('Error fetching place details: $e');
+          }
+        }
+      }
+
+      setState(() {
+        nearbyPlaces = placeInfoList;
+        isLoadingPlaces = false;
+      });
+
+      // Add place markers to map
+      _addPlaceMarkers();
+    } catch (e) {
+      print('Error fetching nearby places: $e');
+      setState(() => isLoadingPlaces = false);
+    }
+  }
+
+  void _addPlaceMarkers() {
+    Set<Marker> newMarkers = Set.from(markers);
+
+    // Remove existing place markers
+    newMarkers.removeWhere(
+      (marker) => marker.markerId.value.startsWith('place_'),
+    );
+
+    // Add new place markers
+    for (int i = 0; i < nearbyPlaces.length; i++) {
+      final place = nearbyPlaces[i];
+      if (place.latitude != null && place.longitude != null) {
+        newMarkers.add(
+          Marker(
+            markerId: MarkerId('place_${place.placeId}'),
+            position: LatLng(place.latitude!, place.longitude!),
+            infoWindow: InfoWindow(
+              title: place.name,
+              snippet:
+                  '${place.formattedRating} • ${place.isOpenNow ? "Open" : "Closed"}',
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueViolet,
+            ),
+            onTap: () {
+              setState(() => selectedPlace = place);
+            },
+          ),
+        );
+      }
+    }
+
+    setState(() => markers = newMarkers);
   }
 
   double _getMarkerColor(String status) {
@@ -252,7 +341,7 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -273,6 +362,8 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                         _buildLegendItem(Colors.green, 'Active'),
                         _buildLegendItem(Colors.blue, 'Completed'),
                         _buildLegendItem(Colors.red, 'Inactive'),
+                        const Divider(height: 8),
+                        _buildLegendItem(Colors.purple, 'Places'),
                       ],
                     ),
                   ),
@@ -284,6 +375,20 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                     right: 0,
                     child: _buildAssignmentDetails(),
                   ),
+                if (selectedPlace != null)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: PlaceDetailsWidget(
+                      place: selectedPlace!,
+                      onClose: () => setState(() => selectedPlace = null),
+                    ),
+                  ),
+                if (nearbyPlaces.isNotEmpty &&
+                    selectedPlace == null &&
+                    selectedAssignmentId == null)
+                  Positioned(bottom: 16, right: 16, child: _buildPlacesList()),
               ],
             ),
     );
@@ -324,7 +429,7 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -403,5 +508,121 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
       default:
         return Colors.orange;
     }
+  }
+
+  Widget _buildPlacesList() {
+    return Container(
+      width: 300,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.purple[50],
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.place, color: Colors.purple, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Nearby Places (${nearbyPlaces.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                if (isLoadingPlaces)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: nearbyPlaces.length,
+              itemBuilder: (context, index) {
+                final place = nearbyPlaces[index];
+                return InkWell(
+                  onTap: () => setState(() => selectedPlace = place),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          place.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              place.formattedRating,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: place.isOpenNow
+                                    ? Colors.green
+                                    : Colors.red,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                place.isOpenNow ? 'Open' : 'Closed',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

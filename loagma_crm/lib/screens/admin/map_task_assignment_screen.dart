@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
+import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
+import '../../models/place_model.dart';
+import '../../widgets/place_details_widget.dart';
 import 'assignment_map_detail_screen.dart';
 
 class MapTaskAssignmentScreen extends StatefulWidget {
@@ -35,10 +38,16 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
   List<Shop> _shops = [];
   LatLng _initialPosition = const LatLng(20.5937, 78.9629); // India center
 
+  // Google Places integration
+  List<PlaceInfo> nearbyPlaces = [];
+  bool isLoadingPlaces = false;
+  PlaceInfo? selectedPlace;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    GooglePlacesService.instance.initialize();
     _loadSalesmen();
   }
 
@@ -123,6 +132,11 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
 
         // Update map markers
         _updateMapMarkers();
+
+        // Fetch nearby places for the area
+        if (_shops.isNotEmpty && _shops.first.latitude != null) {
+          _fetchNearbyPlaces(_shops.first.latitude!, _shops.first.longitude!);
+        }
       } else {
         _showError(result['message'] ?? 'Failed to fetch businesses');
       }
@@ -181,6 +195,83 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
       default:
         return BitmapDescriptor.hueOrange;
     }
+  }
+
+  Future<void> _fetchNearbyPlaces(double lat, double lng) async {
+    setState(() => isLoadingPlaces = true);
+
+    try {
+      final places = await GooglePlacesService.instance.fetchNearbyPlaces(
+        lat: lat,
+        lng: lng,
+        radius: 1500,
+        type: "store",
+      );
+
+      List<PlaceInfo> placeInfoList = [];
+
+      for (var place in places.take(15)) {
+        // Limit to 15 places
+        if (place.placeId != null) {
+          try {
+            final details = await GooglePlacesService.instance
+                .fetchPlaceDetails(place.placeId!);
+            if (details != null) {
+              final placeInfo = PlaceInfo.fromPlaceDetails(details);
+              placeInfoList.add(placeInfo);
+            }
+          } catch (e) {
+            print('Error fetching place details: $e');
+          }
+        }
+      }
+
+      setState(() {
+        nearbyPlaces = placeInfoList;
+        isLoadingPlaces = false;
+      });
+
+      // Add place markers to map
+      _addPlaceMarkers();
+    } catch (e) {
+      print('Error fetching nearby places: $e');
+      setState(() => isLoadingPlaces = false);
+    }
+  }
+
+  void _addPlaceMarkers() {
+    Set<Marker> newMarkers = Set.from(_markers);
+
+    // Remove existing place markers
+    newMarkers.removeWhere(
+      (marker) => marker.markerId.value.startsWith('place_'),
+    );
+
+    // Add new place markers
+    for (int i = 0; i < nearbyPlaces.length; i++) {
+      final place = nearbyPlaces[i];
+      if (place.latitude != null && place.longitude != null) {
+        newMarkers.add(
+          Marker(
+            markerId: MarkerId('place_${place.placeId}'),
+            position: LatLng(place.latitude!, place.longitude!),
+            infoWindow: InfoWindow(
+              title: place.name,
+              snippet:
+                  '${place.formattedRating} • ${place.isOpenNow ? "Open" : "Closed"}',
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueViolet,
+            ),
+            onTap: () {
+              setState(() => selectedPlace = place);
+            },
+          ),
+        );
+      }
+    }
+
+    setState(() => _markers = newMarkers);
   }
 
   void _showShopDetails(Shop shop) {
@@ -597,11 +688,25 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
                         _buildLegendItem('Follow-up', Colors.blue),
                         _buildLegendItem('Converted', Colors.green),
                         _buildLegendItem('Lost', Colors.red),
+                        const Divider(height: 8),
+                        _buildLegendItem('Places', Colors.purple),
                       ],
                     ),
                   ),
                 ),
               ),
+              if (selectedPlace != null)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: PlaceDetailsWidget(
+                    place: selectedPlace!,
+                    onClose: () => setState(() => selectedPlace = null),
+                  ),
+                ),
+              if (nearbyPlaces.isNotEmpty && selectedPlace == null)
+                Positioned(bottom: 16, left: 16, child: _buildPlacesList()),
             ],
           );
   }
@@ -618,6 +723,153 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
           ),
           const SizedBox(width: 8),
           Text(label),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlacesList() {
+    return Container(
+      width: 280,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.purple[50],
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.place, color: Colors.purple, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Google Places (${nearbyPlaces.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                if (isLoadingPlaces)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: nearbyPlaces.length,
+              itemBuilder: (context, index) {
+                final place = nearbyPlaces[index];
+                return InkWell(
+                  onTap: () => setState(() => selectedPlace = place),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        // Photo thumbnail
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            color: Colors.grey[200],
+                          ),
+                          child: place.mainPhotoUrl != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.network(
+                                    place.mainPhotoUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Icon(
+                                        Icons.store,
+                                        color: Colors.grey,
+                                      );
+                                    },
+                                  ),
+                                )
+                              : const Icon(Icons.store, color: Colors.grey),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                place.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Text(
+                                    place.formattedRating,
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: place.isOpenNow
+                                          ? Colors.green
+                                          : Colors.red,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      place.isOpenNow ? 'Open' : 'Closed',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

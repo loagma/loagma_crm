@@ -627,6 +627,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             width: double.maxFinite,
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.7,
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             padding: const EdgeInsets.all(20),
             child: SingleChildScrollView(
@@ -955,11 +956,24 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   String _getCurrentDurationText() {
     if (isPunchedIn && punchInTime != null) {
       // Currently working - calculate live duration
-      final currentDuration = DateTime.now().difference(punchInTime!);
+      final now = DateTime.now();
+      final currentDuration = now.difference(punchInTime!);
+
+      // Ensure duration is not negative (handle clock sync issues)
+      if (currentDuration.isNegative) {
+        return '00:00:00';
+      }
+
       return _formatDuration(currentDuration);
     } else if (punchInTime != null && punchOutTime != null) {
       // Already punched out - show total worked duration
       final totalDuration = punchOutTime!.difference(punchInTime!);
+
+      // Ensure duration is not negative
+      if (totalDuration.isNegative) {
+        return '00:00:00';
+      }
+
       return _formatDuration(totalDuration);
     } else if (currentAttendance?.totalWorkHours != null) {
       // Use backend calculated hours if available
@@ -967,7 +981,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       final duration = Duration(milliseconds: (hours * 3600 * 1000).round());
       return _formatDuration(duration);
     } else {
-      return '--:--:--';
+      return '00:00:00';
     }
   }
 
