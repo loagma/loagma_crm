@@ -43,7 +43,7 @@ export function convertISTToUTC(istDate) {
  * @returns {{ startOfDay: Date, endOfDay: Date }}
  */
 export function getISTDateRange(date = null) {
-    const baseIST = date ? convertUTCToIST(date) : getCurrentISTTime();
+    const baseIST = date ? new Date(date) : getCurrentISTTime();
 
     const startIST = new Date(baseIST);
     startIST.setHours(0, 0, 0, 0);
@@ -51,9 +51,16 @@ export function getISTDateRange(date = null) {
     const endIST = new Date(baseIST);
     endIST.setHours(23, 59, 59, 999);
 
+    console.log('📅 IST Date range calculated:', {
+        baseIST: baseIST.toISOString(),
+        startOfDay: startIST.toISOString(),
+        endOfDay: endIST.toISOString()
+    });
+
+    // Return IST times directly since we're storing IST in database
     return {
-        startOfDay: convertISTToUTC(startIST),
-        endOfDay: convertISTToUTC(endIST)
+        startOfDay: startIST,
+        endOfDay: endIST
     };
 }
 
@@ -142,6 +149,13 @@ export function calculateWorkHoursIST(startTime, endTime) {
     const diffMs = e.getTime() - s.getTime();
     const hours = diffMs / (1000 * 60 * 60);
 
+    console.log('⏱️ Work hours calculation:', {
+        startTime: s.toISOString(),
+        endTime: e.toISOString(),
+        diffMs,
+        hours: Math.max(0, Math.round(hours * 100) / 100)
+    });
+
     return Math.max(0, Math.round(hours * 100) / 100);
 }
 
@@ -152,7 +166,15 @@ export function calculateWorkHoursIST(startTime, endTime) {
  */
 export function getCurrentWorkDurationIST(punchInTime) {
     if (!punchInTime) return 0;
-    const now = new Date(); // UTC
+    
+    // Get current IST time for accurate calculation
+    const now = getCurrentISTTime();
+    
+    console.log('📊 Current work duration calculation:', {
+        punchInTime: new Date(punchInTime).toISOString(),
+        currentTime: now.toISOString()
+    });
+    
     return calculateWorkHoursIST(punchInTime, now);
 }
 
