@@ -58,7 +58,7 @@ export const punchIn = async (req, res) => {
         }
 
         // Get current IST time and date range for today
-        const currentISTTime = getCurrentISTTime();
+        const getCurrentISTTime = getCurrentISTTime();
         const { startOfDay, endOfDay } = getISTDateRange();
 
         // Check for any active attendance (not just today)
