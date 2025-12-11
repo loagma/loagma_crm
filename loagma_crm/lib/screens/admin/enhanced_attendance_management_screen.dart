@@ -1415,16 +1415,7 @@ class _EnhancedAttendanceManagementScreenState
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          gradient: LinearGradient(
-            colors: [
-              Colors.white,
-              attendance.isPunchedOut
-                  ? Colors.green.withValues(alpha: 0.02)
-                  : Colors.blue.withValues(alpha: 0.02),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: Colors.white,
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
