@@ -1,182 +1,190 @@
 /**
  * Timezone utility for Indian Standard Time (IST) handling
- * IST is UTC+5:30
+ * IST = UTC +05:30 (no DST)
  */
 
-// IST offset in milliseconds (5 hours 30 minutes)
+// IST offset in milliseconds
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
 /**
- * Get current IST time
- * @returns {Date} Current time in IST
+ * Get current IST time (as Date object of the IST instant)
+ * @returns {Date}
  */
 export function getCurrentISTTime() {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const ist = new Date(utc + IST_OFFSET);
-    return ist;
+    const nowUTC = Date.now();
+    return new Date(nowUTC + IST_OFFSET);
 }
 
 /**
- * Convert UTC date to IST
- * @param {Date} utcDate - UTC date
- * @returns {Date} IST date
+ * Convert a UTC date to IST (using fixed offset)
+ * @param {Date|string|number} utcDate
+ * @returns {Date|null}
  */
 export function convertUTCToIST(utcDate) {
     if (!utcDate) return null;
-    const utc = new Date(utcDate).getTime();
-    return new Date(utc + IST_OFFSET);
+    const d = new Date(utcDate);
+    return new Date(d.getTime() + IST_OFFSET);
 }
 
 /**
- * Convert IST date to UTC
- * @param {Date} istDate - IST date
- * @returns {Date} UTC date
+ * Convert an IST date to UTC
+ * @param {Date|string|number} istDate
+ * @returns {Date|null}
  */
 export function convertISTToUTC(istDate) {
     if (!istDate) return null;
-    const ist = new Date(istDate).getTime();
-    return new Date(ist - IST_OFFSET);
+    const d = new Date(istDate);
+    return new Date(d.getTime() - IST_OFFSET);
 }
 
 /**
- * Get IST date range for a specific date (start and end of day in IST)
- * @param {Date} date - Date in IST (optional, defaults to today)
- * @returns {Object} { startOfDay, endOfDay } in UTC for database queries
+ * Get IST day range (start & end) as UTC instants for DB queries.
+ * @param {Date|string|number|null} date 
+ * @returns {{ startOfDay: Date, endOfDay: Date }}
  */
 export function getISTDateRange(date = null) {
-    const targetDate = date ? new Date(date) : getCurrentISTTime();
-    
-    // Start of day in IST (00:00:00)
-    const startOfDayIST = new Date(targetDate);
-    startOfDayIST.setHours(0, 0, 0, 0);
-    
-    // End of day in IST (23:59:59.999)
-    const endOfDayIST = new Date(targetDate);
-    endOfDayIST.setHours(23, 59, 59, 999);
-    
-    // Convert to UTC for database storage
+    const baseIST = date ? convertUTCToIST(date) : getCurrentISTTime();
+
+    const startIST = new Date(baseIST);
+    startIST.setHours(0, 0, 0, 0);
+
+    const endIST = new Date(baseIST);
+    endIST.setHours(23, 59, 59, 999);
+
     return {
-        startOfDay: convertISTToUTC(startOfDayIST),
-        endOfDay: convertISTToUTC(endOfDayIST)
+        startOfDay: convertISTToUTC(startIST),
+        endOfDay: convertISTToUTC(endIST)
     };
 }
 
 /**
- * Format IST time for display
- * @param {Date} date - Date to format
- * @param {string} format - Format type ('time', 'date', 'datetime')
- * @returns {string} Formatted string
+ * Format date in IST using Intl API (correct method)
+ * @param {Date|string|number} date
+ * @param {'time'|'date'|'datetime'} format
+ * @returns {string|null}
  */
 export function formatISTTime(date, format = 'datetime') {
     if (!date) return null;
-    
-    const istDate = convertUTCToIST(date);
-    
-    const options = {
-        timeZone: 'Asia/Kolkata',
-        hour12: true
-    };
-    
+
+    const d = new Date(date);
+
+    const base = { timeZone: 'Asia/Kolkata', hour12: true };
+
     switch (format) {
         case 'time':
-            return istDate.toLocaleTimeString('en-IN', {
-                ...options,
+            return new Intl.DateTimeFormat('en-IN', {
+                ...base,
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
-            });
+            }).format(d);
+
         case 'date':
-            return istDate.toLocaleDateString('en-IN', {
-                ...options,
+            return new Intl.DateTimeFormat('en-IN', {
+                ...base,
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
-            });
+            }).format(d);
+
         case 'datetime':
-            return istDate.toLocaleString('en-IN', {
-                ...options,
+        default:
+            return new Intl.DateTimeFormat('en-IN', {
+                ...base,
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
-            });
-        default:
-            return istDate.toISOString();
+            }).format(d);
     }
 }
 
 /**
- * Get IST timestamp string
- * @param {Date} date - Date (optional, defaults to now)
- * @returns {string} IST timestamp in ISO format
+ * Get IST timestamp in ISO-like format (correct local IST output)
+ * ISO standard uses UTC only, so we manually format IST timestamp.
+ * @param {Date|string|number|null} date
+ * @returns {string}
  */
 export function getISTTimestamp(date = null) {
-    const istTime = date ? convertUTCToIST(date) : getCurrentISTTime();
-    return istTime.toISOString();
+    const d = date ? new Date(date) : new Date();
+
+    // Format in ISO-like but in IST timezone
+    const formatted = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).format(d);
+
+    // Convert “YYYY-MM-DD HH:mm:ss” → “YYYY-MM-DDTHH:mm:ss”
+    return formatted.replace(' ', 'T');
 }
 
 /**
- * Calculate work hours between two IST times
- * @param {Date} startTime - Start time in UTC (from database)
- * @param {Date} endTime - End time in UTC (from database)
- * @returns {number} Work hours
+ * Calculate work hours between two UTC instants
+ * @param {Date|string|number} startTime 
+ * @param {Date|string|number} endTime 
+ * @returns {number}
  */
 export function calculateWorkHoursIST(startTime, endTime) {
     if (!startTime || !endTime) return 0;
-    
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        console.error('Invalid date provided for work hours calculation');
-        return 0;
-    }
-    
-    const diffMs = end.getTime() - start.getTime();
+
+    const s = new Date(startTime);
+    const e = new Date(endTime);
+
+    if (isNaN(s) || isNaN(e)) return 0;
+
+    const diffMs = e.getTime() - s.getTime();
     const hours = diffMs / (1000 * 60 * 60);
-    
+
     return Math.max(0, Math.round(hours * 100) / 100);
 }
 
 /**
- * Get current work duration for active attendance
- * @param {Date} punchInTime - Punch in time in UTC (from database)
- * @returns {number} Current work hours
+ * Calculate current active work duration for attendance
+ * @param {Date|string|number} punchInTime - UTC instant
+ * @returns {number}
  */
 export function getCurrentWorkDurationIST(punchInTime) {
     if (!punchInTime) return 0;
-    
-    const now = getCurrentISTTime();
-    const nowUTC = convertISTToUTC(now);
-    
-    return calculateWorkHoursIST(punchInTime, nowUTC);
+    const now = new Date(); // UTC
+    return calculateWorkHoursIST(punchInTime, now);
 }
 
 /**
- * Validate if a time is within IST business hours
- * @param {Date} time - Time to validate
- * @param {number} startHour - Business start hour (default: 9)
- * @param {number} endHour - Business end hour (default: 18)
- * @returns {boolean} True if within business hours
+ * Check if a UTC instant falls into IST business hours
+ * @param {Date|string|number} time
+ * @param {number} startHour 
+ * @param {number} endHour 
+ * @returns {boolean}
  */
 export function isWithinBusinessHours(time, startHour = 9, endHour = 18) {
-    const istTime = convertUTCToIST(time);
-    const hour = istTime.getHours();
+    if (!time) return false;
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour12: false,
+        hour: '2-digit'
+    }).formatToParts(new Date(time));
+
+    const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
+
     return hour >= startHour && hour < endHour;
 }
 
 /**
- * Get IST timezone info
- * @returns {Object} Timezone information
+ * IST Timezone metadata
  */
 export function getISTTimezoneInfo() {
     return {
-        name: 'India Standard Time',
-        abbreviation: 'IST',
-        offset: '+05:30',
+        name: "India Standard Time",
+        abbreviation: "IST",
+        offset: "+05:30",
         offsetMinutes: 330,
         offsetMs: IST_OFFSET
     };

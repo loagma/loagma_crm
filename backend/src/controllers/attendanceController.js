@@ -127,7 +127,10 @@ export const punchIn = async (req, res) => {
         }
 
         // Create attendance record with proper IST handling
-        const punchInTimeUTC = convertISTToUTC(currentISTTime);
+        const currentISTTime = getCurrentISTTime();
+        
+        // Store IST time directly in database for correct display
+        const punchInTimeIST = currentISTTime;
         
         // Get IST date for the date field (date only, no time)
         const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
@@ -137,7 +140,7 @@ export const punchIn = async (req, res) => {
                 employeeId,
                 employeeName,
                 date: istDateOnly,
-                punchInTime: punchInTimeUTC, // Store in UTC for consistency
+                punchInTime: punchInTimeIST, // Store IST time directly
                 punchInLatitude: lat,
                 punchInLongitude: lng,
                 punchInPhoto: punchInPhoto || null,
@@ -250,10 +253,10 @@ export const punchOut = async (req, res) => {
 
         // Get current IST time
         const currentISTTime = getCurrentISTTime();
-        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
+        const punchOutTimeIST = currentISTTime;
 
         // Validate punch out time (should be after punch in)
-        if (punchOutTimeUTC <= attendance.punchInTime) {
+        if (punchOutTimeIST <= attendance.punchInTime) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid punch out time. Please check your device time.'
@@ -261,7 +264,7 @@ export const punchOut = async (req, res) => {
         }
 
         // Calculate work hours with proper IST handling
-        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
+        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeIST);
 
         // Validate minimum work duration (prevent accidental immediate punch out)
         if (workHours < 0.017) { // Less than 1 minute
@@ -288,7 +291,7 @@ export const punchOut = async (req, res) => {
         const updatedAttendance = await prisma.attendance.update({
             where: { id: attendanceId },
             data: {
-                punchOutTime: punchOutTimeUTC, // Store in UTC
+                punchOutTime: punchOutTimeIST, // Store IST time directly
                 punchOutLatitude: lat,
                 punchOutLongitude: lng,
                 punchOutPhoto: punchOutPhoto || null,

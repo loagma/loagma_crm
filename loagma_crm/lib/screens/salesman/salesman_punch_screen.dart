@@ -67,8 +67,11 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     super.initState();
     _updateCurrentTime();
     _startTimer();
-    _initializeLocationService();
     _loadTodayPunchData();
+    // Initialize location after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeLocationService();
+    });
   }
 
   @override
@@ -82,6 +85,8 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateCurrentTime();
+
+      // Update work duration if punched in
       if (isPunchedIn && punchInTime != null) {
         setState(() {
           final now = DateTime.now();
@@ -92,6 +97,14 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             workDuration = newDuration;
           }
         });
+      }
+
+      // Auto-refresh location every 30 seconds if not available
+      if (_currentPosition == null && !isLoadingLocation) {
+        if (timer.tick % 30 == 0) {
+          // Every 30 seconds
+          _getCurrentLocation();
+        }
       }
     });
   }
@@ -105,98 +118,159 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   }
 
   Future<void> _initializeLocationService() async {
+    if (!mounted) return;
+
     setState(() {
       isLoadingLocation = true;
-      locationStatus = 'Requesting location permissions...';
+      locationStatus = 'Initializing location services...';
     });
 
     try {
-      // Show WhatsApp-like permission dialog
-      final shouldRequestPermission =
-          await LocationService.showLocationPermissionDialog(context);
+      final locationService = LocationService.instance;
 
-      if (!shouldRequestPermission) {
-        setState(() {
-          locationStatus = 'Location permission required for attendance';
-          isLoadingLocation = false;
-        });
-        return;
+      // First, try to get location without showing dialog
+      final hasPermission = await locationService.checkLocationPermission();
+
+      if (!hasPermission) {
+        // Show permission dialog only if needed
+        if (mounted) {
+          final shouldRequestPermission =
+              await LocationService.showLocationPermissionDialog(context);
+
+          if (!shouldRequestPermission) {
+            if (mounted) {
+              setState(() {
+                locationStatus = 'Location permission required for attendance';
+                isLoadingLocation = false;
+              });
+            }
+            return;
+          }
+        }
       }
 
       // Start location tracking
-      final locationService = LocationService.instance;
       final success = await locationService.startLocationTracking();
 
-      if (success) {
+      if (success && mounted) {
         // Listen to location updates
-        locationService.locationStream.listen((Position position) {
+        locationService.locationStream.listen(
+          (Position position) {
+            if (mounted) {
+              setState(() {
+                _currentPosition = position;
+                locationStatus =
+                    'Location active (±${position.accuracy.toStringAsFixed(0)}m)';
+                isLoadingLocation = false;
+                _markers = _buildMapMarkers();
+              });
+
+              // Update map camera to follow current location
+              if (_mapController != null) {
+                _mapController!.animateCamera(
+                  CameraUpdate.newLatLng(
+                    LatLng(position.latitude, position.longitude),
+                  ),
+                );
+              }
+            }
+          },
+          onError: (error) {
+            print('Location stream error: $error');
+            if (mounted) {
+              setState(() {
+                locationStatus = 'Location error: ${error.toString()}';
+                isLoadingLocation = false;
+              });
+            }
+          },
+        );
+
+        // Get initial position immediately
+        final initialPosition = await locationService.getCurrentLocation();
+        if (initialPosition != null && mounted) {
           setState(() {
-            _currentPosition = position;
-            locationStatus = 'Location tracking active';
+            _currentPosition = initialPosition;
+            locationStatus =
+                'Location active (±${initialPosition.accuracy.toStringAsFixed(0)}m)';
             isLoadingLocation = false;
             _markers = _buildMapMarkers();
           });
-
-          // Update map camera to follow current location
-          if (_mapController != null) {
-            _mapController!.animateCamera(
-              CameraUpdate.newLatLng(
-                LatLng(position.latitude, position.longitude),
-              ),
-            );
-          }
-        });
-
-        // Get initial position
-        final initialPosition = await locationService.getCurrentLocation();
-        if (initialPosition != null) {
+        }
+      } else {
+        if (mounted) {
           setState(() {
-            _currentPosition = initialPosition;
-            locationStatus = 'Location tracking active';
+            locationStatus =
+                'Failed to start location tracking. Tap refresh to retry.';
             isLoadingLocation = false;
           });
         }
-      } else {
+      }
+    } catch (e) {
+      print('Location initialization error: $e');
+      if (mounted) {
         setState(() {
-          locationStatus = 'Failed to start location tracking';
+          locationStatus = 'Location error. Tap refresh to retry.';
           isLoadingLocation = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        locationStatus = 'Error: $e';
-        isLoadingLocation = false;
-      });
     }
   }
 
   Future<void> _getCurrentLocation() async {
+    if (!mounted) return;
+
     setState(() {
       isLoadingLocation = true;
-      locationStatus = 'Getting location...';
+      locationStatus = 'Refreshing location...';
     });
 
     try {
       final locationService = LocationService.instance;
-      final position = await locationService.getCurrentLocation();
 
-      if (position != null) {
+      // Force a fresh location reading
+      final position = await locationService.getCurrentLocation(
+        forceRefresh: true,
+      );
+
+      if (position != null && mounted) {
         setState(() {
           _currentPosition = position;
-          locationStatus = 'Location acquired';
+          locationStatus =
+              'Location active (±${position.accuracy.toStringAsFixed(0)}m)';
           isLoadingLocation = false;
+          _markers = _buildMapMarkers();
         });
+
+        // Update map if available
+        if (_mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLngZoom(
+              LatLng(position.latitude, position.longitude),
+              16,
+            ),
+          );
+        }
+
+        _showSuccess('Location updated successfully');
       } else {
+        if (mounted) {
+          setState(() {
+            locationStatus = 'Failed to get location. Check GPS settings.';
+            isLoadingLocation = false;
+          });
+        }
+        _showError('Failed to get location. Please check your GPS settings.');
+      }
+    } catch (e) {
+      print('Get location error: $e');
+      if (mounted) {
         setState(() {
-          locationStatus = 'Failed to get location';
+          locationStatus = 'Location error. Check permissions.';
           isLoadingLocation = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        locationStatus = 'Error: $e';
-        isLoadingLocation = false;
-      });
+      _showError('Location error. Please check app permissions.');
     }
   }
 
@@ -315,10 +389,48 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   Future<void> _handlePunchIn() async {
     HapticFeedback.mediumImpact();
 
+    // Check if location is available, if not try to get it
     if (_currentPosition == null) {
-      _showError('Please wait for location to be acquired');
-      HapticFeedback.heavyImpact();
-      return;
+      _showError('Getting location for punch in...');
+
+      // Try to get location immediately
+      await _getCurrentLocation();
+
+      // Check again after location attempt
+      if (_currentPosition == null) {
+        _showError(
+          'Location required for punch in. Please enable GPS and try again.',
+        );
+        HapticFeedback.heavyImpact();
+        return;
+      }
+    }
+
+    // Check location accuracy
+    if (_currentPosition!.accuracy > 50) {
+      final shouldContinue = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Location Accuracy'),
+          content: Text(
+            'Location accuracy is ${_currentPosition!.accuracy.toStringAsFixed(0)}m. '
+            'For better accuracy, please move to an open area.\n\n'
+            'Continue with current location?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldContinue != true) return;
     }
 
     // Show multi-step punch in dialog
@@ -388,10 +500,21 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   Future<void> _handlePunchOut() async {
     HapticFeedback.mediumImpact();
 
+    // Check if location is available, if not try to get it
     if (_currentPosition == null) {
-      _showError('Please wait for location to be acquired');
-      HapticFeedback.heavyImpact();
-      return;
+      _showError('Getting location for punch out...');
+
+      // Try to get location immediately
+      await _getCurrentLocation();
+
+      // Check again after location attempt
+      if (_currentPosition == null) {
+        _showError(
+          'Location required for punch out. Please enable GPS and try again.',
+        );
+        HapticFeedback.heavyImpact();
+        return;
+      }
     }
 
     // Calculate distance for preview
@@ -1231,17 +1354,25 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                       decoration: BoxDecoration(
                         color: _currentPosition != null
                             ? Colors.green
+                            : isLoadingLocation
+                            ? Colors.orange
                             : Colors.red,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _currentPosition != null ? 'Active' : 'Inactive',
+                      _currentPosition != null
+                          ? 'Active'
+                          : isLoadingLocation
+                          ? 'Loading...'
+                          : 'Inactive',
                       style: TextStyle(
                         fontSize: 12,
                         color: _currentPosition != null
                             ? Colors.green
+                            : isLoadingLocation
+                            ? Colors.orange
                             : Colors.red,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1249,11 +1380,18 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                   ],
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _getCurrentLocation,
-                  tooltip: 'Refresh location',
-                ),
+                if (isLoadingLocation)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _getCurrentLocation,
+                    tooltip: 'Refresh location',
+                  ),
               ],
             ),
           ),
@@ -1306,10 +1444,19 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.location_off, size: 48, color: Colors.grey[400]),
+                    if (isLoadingLocation)
+                      const CircularProgressIndicator()
+                    else
+                      Icon(
+                        Icons.location_off,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
                     const SizedBox(height: 12),
                     Text(
-                      'Location not available',
+                      isLoadingLocation
+                          ? 'Getting location...'
+                          : 'Location not available',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey[600],
@@ -1317,11 +1464,29 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      locationStatus,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      textAlign: TextAlign.center,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        locationStatus,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
+                    if (!isLoadingLocation) ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _getCurrentLocation,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Try Again'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
