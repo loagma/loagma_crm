@@ -12,7 +12,15 @@ const IST_OFFSET = 5.5 * 60 * 60 * 1000;
  */
 export function getCurrentISTTime() {
     const nowUTC = Date.now();
-    return new Date(nowUTC + IST_OFFSET);
+    const istTime = new Date(nowUTC + IST_OFFSET);
+    
+    console.log('🕐 getCurrentISTTime called:', {
+        utcTime: new Date(nowUTC).toISOString(),
+        istTime: istTime.toISOString(),
+        offset: '+05:30'
+    });
+    
+    return istTime;
 }
 
 /**
