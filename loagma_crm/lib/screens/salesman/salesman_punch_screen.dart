@@ -83,20 +83,23 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   }
 
   void _startTimer() {
+    _timer?.cancel(); // Cancel existing timer if any
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateCurrentTime();
 
       // Update work duration if punched in
       if (isPunchedIn && punchInTime != null) {
-        setState(() {
-          final now = DateTime.now();
-          final newDuration = now.difference(punchInTime!);
+        if (mounted) {
+          setState(() {
+            final now = DateTime.now();
+            final newDuration = now.difference(punchInTime!);
 
-          // Only update if duration is positive and different
-          if (!newDuration.isNegative && newDuration != workDuration) {
-            workDuration = newDuration;
-          }
-        });
+            // Always update duration for real-time display
+            if (!newDuration.isNegative) {
+              workDuration = newDuration;
+            }
+          });
+        }
       }
 
       // Auto-refresh location every 30 seconds if not available
@@ -363,6 +366,8 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           if (sessionDuration > 0) {
             print('Active session loaded: ${sessionDuration} minutes worked');
           }
+          // Ensure timer is running for active sessions
+          _startTimer();
         }
       } else {
         // No attendance found, reset state

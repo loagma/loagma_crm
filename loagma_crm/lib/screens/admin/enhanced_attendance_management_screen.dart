@@ -663,14 +663,14 @@ class _EnhancedAttendanceManagementScreenState
                       Expanded(
                         child: _buildStatItemDouble(
                           'Avg Hours',
-                          avgWorkHours,
+                          avgWorkHours.toDouble(),
                           Colors.indigo,
                         ),
                       ),
                       Expanded(
                         child: _buildStatItemDouble(
                           'Total Hours',
-                          totalWorkHours,
+                          totalWorkHours.toDouble(),
                           Colors.teal,
                         ),
                       ),

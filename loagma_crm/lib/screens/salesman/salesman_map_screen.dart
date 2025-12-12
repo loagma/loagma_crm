@@ -471,7 +471,7 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
                     final lat = double.parse(account['latitude'].toString());
                     final lng = double.parse(account['longitude'].toString());
                     _mapController?.animateCamera(
-                      CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
+                      CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
                     );
                   }
                 },
@@ -707,7 +707,7 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
         print('🎯 Zooming to account: ${account['personName']} at $lat, $lng');
 
         _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
         );
 
         // Show a brief toast/snackbar

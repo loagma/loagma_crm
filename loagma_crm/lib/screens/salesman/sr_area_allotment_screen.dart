@@ -28,6 +28,7 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
 
   // Places
   List<PlaceInfo> _nearbyPlaces = [];
+  List<PlaceInfo> _filteredPlaces = [];
   bool _isLoadingPlaces = false;
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
@@ -36,6 +37,20 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   Set<Marker> _markers = {};
   String _selectedPlaceType = 'store';
   int _searchRadius = 1500;
+  bool _isFullScreenMap = false;
+  bool _showFilters = false;
+
+  // Filters
+  List<String> _selectedPincodes = [];
+  List<String> _availablePincodes = [];
+  String _selectedArea = '';
+  List<String> _availableAreas = [];
+  double _minRating = 0.0;
+  bool _openNowOnly = false;
+  String _searchQuery = '';
+
+  // Controllers
+  final TextEditingController _searchController = TextEditingController();
 
   // Place types for business discovery
   final List<Map<String, dynamic>> _placeTypes = [
@@ -71,7 +86,102 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   @override
   void dispose() {
     LocationService.instance.stopLocationTracking();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _applyFilters() {
+    List<PlaceInfo> filtered = List.from(_nearbyPlaces);
+
+    // Search filter
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered
+          .where(
+            (place) =>
+                place.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                (place.address?.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    ) ??
+                    false),
+          )
+          .toList();
+    }
+
+    // Pincode filter
+    if (_selectedPincodes.isNotEmpty) {
+      filtered = filtered.where((place) {
+        if (place.address == null) return false;
+        return _selectedPincodes.any(
+          (pincode) => place.address!.contains(pincode),
+        );
+      }).toList();
+    }
+
+    // Area filter
+    if (_selectedArea.isNotEmpty) {
+      filtered = filtered
+          .where(
+            (place) =>
+                place.address?.toLowerCase().contains(
+                  _selectedArea.toLowerCase(),
+                ) ??
+                false,
+          )
+          .toList();
+    }
+
+    // Rating filter
+    if (_minRating > 0) {
+      filtered = filtered
+          .where((place) => (place.rating ?? 0) >= _minRating)
+          .toList();
+    }
+
+    // Open now filter
+    if (_openNowOnly) {
+      filtered = filtered.where((place) => place.isOpenNow ?? false).toList();
+    }
+
+    setState(() {
+      _filteredPlaces = filtered;
+    });
+    _updateMapMarkers();
+  }
+
+  void _extractPincodesAndAreas() {
+    Set<String> pincodes = {};
+    Set<String> areas = {};
+
+    for (var place in _nearbyPlaces) {
+      if (place.address != null) {
+        // Extract pincode (assuming 6-digit pattern)
+        RegExp pincodeRegex = RegExp(r'\b\d{6}\b');
+        var matches = pincodeRegex.allMatches(place.address!);
+        for (var match in matches) {
+          pincodes.add(match.group(0)!);
+        }
+
+        // Extract area names (words before pincode or comma-separated)
+        List<String> addressParts = place.address!.split(',');
+        for (String part in addressParts) {
+          String trimmed = part.trim();
+          if (trimmed.isNotEmpty && !RegExp(r'^\d+$').hasMatch(trimmed)) {
+            areas.add(trimmed);
+          }
+        }
+      }
+    }
+
+    setState(() {
+      _availablePincodes = pincodes.toList()..sort();
+      _availableAreas = areas.toList()..sort();
+    });
+  }
+
+  void _updateMapMarkers() {
+    setState(() {
+      _markers = _buildMapMarkers();
+    });
   }
 
   Future<void> _initializeLocation() async {
@@ -159,9 +269,11 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
       if (mounted) {
         setState(() {
           _nearbyPlaces = places;
+          _filteredPlaces = places;
           _isLoadingPlaces = false;
-          _markers = _buildMapMarkers();
         });
+        _extractPincodesAndAreas();
+        _applyFilters();
       }
     } catch (e) {
       print('Error loading places: $e');
@@ -212,9 +324,9 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
       // Add area boundary markers here if needed
     }
 
-    // Nearby places
-    for (int i = 0; i < _nearbyPlaces.length; i++) {
-      final place = _nearbyPlaces[i];
+    // Nearby places (filtered)
+    for (int i = 0; i < _filteredPlaces.length; i++) {
+      final place = _filteredPlaces[i];
       if (place.latitude != null && place.longitude != null) {
         markers.add(
           Marker(
@@ -246,58 +358,207 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text('SR Area Allotment'),
-        backgroundColor: primaryColor,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadNearbyPlaces,
-            tooltip: 'Refresh Places',
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // Area Info Card
-              if (widget.areaAssignment != null) _buildAreaInfoCard(),
-
-              // Place Type Filter
-              _buildPlaceTypeFilter(),
-
-              // Map Section
-              Expanded(child: _buildMapSection()),
-
-              // Places List
-              _buildPlacesListSection(),
-            ],
-          ),
-
-          // Place Details Overlay
-          if (_showPlaceDetailsOverlay && _selectedPlace != null)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.7,
-                ),
-                child: PlaceDetailsWidget(
-                  place: _selectedPlace!,
-                  onClose: () {
+      appBar: _isFullScreenMap
+          ? null
+          : AppBar(
+              title: const Text('SR Area Allotment'),
+              backgroundColor: primaryColor,
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    _showFilters ? Icons.filter_list_off : Icons.filter_list,
+                  ),
+                  onPressed: () {
                     setState(() {
-                      _showPlaceDetailsOverlay = false;
-                      _selectedPlace = null;
+                      _showFilters = !_showFilters;
                     });
                   },
+                  tooltip: 'Toggle Filters',
                 ),
+                IconButton(
+                  icon: Icon(
+                    _isFullScreenMap ? Icons.fullscreen_exit : Icons.fullscreen,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isFullScreenMap = !_isFullScreenMap;
+                    });
+                  },
+                  tooltip: _isFullScreenMap
+                      ? 'Exit Full Screen'
+                      : 'Full Screen Map',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadNearbyPlaces,
+                  tooltip: 'Refresh Places',
+                ),
+              ],
+            ),
+      body: _isFullScreenMap ? _buildFullScreenMap() : _buildNormalView(),
+    );
+  }
+
+  Widget _buildNormalView() {
+    return Stack(
+      children: [
+        Column(
+          children: [
+            // Area Info Card
+            if (widget.areaAssignment != null) _buildAreaInfoCard(),
+
+            // Search Bar
+            _buildSearchBar(),
+
+            // Collapsible Filters
+            if (_showFilters) _buildFiltersSection(),
+
+            // Place Type Filter
+            _buildPlaceTypeFilter(),
+
+            // Map Section
+            Expanded(child: _buildMapSection()),
+
+            // Places List
+            _buildPlacesListSection(),
+          ],
+        ),
+
+        // Place Details Overlay
+        if (_showPlaceDetailsOverlay && _selectedPlace != null)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: PlaceDetailsWidget(
+                place: _selectedPlace!,
+                onClose: () {
+                  setState(() {
+                    _showPlaceDetailsOverlay = false;
+                    _selectedPlace = null;
+                  });
+                },
               ),
             ),
-        ],
-      ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFullScreenMap() {
+    return Stack(
+      children: [
+        // Full screen map
+        _currentPosition != null
+            ? GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: LatLng(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                  ),
+                  zoom: 15,
+                ),
+                markers: _markers,
+                onMapCreated: (GoogleMapController controller) {
+                  _mapController = controller;
+                },
+                myLocationEnabled: true,
+                myLocationButtonEnabled: true,
+                zoomControlsEnabled: true,
+                mapToolbarEnabled: false,
+              )
+            : Container(
+                color: Colors.grey[200],
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_isLoadingLocation)
+                        const CircularProgressIndicator()
+                      else
+                        Icon(
+                          Icons.location_off,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _locationStatus,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+        // Floating controls
+        Positioned(
+          top: 50,
+          left: 16,
+          child: FloatingActionButton(
+            mini: true,
+            backgroundColor: primaryColor,
+            onPressed: () {
+              setState(() {
+                _isFullScreenMap = false;
+              });
+            },
+            child: const Icon(Icons.fullscreen_exit, color: Colors.white),
+          ),
+        ),
+
+        // Floating filter button
+        Positioned(
+          top: 50,
+          right: 16,
+          child: FloatingActionButton(
+            mini: true,
+            backgroundColor: primaryColor,
+            onPressed: () {
+              setState(() {
+                _showFilters = !_showFilters;
+              });
+            },
+            child: Icon(
+              _showFilters ? Icons.filter_list_off : Icons.filter_list,
+              color: Colors.white,
+            ),
+          ),
+        ),
+
+        // Collapsible filters in full screen
+        if (_showFilters)
+          Positioned(
+            top: 110,
+            left: 16,
+            right: 16,
+            child: Card(child: _buildFiltersContent()),
+          ),
+
+        // Place count indicator
+        Positioned(
+          bottom: 100,
+          left: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: primaryColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${_filteredPlaces.length} places found',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -437,6 +698,190 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
     );
   }
 
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search places...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                    _applyFilters();
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+          _applyFilters();
+        },
+      ),
+    );
+  }
+
+  Widget _buildFiltersSection() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: _buildFiltersContent(),
+    );
+  }
+
+  Widget _buildFiltersContent() {
+    return ExpansionTile(
+      title: const Text('Filters'),
+      leading: const Icon(Icons.tune),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Pincode Filter
+              if (_availablePincodes.isNotEmpty) ...[
+                const Text(
+                  'Pincodes:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: _availablePincodes.map((pincode) {
+                    final isSelected = _selectedPincodes.contains(pincode);
+                    return FilterChip(
+                      label: Text(pincode),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedPincodes.add(pincode);
+                          } else {
+                            _selectedPincodes.remove(pincode);
+                          }
+                        });
+                        _applyFilters();
+                      },
+                      selectedColor: primaryColor,
+                      checkmarkColor: Colors.white,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Area Filter
+              if (_availableAreas.isNotEmpty) ...[
+                const Text(
+                  'Areas:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _selectedArea.isEmpty ? null : _selectedArea,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  hint: const Text('Select Area'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('All Areas'),
+                    ),
+                    ..._availableAreas.map(
+                      (area) => DropdownMenuItem<String>(
+                        value: area,
+                        child: Text(area),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedArea = value ?? '';
+                    });
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Rating Filter
+              const Text(
+                'Minimum Rating:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Slider(
+                value: _minRating,
+                min: 0.0,
+                max: 5.0,
+                divisions: 10,
+                label: _minRating == 0.0
+                    ? 'Any'
+                    : _minRating.toStringAsFixed(1),
+                onChanged: (value) {
+                  setState(() {
+                    _minRating = value;
+                  });
+                  _applyFilters();
+                },
+                activeColor: primaryColor,
+              ),
+
+              // Open Now Filter
+              SwitchListTile(
+                title: const Text('Open Now Only'),
+                value: _openNowOnly,
+                onChanged: (value) {
+                  setState(() {
+                    _openNowOnly = value;
+                  });
+                  _applyFilters();
+                },
+                activeColor: primaryColor,
+              ),
+
+              // Clear Filters Button
+              Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedPincodes.clear();
+                      _selectedArea = '';
+                      _minRating = 0.0;
+                      _openNowOnly = false;
+                      _searchQuery = '';
+                      _searchController.clear();
+                    });
+                    _applyFilters();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[300],
+                  ),
+                  child: const Text('Clear All Filters'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMapSection() {
     return Container(
       margin: const EdgeInsets.all(16),
@@ -499,7 +944,7 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   }
 
   Widget _buildPlacesListSection() {
-    if (_nearbyPlaces.isEmpty && !_isLoadingPlaces) {
+    if (_filteredPlaces.isEmpty && !_isLoadingPlaces) {
       return const SizedBox.shrink();
     }
 
@@ -527,7 +972,7 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
                 Icon(Icons.store, color: primaryColor),
                 const SizedBox(width: 8),
                 Text(
-                  'Nearby ${_placeTypes.firstWhere((p) => p['type'] == _selectedPlaceType)['name']} (${_nearbyPlaces.length})',
+                  'Nearby ${_placeTypes.firstWhere((p) => p['type'] == _selectedPlaceType)['name']} (${_filteredPlaces.length})',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -543,16 +988,16 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
               ],
             ),
           ),
-          if (_isLoadingPlaces && _nearbyPlaces.isEmpty)
+          if (_isLoadingPlaces && _filteredPlaces.isEmpty)
             const Expanded(child: Center(child: CircularProgressIndicator()))
-          else if (_nearbyPlaces.isNotEmpty)
+          else if (_filteredPlaces.isNotEmpty)
             Expanded(
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _nearbyPlaces.length,
+                itemCount: _filteredPlaces.length,
                 itemBuilder: (context, index) {
-                  final place = _nearbyPlaces[index];
+                  final place = _filteredPlaces[index];
                   return Container(
                     width: 200,
                     margin: const EdgeInsets.only(right: 12, bottom: 16),
