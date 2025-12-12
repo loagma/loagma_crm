@@ -84,6 +84,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
 
   void _startTimer() {
     _timer?.cancel(); // Cancel existing timer if any
+    print('🔄 Starting timer...');
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateCurrentTime();
 
@@ -97,6 +98,8 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
             // Always update duration for real-time display
             if (!newDuration.isNegative) {
               workDuration = newDuration;
+              // Force UI update by calling setState
+              print('⏱️ Timer tick: ${newDuration.inSeconds}s elapsed');
             }
           });
         }
@@ -114,10 +117,20 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
 
   void _updateCurrentTime() {
     final now = DateTime.now();
-    setState(() {
-      currentTime = DateFormat('hh:mm:ss a').format(now);
-      currentDate = DateFormat('EEEE, MMMM dd, yyyy').format(now);
-    });
+    if (mounted) {
+      setState(() {
+        currentTime = DateFormat('hh:mm:ss a').format(now);
+        currentDate = DateFormat('EEEE, MMMM dd, yyyy').format(now);
+
+        // Also update duration if punched in
+        if (isPunchedIn && punchInTime != null) {
+          final newDuration = now.difference(punchInTime!);
+          if (!newDuration.isNegative) {
+            workDuration = newDuration;
+          }
+        }
+      });
+    }
   }
 
   Future<void> _initializeLocationService() async {
@@ -363,11 +376,18 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
         // Show session info if active
         if (attendance.isPunchedIn) {
           final sessionDuration = workDuration.inMinutes;
-          if (sessionDuration > 0) {
-            print('Active session loaded: ${sessionDuration} minutes worked');
-          }
+          print(
+            '✅ Active session loaded: ${sessionDuration} minutes worked, punchInTime: ${attendance.punchInTime}',
+          );
+          print('🔄 Current time: ${DateTime.now()}');
+          print(
+            '⏱️ Calculated duration: ${DateTime.now().difference(attendance.punchInTime).inSeconds}s',
+          );
+
           // Ensure timer is running for active sessions
           _startTimer();
+        } else {
+          print('ℹ️ No active session found');
         }
       } else {
         // No attendance found, reset state
@@ -394,17 +414,71 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   Future<void> _handlePunchIn() async {
     HapticFeedback.mediumImpact();
 
+    // First, ensure we have location permissions
+    final locationService = LocationService.instance;
+    bool hasPermission = await locationService.checkLocationPermission();
+
+    if (!hasPermission) {
+      // Show permission dialog
+      final shouldRequest = await LocationService.showLocationPermissionDialog(
+        context,
+      );
+      if (!shouldRequest) {
+        _showError('Location permission is required for punch in.');
+        return;
+      }
+
+      // Request permissions
+      hasPermission = await locationService.requestLocationPermissions(
+        requestAlways: true,
+      );
+      if (!hasPermission) {
+        await LocationService.showLocationSettingsDialog(context);
+        return;
+      }
+    }
+
+    // Start location tracking if not already started
+    if (!locationService.isTracking) {
+      _showError('Starting location tracking...');
+
+      // Request background location permission for better tracking
+      final shouldRequestBackground =
+          await LocationService.showBackgroundLocationDialog(context);
+      if (shouldRequestBackground) {
+        // Request notification permissions for persistent notification
+        await LocationService.requestNotificationPermissions();
+      }
+
+      final trackingStarted = await locationService.startLocationTracking();
+      if (!trackingStarted) {
+        _showError(
+          'Failed to start location tracking. Please check your GPS settings.',
+        );
+        return;
+      }
+
+      // Show success message with tracking info
+      _showSuccess(
+        'Location tracking started. You will see a notification while tracking is active.',
+      );
+    }
+
     // Check if location is available, if not try to get it
     if (_currentPosition == null) {
-      _showError('Getting location for punch in...');
+      _showError('Getting precise location for punch in...');
 
-      // Try to get location immediately
-      await _getCurrentLocation();
+      // Try to get location immediately with multiple attempts
+      for (int i = 0; i < 3; i++) {
+        await _getCurrentLocation();
+        if (_currentPosition != null) break;
+        await Future.delayed(Duration(seconds: 2));
+      }
 
-      // Check again after location attempt
+      // Check again after location attempts
       if (_currentPosition == null) {
         _showError(
-          'Location required for punch in. Please enable GPS and try again.',
+          'Unable to get location. Please ensure GPS is enabled and you are in an open area.',
         );
         HapticFeedback.heavyImpact();
         return;
@@ -964,12 +1038,20 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       final now = DateTime.now();
       final currentDuration = now.difference(punchInTime!);
 
+      // Debug print
+      print(
+        '🕐 Duration calculation: isPunchedIn=$isPunchedIn, punchInTime=$punchInTime, now=$now, duration=${currentDuration.inSeconds}s',
+      );
+
       // Ensure duration is not negative (handle clock sync issues)
       if (currentDuration.isNegative) {
+        print('⚠️ Negative duration detected, returning 00:00:00');
         return '00:00:00';
       }
 
-      return _formatDuration(currentDuration);
+      final formatted = _formatDuration(currentDuration);
+      print('✅ Formatted duration: $formatted');
+      return formatted;
     } else if (punchInTime != null && punchOutTime != null) {
       // Already punched out - show total worked duration
       final totalDuration = punchOutTime!.difference(punchInTime!);
@@ -986,6 +1068,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
       final duration = Duration(milliseconds: (hours * 3600 * 1000).round());
       return _formatDuration(duration);
     } else {
+      print('⚠️ No punch data available, returning 00:00:00');
       return '00:00:00';
     }
   }
