@@ -424,10 +424,40 @@ class _EditUserScreenState extends State<EditUserScreen> {
     return null;
   }
 
-  // Image picker
+  // Image picker with camera and gallery options
   Future<void> pickImage() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImageFromSource(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImageFromSource(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImageFromSource(ImageSource source) async {
     final pickedFile = await _picker.pickImage(
-      source: ImageSource.gallery,
+      source: source,
       maxWidth: 800,
       maxHeight: 800,
       imageQuality: 85,
