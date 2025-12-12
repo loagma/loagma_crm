@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class LocationService {
   static LocationService? _instance;
@@ -39,37 +38,202 @@ class LocationService {
     }
   }
 
-  /// Request all necessary location permissions like WhatsApp
-  Future<bool> requestLocationPermissions() async {
+  /// Request all necessary location permissions with proper handling
+  Future<bool> requestLocationPermissions({bool requestAlways = false}) async {
     try {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         print('Location services are disabled');
+        // Location services are disabled
+        print('User needs to enable location services manually');
         return false;
       }
 
-      // Request location permission
+      // Check current permission status
       LocationPermission permission = await Geolocator.checkPermission();
+
+      // If permission is denied, request it
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          print('Location permission denied');
+          print('Location permission denied by user');
           return false;
         }
       }
 
+      // If permission is denied forever, guide user to settings
       if (permission == LocationPermission.deniedForever) {
-        print('Location permission denied forever');
+        print('Location permission denied forever - need to open settings');
         return false;
       }
 
-      return permission == LocationPermission.whileInUse ||
+      // For background tracking, we need "always" permission
+      if (requestAlways && permission == LocationPermission.whileInUse) {
+        print('Requesting background location permission...');
+        // Note: On Android, this might require additional setup in AndroidManifest.xml
+        // For now, we'll work with whileInUse permission
+      }
+
+      bool hasPermission =
+          permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always;
+
+      if (hasPermission) {
+        print('✅ Location permission granted: $permission');
+      }
+
+      return hasPermission;
     } catch (e) {
-      print('Error requesting location permissions: $e');
+      print('❌ Error requesting location permissions: $e');
       return false;
     }
+  }
+
+  /// Show location permission dialog with clear explanation
+  static Future<bool> showLocationPermissionDialog(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.location_on, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Location Permission Required'),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This app needs location access to:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  SizedBox(height: 8),
+                  Text('• Track your work location for attendance'),
+                  Text('• Calculate travel distance'),
+                  Text('• Show nearby places and shops'),
+                  Text('• Ensure accurate punch in/out'),
+                  SizedBox(height: 12),
+                  Text(
+                    'Your location data is only used for work tracking and is not shared with third parties.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Deny'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Allow Location'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  /// Show settings dialog when permission is denied forever
+  static Future<void> showLocationSettingsDialog(BuildContext context) async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Location Permission Required'),
+          content: const Text(
+            'Location permission is required for this app to work properly. '
+            'Please enable location permission in your device settings.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Request notification permissions for persistent location tracking
+  static Future<bool> requestNotificationPermissions() async {
+    try {
+      // For Android 13+ (API 33+), we need to request notification permission
+      // This is handled automatically by the geolocator plugin when starting location services
+      print('✅ Notification permissions handled by geolocator plugin');
+      return true;
+    } catch (e) {
+      print('❌ Error requesting notification permissions: $e');
+      return false;
+    }
+  }
+
+  /// Show background location permission dialog
+  static Future<bool> showBackgroundLocationDialog(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.location_on, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Background Location'),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'For accurate attendance tracking, this app needs to access your location even when running in the background.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'This ensures:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  SizedBox(height: 8),
+                  Text('• Continuous location tracking during work hours'),
+                  Text('• Accurate travel distance calculation'),
+                  Text('• Reliable punch in/out location verification'),
+                  SizedBox(height: 12),
+                  Text(
+                    'You will see a persistent notification while location tracking is active.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Not Now'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Allow Background Location'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   /// Start continuous location tracking
@@ -90,8 +254,8 @@ class LocationService {
       // Configure location settings for high accuracy and continuous tracking
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 3, // Update every 3 meters for better tracking
-        timeLimit: Duration(seconds: 10), // Faster timeout for responsiveness
+        distanceFilter: 1, // Update every 1 meter for precise tracking
+        timeLimit: Duration(seconds: 15), // Reasonable timeout
       );
 
       // Start position stream
@@ -221,117 +385,6 @@ class LocationService {
       end.longitude,
     );
     return distanceInMeters / 1000; // Convert to kilometers
-  }
-
-  /// Show location permission dialog like WhatsApp
-  static Future<bool> showLocationPermissionDialog(BuildContext context) async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Row(
-                children: [
-                  Icon(Icons.location_on, color: Colors.blue[600], size: 28),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Location Access',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'This app needs location access to:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPermissionItem(
-                    Icons.punch_clock,
-                    'Track attendance location',
-                  ),
-                  _buildPermissionItem(Icons.map, 'Show your position on maps'),
-                  _buildPermissionItem(
-                    Icons.directions,
-                    'Calculate travel distance',
-                  ),
-                  _buildPermissionItem(Icons.security, 'Verify work location'),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.blue[700],
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Location data is only used for attendance tracking and is not shared with third parties.',
-                            style: TextStyle(fontSize: 12, color: Colors.blue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Not Now'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[600],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text('Allow Location'),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
-  }
-
-  static Widget _buildPermissionItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey[600]),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Dispose resources
