@@ -27,11 +27,78 @@ router.get('/search', searchAreaAssignments);
 // GET /api/area-assignments/salesman/:salesmanId - Get area assignments for specific salesman
 router.get('/salesman/:salesmanId', getSalesmanAreaAssignments);
 
+// GET /api/area-assignments/my-assignments - Get area assignments for current authenticated user
+router.get('/my-assignments', async (req, res) => {
+  try {
+    const salesmanId = req.user.id; // Get from authenticated token
+
+    console.log('🔍 My assignments - authenticated user ID:', salesmanId);
+    console.log('🔍 User ID type:', typeof salesmanId);
+
+    // Get all area assignments to debug
+    const allAssignments = await prisma.areaAssignment.findMany({
+      select: {
+        id: true,
+        salesmanId: true,
+        city: true,
+        district: true,
+      },
+    });
+    console.log('📊 All area assignments in database:', allAssignments);
+
+    const assignments = await prisma.areaAssignment.findMany({
+      where: {
+        salesmanId: salesmanId,
+      },
+      include: {
+        salesman: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            contactNumber: true,
+          },
+        },
+      },
+      orderBy: {
+        assignedDate: 'desc',
+      },
+    });
+
+    console.log('📊 Found assignments for authenticated user:', assignments.length);
+
+    res.json({
+      success: true,
+      assignments: assignments.map(assignment => ({
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesman?.name || 'Unknown',
+        pinCode: assignment.pinCode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching my area assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch area assignments',
+      error: error.message,
+    });
+  }
+});
+
 // GET /api/area-assignments/debug/:salesmanId - Debug endpoint to check data
 router.get('/debug/:salesmanId', async (req, res) => {
   try {
     const { salesmanId } = req.params;
-    
+
     // Get all area assignments
     const allAssignments = await prisma.areaAssignment.findMany({
       select: {
@@ -41,7 +108,7 @@ router.get('/debug/:salesmanId', async (req, res) => {
         district: true,
       },
     });
-    
+
     // Get user info
     const user = await prisma.user.findUnique({
       where: { id: salesmanId },
@@ -51,7 +118,7 @@ router.get('/debug/:salesmanId', async (req, res) => {
         contactNumber: true,
       },
     });
-    
+
     res.json({
       success: true,
       debug: {

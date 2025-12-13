@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/network_service.dart';
+import '../../services/area_assignment_service.dart';
 
 class SRAreaAllotmentScreen extends StatefulWidget {
   const SRAreaAllotmentScreen({super.key});
@@ -53,18 +53,18 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
       print('🔍 Loading area assignments for user: $userId');
       print('🔑 Token available: ${token.isNotEmpty}');
 
-      final headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+      print('📡 Fetching area assignments using service...');
+      final assignments =
+          await AreaAssignmentService.getSalesmanAreaAssignments();
 
-      final areaAssignmentsUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/area-assignments/salesman/$userId',
+      // Create a mock response structure for compatibility
+      final response = http.Response(
+        jsonEncode({
+          'success': true,
+          'assignments': assignments.map((a) => a.toJson()).toList(),
+        }),
+        200,
       );
-
-      print('📡 Making request to: $areaAssignmentsUrl');
-
-      final response = await http.get(areaAssignmentsUrl, headers: headers);
 
       print('📊 Response status: ${response.statusCode}');
       print('📊 Response body: ${response.body}');
@@ -115,8 +115,11 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   }
 
   Future<void> _debugAreaAssignments() async {
-    try {
-      final user
+    // Debug function removed for now
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(

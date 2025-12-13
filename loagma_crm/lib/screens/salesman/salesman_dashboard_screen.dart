@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
+import '../../services/area_assignment_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/attendance_status_widget.dart';
 import 'sr_area_allotment_screen.dart';
@@ -172,21 +173,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
 
       final assignmentsData = jsonDecode(assignmentsResponse.body);
 
-      // Fetch area assignments
-      final areaAssignmentsUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/area-assignments/salesman/$userId',
-      );
-      print('📡 Fetching area assignments from: $areaAssignmentsUrl');
+      // Fetch area assignments using the service
+      print('📡 Fetching area assignments using service...');
+      final fetchedAreaAssignments =
+          await AreaAssignmentService.getSalesmanAreaAssignments();
+      print('📥 Area Assignments loaded: ${fetchedAreaAssignments.length}');
 
-      final areaAssignmentsResponse = await http.get(
-        areaAssignmentsUrl,
-        headers: headers,
-      );
-      print(
-        '📥 Area Assignments Response Status: ${areaAssignmentsResponse.statusCode}',
-      );
-
-      final areaAssignmentsData = jsonDecode(areaAssignmentsResponse.body);
+      final areaAssignmentsData = {
+        'success': true,
+        'assignments': fetchedAreaAssignments.map((a) => a.toJson()).toList(),
+      };
 
       // Process customer stage breakdown
       Map<String, int> stageBreakdown = {};
@@ -202,16 +198,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       print('   Total Accounts: ${accountStatsData['data']?['totalAccounts']}');
       print('   Recent Accounts: ${accountsData['data']?.length}');
       print('   Task Assignments: ${assignmentsData['data']?.length}');
-      print('   Area Assignments: ${areaAssignmentsData['data']?.length}');
+      final areaAssignmentsList =
+          areaAssignmentsData['assignments'] as List<dynamic>? ?? [];
+      print('   Area Assignments: ${areaAssignmentsList.length}');
 
       setState(() {
         accountStats = accountStatsData['data'] ?? {};
         assignments = List<Map<String, dynamic>>.from(
           assignmentsData['data'] ?? [],
         );
-        areaAssignments = List<Map<String, dynamic>>.from(
-          areaAssignmentsData['data'] ?? [],
-        );
+        areaAssignments = List<Map<String, dynamic>>.from(areaAssignmentsList);
         recentAccounts = List<Map<String, dynamic>>.from(
           accountsData['data'] ?? [],
         );
