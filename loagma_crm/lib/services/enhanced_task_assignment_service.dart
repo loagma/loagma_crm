@@ -180,6 +180,23 @@ class EnhancedTaskAssignmentService {
     required List<String> businessTypes,
   }) async {
     try {
+      final requestBody = {
+        'salesmanId': salesmanId,
+        'pinCode': pinCode,
+        'country': country,
+        'state': state,
+        'district': district,
+        'city': city,
+        'areas': selectedAreas,
+        'businessTypes': businessTypes,
+        'totalBusinesses': selectedAreas.length * businessTypes.length * 5,
+      };
+
+      print('🚀 Assigning areas to salesman...');
+      print('📡 API URL: ${ApiConfig.baseUrl}/area-assignments');
+      print('🔑 Token: ${UserService.token != null ? "Available" : "Missing"}');
+      print('📦 Request body: ${jsonEncode(requestBody)}');
+
       // Use real API call to create area assignment
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/area-assignments'),
@@ -187,22 +204,16 @@ class EnhancedTaskAssignmentService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${UserService.token}',
         },
-        body: jsonEncode({
-          'salesmanId': salesmanId,
-          'pinCode': pinCode,
-          'country': country,
-          'state': state,
-          'district': district,
-          'city': city,
-          'areas': selectedAreas,
-          'businessTypes': businessTypes,
-          'totalBusinesses': selectedAreas.length * businessTypes.length * 5,
-        }),
+        body: jsonEncode(requestBody),
       );
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response body: ${response.body}');
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        print('✅ Area assignment successful!');
         return {
           'success': true,
           'message':
@@ -210,10 +221,11 @@ class EnhancedTaskAssignmentService {
           'assignment': data['assignment'],
         };
       } else {
+        print('❌ Area assignment failed: ${data['message']}');
         throw Exception(data['message'] ?? 'Failed to assign areas');
       }
     } catch (e) {
-      print('Error assigning areas: $e');
+      print('❌ Error assigning areas: $e');
       throw Exception('Failed to assign areas: $e');
     }
 

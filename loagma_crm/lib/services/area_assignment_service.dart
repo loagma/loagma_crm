@@ -18,6 +18,7 @@ class AreaAssignmentService {
 
       print('🔍 Loading area assignments for authenticated user');
       print('🔑 Token available: true');
+      print('👤 Current user ID: ${UserService.currentUserId}');
 
       // Use the new endpoint that gets assignments for the authenticated user
       final url = '$_baseUrl/area-assignments/my-assignments';
@@ -37,6 +38,14 @@ class AreaAssignmentService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+
+        print('✅ Loaded ${assignmentsJson.length} area assignments');
+        for (int i = 0; i < assignmentsJson.length; i++) {
+          final assignment = assignmentsJson[i];
+          print(
+            '  Assignment ${i + 1}: ${assignment['city']} - ${assignment['pinCode']}',
+          );
+        }
 
         return assignmentsJson
             .map((json) => AreaAssignment.fromJson(json))
