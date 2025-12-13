@@ -19,18 +19,26 @@ export const getLocationByPincode = async (pincode) => {
     );
 
     if (response.data && response.data[0]?.Status === 'Success') {
-      const postOffice = response.data[0].PostOffice[0];
-      
+      const postOffices = response.data[0].PostOffice;
+
+      // Extract all unique area names
+      const areas = [...new Set(postOffices.map(po => po.Name))];
+
+      // Get common location data from first post office
+      const firstOffice = postOffices[0];
+
       return {
         success: true,
         data: {
           pincode: pincode,
-          country: postOffice.Country || 'India',
-          state: postOffice.State || postOffice.Circle,
-          district: postOffice.District,
-          city: postOffice.Division || postOffice.District,
-          area: postOffice.Name,
-          region: postOffice.Region,
+          country: firstOffice.Country || 'India',
+          state: firstOffice.State || firstOffice.Circle,
+          district: firstOffice.District,
+          city: firstOffice.Division || firstOffice.District,
+          region: firstOffice.Region,
+          areas: areas, // Return all areas as array
+          // Keep single area for backward compatibility
+          area: firstOffice.Name,
         },
       };
     } else {
@@ -69,17 +77,13 @@ export const getAreasByPincode = async (pincode) => {
 
     if (response.data && response.data[0]?.Status === 'Success') {
       const postOffices = response.data[0].PostOffice;
-      
-      // Extract unique areas
-      const areas = postOffices.map(po => ({
-        name: po.Name,
-        branchType: po.BranchType,
-        deliveryStatus: po.DeliveryStatus,
-      }));
+
+      // Extract unique area names
+      const areas = [...new Set(postOffices.map(po => po.Name))];
 
       // Get common location data from first post office
       const firstOffice = postOffices[0];
-      
+
       return {
         success: true,
         data: {

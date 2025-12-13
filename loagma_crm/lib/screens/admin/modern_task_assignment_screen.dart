@@ -127,15 +127,25 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     setState(() => _isLoading = true);
     try {
       final result = await _service.fetchLocationByPincode(pincode);
-      if (result['success'] == true && result['location'] != null) {
-        setState(() {
-          _pincodeLocations.add(result['location']);
-          _selectedAreasByPincode[pincode] = [];
-          _pincodeController.clear();
-          // Auto-expand the newly added pincode
-          _expandedPincodes.add(pincode);
-        });
-        _showSuccess('Pincode $pincode added! Tap to select specific areas.');
+      if (result['success'] == true) {
+        final locationData = result['data'] ?? result['location'];
+        if (locationData != null) {
+          // Convert single area to areas array if needed
+          final areas = locationData['areas'] ?? [locationData['area']];
+          final processedLocation = Map<String, dynamic>.from(locationData);
+          processedLocation['areas'] = areas;
+
+          setState(() {
+            _pincodeLocations.add(processedLocation);
+            _selectedAreasByPincode[pincode] = [];
+            _pincodeController.clear();
+            // Auto-expand the newly added pincode
+            _expandedPincodes.add(pincode);
+          });
+          _showSuccess('Pincode $pincode added! Tap to select specific areas.');
+        } else {
+          _showError('Invalid location data received');
+        }
       } else {
         _showError(result['message'] ?? 'Failed to fetch location');
       }
@@ -2183,10 +2193,13 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     List<String> availableAreas = [];
     try {
       final locationResult = await _service.fetchLocationByPincode(pincode);
-      if (locationResult['success'] == true &&
-          locationResult['location'] != null) {
-        availableAreas = (locationResult['location']['areas'] as List)
-            .cast<String>();
+      if (locationResult['success'] == true) {
+        final locationData =
+            locationResult['data'] ?? locationResult['location'];
+        if (locationData != null) {
+          final areas = locationData['areas'] ?? [locationData['area']];
+          availableAreas = areas.cast<String>();
+        }
       }
     } catch (e) {
       print('Error fetching areas: $e');

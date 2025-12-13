@@ -95,11 +95,58 @@ class EnhancedTaskAssignmentService {
   /// Fetch location details by pin code
   static Future<LocationInfo> fetchLocationByPinCode(String pinCode) async {
     try {
-      // TODO: Replace with actual API call
-      await Future.delayed(const Duration(milliseconds: 800));
+      print('🔍 Fetching location for pincode: $pinCode');
 
-      // Mock data based on pin code
+      // Make actual API call to pincode endpoint
+      final url = '${ApiConfig.baseUrl}/pincode/$pinCode';
+      print('📡 API URL: $url');
+
+      final response = await http.get(Uri.parse(url));
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true && data['data'] != null) {
+          final locationData = data['data'];
+
+          // Get areas from the main response (now includes all areas)
+          List<String> areas = [];
+          if (locationData['areas'] != null) {
+            areas = (locationData['areas'] as List).cast<String>();
+          }
+
+          // If no areas found, add a default area
+          if (areas.isEmpty) {
+            areas = [locationData['area'] ?? 'Main Area'];
+          }
+
+          print(
+            '✅ Location data: ${locationData['city']}, ${locationData['state']}',
+          );
+          print('✅ Areas found: ${areas.length}');
+
+          return LocationInfo(
+            pinCode: pinCode,
+            country: locationData['country'] ?? 'India',
+            state: locationData['state'] ?? '',
+            district: locationData['district'] ?? '',
+            city: locationData['city'] ?? '',
+            areas: areas,
+          );
+        }
+      }
+
+      // If API fails, throw an exception
+      throw Exception('Failed to fetch location data for pincode $pinCode');
+    } catch (e) {
+      print('❌ Error fetching location: $e');
+
+      // Fallback to mock data for common pincodes
       if (pinCode.startsWith('4')) {
+        print('🔄 Using fallback data for Maharashtra pincode');
         return LocationInfo(
           pinCode: pinCode,
           country: 'India',
@@ -116,6 +163,7 @@ class EnhancedTaskAssignmentService {
           ],
         );
       } else if (pinCode.startsWith('1')) {
+        print('🔄 Using fallback data for Delhi pincode');
         return LocationInfo(
           pinCode: pinCode,
           country: 'India',
@@ -131,6 +179,7 @@ class EnhancedTaskAssignmentService {
           ],
         );
       } else {
+        print('🔄 Using fallback data for other pincode');
         return LocationInfo(
           pinCode: pinCode,
           country: 'India',
@@ -146,24 +195,6 @@ class EnhancedTaskAssignmentService {
           ],
         );
       }
-
-      // TODO: Uncomment when backend is ready
-      /*
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/location/pincode/$pinCode'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return LocationInfo.fromJson(data['location']);
-        }
-      }
-      throw Exception('Failed to fetch location details');
-      */
-    } catch (e) {
-      print('Error fetching location: $e');
-      rethrow;
     }
   }
 

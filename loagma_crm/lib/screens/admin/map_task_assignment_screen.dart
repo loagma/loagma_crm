@@ -90,11 +90,21 @@ class _MapTaskAssignmentScreenState extends State<MapTaskAssignmentScreen>
         _pincodeController.text,
       );
       if (result['success']) {
-        setState(() {
-          _locationInfo = result['location'];
-          _selectedAreas = [];
-        });
-        Fluttertoast.showToast(msg: 'Location fetched successfully');
+        final locationData = result['data'] ?? result['location'];
+        if (locationData != null) {
+          // Convert single area to areas array if needed
+          final areas = locationData['areas'] ?? [locationData['area']];
+          final processedLocation = Map<String, dynamic>.from(locationData);
+          processedLocation['areas'] = areas;
+
+          setState(() {
+            _locationInfo = processedLocation;
+            _selectedAreas = [];
+          });
+          Fluttertoast.showToast(msg: 'Location fetched successfully');
+        } else {
+          _showError('Invalid location data received');
+        }
       } else {
         _showError(result['message'] ?? 'Failed to fetch location');
       }
