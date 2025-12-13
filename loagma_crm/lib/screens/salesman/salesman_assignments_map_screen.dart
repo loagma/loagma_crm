@@ -22,6 +22,7 @@ class _SalesmanAssignmentsMapScreenState
   Set<Marker> markers = {};
   bool isLoading = true;
   String? selectedPincode;
+  String screenTitle = 'Area Allotments Map';
 
   // Filters
   String? selectedCity;
@@ -33,7 +34,43 @@ class _SalesmanAssignmentsMapScreenState
   @override
   void initState() {
     super.initState();
-    fetchAssignments();
+    // Don't fetch assignments here, wait for didChangeDependencies to get arguments
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Get arguments from navigation
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (args != null) {
+      if (args['isMultiple'] == true && args['assignments'] != null) {
+        // Multiple assignments passed from "View All on Map"
+        setState(() {
+          assignments = List<Map<String, dynamic>>.from(args['assignments']);
+          screenTitle = 'All Area Allotments Map';
+          isLoading = false;
+        });
+        createMarkers();
+      } else if (args['assignment'] != null) {
+        // Single assignment passed from "View on Map"
+        final assignment = args['assignment'];
+        setState(() {
+          assignments = [assignment];
+          screenTitle = '${assignment['city']} - ${assignment['pincode']} Map';
+          isLoading = false;
+        });
+        createMarkers();
+      } else {
+        // No arguments, fetch assignments normally
+        fetchAssignments();
+      }
+    } else {
+      // No arguments, fetch assignments normally
+      fetchAssignments();
+    }
   }
 
   @override
@@ -77,7 +114,7 @@ class _SalesmanAssignmentsMapScreenState
           assignments = assignmentsList;
         });
 
-        await _createMarkers();
+        await createMarkers();
         if (mounted) {
           _fitMapToMarkers();
         }
@@ -96,7 +133,7 @@ class _SalesmanAssignmentsMapScreenState
     }
   }
 
-  Future<void> _createMarkers() async {
+  Future<void> createMarkers() async {
     Set<Marker> newMarkers = {};
 
     for (var assignment in filteredAssignments) {
@@ -257,14 +294,14 @@ class _SalesmanAssignmentsMapScreenState
       selectedState = null;
       selectedPincode = null;
     });
-    _createMarkers();
+    createMarkers();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Area Allotments Map'),
+        title: Text(screenTitle),
         backgroundColor: primaryColor,
         actions: [
           IconButton(
@@ -505,7 +542,7 @@ class _SalesmanAssignmentsMapScreenState
                 onChanged: (value) {
                   setState(() => selectedCity = value);
                   Navigator.pop(context);
-                  _createMarkers();
+                  createMarkers();
                 },
               ),
             ),
@@ -518,7 +555,7 @@ class _SalesmanAssignmentsMapScreenState
                   onChanged: (value) {
                     setState(() => selectedCity = value);
                     Navigator.pop(context);
-                    _createMarkers();
+                    createMarkers();
                   },
                 ),
               ),
@@ -551,7 +588,7 @@ class _SalesmanAssignmentsMapScreenState
                 onChanged: (value) {
                   setState(() => selectedState = value);
                   Navigator.pop(context);
-                  _createMarkers();
+                  createMarkers();
                 },
               ),
             ),
@@ -564,7 +601,7 @@ class _SalesmanAssignmentsMapScreenState
                   onChanged: (value) {
                     setState(() => selectedState = value);
                     Navigator.pop(context);
-                    _createMarkers();
+                    createMarkers();
                   },
                 ),
               ),
