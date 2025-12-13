@@ -52,7 +52,7 @@ class ApiConfig {
   /// 2. Set useProduction = false to use local backend
   /// 3. Make sure your local backend is running on port 5000
   static const bool useProduction =
-      false; // Using local backend with multiple areas fix
+      true; // Using local backend with multiple areas fix
 
   static String get baseUrl {
     if (useProduction) {
