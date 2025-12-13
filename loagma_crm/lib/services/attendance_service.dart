@@ -1,10 +1,40 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/attendance_model.dart';
 import 'api_config.dart';
+import 'user_service.dart';
 
 class AttendanceService {
   static String get baseUrl => '${ApiConfig.baseUrl}/attendance';
+
+  // Helper method to check network connectivity
+  static Future<bool> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Helper method to handle network errors
+  static String _getNetworkErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    if (errorString.contains('failed host lookup') ||
+        errorString.contains('socketexception')) {
+      return 'Network connection failed. Please check your internet connection and try again.';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timeout. The server might be starting up. Please wait a moment and try again.';
+    } else if (errorString.contains('connection refused')) {
+      return 'Cannot connect to server. Please try again later.';
+    } else if (errorString.contains('handshake')) {
+      return 'SSL connection failed. Please check your network settings.';
+    } else {
+      return 'Network error occurred. Please check your connection and try again.';
+    }
+  }
 
   // Punch In
   static Future<Map<String, dynamic>> punchIn({
@@ -25,13 +55,30 @@ class AttendanceService {
         };
       }
 
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      print('🔍 Punching in for employee: $employeeId');
+      print('🔑 Token available: ${token != null && token.isNotEmpty}');
+
+      // Check connectivity first
+      final hasConnection = await _checkConnectivity();
+      if (!hasConnection) {
+        return {
+          'success': false,
+          'message':
+              'No internet connection. Please check your network and try again.',
+        };
+      }
+
       final response = await http
           .post(
             Uri.parse('$baseUrl/punch-in'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+            headers: headers,
             body: jsonEncode({
               'employeeId': employeeId,
               'employeeName': employeeName,
@@ -43,15 +90,27 @@ class AttendanceService {
             }),
           )
           .timeout(
-            const Duration(seconds: 30), // Add timeout
+            const Duration(
+              seconds: 45,
+            ), // Increased timeout for Render cold starts
             onTimeout: () {
-              throw Exception('Request timeout. Please check your connection.');
+              throw Exception(
+                'Request timeout. The server might be starting up. Please try again.',
+              );
             },
           );
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      print('📊 Punch in response status: ${response.statusCode}');
+
+      if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Authentication failed. Please login again.',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 201 || response.statusCode == 200) {
         return {
           'success': true,
           'message': data['message'] ?? 'Punched in successfully',
@@ -100,13 +159,20 @@ class AttendanceService {
         };
       }
 
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      print('🔍 Punching out for attendance: $attendanceId');
+      print('🔑 Token available: ${token != null && token.isNotEmpty}');
+
       final response = await http
           .post(
             Uri.parse('$baseUrl/punch-out'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+            headers: headers,
             body: jsonEncode({
               'attendanceId': attendanceId,
               'punchOutLatitude': latitude,
@@ -125,7 +191,15 @@ class AttendanceService {
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200) {
+      print('📊 Punch out response status: ${response.statusCode}');
+
+      if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Authentication failed. Please login again.',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 200) {
         return {
           'success': true,
           'message': data['message'] ?? 'Punched out successfully',
@@ -159,21 +233,39 @@ class AttendanceService {
   // Get Today's Attendance
   static Future<AttendanceModel?> getTodayAttendance(String employeeId) async {
     try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      print('🔍 Fetching today attendance for: $employeeId');
+      print('🔑 Token available: ${token != null && token.isNotEmpty}');
+
       final response = await http.get(
         Uri.parse('$baseUrl/today/$employeeId'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
       );
+
+      print('📊 Attendance response status: ${response.statusCode}');
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && data['success'] == true) {
+      if (response.statusCode == 401) {
+        print('❌ Authentication failed for attendance');
+        throw Exception('Authentication failed. Please login again.');
+      } else if (response.statusCode == 200 && data['success'] == true) {
         if (data['data'] != null) {
           return AttendanceModel.fromJson(data['data']);
         }
       }
       return null;
     } catch (e) {
-      print('Error fetching today attendance: $e');
+      print('❌ Error fetching today attendance: $e');
+      if (e.toString().contains('401') ||
+          e.toString().contains('Authentication')) {
+        rethrow; // Re-throw authentication errors
+      }
       return null;
     }
   }

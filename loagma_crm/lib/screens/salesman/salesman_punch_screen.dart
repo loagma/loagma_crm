@@ -52,9 +52,6 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   bool isLoadingLocation = false;
   String locationStatus = 'Getting location...';
 
-  // Work duration
-  Duration workDuration = Duration.zero;
-
   // Travel distance
   double totalDistanceKm = 0.0;
 
@@ -65,13 +62,20 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   @override
   void initState() {
     super.initState();
-    _updateCurrentTime();
-    _startTimer();
     _loadTodayPunchData();
     // Initialize location after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLocationService();
     });
+  }
+
+  Duration get liveWorkDuration {
+    if (punchInTime == null) return Duration.zero;
+
+    final now = DateTime.now();
+    final diff = now.difference(punchInTime!);
+
+    return diff.isNegative ? Duration.zero : diff;
   }
 
   @override
@@ -83,54 +87,19 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
   }
 
   void _startTimer() {
-    _timer?.cancel(); // Cancel existing timer if any
-    print('🔄 Starting timer...');
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _updateCurrentTime();
+    _timer?.cancel();
 
-      // Update work duration if punched in
-      if (isPunchedIn && punchInTime != null) {
-        if (mounted) {
-          setState(() {
-            final now = DateTime.now();
-            final newDuration = now.difference(punchInTime!);
+    if (!isPunchedIn) return;
 
-            // Always update duration for real-time display
-            if (!newDuration.isNegative) {
-              workDuration = newDuration;
-              // Force UI update by calling setState
-              print('⏱️ Timer tick: ${newDuration.inSeconds}s elapsed');
-            }
-          });
-        }
-      }
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
 
-      // Auto-refresh location every 30 seconds if not available
-      if (_currentPosition == null && !isLoadingLocation) {
-        if (timer.tick % 30 == 0) {
-          // Every 30 seconds
-          _getCurrentLocation();
-        }
-      }
-    });
-  }
-
-  void _updateCurrentTime() {
-    final now = DateTime.now();
-    if (mounted) {
       setState(() {
+        final now = DateTime.now();
         currentTime = DateFormat('hh:mm:ss a').format(now);
         currentDate = DateFormat('EEEE, MMMM dd, yyyy').format(now);
-
-        // Also update duration if punched in
-        if (isPunchedIn && punchInTime != null) {
-          final newDuration = now.difference(punchInTime!);
-          if (!newDuration.isNegative) {
-            workDuration = newDuration;
-          }
-        }
       });
-    }
+    });
   }
 
   Future<void> _initializeLocationService() async {
@@ -295,10 +264,19 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
 
     try {
       final employeeId = UserService.currentUserId;
-      if (employeeId == null) {
+      if (employeeId == null || employeeId.isEmpty) {
         _showError('Employee ID not found. Please login again.');
         return;
       }
+
+      final token = UserService.token;
+      if (token == null || token.isEmpty) {
+        _showError('Authentication token missing. Please login again.');
+        return;
+      }
+
+      print('🔍 Loading attendance for employee: $employeeId');
+      print('🔑 Token available: ${token.isNotEmpty}');
 
       final attendance = await AttendanceService.getTodayAttendance(employeeId);
 
@@ -307,27 +285,6 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           currentAttendance = attendance;
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
-
-          // Calculate work duration with proper handling and timezone consideration
-          if (attendance.isPunchedIn) {
-            // For active attendance, calculate current duration
-            final now = DateTime.now();
-            final duration = now.difference(attendance.punchInTime);
-
-            // Ensure duration is not negative (handle clock sync issues)
-            workDuration = duration.isNegative ? Duration.zero : duration;
-          } else if (attendance.isPunchedOut &&
-              attendance.punchOutTime != null) {
-            // For completed attendance, use the actual work duration
-            final duration = attendance.punchOutTime!.difference(
-              attendance.punchInTime,
-            );
-
-            // Ensure duration is not negative
-            workDuration = duration.isNegative ? Duration.zero : duration;
-          } else {
-            workDuration = Duration.zero;
-          }
 
           // Create punch in location
           punchInLocation = Position(
@@ -373,19 +330,22 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           _markers = _buildMapMarkers();
         });
 
+        if (mounted) {
+          _timer?.cancel();
+          if (isPunchedIn) {
+            _startTimer();
+          }
+        }
+
         // Show session info if active
         if (attendance.isPunchedIn) {
-          final sessionDuration = workDuration.inMinutes;
-          print(
-            '✅ Active session loaded: ${sessionDuration} minutes worked, punchInTime: ${attendance.punchInTime}',
-          );
+          print('minutes worked, punchInTime: ${attendance.punchInTime}');
           print('🔄 Current time: ${DateTime.now()}');
           print(
             '⏱️ Calculated duration: ${DateTime.now().difference(attendance.punchInTime).inSeconds}s',
           );
 
           // Ensure timer is running for active sessions
-          _startTimer();
         } else {
           print('ℹ️ No active session found');
         }
@@ -398,7 +358,6 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           punchOutTime = null;
           punchInLocation = null;
           punchOutLocation = null;
-          workDuration = Duration.zero;
           totalDistanceKm = 0.0;
           _markers = _buildMapMarkers();
         });
@@ -560,12 +519,12 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
         setState(() {
           currentAttendance = attendance;
           isPunchedIn = true;
-          punchInTime = DateTime.now();
+          punchInTime = attendance?.punchInTime;
+
           punchInLocation = _currentPosition;
           punchInPhoto = result['photo'];
           punchInPhotoBase64 = result['photoBase64'];
           bikeKilometers = result['bikeKm'];
-          workDuration = Duration.zero;
           _markers = _buildMapMarkers();
         });
 
@@ -1024,53 +983,16 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     );
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    String hours = twoDigits(duration.inHours);
-    String minutes = twoDigits(duration.inMinutes.remainder(60));
-    String seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$hours:$minutes:$seconds';
-  }
-
   String _getCurrentDurationText() {
-    if (isPunchedIn && punchInTime != null) {
-      // Currently working - calculate live duration
-      final now = DateTime.now();
-      final currentDuration = now.difference(punchInTime!);
+    final duration = liveWorkDuration;
 
-      // Debug print
-      print(
-        '🕐 Duration calculation: isPunchedIn=$isPunchedIn, punchInTime=$punchInTime, now=$now, duration=${currentDuration.inSeconds}s',
-      );
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
 
-      // Ensure duration is not negative (handle clock sync issues)
-      if (currentDuration.isNegative) {
-        print('⚠️ Negative duration detected, returning 00:00:00');
-        return '00:00:00';
-      }
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
 
-      final formatted = _formatDuration(currentDuration);
-      print('✅ Formatted duration: $formatted');
-      return formatted;
-    } else if (punchInTime != null && punchOutTime != null) {
-      // Already punched out - show total worked duration
-      final totalDuration = punchOutTime!.difference(punchInTime!);
-
-      // Ensure duration is not negative
-      if (totalDuration.isNegative) {
-        return '00:00:00';
-      }
-
-      return _formatDuration(totalDuration);
-    } else if (currentAttendance?.totalWorkHours != null) {
-      // Use backend calculated hours if available
-      final hours = currentAttendance!.totalWorkHours!;
-      final duration = Duration(milliseconds: (hours * 3600 * 1000).round());
-      return _formatDuration(duration);
-    } else {
-      print('⚠️ No punch data available, returning 00:00:00');
-      return '00:00:00';
-    }
+    return '$hours:$minutes:$seconds';
   }
 
   void _showSuccess(String message) {
