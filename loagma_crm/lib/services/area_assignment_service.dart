@@ -11,19 +11,28 @@ class AreaAssignmentService {
   static Future<List<AreaAssignment>> getSalesmanAreaAssignments() async {
     try {
       final token = UserService.token;
-      final userId = UserService.currentUserId;
 
-      if (token == null || userId == null) {
+      if (token == null) {
         throw Exception('Authentication required');
       }
 
+      print('🔍 Loading area assignments for authenticated user');
+      print('🔑 Token available: true');
+
+      // Use the new endpoint that gets assignments for the authenticated user
+      final url = '$_baseUrl/area-assignments/my-assignments';
+      print('📡 Making request to: $url');
+
       final response = await http.get(
-        Uri.parse('$_baseUrl/area-assignments/salesman/$userId'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

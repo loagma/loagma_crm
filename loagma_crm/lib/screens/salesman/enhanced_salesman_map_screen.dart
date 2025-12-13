@@ -8,6 +8,7 @@ import '../../services/user_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/location_service.dart';
 import '../../services/network_service.dart';
+import '../../services/area_assignment_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 
@@ -246,35 +247,20 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         return;
       }
 
-      final headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+      print('📡 Loading area assignments using service...');
 
-      final areaAssignmentsUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/area-assignments/salesman/$userId',
-      );
+      try {
+        final assignments =
+            await AreaAssignmentService.getSalesmanAreaAssignments();
+        print('📊 Area assignments loaded: ${assignments.length}');
 
-      print('📡 Loading area assignments from: $areaAssignmentsUrl');
-
-      final response = await http.get(areaAssignmentsUrl, headers: headers);
-
-      print('📊 Area assignments response status: ${response.statusCode}');
-
-      if (response.statusCode == 401) {
-        print('⚠️ Authentication failed for area assignments');
-        return;
-      } else if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          setState(() {
-            areaAssignments = List<Map<String, dynamic>>.from(
-              data['assignments'] ?? data['data'] ?? [],
-            );
-          });
-          _extractFilterOptions();
-          print('✅ Loaded ${areaAssignments.length} area assignments');
-        }
+        setState(() {
+          areaAssignments = assignments.map((a) => a.toJson()).toList();
+        });
+        _extractFilterOptions();
+        print('✅ Loaded ${areaAssignments.length} area assignments');
+      } catch (e) {
+        print('❌ Error loading area assignments: $e');
       }
     } catch (e) {
       print('❌ Error loading area assignments: $e');

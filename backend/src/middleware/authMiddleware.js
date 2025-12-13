@@ -9,7 +9,7 @@ export const authMiddleware = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Fetch user with role information
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
@@ -25,9 +25,9 @@ export const authMiddleware = async (req, res, next) => {
       roleId: user.roleId,
       role: user.role?.name,
     };
-    
+
     next();
-  } catch {
+  } catch (error) {
     res.status(401).json({ success: false, message: 'Invalid token' });
   }
 };

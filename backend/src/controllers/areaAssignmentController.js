@@ -66,6 +66,15 @@ const getSalesmanAreaAssignments = async (req, res) => {
     });
     console.log('📊 All area assignments in database:', allAssignments);
 
+    // Check if user exists
+    const userExists = await prisma.user.findUnique({
+      where: { id: salesmanId },
+      select: { id: true, name: true }
+    });
+    console.log('👤 User exists check:', userExists);
+
+    // Try different query approaches
+    console.log('🔍 Trying exact match query...');
     const assignments = await prisma.areaAssignment.findMany({
       where: {
         salesmanId: salesmanId,
@@ -84,6 +93,14 @@ const getSalesmanAreaAssignments = async (req, res) => {
         assignedDate: 'desc',
       },
     });
+
+    console.log('📊 Found assignments:', assignments.length);
+    console.log('📊 Assignment details:', assignments.map(a => ({
+      id: a.id,
+      salesmanId: a.salesmanId,
+      salesmanIdType: typeof a.salesmanId,
+      city: a.city
+    })));
 
     res.json({
       success: true,
