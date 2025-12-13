@@ -10,6 +10,9 @@ class MapTaskAssignmentService {
   // Get headers with auth token from UserService
   static Map<String, String> _getHeaders() {
     final token = UserService.token;
+    print(
+      '🔑 UserService.token: ${token != null ? "Available (${token.substring(0, 20)}...)" : "NULL"}',
+    );
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
@@ -49,17 +52,61 @@ class MapTaskAssignmentService {
   Future<Map<String, dynamic>> fetchLocationByPincode(String pincode) async {
     try {
       final headers = _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/pincode/$pincode'), // Use the pincode endpoint
-        headers: headers,
-      );
+      final url = '$baseUrl/pincode/$pincode';
+
+      print('🔍 Fetching location for pincode: $pincode');
+      print('📡 URL: $url');
+      print('🔑 Headers: $headers');
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        return {'success': false, 'message': 'Failed to fetch location'};
+        final data = json.decode(response.body);
+        print('✅ Location data received: $data');
+
+        // Ensure the response has the expected structure
+        if (data['success'] == true && data['data'] != null) {
+          return data;
+        } else {
+          return {
+            'success': false,
+            'message': 'Invalid response format from server',
+          };
+        }
+      } else if (response.statusCode == 401) {
+        // Try without authentication for pincode lookup
+        print('🔄 Retrying without authentication...');
+        final responseNoAuth = await http.get(Uri.parse(url));
+
+        print('📊 No-auth response status: ${responseNoAuth.statusCode}');
+        print('📊 No-auth response body: ${responseNoAuth.body}');
+
+        if (responseNoAuth.statusCode == 200) {
+          final data = json.decode(responseNoAuth.body);
+          print('✅ Location data received (no auth): $data');
+
+          // Ensure the response has the expected structure
+          if (data['success'] == true && data['data'] != null) {
+            return data;
+          } else {
+            return {
+              'success': false,
+              'message': 'Invalid response format from server',
+            };
+          }
+        }
       }
+
+      print('❌ Failed to fetch location: ${response.statusCode}');
+      return {
+        'success': false,
+        'message': 'Failed to fetch location (Status: ${response.statusCode})',
+      };
     } catch (e) {
+      print('❌ Error fetching location: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
