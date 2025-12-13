@@ -1,182 +1,283 @@
-// TODO: Uncomment when backend integration is ready
-// import 'dart:convert';
-// import 'package:http/http.dart' as http;
-// import 'api_config.dart';
-
-import '../models/salesman_model.dart';
-import '../models/pincode_assignment_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'api_config.dart';
+import '../models/task_assignment_model.dart';
+import '../services/user_service.dart';
 
 class TaskAssignmentService {
-  /// Fetch all salesmen from the backend
-  /// TODO: Replace with actual API endpoint when backend is ready
-  static Future<List<Salesman>> fetchSalesmen() async {
+  static final String _baseUrl = ApiConfig.baseUrl;
+
+  /// Get task assignments for current salesman
+  static Future<List<TaskAssignment>> getSalesmanTaskAssignments() async {
     try {
-      // Placeholder: Mock data for now
-      await Future.delayed(const Duration(seconds: 1));
+      final token = UserService.token;
 
-      // Mock salesmen data
-      return [
-        Salesman(
-          id: '1',
-          name: 'Rajesh Kumar',
-          contactNumber: '9876543210',
-          employeeCode: 'EMP001',
-          email: 'rajesh@example.com',
-          assignedPinCodes: ['400001', '400002'],
-        ),
-        Salesman(
-          id: '2',
-          name: 'Priya Sharma',
-          contactNumber: '9876543211',
-          employeeCode: 'EMP002',
-          email: 'priya@example.com',
-          assignedPinCodes: ['400003'],
-        ),
-        Salesman(
-          id: '3',
-          name: 'Amit Patel',
-          contactNumber: '9876543212',
-          employeeCode: 'EMP003',
-          email: 'amit@example.com',
-          assignedPinCodes: [],
-        ),
-      ];
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
 
-      // TODO: Uncomment when backend is ready
-      /*
+      print('🔍 Loading task assignments for authenticated user');
+      print('🔑 Token available: true');
+      print('👤 Current user ID: ${UserService.currentUserId}');
+
+      // Use the new endpoint that gets assignments for the authenticated user
+      final url = '$_baseUrl/task-assignments/my-assignments';
+      print('📡 Making request to: $url');
+
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/salesmen'),
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+
+        print('✅ Loaded ${assignmentsJson.length} task assignments');
+        for (int i = 0; i < assignmentsJson.length; i++) {
+          final assignment = assignmentsJson[i];
+          print(
+            '  Assignment ${i + 1}: ${assignment['city']} - ${assignment['pincode']}',
+          );
+        }
+
+        return assignmentsJson
+            .map((json) => TaskAssignment.fromJson(json))
+            .toList();
+      } else {
+        throw Exception(
+          'Failed to load task assignments: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('Error fetching task assignments: $e');
+      throw Exception('Failed to load task assignments: $e');
+    }
+  }
+
+  /// Get all task assignments (admin only)
+  static Future<List<TaskAssignment>> getAllTaskAssignments() async {
+    try {
+      final token = UserService.token;
+
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/task-assignments'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return (data['salesmen'] as List)
-              .map((json) => Salesman.fromJson(json))
-              .toList();
-        }
-      }
-      throw Exception('Failed to fetch salesmen');
-      */
-    } catch (e) {
-      print('Error fetching salesmen: $e');
-      rethrow;
-    }
-  }
+        final data = json.decode(response.body);
+        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
 
-  /// Assign a pin code to a salesman
-  /// TODO: Replace with actual API endpoint when backend is ready
-  static Future<Map<String, dynamic>> assignPinCodeToSalesman({
-    required String salesmanId,
-    required String salesmanName,
-    required String pinCode,
-  }) async {
-    try {
-      // Placeholder: Mock assignment for now
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      return {
-        'success': true,
-        'message': 'Pin code $pinCode assigned to $salesmanName successfully',
-        'assignment': PinCodeAssignment(
-          salesmanId: salesmanId,
-          salesmanName: salesmanName,
-          pinCode: pinCode,
-          assignedDate: DateTime.now(),
-        ).toJson(),
-      };
-
-      // TODO: Uncomment when backend is ready
-      /*
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/task-assignments'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'salesmanId': salesmanId,
-          'salesmanName': salesmanName,
-          'pinCode': pinCode,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return data;
+        return assignmentsJson
+            .map((json) => TaskAssignment.fromJson(json))
+            .toList();
       } else {
-        throw Exception(data['message'] ?? 'Failed to assign pin code');
+        throw Exception(
+          'Failed to load task assignments: ${response.statusCode}',
+        );
       }
-      */
     } catch (e) {
-      print('Error assigning pin code: $e');
-      rethrow;
+      print('Error fetching all task assignments: $e');
+      throw Exception('Failed to load task assignments: $e');
     }
   }
 
-  /// Get all assignments for a specific salesman
-  static Future<List<PinCodeAssignment>> getAssignmentsBySalesman(
-    String salesmanId,
+  /// Create new task assignment
+  static Future<TaskAssignment> createTaskAssignment(
+    Map<String, dynamic> assignmentData,
   ) async {
     try {
-      // Placeholder: Mock data for now
-      await Future.delayed(const Duration(milliseconds: 300));
+      final token = UserService.token;
 
-      return [];
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
 
-      // TODO: Uncomment when backend is ready
-      /*
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/task-assignments/salesman/$salesmanId'),
+      final response = await http.post(
+        Uri.parse('$_baseUrl/task-assignments'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(assignmentData),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return (data['assignments'] as List)
-              .map((json) => PinCodeAssignment.fromJson(json))
-              .toList();
-        }
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        return TaskAssignment.fromJson(data['assignment']);
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(
+          errorData['message'] ?? 'Failed to create task assignment',
+        );
       }
-      throw Exception('Failed to fetch assignments');
-      */
     } catch (e) {
-      print('Error fetching assignments: $e');
-      rethrow;
+      print('Error creating task assignment: $e');
+      throw Exception('Failed to create task assignment: $e');
     }
   }
 
-  /// Remove a pin code assignment
-  static Future<Map<String, dynamic>> removePinCodeAssignment({
-    required String salesmanId,
-    required String pinCode,
-  }) async {
+  /// Update task assignment
+  static Future<TaskAssignment> updateTaskAssignment(
+    String assignmentId,
+    Map<String, dynamic> updateData,
+  ) async {
     try {
-      // Placeholder: Mock removal for now
-      await Future.delayed(const Duration(milliseconds: 300));
+      final token = UserService.token;
 
-      return {
-        'success': true,
-        'message': 'Pin code $pinCode removed successfully',
-      };
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
 
-      // TODO: Uncomment when backend is ready
-      /*
-      final response = await http.delete(
-        Uri.parse(
-          '${ApiConfig.baseUrl}/task-assignments/$salesmanId/$pinCode',
-        ),
+      final response = await http.put(
+        Uri.parse('$_baseUrl/task-assignments/$assignmentId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(updateData),
       );
 
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return TaskAssignment.fromJson(data['assignment']);
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(
+          errorData['message'] ?? 'Failed to update task assignment',
+        );
+      }
+    } catch (e) {
+      print('Error updating task assignment: $e');
+      throw Exception('Failed to update task assignment: $e');
+    }
+  }
+
+  /// Delete task assignment
+  static Future<void> deleteTaskAssignment(String assignmentId) async {
+    try {
+      final token = UserService.token;
+
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
+
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/task-assignments/$assignmentId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        final errorData = json.decode(response.body);
+        throw Exception(
+          errorData['message'] ?? 'Failed to delete task assignment',
+        );
+      }
+    } catch (e) {
+      print('Error deleting task assignment: $e');
+      throw Exception('Failed to delete task assignment: $e');
+    }
+  }
+
+  /// Get task assignment by ID
+  static Future<TaskAssignment?> getTaskAssignmentById(
+    String assignmentId,
+  ) async {
+    try {
+      final token = UserService.token;
+
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/task-assignments/$assignmentId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
       if (response.statusCode == 200) {
-        return data;
+        final data = json.decode(response.body);
+        return TaskAssignment.fromJson(data['assignment']);
+      } else if (response.statusCode == 404) {
+        return null;
       } else {
-        throw Exception(data['message'] ?? 'Failed to remove pin code');
+        throw Exception(
+          'Failed to load task assignment: ${response.statusCode}',
+        );
       }
-      */
     } catch (e) {
-      print('Error removing pin code: $e');
-      rethrow;
+      print('Error fetching task assignment: $e');
+      throw Exception('Failed to load task assignment: $e');
+    }
+  }
+
+  /// Search task assignments by location
+  static Future<List<TaskAssignment>> searchTaskAssignmentsByLocation({
+    String? pincode,
+    String? city,
+    String? district,
+    String? state,
+  }) async {
+    try {
+      final token = UserService.token;
+
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
+
+      final queryParams = <String, String>{};
+      if (pincode != null) queryParams['pincode'] = pincode;
+      if (city != null) queryParams['city'] = city;
+      if (district != null) queryParams['district'] = district;
+      if (state != null) queryParams['state'] = state;
+
+      final uri = Uri.parse(
+        '$_baseUrl/task-assignments/search',
+      ).replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+
+        return assignmentsJson
+            .map((json) => TaskAssignment.fromJson(json))
+            .toList();
+      } else {
+        throw Exception(
+          'Failed to search task assignments: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('Error searching task assignments: $e');
+      throw Exception('Failed to search task assignments: $e');
     }
   }
 }

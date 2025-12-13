@@ -182,7 +182,8 @@ class EnhancedTaskAssignmentService {
     try {
       final requestBody = {
         'salesmanId': salesmanId,
-        'pinCode': pinCode,
+        'salesmanName': salesmanName,
+        'pincode': pinCode, // Note: TaskAssignment uses 'pincode' (lowercase)
         'country': country,
         'state': state,
         'district': district,
@@ -192,14 +193,14 @@ class EnhancedTaskAssignmentService {
         'totalBusinesses': selectedAreas.length * businessTypes.length * 5,
       };
 
-      print('🚀 Assigning areas to salesman...');
-      print('📡 API URL: ${ApiConfig.baseUrl}/area-assignments');
+      print('� Assignin g areas to salesman...');
+      print('📡 API URL: ${ApiConfig.baseUrl}/task-assignments');
       print('🔑 Token: ${UserService.token != null ? "Available" : "Missing"}');
       print('📦 Request body: ${jsonEncode(requestBody)}');
 
-      // Use real API call to create area assignment
+      // Use real API call to create task assignment
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/area-assignments'),
+        Uri.parse('${ApiConfig.baseUrl}/task-assignments'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${UserService.token}',
