@@ -132,6 +132,10 @@ const getSalesmanAreaAssignments = async (req, res) => {
 // Create new area assignment
 const createAreaAssignment = async (req, res) => {
   try {
+    console.log('🆕 Creating new area assignment...');
+    console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('👤 Authenticated user:', req.user);
+
     const {
       salesmanId,
       pinCode,
@@ -144,8 +148,20 @@ const createAreaAssignment = async (req, res) => {
       totalBusinesses,
     } = req.body;
 
+    console.log('🔍 Extracted fields:');
+    console.log('  salesmanId:', salesmanId);
+    console.log('  pinCode:', pinCode);
+    console.log('  country:', country);
+    console.log('  state:', state);
+    console.log('  district:', district);
+    console.log('  city:', city);
+    console.log('  areas:', areas);
+    console.log('  businessTypes:', businessTypes);
+    console.log('  totalBusinesses:', totalBusinesses);
+
     // Validate required fields
     if (!salesmanId || !pinCode || !country || !state || !district || !city) {
+      console.log('❌ Validation failed - missing required fields');
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: salesmanId, pinCode, country, state, district, city',
@@ -153,17 +169,22 @@ const createAreaAssignment = async (req, res) => {
     }
 
     // Check if salesman exists
+    console.log('🔍 Checking if salesman exists...');
     const salesman = await prisma.user.findUnique({
       where: { id: salesmanId },
     });
 
     if (!salesman) {
+      console.log('❌ Salesman not found:', salesmanId);
       return res.status(404).json({
         success: false,
         message: 'Salesman not found',
       });
     }
 
+    console.log('✅ Salesman found:', salesman.name);
+
+    console.log('💾 Creating area assignment in database...');
     const assignment = await prisma.areaAssignment.create({
       data: {
         salesmanId,
@@ -189,7 +210,9 @@ const createAreaAssignment = async (req, res) => {
       },
     });
 
-    res.status(201).json({
+    console.log('✅ Area assignment created successfully:', assignment.id);
+
+    const responseData = {
       success: true,
       message: 'Area assignment created successfully',
       assignment: {
@@ -206,9 +229,13 @@ const createAreaAssignment = async (req, res) => {
         assignedDate: assignment.assignedDate,
         totalBusinesses: assignment.totalBusinesses || 0,
       },
-    });
+    };
+
+    console.log('📤 Sending response:', JSON.stringify(responseData, null, 2));
+    res.status(201).json(responseData);
   } catch (error) {
-    console.error('Error creating area assignment:', error);
+    console.error('❌ Error creating area assignment:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to create area assignment',
