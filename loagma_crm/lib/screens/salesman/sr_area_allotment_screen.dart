@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../services/user_service.dart';
 import '../../services/network_service.dart';
 import '../../services/task_assignment_service.dart';
+import 'salesman_assignments_map_screen.dart';
 
 class SRAreaAllotmentScreen extends StatefulWidget {
   const SRAreaAllotmentScreen({super.key});
@@ -116,6 +117,32 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
 
   Future<void> _debugAreaAssignments() async {
     // Debug function removed for now
+  }
+
+  void _viewAssignmentOnMap(Map<String, dynamic> assignment) {
+    // Navigate to map view for single assignment
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SalesmanAssignmentsMapScreen(),
+        settings: RouteSettings(
+          arguments: {'assignment': assignment, 'isMultiple': false},
+        ),
+      ),
+    );
+  }
+
+  void _viewAllAssignmentsOnMap() {
+    // Navigate to map view for all assignments
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SalesmanAssignmentsMapScreen(),
+        settings: RouteSettings(
+          arguments: {'assignments': _areaAssignments, 'isMultiple': true},
+        ),
+      ),
+    );
   }
 
   @override
@@ -374,6 +401,32 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
                       ),
                     ),
 
+                    // View All on Map Button
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _viewAllAssignmentsOnMap,
+                        icon: const Icon(Icons.map, size: 24),
+                        label: const Text(
+                          'View All Assignments on Map',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
                     // Data Table
                     Container(
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -449,6 +502,14 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
                                     ),
                                   ),
                                 ),
+                                DataColumn(
+                                  label: Text(
+                                    'Actions',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
                               ],
                               rows: _areaAssignments.map((assignment) {
                                 return DataRow(
@@ -458,7 +519,7 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
                                       Text(assignment['district'] ?? 'N/A'),
                                     ),
                                     DataCell(
-                                      Text(assignment['pinCode'] ?? 'N/A'),
+                                      Text(assignment['pincode'] ?? 'N/A'),
                                     ),
                                     DataCell(
                                       Container(
@@ -495,6 +556,25 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
                                                 ' ',
                                               )[0]
                                             : 'N/A',
+                                      ),
+                                    ),
+                                    DataCell(
+                                      ElevatedButton.icon(
+                                        onPressed: () =>
+                                            _viewAssignmentOnMap(assignment),
+                                        icon: const Icon(Icons.map, size: 16),
+                                        label: const Text('View on Map'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: primaryColor,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          textStyle: const TextStyle(
+                                            fontSize: 12,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ],
