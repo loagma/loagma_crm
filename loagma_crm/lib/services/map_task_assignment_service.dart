@@ -3,9 +3,19 @@ import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import '../models/shop_model.dart';
 import '../services/user_service.dart';
+import 'google_places_service.dart';
 
 class MapTaskAssignmentService {
   final String baseUrl = ApiConfig.baseUrl;
+
+  // Constructor to initialize Google Places service
+  MapTaskAssignmentService() {
+    try {
+      GooglePlacesService.instance.initialize();
+    } catch (e) {
+      print('⚠️ Google Places service initialization failed: $e');
+    }
+  }
 
   // Get headers with auth token from UserService
   static Map<String, String> _getHeaders() {
@@ -197,20 +207,317 @@ class MapTaskAssignmentService {
     List<String> areas,
     List<String> businessTypes,
   ) async {
-    try {
-      // This endpoint might not exist, so let's return mock data for now
-      print(
-        '🔍 Searching businesses for pincode: $pincode, areas: $areas, types: $businessTypes',
-      );
+    print(
+      '🔍 Searching businesses for pincode: $pincode, areas: $areas, types: $businessTypes',
+    );
 
-      // Return mock data since we don't have a businesses search endpoint
+    // For now, let's use mock data to ensure the app works
+    // TODO: Re-enable Google Places API after debugging
+    print('🔄 Using mock data for testing...');
+    return _generateMockBusinesses(pincode, areas, businessTypes);
+
+    /* 
+    // Google Places API implementation (temporarily disabled for debugging)
+    try {
+      // First, get location coordinates for the pincode
+      final locationResult = await fetchLocationByPincode(pincode);
+      if (locationResult['success'] != true) {
+        print('❌ Failed to get location for pincode');
+        return _generateMockBusinesses(pincode, areas, businessTypes);
+      }
+
+      final locationData = locationResult['data'];
+      final city = locationData['city'];
+      final state = locationData['state'];
+      print('📍 Location: $city, $state');
+
+      // Use Google Places to search for businesses
+      final GooglePlacesService placesService = GooglePlacesService.instance;
+      List<Map<String, dynamic>> allBusinesses = [];
+      Map<String, int> breakdown = {};
+
+      // Search for each business type in each area
+      for (String businessType in businessTypes) {
+        int typeCount = 0;
+
+        // Map business types to Google Places types
+        String googlePlaceType = _mapBusinessTypeToGoogleType(businessType);
+        print('🔄 Mapped $businessType -> $googlePlaceType');
+
+        for (String area in areas.isEmpty ? [city] : areas) {
+          try {
+            // Search by text query combining area, city and business type
+            String searchQuery = '$googlePlaceType in $area, $city, $state';
+            print('🔍 Searching: $searchQuery');
+
+            final places = await placesService.searchPlacesByText(
+              query: searchQuery,
+            );
+
+            print('📊 Found ${places.length} places for $searchQuery');
+
+            // Convert places to business format
+            for (var place in places.take(10)) {
+              // Limit to 10 per area/type
+              if (place.name != null && place.geometry?.location != null) {
+                print('✅ Adding business: ${place.name}');
+                final business = {
+                  'placeId': place.placeId ?? '',
+                  'name': place.name!,
+                  'businessType': businessType,
+                  'rating': place.rating?.toDouble() ?? 0.0,
+                  'address': place.formattedAddress ?? '$area, $city',
+                  'latitude': place.geometry!.location!.lat,
+                  'longitude': place.geometry!.location!.lng,
+                  'area': area,
+                  'pincode': pincode,
+                  'stage': 'new', // Default stage
+                  'photos': place.photos?.isNotEmpty == true
+                      ? [
+                          place.mainPhotoUrl,
+                        ].where((url) => url != null).toList()
+                      : [],
+                  'types': place.types ?? [],
+                  'priceLevel': place.priceLevel ?? 0,
+                  'openNow': place.isOpenNow,
+                };
+
+                allBusinesses.add(business);
+                typeCount++;
+              }
+            }
+          } catch (e) {
+            print('❌ Error searching for $businessType in $area: $e');
+          }
+        }
+
+        breakdown[businessType] = typeCount;
+        print('✅ Found $typeCount businesses for $businessType');
+      }
+
+      print('✅ Total businesses found: ${allBusinesses.length}');
+
+      if (allBusinesses.isEmpty) {
+        print('🔄 No businesses found via API, using mock data...');
+        return _generateMockBusinesses(pincode, areas, businessTypes);
+      }
+
       return {
         'success': true,
-        'businesses': [],
-        'message': 'Business search not implemented yet',
+        'businesses': allBusinesses,
+        'totalBusinesses': allBusinesses.length,
+        'breakdown': breakdown,
+        'message': 'Found ${allBusinesses.length} businesses',
       };
     } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
+      print('❌ Error searching businesses: $e');
+
+      // Fallback to mock data if Google Places fails
+      print('🔄 Using fallback mock data...');
+      return _generateMockBusinesses(pincode, areas, businessTypes);
+    }
+    */
+  }
+
+  // Generate mock businesses as fallback
+  Map<String, dynamic> _generateMockBusinesses(
+    String pincode,
+    List<String> areas,
+    List<String> businessTypes,
+  ) {
+    print('🎭 Generating mock businesses for:');
+    print('   Pincode: $pincode');
+    print('   Areas: $areas');
+    print('   Business Types: $businessTypes');
+
+    List<Map<String, dynamic>> mockBusinesses = [];
+    Map<String, int> breakdown = {};
+
+    // Mock coordinates for Jabalpur area (482004)
+    double baseLat = 23.1815; // Jabalpur latitude
+    double baseLng = 79.9864; // Jabalpur longitude
+
+    for (String businessType in businessTypes) {
+      int typeCount = 0;
+
+      for (String area in areas.isEmpty ? ['Main Area'] : areas) {
+        // Generate 3-5 mock businesses per type per area
+        int businessCount = 3 + (businessType.hashCode % 3);
+
+        for (int i = 0; i < businessCount; i++) {
+          final businessName = _generateMockBusinessName(businessType, i);
+          print('   📍 Creating: $businessName ($businessType in $area)');
+
+          final business = {
+            'placeId': 'mock_${businessType}_${area}_$i',
+            'name': businessName,
+            'businessType': businessType,
+            'rating': 3.5 + (i * 0.3),
+            'address': '$area, $pincode',
+            'latitude':
+                baseLat + (i * 0.001) + (businessType.hashCode % 100) * 0.0001,
+            'longitude': baseLng + (i * 0.001) + (area.hashCode % 100) * 0.0001,
+            'area': area,
+            'pincode': pincode,
+            'stage': 'new',
+            'photos': [],
+            'types': [businessType],
+            'priceLevel': 1 + (i % 3),
+            'openNow': i % 2 == 0,
+          };
+
+          mockBusinesses.add(business);
+          typeCount++;
+        }
+      }
+
+      breakdown[businessType] = typeCount;
+      print('   ✅ Generated $typeCount businesses for $businessType');
+    }
+
+    print(
+      '🎭 Mock generation complete: ${mockBusinesses.length} total businesses',
+    );
+    print('   Breakdown: $breakdown');
+
+    return {
+      'success': true,
+      'businesses': mockBusinesses,
+      'totalBusinesses': mockBusinesses.length,
+      'breakdown': breakdown,
+      'message': 'Found ${mockBusinesses.length} businesses (mock data)',
+    };
+  }
+
+  String _generateMockBusinessName(String businessType, int index) {
+    Map<String, List<String>> nameTemplates = {
+      'kirana': [
+        'Sharma General Store',
+        'Patel Kirana',
+        'Gupta Store',
+        'Local Mart',
+        'Family Store',
+      ],
+      'pharmacy': [
+        'Apollo Pharmacy',
+        'MedPlus',
+        'City Medical',
+        'Health Care',
+        'Wellness Pharmacy',
+      ],
+      'schools': [
+        'St. Mary School',
+        'Government School',
+        'Little Angels',
+        'Bright Future School',
+        'Knowledge Hub',
+      ],
+      'cafe': [
+        'Coffee Corner',
+        'Tea Time',
+        'Brew House',
+        'Cafe Delight',
+        'Morning Fresh',
+      ],
+      'restaurant': [
+        'Tasty Bites',
+        'Food Palace',
+        'Spice Garden',
+        'Royal Dining',
+        'Home Kitchen',
+      ],
+      'bakery': [
+        'Fresh Bread',
+        'Sweet Corner',
+        'Cake Shop',
+        'Bakery House',
+        'Daily Bread',
+      ],
+      'hotel': [
+        'Hotel Comfort',
+        'Stay Inn',
+        'Royal Lodge',
+        'City Hotel',
+        'Traveler Rest',
+      ],
+      'supermarket': [
+        'Big Bazaar',
+        'Super Market',
+        'Mega Store',
+        'Shopping Center',
+        'Retail Hub',
+      ],
+      'hospitals': [
+        'City Hospital',
+        'Apollo Hospital',
+        'Max Healthcare',
+        'Fortis Hospital',
+        'AIIMS',
+        'Government Hospital',
+        'Care Hospital',
+      ],
+      'colleges': [
+        'Government College',
+        'Engineering College',
+        'Medical College',
+        'Arts College',
+        'Commerce College',
+      ],
+      'hostel': [
+        'Student Hostel',
+        'PG Accommodation',
+        'Boys Hostel',
+        'Girls Hostel',
+        'Working Hostel',
+      ],
+      'others': [
+        'General Store',
+        'Local Shop',
+        'Service Center',
+        'Business Center',
+        'Commercial Hub',
+      ],
+    };
+
+    List<String> names =
+        nameTemplates[businessType.toLowerCase()] ??
+        nameTemplates['others'] ??
+        ['${businessType.toUpperCase()} ${index + 1}'];
+    return names[index % names.length];
+  }
+
+  // Map business types to Google Places types
+  String _mapBusinessTypeToGoogleType(String businessType) {
+    switch (businessType.toLowerCase()) {
+      case 'kirana':
+      case 'grocery':
+        return 'grocery store';
+      case 'cafe':
+        return 'cafe';
+      case 'hotel':
+        return 'lodging';
+      case 'dairy':
+        return 'store dairy';
+      case 'restaurant':
+        return 'restaurant';
+      case 'bakery':
+        return 'bakery';
+      case 'pharmacy':
+        return 'pharmacy';
+      case 'supermarket':
+        return 'supermarket';
+      case 'hostel':
+        return 'lodging hostel';
+      case 'schools':
+        return 'school';
+      case 'colleges':
+        return 'university';
+      case 'hospitals':
+        return 'hospital';
+      case 'others':
+        return 'store';
+      default:
+        return businessType;
     }
   }
 
