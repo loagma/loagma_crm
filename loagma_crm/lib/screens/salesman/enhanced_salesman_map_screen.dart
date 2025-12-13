@@ -8,7 +8,7 @@ import '../../services/user_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/location_service.dart';
 import '../../services/network_service.dart';
-import '../../services/area_assignment_service.dart';
+import '../../services/task_assignment_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 
@@ -251,16 +251,16 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
       try {
         final assignments =
-            await AreaAssignmentService.getSalesmanAreaAssignments();
-        print('📊 Area assignments loaded: ${assignments.length}');
+            await TaskAssignmentService.getSalesmanTaskAssignments();
+        print('📊 Task assignments loaded: ${assignments.length}');
 
         setState(() {
           areaAssignments = assignments.map((a) => a.toJson()).toList();
         });
         _extractFilterOptions();
-        print('✅ Loaded ${areaAssignments.length} area assignments');
+        print('✅ Loaded ${areaAssignments.length} task assignments');
       } catch (e) {
-        print('❌ Error loading area assignments: $e');
+        print('❌ Error loading task assignments: $e');
       }
     } catch (e) {
       print('❌ Error loading area assignments: $e');

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/user_service.dart';
 import '../../services/network_service.dart';
-import '../../services/area_assignment_service.dart';
+import '../../services/task_assignment_service.dart';
 
 class SRAreaAllotmentScreen extends StatefulWidget {
   const SRAreaAllotmentScreen({super.key});
@@ -53,9 +53,9 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
       print('🔍 Loading area assignments for user: $userId');
       print('🔑 Token available: ${token.isNotEmpty}');
 
-      print('📡 Fetching area assignments using service...');
+      print('📡 Fetching task assignments using service...');
       final assignments =
-          await AreaAssignmentService.getSalesmanAreaAssignments();
+          await TaskAssignmentService.getSalesmanTaskAssignments();
 
       // Create a mock response structure for compatibility
       final response = http.Response(

@@ -1,111 +1,134 @@
 import { PrismaClient } from '@prisma/client';
-import { getAreasByPincode } from '../services/pincodeService.js';
-import { searchBusinessesByPincode } from '../services/googlePlacesService.js';
-
 const prisma = new PrismaClient();
 
-/**
- * Get all salesmen (users with salesman role in primaryRole, otherRoles, roles array, or roleId)
- */
-export const getAllSalesmen = async (req, res) => {
+// Get all task assignments
+const getAllTaskAssignments = async (req, res) => {
   try {
-    // Fetch users with their role relation to get role name
-    const allUsers = await prisma.user.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        contactNumber: true,
-        employeeCode: true,
-        email: true,
-        roles: true,
-        roleId: true,
-        role: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      }
+    const assignments = await prisma.taskAssignment.findMany({
+      orderBy: {
+        assignedDate: 'desc',
+      },
     });
 
-    // Filter salesmen by roleId = 'R002' or role.name = 'salesman'
-    const salesmen = allUsers.filter(user => {
-      // Check roleId (R002 is salesman)
-      if (user.roleId === 'R002') return true;
-      
-      // Check role relation
-      if (user.role && user.role.name === 'salesman') return true;
-      
-      // Check roles array (for backward compatibility)
-      const rArr = Array.isArray(user.roles)
-        ? user.roles.map(r => r.toLowerCase())
-        : [];
-      if (rArr.includes("salesman") || rArr.includes("r002")) return true;
-      
-      return false;
-    });
-
-    console.log(`📊 Found ${salesmen.length} salesmen out of ${allUsers.length} users`);
-    
     res.json({
       success: true,
-      count: salesmen.length,
-      salesmen
+      assignments: assignments.map(assignment => ({
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching task assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch task assignments',
+      error: error.message,
+    });
+  }
+};
+
+// Get task assignments for a specific salesman
+const getSalesmanTaskAssignments = async (req, res) => {
+  try {
+    const { salesmanId } = req.params;
+
+    const assignments = await prisma.taskAssignment.findMany({
+      where: {
+        salesmanId: salesmanId,
+      },
+      orderBy: {
+        assignedDate: 'desc',
+      },
     });
 
+    res.json({
+      success: true,
+      assignments: assignments.map(assignment => ({
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      })),
+    });
   } catch (error) {
-    console.error("Error fetching salesmen:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error fetching salesman task assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch salesman task assignments',
+      error: error.message,
+    });
   }
 };
 
-
-
-/**
- * Get location details by pincode
- */
-export const getLocationByPincode = async (req, res) => {
+// Get task assignments for current authenticated user
+const getMyTaskAssignments = async (req, res) => {
   try {
-    const { pincode } = req.params;
+    const salesmanId = req.user.id; // Get from authenticated token
 
-    // Validate pincode
-    if (!/^\d{6}$/.test(pincode)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid pincode format. Must be 6 digits.' 
-      });
-    }
+    console.log('🔍 Loading task assignments for user:', salesmanId);
 
-    // Fetch location details from pincode service
-    const result = await getAreasByPincode(pincode);
+    const assignments = await prisma.taskAssignment.findMany({
+      where: {
+        salesmanId: salesmanId,
+      },
+      orderBy: {
+        assignedDate: 'desc',
+      },
+    });
 
-    if (!result.success) {
-      return res.status(404).json(result);
-    }
+    console.log('📊 Found task assignments:', assignments.length);
 
-    // Format response
-    const location = {
-      pincode: result.data.pincode,
-      country: result.data.country,
-      state: result.data.state,
-      district: result.data.district,
-      city: result.data.city,
-      areas: result.data.areas.map(area => area.name)
-    };
-
-    res.json({ success: true, location });
+    res.json({
+      success: true,
+      assignments: assignments.map(assignment => ({
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      })),
+    });
   } catch (error) {
-    console.error('Get location error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error fetching my task assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch task assignments',
+      error: error.message,
+    });
   }
 };
 
-/**
- * Assign areas to salesman
- */
-export const assignAreasToSalesman = async (req, res) => {
+// Create new task assignment
+const createTaskAssignment = async (req, res) => {
   try {
+    console.log('🆕 Creating new task assignment...');
+    console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+
     const {
       salesmanId,
       salesmanName,
@@ -116,378 +139,300 @@ export const assignAreasToSalesman = async (req, res) => {
       city,
       areas,
       businessTypes,
-      totalBusinesses
+      totalBusinesses,
     } = req.body;
 
-    console.log('📥 Received assignment request:', {
-      salesmanId,
-      salesmanName,
-      pincode,
-      areasCount: areas?.length,
-      businessTypes,
-      totalBusinesses
-    });
+    console.log('🔍 Extracted fields:');
+    console.log('  salesmanId:', salesmanId);
+    console.log('  salesmanName:', salesmanName);
+    console.log('  pincode:', pincode);
+    console.log('  country:', country);
+    console.log('  state:', state);
+    console.log('  district:', district);
+    console.log('  city:', city);
+    console.log('  areas:', areas);
+    console.log('  businessTypes:', businessTypes);
+    console.log('  totalBusinesses:', totalBusinesses);
 
-    // Validation
-    if (!salesmanId || !pincode || !areas || areas.length === 0) {
-      console.log('❌ Validation failed: Missing required fields');
+    // Validate required fields
+    if (!salesmanId || !salesmanName || !pincode || !country || !state || !district || !city) {
+      console.log('❌ Validation failed - missing required fields');
       return res.status(400).json({
         success: false,
-        message: 'salesmanId, pincode, and areas are required'
+        message: 'Missing required fields: salesmanId, salesmanName, pincode, country, state, district, city',
       });
     }
 
-    // Check if salesman exists (only check basic fields)
+    // Check if salesman exists
+    console.log('🔍 Checking if salesman exists...');
     const salesman = await prisma.user.findUnique({
       where: { id: salesmanId },
-      select: {
-        id: true,
-        name: true,
-        employeeCode: true,
-        isActive: true
-      }
     });
 
     if (!salesman) {
       console.log('❌ Salesman not found:', salesmanId);
       return res.status(404).json({
         success: false,
-        message: 'Salesman not found'
+        message: 'Salesman not found',
       });
     }
 
-    if (!salesman.isActive) {
-      console.log('❌ Salesman is not active:', salesmanId);
-      return res.status(400).json({
-        success: false,
-        message: 'Salesman is not active'
-      });
-    }
+    console.log('✅ Salesman found:', salesman.name);
 
-    // Check if assignment already exists for this pincode and salesman
-    const existingAssignment = await prisma.taskAssignment.findFirst({
-      where: {
+    console.log('💾 Creating task assignment in database...');
+    const assignment = await prisma.taskAssignment.create({
+      data: {
         salesmanId,
-        pincode
-      }
+        salesmanName,
+        pincode,
+        country,
+        state,
+        district,
+        city,
+        areas: areas || [],
+        businessTypes: businessTypes || [],
+        totalBusinesses: totalBusinesses || 0,
+        assignedDate: new Date(),
+      },
     });
 
-    let assignment;
-    if (existingAssignment) {
-      // Update existing assignment
-      assignment = await prisma.taskAssignment.update({
-        where: { id: existingAssignment.id },
-        data: {
-          areas,
-          businessTypes: businessTypes || [],
-          totalBusinesses: totalBusinesses || 0,
-          updatedAt: new Date()
-        }
+    console.log('✅ Task assignment created successfully:', assignment.id);
+
+    const responseData = {
+      success: true,
+      message: 'Task assignment created successfully',
+      assignment: {
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      },
+    };
+
+    console.log('📤 Sending response:', JSON.stringify(responseData, null, 2));
+    res.status(201).json(responseData);
+  } catch (error) {
+    console.error('❌ Error creating task assignment:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create task assignment',
+      error: error.message,
+    });
+  }
+};
+
+// Get task assignment by ID
+const getTaskAssignmentById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const assignment = await prisma.taskAssignment.findUnique({
+      where: { id },
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task assignment not found',
       });
-      console.log(`✅ Updated assignment for ${salesmanName} in pincode ${pincode}`);
-    } else {
-      // Create new task assignment
-      assignment = await prisma.taskAssignment.create({
-        data: {
-          salesmanId,
-          salesmanName: salesmanName || salesman.name,
-          pincode,
-          country,
-          state,
-          district,
-          city,
-          areas,
-          businessTypes: businessTypes || [],
-          totalBusinesses: totalBusinesses || 0
-        }
-      });
-      console.log(`✅ Created new assignment for ${salesmanName} in pincode ${pincode}`);
     }
 
-    res.status(201).json({
+    res.json({
       success: true,
-      message: `Successfully assigned ${areas.length} areas to ${salesmanName || salesman.name}`,
-      assignment
+      assignment: {
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      },
     });
   } catch (error) {
-    console.error('Assign areas error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error fetching task assignment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch task assignment',
+      error: error.message,
+    });
   }
 };
 
-/**
- * Get assignments by salesman ID
- */
-export const getAssignmentsBySalesman = async (req, res) => {
+// Update task assignment
+const updateTaskAssignment = async (req, res) => {
   try {
-    const { salesmanId } = req.params;
+    const { id } = req.params;
+    const {
+      salesmanId,
+      salesmanName,
+      pincode,
+      country,
+      state,
+      district,
+      city,
+      areas,
+      businessTypes,
+      totalBusinesses,
+    } = req.body;
 
-    const assignments = await prisma.taskAssignment.findMany({
-      where: { salesmanId },
-      orderBy: { assignedDate: 'desc' }
+    // Check if assignment exists
+    const existingAssignment = await prisma.taskAssignment.findUnique({
+      where: { id },
     });
 
-    res.json({ success: true, assignments });
-  } catch (error) {
-    console.error('Get assignments error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * Update assignment
- */
-export const updateAssignment = async (req, res) => {
-  try {
-    const { assignmentId } = req.params;
-    const { areas, businessTypes, totalBusinesses } = req.body;
-
-    console.log('📝 Updating assignment:', assignmentId, req.body);
-
-    // Build update data object
-    const updateData = {};
-    if (areas !== undefined) updateData.areas = areas;
-    if (businessTypes !== undefined) updateData.businessTypes = businessTypes;
-    if (totalBusinesses !== undefined) updateData.totalBusinesses = totalBusinesses;
-    updateData.updatedAt = new Date();
+    if (!existingAssignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task assignment not found',
+      });
+    }
 
     const assignment = await prisma.taskAssignment.update({
-      where: { id: assignmentId },
-      data: updateData
+      where: { id },
+      data: {
+        ...(salesmanId && { salesmanId }),
+        ...(salesmanName && { salesmanName }),
+        ...(pincode && { pincode }),
+        ...(country && { country }),
+        ...(state && { state }),
+        ...(district && { district }),
+        ...(city && { city }),
+        ...(areas && { areas }),
+        ...(businessTypes && { businessTypes }),
+        ...(totalBusinesses !== undefined && { totalBusinesses }),
+      },
     });
 
-    console.log('✅ Assignment updated successfully');
-    res.json({ 
-      success: true, 
-      message: 'Assignment updated successfully',
-      assignment 
+    res.json({
+      success: true,
+      message: 'Task assignment updated successfully',
+      assignment: {
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      },
     });
   } catch (error) {
-    console.error('Update assignment error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error updating task assignment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update task assignment',
+      error: error.message,
+    });
   }
 };
 
-/**
- * Delete assignment
- */
-export const deleteAssignment = async (req, res) => {
+// Delete task assignment
+const deleteTaskAssignment = async (req, res) => {
   try {
-    const { assignmentId } = req.params;
+    const { id } = req.params;
 
-    console.log('🗑️ Deleting assignment:', assignmentId);
+    // Check if assignment exists
+    const existingAssignment = await prisma.taskAssignment.findUnique({
+      where: { id },
+    });
+
+    if (!existingAssignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task assignment not found',
+      });
+    }
 
     await prisma.taskAssignment.delete({
-      where: { id: assignmentId }
+      where: { id },
     });
 
-    console.log('✅ Assignment deleted successfully');
-    res.json({ success: true, message: 'Assignment deleted successfully' });
-  } catch (error) {
-    console.error('Delete assignment error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * Search businesses by pincode and business types
- */
-export const searchBusinesses = async (req, res) => {
-  try {
-    const { pincode, areas, businessTypes } = req.body;
-
-    if (!pincode || !businessTypes || businessTypes.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'pincode and businessTypes are required'
-      });
-    }
-
-    // Search businesses using Google Places API
-    const result = await searchBusinessesByPincode(pincode, businessTypes, areas);
-
-    if (!result.success) {
-      return res.status(500).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error('Search businesses error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * Save shops to database
- */
-export const saveShops = async (req, res) => {
-  try {
-    const { shops, salesmanId } = req.body;
-
-    if (!shops || shops.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'shops array is required'
-      });
-    }
-
-    const savedShops = [];
-    const shopsByPincode = {};
-
-    for (const shop of shops) {
-      // Check if shop already exists by placeId
-      let existingShop = null;
-      if (shop.placeId) {
-        existingShop = await prisma.shop.findUnique({
-          where: { placeId: shop.placeId }
-        });
-      }
-
-      let savedShop;
-      if (existingShop) {
-        // Update existing shop
-        savedShop = await prisma.shop.update({
-          where: { id: existingShop.id },
-          data: {
-            assignedTo: salesmanId || existingShop.assignedTo,
-            updatedAt: new Date()
-          }
-        });
-      } else {
-        // Create new shop
-        savedShop = await prisma.shop.create({
-          data: {
-            placeId: shop.placeId,
-            name: shop.name,
-            businessType: shop.businessType,
-            address: shop.address,
-            pincode: shop.pincode,
-            area: shop.area,
-            city: shop.city,
-            state: shop.state,
-            country: shop.country,
-            latitude: shop.latitude,
-            longitude: shop.longitude,
-            phoneNumber: shop.phoneNumber,
-            rating: shop.rating,
-            assignedTo: salesmanId,
-            stage: 'new'
-          }
-        });
-      }
-      
-      savedShops.push(savedShop);
-      
-      // Count shops by pincode
-      const pincode = savedShop.pincode;
-      shopsByPincode[pincode] = (shopsByPincode[pincode] || 0) + 1;
-    }
-
-    // Update totalBusinesses count in task assignments
-    if (salesmanId) {
-      for (const [pincode, count] of Object.entries(shopsByPincode)) {
-        await prisma.taskAssignment.updateMany({
-          where: {
-            salesmanId,
-            pincode
-          },
-          data: {
-            totalBusinesses: count
-          }
-        });
-        console.log(`✅ Updated assignment for pincode ${pincode}: ${count} businesses`);
-      }
-    }
-
-    res.status(201).json({
+    res.json({
       success: true,
-      message: `Saved ${savedShops.length} shops`,
-      shops: savedShops,
-      breakdown: shopsByPincode
+      message: 'Task assignment deleted successfully',
     });
   } catch (error) {
-    console.error('Save shops error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error deleting task assignment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete task assignment',
+      error: error.message,
+    });
   }
 };
 
-/**
- * Get shops by salesman
- */
-export const getShopsBySalesman = async (req, res) => {
+// Search task assignments by location
+const searchTaskAssignments = async (req, res) => {
   try {
-    const { salesmanId } = req.params;
-    const { stage, businessType } = req.query;
+    const { pincode, city, district, state } = req.query;
 
-    const where = { assignedTo: salesmanId };
-    if (stage) where.stage = stage;
-    if (businessType) where.businessType = businessType;
+    const whereClause = {};
+    if (pincode) whereClause.pincode = { contains: pincode, mode: 'insensitive' };
+    if (city) whereClause.city = { contains: city, mode: 'insensitive' };
+    if (district) whereClause.district = { contains: district, mode: 'insensitive' };
+    if (state) whereClause.state = { contains: state, mode: 'insensitive' };
 
-    const shops = await prisma.shop.findMany({
-      where,
-      orderBy: { createdAt: 'desc' }
+    const assignments = await prisma.taskAssignment.findMany({
+      where: whereClause,
+      orderBy: {
+        assignedDate: 'desc',
+      },
     });
 
-    res.json({ success: true, shops });
+    res.json({
+      success: true,
+      assignments: assignments.map(assignment => ({
+        id: assignment.id,
+        salesmanId: assignment.salesmanId,
+        salesmanName: assignment.salesmanName,
+        pincode: assignment.pincode,
+        country: assignment.country,
+        state: assignment.state,
+        district: assignment.district,
+        city: assignment.city,
+        areas: assignment.areas || [],
+        businessTypes: assignment.businessTypes || [],
+        assignedDate: assignment.assignedDate,
+        totalBusinesses: assignment.totalBusinesses || 0,
+      })),
+    });
   } catch (error) {
-    console.error('Get shops error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error searching task assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search task assignments',
+      error: error.message,
+    });
   }
 };
 
-/**
- * Update shop stage
- */
-export const updateShopStage = async (req, res) => {
-  try {
-    const { shopId } = req.params;
-    const { stage, notes } = req.body;
-
-    const validStages = ['new', 'follow-up', 'converted', 'lost'];
-    if (!validStages.includes(stage)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid stage. Must be: new, follow-up, converted, or lost'
-      });
-    }
-
-    const shop = await prisma.shop.update({
-      where: { id: shopId },
-      data: {
-        stage,
-        notes: notes || undefined,
-        lastContactDate: new Date()
-      }
-    });
-
-    res.json({ success: true, shop });
-  } catch (error) {
-    console.error('Update shop stage error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * Get shops by pincode with filters
- */
-export const getShopsByPincode = async (req, res) => {
-  try {
-    const { pincode } = req.params;
-    const { stage, businessType, assignedTo } = req.query;
-
-    const where = { pincode };
-    if (stage) where.stage = stage;
-    if (businessType) where.businessType = businessType;
-    if (assignedTo) where.assignedTo = assignedTo;
-
-    const shops = await prisma.shop.findMany({
-      where,
-      orderBy: { createdAt: 'desc' }
-    });
-
-    res.json({ success: true, shops });
-  } catch (error) {
-    console.error('Get shops by pincode error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+export {
+  getAllTaskAssignments,
+  getSalesmanTaskAssignments,
+  getMyTaskAssignments,
+  getTaskAssignmentById,
+  createTaskAssignment,
+  updateTaskAssignment,
+  deleteTaskAssignment,
+  searchTaskAssignments,
 };

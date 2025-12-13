@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
-import '../../services/area_assignment_service.dart';
+import '../../services/task_assignment_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/attendance_status_widget.dart';
 import 'sr_area_allotment_screen.dart';
@@ -173,15 +173,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
 
       final assignmentsData = jsonDecode(assignmentsResponse.body);
 
-      // Fetch area assignments using the service
-      print('📡 Fetching area assignments using service...');
-      final fetchedAreaAssignments =
-          await AreaAssignmentService.getSalesmanAreaAssignments();
-      print('📥 Area Assignments loaded: ${fetchedAreaAssignments.length}');
+      // Fetch task assignments using the service
+      print('📡 Fetching task assignments using service...');
+      final fetchedTaskAssignments =
+          await TaskAssignmentService.getSalesmanTaskAssignments();
+      print('📥 Task Assignments loaded: ${fetchedTaskAssignments.length}');
 
       final areaAssignmentsData = {
         'success': true,
-        'assignments': fetchedAreaAssignments.map((a) => a.toJson()).toList(),
+        'assignments': fetchedTaskAssignments.map((a) => a.toJson()).toList(),
       };
 
       // Process customer stage breakdown
