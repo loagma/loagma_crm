@@ -52,6 +52,20 @@ const getSalesmanAreaAssignments = async (req, res) => {
   try {
     const { salesmanId } = req.params;
 
+    console.log('🔍 Searching for area assignments with salesmanId:', salesmanId);
+    console.log('🔍 salesmanId type:', typeof salesmanId);
+
+    // First, let's check all area assignments to see what's in the database
+    const allAssignments = await prisma.areaAssignment.findMany({
+      select: {
+        id: true,
+        salesmanId: true,
+        city: true,
+        district: true,
+      },
+    });
+    console.log('📊 All area assignments in database:', allAssignments);
+
     const assignments = await prisma.areaAssignment.findMany({
       where: {
         salesmanId: salesmanId,

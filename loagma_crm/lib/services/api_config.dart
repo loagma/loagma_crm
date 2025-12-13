@@ -45,6 +45,12 @@ class ApiConfig {
   /// Toggle between environments
   /// Set to false for local development
   /// Set to true for production/deployed backend
+  ///
+  /// NOTE: If you're getting "Failed host lookup" errors with the production server,
+  /// it might be because the free Render server is sleeping. Try:
+  /// 1. Wait 30-60 seconds and retry
+  /// 2. Set useProduction = false to use local backend
+  /// 3. Make sure your local backend is running on port 5000
   static const bool useProduction = true; // Using Render deployed backend
 
   static String get baseUrl {

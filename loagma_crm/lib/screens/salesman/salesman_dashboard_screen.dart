@@ -2,13 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/attendance_status_widget.dart';
 import 'sr_area_allotment_screen.dart';
+import 'enhanced_salesman_map_screen.dart';
 
 class SalesmanDashboardScreen extends StatefulWidget {
   const SalesmanDashboardScreen({super.key});
@@ -22,6 +22,8 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     with SingleTickerProviderStateMixin {
   Map<String, dynamic>? accountStats;
   List<Map<String, dynamic>> assignments = [];
+  List<Map<String, dynamic>> areaAssignments =
+      []; // Real area assignments from backend
   List<Map<String, dynamic>> recentAccounts = [];
   Map<String, int> customerStageBreakdown = {};
   bool isLoading = true;
@@ -120,7 +122,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       );
       print('📡 Fetching stats from: $accountStatsUrl');
 
-      final accountStatsResponse = await http.get(accountStatsUrl);
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
+      final accountStatsResponse = await http.get(
+        accountStatsUrl,
+        headers: headers,
+      );
       print('📥 Stats Response Status: ${accountStatsResponse.statusCode}');
       print('📥 Stats Response Body: ${accountStatsResponse.body}');
 
@@ -132,7 +143,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       );
       print('📡 Fetching accounts from: $accountsUrl');
 
-      final accountsResponse = await http.get(accountsUrl);
+      final accountsResponse = await http.get(accountsUrl, headers: headers);
       print('📥 Accounts Response Status: ${accountsResponse.statusCode}');
       print('📥 Accounts Response Body: ${accountsResponse.body}');
 
@@ -145,18 +156,37 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
         totalAccounts = accountsData['data'].length;
       }
 
-      // Fetch assignments
+      // Fetch task assignments
       final assignmentsUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/task-assignments?salesmanId=$userId',
+        '${ApiConfig.baseUrl}/task-assignments/assignments/salesman/$userId',
       );
-      print('📡 Fetching assignments from: $assignmentsUrl');
+      print('📡 Fetching task assignments from: $assignmentsUrl');
 
-      final assignmentsResponse = await http.get(assignmentsUrl);
+      final assignmentsResponse = await http.get(
+        assignmentsUrl,
+        headers: headers,
+      );
       print(
-        '📥 Assignments Response Status: ${assignmentsResponse.statusCode}',
+        '📥 Task Assignments Response Status: ${assignmentsResponse.statusCode}',
       );
 
       final assignmentsData = jsonDecode(assignmentsResponse.body);
+
+      // Fetch area assignments
+      final areaAssignmentsUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/area-assignments/salesman/$userId',
+      );
+      print('📡 Fetching area assignments from: $areaAssignmentsUrl');
+
+      final areaAssignmentsResponse = await http.get(
+        areaAssignmentsUrl,
+        headers: headers,
+      );
+      print(
+        '📥 Area Assignments Response Status: ${areaAssignmentsResponse.statusCode}',
+      );
+
+      final areaAssignmentsData = jsonDecode(areaAssignmentsResponse.body);
 
       // Process customer stage breakdown
       Map<String, int> stageBreakdown = {};
@@ -171,12 +201,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       print('📊 Processed Data:');
       print('   Total Accounts: ${accountStatsData['data']?['totalAccounts']}');
       print('   Recent Accounts: ${accountsData['data']?.length}');
-      print('   Assignments: ${assignmentsData['data']?.length}');
+      print('   Task Assignments: ${assignmentsData['data']?.length}');
+      print('   Area Assignments: ${areaAssignmentsData['data']?.length}');
 
       setState(() {
         accountStats = accountStatsData['data'] ?? {};
         assignments = List<Map<String, dynamic>>.from(
           assignmentsData['data'] ?? [],
+        );
+        areaAssignments = List<Map<String, dynamic>>.from(
+          areaAssignmentsData['data'] ?? [],
         );
         recentAccounts = List<Map<String, dynamic>>.from(
           accountsData['data'] ?? [],
@@ -292,7 +326,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                                 Expanded(
                                   child: _buildStatCard(
                                     'Area Allotments',
-                                    assignments.length.toString(),
+                                    areaAssignments.length.toString(),
                                     Icons.map,
                                     Colors.purple,
                                   ),
@@ -302,6 +336,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                           ],
                         ),
                       ),
+
+                      // Area Allotments Section
+                      if (areaAssignments.isNotEmpty)
+                        _buildAreaAllotmentsSection(),
 
                       // Recent Accounts with Pagination
                       if (recentAccounts.isNotEmpty)
@@ -344,6 +382,130 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
             Text(
               title,
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAreaAllotmentsSection() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Area Allotments',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SRAreaAllotmentScreen(),
+                  ),
+                ),
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: areaAssignments.length,
+              itemBuilder: (context, index) {
+                final assignment = areaAssignments[index];
+                return Container(
+                  width: 200,
+                  margin: const EdgeInsets.only(right: 12),
+                  child: _buildAreaAllotmentCard(assignment),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAreaAllotmentCard(Map<String, dynamic> assignment) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.location_city,
+                    color: primaryColor,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    assignment['city'] ?? 'Unknown City',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              assignment['district'] ?? 'Unknown District',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.pin_drop, size: 12, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  assignment['pinCode'] ?? 'N/A',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: assignment['isActive'] == true
+                        ? Colors.green
+                        : Colors.orange,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    assignment['isActive'] == true ? 'Active' : 'Inactive',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -429,11 +591,17 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
 
     try {
       final userId = UserService.currentUserId;
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
       final accountsUrl = Uri.parse(
         '${ApiConfig.baseUrl}/accounts?createdById=$userId&limit=$itemsPerPage&page=$page',
       );
 
-      final accountsResponse = await http.get(accountsUrl);
+      final accountsResponse = await http.get(accountsUrl, headers: headers);
       final accountsData = jsonDecode(accountsResponse.body);
 
       setState(() {
@@ -469,7 +637,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -480,7 +648,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.1),
+              color: primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -575,10 +743,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 ),
               ),
               _buildActionCard(
-                'Maps',
+                'Enhanced Maps',
                 Icons.map,
                 Colors.orange,
-                () => context.go('/dashboard/salesman/map'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EnhancedSalesmanMapScreen(),
+                  ),
+                ),
               ),
               _buildActionCard(
                 'Punch',
