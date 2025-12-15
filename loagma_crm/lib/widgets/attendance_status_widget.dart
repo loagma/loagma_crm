@@ -81,45 +81,11 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
         _currentDuration = newDuration.isNegative ? Duration.zero : newDuration;
       });
 
-      // Manual verification (log once when duration changes)
-      final localNow = now.toLocal();
-      final localPunchInTime = punchInTime.toLocal();
-      if (_currentDuration.inSeconds != newDuration.inSeconds) {
-        print('🔍 Manual Test:');
-        print(
-          '   Expected: ${localNow.millisecondsSinceEpoch - localPunchInTime.millisecondsSinceEpoch} ms',
-        );
-        print('   Actual: ${newDuration.inMilliseconds} ms');
-        print(
-          '   Match: ${(localNow.millisecondsSinceEpoch - localPunchInTime.millisecondsSinceEpoch) == newDuration.inMilliseconds}',
-        );
-      }
-
-      // Debug logging (only log every 10 seconds to avoid spam)
-      if (_currentDuration.inSeconds % 10 == 0) {
-        print('🕐 Duration Update: ${_formatDuration(_currentDuration)}');
-        print('   Punch In (UTC): $punchInTime');
-        print('   Punch In (Local): $localPunchInTime');
-        print('   Current (Local): $localNow');
-        print('   Raw Duration Seconds: ${newDuration.inSeconds}');
-        print('   Timezone Offset: ${localNow.timeZoneOffset}');
-        print('   Is Punched In: ${widget.attendance?.isPunchedIn}');
-        print('   Status: ${widget.attendance?.status}');
-        print('   ✅ FIXED: Duration should now be working!');
-      }
     } else {
       setState(() {
         _currentDuration = Duration.zero;
       });
 
-      // Debug when not punched in
-      if (widget.attendance != null) {
-        print(
-          '❌ Not punched in - Status: ${widget.attendance?.status}, isPunchedIn: ${widget.attendance?.isPunchedIn}',
-        );
-      } else {
-        print('❌ No attendance data available');
-      }
     }
   }
 
@@ -132,11 +98,27 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
     });
   }
 
-  /// Safely calculate duration between two DateTime objects, handling timezone differences
+  /// Normalize timestamps where backend stored local time as UTC (e.g., with Z).
+  DateTime _normalizeTimestamp(DateTime timestamp) {
+    if (!timestamp.isUtc) return timestamp;
+    // Drop UTC flag but keep the components so it is treated as local time.
+    return DateTime(
+      timestamp.year,
+      timestamp.month,
+      timestamp.day,
+      timestamp.hour,
+      timestamp.minute,
+      timestamp.second,
+      timestamp.millisecond,
+      timestamp.microsecond,
+    );
+  }
+
+  /// Safely calculate duration between two DateTime objects, handling timezone differences.
   Duration _calculateDuration(DateTime startTime, DateTime endTime) {
-    final localStart = startTime.toLocal();
-    final localEnd = endTime.toLocal();
-    final duration = localEnd.difference(localStart);
+    final normalizedStart = _normalizeTimestamp(startTime);
+    final normalizedEnd = _normalizeTimestamp(endTime);
+    final duration = normalizedEnd.difference(normalizedStart);
     return duration.isNegative ? Duration.zero : duration;
   }
 
@@ -314,43 +296,6 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
                       ),
                     ),
                   ],
-                ],
-
-                // Debug Info (only in debug mode)
-                if (hasAttendance) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Debug: Status=${attendance.status}, isPunchedIn=${attendance.isPunchedIn}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                        ),
-                        Text(
-                          'Local Duration: ${_formatDuration(_currentDuration)}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                        ),
-                        Text(
-                          'Model Duration: ${_formatDuration(attendance.currentWorkDuration)}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
 
                 // Action Hint
