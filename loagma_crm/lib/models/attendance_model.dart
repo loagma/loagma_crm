@@ -187,8 +187,9 @@ class AttendanceModel {
   Duration get currentWorkDuration {
     if (!isPunchedIn) return Duration.zero;
 
-    final now = DateTime.now();
-    final duration = now.difference(punchInTime);
+    final now = DateTime.now().toLocal();
+    final localPunchInTime = punchInTime.toLocal();
+    final duration = now.difference(localPunchInTime);
 
     // Ensure duration is not negative
     return duration.isNegative ? Duration.zero : duration;
@@ -198,7 +199,9 @@ class AttendanceModel {
   Duration get totalWorkDuration {
     if (punchOutTime == null) return currentWorkDuration;
 
-    final duration = punchOutTime!.difference(punchInTime);
+    final localPunchInTime = punchInTime.toLocal();
+    final localPunchOutTime = punchOutTime!.toLocal();
+    final duration = localPunchOutTime.difference(localPunchInTime);
     return duration.isNegative ? Duration.zero : duration;
   }
 

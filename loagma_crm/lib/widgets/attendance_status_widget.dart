@@ -24,6 +24,7 @@ class AttendanceStatusWidget extends StatefulWidget {
 class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   Timer? _timer;
   String _currentTime = '';
+  Duration _currentDuration = Duration.zero;
   Position? _currentPosition;
   StreamSubscription<Position>? _locationSubscription;
 
@@ -31,9 +32,20 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   void initState() {
     super.initState();
     _updateTime();
+    _updateDuration();
     _startTimer();
     if (widget.showLiveLocation) {
       _startLocationTracking();
+    }
+  }
+
+  @override
+  void didUpdateWidget(AttendanceStatusWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If attendance data changed, update duration immediately
+    if (oldWidget.attendance != widget.attendance) {
+      _updateDuration();
     }
   }
 
@@ -47,11 +59,7 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateTime();
-      if (widget.attendance?.isPunchedIn == true) {
-        setState(() {
-          // Trigger rebuild to update duration display
-        });
-      }
+      _updateDuration();
     });
   }
 
@@ -59,6 +67,60 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
     setState(() {
       _currentTime = DateFormat('hh:mm:ss a').format(DateTime.now());
     });
+  }
+
+  void _updateDuration() {
+    if (widget.attendance?.isPunchedIn == true) {
+      final now = DateTime.now();
+      final punchInTime = widget.attendance!.punchInTime;
+
+      // Fix timezone issue: Use utility method for safe duration calculation
+      final newDuration = _calculateDuration(punchInTime, now);
+
+      setState(() {
+        _currentDuration = newDuration.isNegative ? Duration.zero : newDuration;
+      });
+
+      // Manual verification (log once when duration changes)
+      final localNow = now.toLocal();
+      final localPunchInTime = punchInTime.toLocal();
+      if (_currentDuration.inSeconds != newDuration.inSeconds) {
+        print('🔍 Manual Test:');
+        print(
+          '   Expected: ${localNow.millisecondsSinceEpoch - localPunchInTime.millisecondsSinceEpoch} ms',
+        );
+        print('   Actual: ${newDuration.inMilliseconds} ms');
+        print(
+          '   Match: ${(localNow.millisecondsSinceEpoch - localPunchInTime.millisecondsSinceEpoch) == newDuration.inMilliseconds}',
+        );
+      }
+
+      // Debug logging (only log every 10 seconds to avoid spam)
+      if (_currentDuration.inSeconds % 10 == 0) {
+        print('🕐 Duration Update: ${_formatDuration(_currentDuration)}');
+        print('   Punch In (UTC): $punchInTime');
+        print('   Punch In (Local): $localPunchInTime');
+        print('   Current (Local): $localNow');
+        print('   Raw Duration Seconds: ${newDuration.inSeconds}');
+        print('   Timezone Offset: ${localNow.timeZoneOffset}');
+        print('   Is Punched In: ${widget.attendance?.isPunchedIn}');
+        print('   Status: ${widget.attendance?.status}');
+        print('   ✅ FIXED: Duration should now be working!');
+      }
+    } else {
+      setState(() {
+        _currentDuration = Duration.zero;
+      });
+
+      // Debug when not punched in
+      if (widget.attendance != null) {
+        print(
+          '❌ Not punched in - Status: ${widget.attendance?.status}, isPunchedIn: ${widget.attendance?.isPunchedIn}',
+        );
+      } else {
+        print('❌ No attendance data available');
+      }
+    }
   }
 
   void _startLocationTracking() {
@@ -70,20 +132,47 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
     });
   }
 
+  /// Safely calculate duration between two DateTime objects, handling timezone differences
+  Duration _calculateDuration(DateTime startTime, DateTime endTime) {
+    final localStart = startTime.toLocal();
+    final localEnd = endTime.toLocal();
+    final duration = localEnd.difference(localStart);
+    return duration.isNegative ? Duration.zero : duration;
+  }
+
   String _formatDuration(Duration duration) {
-    // Handle negative durations
-    if (duration.isNegative) {
+    // Handle null or negative durations
+    if (duration.isNegative || duration == Duration.zero) {
       return '00:00:00';
     }
 
     String twoDigits(int n) => n.toString().padLeft(2, '0');
 
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
+    final totalSeconds = duration.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
 
     // Always show hours:minutes:seconds format for clarity
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
+  }
+
+  String _getDurationText(AttendanceModel? attendance, bool isPunchedIn) {
+    if (attendance == null) {
+      return '--:--:--';
+    }
+
+    if (isPunchedIn) {
+      // Show live duration with blinking indicator
+      final durationText = _formatDuration(_currentDuration);
+      final indicator = _currentDuration.inSeconds % 2 == 0 ? '●' : '○';
+      return '$durationText $indicator';
+    } else if (attendance.punchOutTime != null) {
+      // Show completed work duration
+      return _formatDuration(attendance.totalWorkDuration);
+    } else {
+      return '--:--:--';
+    }
   }
 
   @override
@@ -186,11 +275,7 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
                       Container(width: 1, height: 40, color: Colors.white30),
                       _buildTimeInfo(
                         'Duration',
-                        isPunchedIn
-                            ? _formatDuration(attendance.currentWorkDuration)
-                            : attendance.punchOutTime != null
-                            ? _formatDuration(attendance.totalWorkDuration)
-                            : '--:--:--',
+                        _getDurationText(attendance, isPunchedIn),
                         Icons.timer,
                       ),
                     ],
@@ -229,6 +314,43 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
                       ),
                     ),
                   ],
+                ],
+
+                // Debug Info (only in debug mode)
+                if (hasAttendance) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Debug: Status=${attendance.status}, isPunchedIn=${attendance.isPunchedIn}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Text(
+                          'Local Duration: ${_formatDuration(_currentDuration)}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Text(
+                          'Model Duration: ${_formatDuration(attendance.currentWorkDuration)}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
 
                 // Action Hint

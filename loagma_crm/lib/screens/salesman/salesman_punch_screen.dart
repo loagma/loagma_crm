@@ -69,11 +69,35 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     });
   }
 
+  /// Returns punch-in time adjusted for server UTC timestamps being treated
+  /// as local (prevents negative durations when server stores IST as UTC).
+  DateTime? get _effectivePunchInTime {
+    if (punchInTime == null) return null;
+    final t = punchInTime!;
+
+    // If the backend sent a UTC timestamp (e.g., ends with Z) but it actually
+    // represents local time, drop the UTC flag so math uses local clock.
+    if (t.isUtc) {
+      return DateTime(
+        t.year,
+        t.month,
+        t.day,
+        t.hour,
+        t.minute,
+        t.second,
+        t.millisecond,
+        t.microsecond,
+      );
+    }
+    return t;
+  }
+
   Duration get liveWorkDuration {
-    if (punchInTime == null) return Duration.zero;
+    final start = _effectivePunchInTime;
+    if (start == null) return Duration.zero;
 
     final now = DateTime.now();
-    final diff = now.difference(punchInTime!);
+    final diff = now.difference(start);
 
     return diff.isNegative ? Duration.zero : diff;
   }
@@ -521,6 +545,10 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           isPunchedIn = true;
           punchInTime = attendance?.punchInTime;
 
+          // Start ticking the UI immediately after a successful punch-in so
+          // duration keeps advancing instead of staying at 00:00:00.
+          _startTimer();
+
           punchInLocation = _currentPosition;
           punchInPhoto = result['photo'];
           punchInPhotoBase64 = result['photoBase64'];
@@ -615,6 +643,7 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
           isPunchedIn = false;
           punchOutTime = DateTime.now();
           punchOutLocation = _currentPosition;
+          _timer?.cancel(); // Stop live duration updates after punch-out
           _markers = _buildMapMarkers();
         });
 
