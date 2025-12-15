@@ -81,6 +81,15 @@ class UserService {
   static String? get name => _prefs?.getString(_keyName);
   static String? get token => _prefs?.getString(_keyToken);
 
+  /// Check if user has valid authentication (logged in with token)
+  static bool get hasValidAuth {
+    return isLoggedIn &&
+        token != null &&
+        token!.isNotEmpty &&
+        currentUserId != null &&
+        currentUserId!.isNotEmpty;
+  }
+
   /// -------------------------------------------------------------
   /// API METHODS
   /// -------------------------------------------------------------

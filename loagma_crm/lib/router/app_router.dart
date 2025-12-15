@@ -48,7 +48,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/',
       redirect: (context, state) {
-        if (UserService.isLoggedIn && UserService.currentRole != null) {
+        if (UserService.hasValidAuth && UserService.currentRole != null) {
           final role = UserService.currentRole!.toLowerCase();
           return '/dashboard/$role';
         }
