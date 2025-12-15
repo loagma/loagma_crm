@@ -176,9 +176,21 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
       if (result['success'] == true && mounted) {
         final data = result['data'];
         setState(() {
-          _availableAreas = List<Map<String, dynamic>>.from(
-            data['areas'] ?? [],
-          );
+          // Load areas - convert string array to map array
+          final areasData = data['areas'] ?? [];
+          if (areasData is List) {
+            _availableAreas = areasData.map((area) {
+              if (area is String) {
+                return {'name': area};
+              } else if (area is Map<String, dynamic>) {
+                return area;
+              } else {
+                return {'name': area.toString()};
+              }
+            }).toList();
+          } else {
+            _availableAreas = [];
+          }
         });
       }
     } catch (e) {
@@ -311,10 +323,21 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
           _districtController.text = data['district'] ?? '';
           _cityController.text = data['city'] ?? '';
 
-          // Load areas
-          _availableAreas = List<Map<String, dynamic>>.from(
-            data['areas'] ?? [],
-          );
+          // Load areas - convert string array to map array
+          final areasData = data['areas'] ?? [];
+          if (areasData is List) {
+            _availableAreas = areasData.map((area) {
+              if (area is String) {
+                return {'name': area};
+              } else if (area is Map<String, dynamic>) {
+                return area;
+              } else {
+                return {'name': area.toString()};
+              }
+            }).toList();
+          } else {
+            _availableAreas = [];
+          }
           _selectedArea = null; // Reset area selection
         });
         _showSuccess('Location details fetched successfully');

@@ -344,10 +344,21 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
             _district.text = locationData["district"] ?? "";
             _city.text = locationData["city"] ?? "";
 
-            // Load areas
-            _availableAreas = List<Map<String, dynamic>>.from(
-              locationData["areas"] ?? [],
-            );
+            // Load areas - convert string array to map array
+            final areasData = locationData["areas"] ?? [];
+            if (areasData is List) {
+              _availableAreas = areasData.map((area) {
+                if (area is String) {
+                  return {'name': area};
+                } else if (area is Map<String, dynamic>) {
+                  return area;
+                } else {
+                  return {'name': area.toString()};
+                }
+              }).toList();
+            } else {
+              _availableAreas = [];
+            }
             selectedArea = null; // Reset area selection
           });
 

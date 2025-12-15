@@ -509,10 +509,21 @@ class _EditUserScreenState extends State<EditUserScreen> {
             _districtController.text = locationData["district"] ?? "";
             _cityController.text = locationData["city"] ?? "";
 
-            // Load areas and reset selection
-            _availableAreas = List<Map<String, dynamic>>.from(
-              locationData["areas"] ?? [],
-            );
+            // Load areas and reset selection - convert string array to map array
+            final areasData = locationData["areas"] ?? [];
+            if (areasData is List) {
+              _availableAreas = areasData.map((area) {
+                if (area is String) {
+                  return {'name': area};
+                } else if (area is Map<String, dynamic>) {
+                  return area;
+                } else {
+                  return {'name': area.toString()};
+                }
+              }).toList();
+            } else {
+              _availableAreas = [];
+            }
             selectedArea = null; // Reset area selection when pincode changes
           });
 

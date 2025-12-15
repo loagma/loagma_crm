@@ -217,7 +217,26 @@ class RoleDashboardTemplate extends StatelessWidget {
         children: [
           // Icon(roleIcon, size: 24),
           const SizedBox(width: 10),
-          Text("$roleDisplayName Dashboard"),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "$roleDisplayName Dashboard",
+                  style: const TextStyle(fontSize: 18),
+                ),
+                if (UserService.name != null)
+                  Text(
+                    UserService.name!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w300,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
       actions: [
