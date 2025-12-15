@@ -50,13 +50,25 @@ class TaskAssignmentService {
         return assignmentsJson
             .map((json) => TaskAssignment.fromJson(json))
             .toList();
-      } else {
+      } else if (response.statusCode == 401) {
+        final data = json.decode(response.body);
         throw Exception(
-          'Failed to load task assignments: ${response.statusCode}',
+          'Authentication failed: ${data['message'] ?? 'Invalid token'}',
+        );
+      } else {
+        final data = json.decode(response.body);
+        throw Exception(
+          'Failed to load task assignments: ${data['message'] ?? 'Server error (${response.statusCode})'}',
         );
       }
     } catch (e) {
       print('Error fetching task assignments: $e');
+
+      // Re-throw authentication errors as-is
+      if (e.toString().contains('Authentication failed')) {
+        rethrow;
+      }
+
       throw Exception('Failed to load task assignments: $e');
     }
   }

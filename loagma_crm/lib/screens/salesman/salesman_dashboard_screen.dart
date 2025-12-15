@@ -63,6 +63,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     setState(() => isLoadingAttendance = true);
 
     try {
+      // Check if user has valid authentication
+      if (!UserService.hasValidAuth) {
+        print('❌ User authentication invalid - skipping attendance load');
+        return;
+      }
+
       final employeeId = UserService.currentUserId;
       if (employeeId == null) return;
 
@@ -75,6 +81,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       }
     } catch (e) {
       print('Error loading attendance: $e');
+
+      // Check if it's an authentication error
+      if (e.toString().contains('401') ||
+          e.toString().contains('Authentication failed')) {
+        if (mounted) {
+          _showAuthenticationErrorDialog();
+        }
+        return; // Don't continue if authentication failed
+      }
     } finally {
       if (mounted) {
         setState(() => isLoadingAttendance = false);
@@ -92,6 +107,15 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     setState(() => isLoading = true);
 
     try {
+      // Check if user has valid authentication
+      if (!UserService.hasValidAuth) {
+        print('❌ User authentication invalid');
+        if (mounted) {
+          _showAuthenticationErrorDialog();
+        }
+        return;
+      }
+
       final userId = UserService.currentUserId;
       final userName = UserService.name;
       final userRole = UserService.currentRole;
@@ -100,18 +124,13 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       print('   User ID: $userId');
       print('   User Name: $userName');
       print('   User Role: $userRole');
+      print('   Token: ${UserService.token != null ? "Available" : "Missing"}');
 
       if (userId == null || userId.isEmpty) {
         print('❌ User ID is null or empty');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error: User not logged in properly'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          _showAuthenticationErrorDialog();
         }
-        setState(() => isLoading = false);
         return;
       }
 
@@ -221,16 +240,111 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       print('❌ Stack trace: $stackTrace');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading dashboard: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        // Check if it's an authentication error
+        if (e.toString().contains('401') ||
+            e.toString().contains('Invalid token') ||
+            e.toString().contains('Authentication')) {
+          // Show authentication error dialog
+          _showAuthenticationErrorDialog();
+        } else {
+          // Show general error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading dashboard: ${_getErrorMessage(e)}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => fetchDashboardData(),
+              ),
+            ),
+          );
+        }
       }
     } finally {
       setState(() => isLoading = false);
+    }
+  }
+
+  void _showAuthenticationErrorDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 32,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Authentication Error',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your session has expired or you are not properly logged in.',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Please log in again to continue using the app.',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Clear user data and navigate to login
+              UserService.logout();
+              context.go('/login');
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Login Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+
+    if (errorString.contains('network') || errorString.contains('connection')) {
+      return 'Network connection failed. Please check your internet connection.';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timeout. Please try again.';
+    } else if (errorString.contains('server')) {
+      return 'Server error. Please try again later.';
+    } else {
+      return 'An unexpected error occurred. Please try again.';
     }
   }
 

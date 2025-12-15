@@ -72,6 +72,9 @@ class EnhancedTaskAssignmentService {
                   contactNumber: salesman['contactNumber'] ?? '',
                   employeeCode: salesman['employeeCode'] ?? '',
                   email: salesman['email'] ?? '',
+                  assignedPinCodes: salesman['assignedPinCodes'] != null
+                      ? List<String>.from(salesman['assignedPinCodes'])
+                      : [],
                 ),
               )
               .toList();
