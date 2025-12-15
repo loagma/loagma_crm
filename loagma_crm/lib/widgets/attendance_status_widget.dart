@@ -24,7 +24,6 @@ class AttendanceStatusWidget extends StatefulWidget {
 class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   Timer? _timer;
   String _currentTime = '';
-  Duration _workDuration = Duration.zero;
   Position? _currentPosition;
   StreamSubscription<Position>? _locationSubscription;
 
@@ -50,17 +49,7 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
       _updateTime();
       if (widget.attendance?.isPunchedIn == true) {
         setState(() {
-          // Calculate work duration with proper timezone handling
-          final now = DateTime.now();
-          final punchInTime = widget.attendance!.punchInTime;
-
-          // Ensure we're calculating from the correct punch in time
-          _workDuration = now.difference(punchInTime);
-
-          // Ensure duration is not negative (in case of clock sync issues)
-          if (_workDuration.isNegative) {
-            _workDuration = Duration.zero;
-          }
+          // Trigger rebuild to update duration display
         });
       }
     });
@@ -84,7 +73,7 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
   String _formatDuration(Duration duration) {
     // Handle negative durations
     if (duration.isNegative) {
-      return '00:00';
+      return '00:00:00';
     }
 
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -93,12 +82,8 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
 
-    // Show hours:minutes for durations over 1 hour, otherwise minutes:seconds
-    if (hours > 0) {
-      return '${twoDigits(hours)}:${twoDigits(minutes)}';
-    } else {
-      return '${twoDigits(minutes)}:${twoDigits(seconds)}';
-    }
+    // Always show hours:minutes:seconds format for clarity
+    return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 
   @override
@@ -122,7 +107,9 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: (isPunchedIn ? Colors.green : Colors.blue).withOpacity(0.3),
+            color: (isPunchedIn ? Colors.green : Colors.blue).withValues(
+              alpha: 0.3,
+            ),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -200,14 +187,10 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
                       _buildTimeInfo(
                         'Duration',
                         isPunchedIn
-                            ? _formatDuration(_workDuration)
+                            ? _formatDuration(attendance.currentWorkDuration)
                             : attendance.punchOutTime != null
-                            ? _formatDuration(
-                                attendance.punchOutTime!.difference(
-                                  attendance.punchInTime,
-                                ),
-                              )
-                            : '--:--',
+                            ? _formatDuration(attendance.totalWorkDuration)
+                            : '--:--:--',
                         Icons.timer,
                       ),
                     ],
@@ -222,7 +205,7 @@ class _AttendanceStatusWidgetState extends State<AttendanceStatusWidget> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(

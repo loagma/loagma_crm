@@ -311,7 +311,21 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         _stateController.text = data['state'] ?? '';
         _districtController.text = data['district'] ?? '';
         _cityController.text = data['city'] ?? '';
-        _availableAreas = List<Map<String, dynamic>>.from(data['areas'] ?? []);
+        // Load areas - convert string array to map array
+        final areasData = data['areas'] ?? [];
+        if (areasData is List) {
+          _availableAreas = areasData.map((area) {
+            if (area is String) {
+              return {'name': area};
+            } else if (area is Map<String, dynamic>) {
+              return area;
+            } else {
+              return {'name': area.toString()};
+            }
+          }).toList();
+        } else {
+          _availableAreas = [];
+        }
         if (_selectedArea != null &&
             !_availableAreas.any((a) => a['name'] == _selectedArea)) {
           _selectedArea = null;
