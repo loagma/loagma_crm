@@ -269,6 +269,35 @@ export const createAccount = async (req, res) => {
       });
     }
 
+    // Validate coordinates if provided
+    if (latitude !== undefined && latitude !== null) {
+      const lat = parseFloat(latitude);
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid latitude. Must be between -90 and 90'
+        });
+      }
+    }
+
+    if (longitude !== undefined && longitude !== null) {
+      const lng = parseFloat(longitude);
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid longitude. Must be between -180 and 180'
+        });
+      }
+    }
+
+    // Ensure both coordinates are provided together or both are null
+    if ((latitude !== undefined && latitude !== null) !== (longitude !== undefined && longitude !== null)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both latitude and longitude must be provided together'
+      });
+    }
+
     // Generate unique account code
     const accountCode = await generateAccountCode();
     console.log('✅ Generated account code:', accountCode);
@@ -501,6 +530,35 @@ export const updateAccount = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Pincode must be exactly 6 digits'
+      });
+    }
+
+    // Validate coordinates if provided
+    if (latitude !== undefined && latitude !== null) {
+      const lat = parseFloat(latitude);
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid latitude. Must be between -90 and 90'
+        });
+      }
+    }
+
+    if (longitude !== undefined && longitude !== null) {
+      const lng = parseFloat(longitude);
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid longitude. Must be between -180 and 180'
+        });
+      }
+    }
+
+    // Ensure both coordinates are provided together or both are null
+    if ((latitude !== undefined && latitude !== null) !== (longitude !== undefined && longitude !== null)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both latitude and longitude must be provided together'
       });
     }
 
