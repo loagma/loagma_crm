@@ -42,13 +42,14 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   int _searchRadius = 1500;
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
+  bool _isLegendCollapsed = false;
 
-  // Filter states for accounts
-  String? selectedCustomerStage;
-  String? selectedBusinessType;
-  String? selectedFunnelStage;
-  String? selectedPincode;
-  String? selectedAssignedArea;
+  // Filter states for accounts - changed to support multiple selections
+  List<String> selectedCustomerStages = [];
+  List<String> selectedBusinessTypes = [];
+  List<String> selectedFunnelStages = [];
+  List<String> selectedPincodes = [];
+  List<String> selectedAssignedAreas = [];
   bool? selectedApprovalStatus;
 
   // Available filter options
@@ -362,7 +363,13 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
             final lat = double.parse(account['latitude'].toString());
             final lng = double.parse(account['longitude'].toString());
 
-            if (lat == 0 && lng == 0) continue;
+            // Enhanced coordinate validation
+            if (!_isValidCoordinate(lat, lng)) {
+              print(
+                '⚠️ Invalid coordinates for account ${account['id']}: lat=$lat, lng=$lng',
+              );
+              continue;
+            }
 
             final isApproved = account['isApproved'] == true;
             final personName = account['personName'] ?? 'Unknown';
@@ -385,7 +392,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
               ),
             );
           } catch (e) {
-            print('Error parsing coordinates for account ${account['id']}: $e');
+            print(
+              '❌ Error parsing coordinates for account ${account['id']}: $e',
+            );
           }
         }
       }
@@ -420,24 +429,60 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     });
   }
 
+  // Enhanced coordinate validation
+  bool _isValidCoordinate(double lat, double lng) {
+    // Check if coordinates are within valid ranges
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return false;
+    }
+
+    // Check if coordinates are not exactly 0,0 (often indicates missing data)
+    if (lat == 0 && lng == 0) {
+      return false;
+    }
+
+    // Check if coordinates are not obviously invalid (like very small decimals that might be parsing errors)
+    if (lat.abs() < 0.0001 && lng.abs() < 0.0001) {
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _canFocusOnAccount(Map<String, dynamic> account) {
+    if (account['latitude'] == null || account['longitude'] == null) {
+      return false;
+    }
+
+    try {
+      final lat = double.parse(account['latitude'].toString());
+      final lng = double.parse(account['longitude'].toString());
+      return _isValidCoordinate(lat, lng);
+    } catch (e) {
+      return false;
+    }
+  }
+
   List<Map<String, dynamic>> _getFilteredAccounts() {
     return salesmanAccounts.where((account) {
-      if (selectedCustomerStage != null &&
-          account['customerStage'] != selectedCustomerStage)
+      // Multi-select filter logic
+      if (selectedCustomerStages.isNotEmpty &&
+          !selectedCustomerStages.contains(account['customerStage']))
         return false;
-      if (selectedBusinessType != null &&
-          account['businessType'] != selectedBusinessType)
+      if (selectedBusinessTypes.isNotEmpty &&
+          !selectedBusinessTypes.contains(account['businessType']))
         return false;
-      if (selectedFunnelStage != null &&
-          account['funnelStage'] != selectedFunnelStage)
+      if (selectedFunnelStages.isNotEmpty &&
+          !selectedFunnelStages.contains(account['funnelStage']))
         return false;
-      if (selectedPincode != null && account['pincode'] != selectedPincode)
+      if (selectedPincodes.isNotEmpty &&
+          !selectedPincodes.contains(account['pincode']))
         return false;
-      if (selectedAssignedArea != null) {
-        // Check if account is in the selected assigned area
+      if (selectedAssignedAreas.isNotEmpty) {
+        // Check if account is in any of the selected assigned areas
         bool isInAssignedArea = areaAssignments.any(
           (assignment) =>
-              assignment['city'] == selectedAssignedArea &&
+              selectedAssignedAreas.contains(assignment['city']) &&
               assignment['pinCode'] == account['pincode'],
         );
         if (!isInAssignedArea) return false;
@@ -555,23 +600,34 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
             ],
             if (account['pincode'] != null)
               _buildDetailRow(Icons.pin_drop, 'Pincode', account['pincode']),
+            const SizedBox(height: 12),
+            // Location status
+            _buildLocationStatus(account),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _focusOnAccount(account);
-                },
+                onPressed: _canFocusOnAccount(account)
+                    ? () {
+                        Navigator.pop(context);
+                        _focusOnAccount(account);
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: _canFocusOnAccount(account)
+                      ? primaryColor
+                      : Colors.grey,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
                 icon: const Icon(Icons.my_location),
-                label: const Text('Focus on Map'),
+                label: Text(
+                  _canFocusOnAccount(account)
+                      ? 'Focus on Map'
+                      : 'Invalid GPS Location',
+                ),
               ),
             ),
           ],
@@ -586,14 +642,18 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         final lat = double.parse(account['latitude'].toString());
         final lng = double.parse(account['longitude'].toString());
 
-        if (lat != 0 && lng != 0) {
+        if (_isValidCoordinate(lat, lng)) {
           _mapController?.animateCamera(
             CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
           );
+        } else {
+          _showError(
+            'Invalid location coordinates for this account (lat: $lat, lng: $lng)',
+          );
         }
       } catch (e) {
-        print('Error focusing on account: $e');
-        _showError('Invalid location coordinates for this account');
+        print('❌ Error focusing on account: $e');
+        _showError('Error parsing location coordinates for this account');
       }
     } else {
       _showError('No location data available for this account');
@@ -607,7 +667,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
       try {
         final lat = double.parse(account['latitude'].toString());
         final lng = double.parse(account['longitude'].toString());
-        return lat != 0 && lng != 0;
+        return _isValidCoordinate(lat, lng);
       } catch (e) {
         return false;
       }
@@ -701,6 +761,106 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     );
   }
 
+  Widget _buildLocationStatus(Map<String, dynamic> account) {
+    final hasCoordinates =
+        account['latitude'] != null && account['longitude'] != null;
+
+    if (!hasCoordinates) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.location_off, size: 16, color: Colors.grey.shade600),
+            const SizedBox(width: 8),
+            Text(
+              'No GPS coordinates available',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    try {
+      final lat = double.parse(account['latitude'].toString());
+      final lng = double.parse(account['longitude'].toString());
+
+      if (_isValidCoordinate(lat, lng)) {
+        return Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.location_on, size: 16, color: Colors.green.shade600),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'GPS: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+                  style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        return Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.red.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, size: 16, color: Colors.red.shade600),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Invalid GPS coordinates: $lat, $lng',
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_outlined,
+              size: 16,
+              color: Colors.orange.shade600,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Error parsing GPS coordinates',
+                style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
@@ -709,11 +869,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
   void _clearAllFilters() {
     setState(() {
-      selectedCustomerStage = null;
-      selectedBusinessType = null;
-      selectedFunnelStage = null;
-      selectedPincode = null;
-      selectedAssignedArea = null;
+      selectedCustomerStages.clear();
+      selectedBusinessTypes.clear();
+      selectedFunnelStages.clear();
+      selectedPincodes.clear();
+      selectedAssignedAreas.clear();
       selectedApprovalStatus = null;
     });
     _updateMapMarkers();
@@ -1070,11 +1230,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   }
 
   bool _hasActiveFilters() {
-    return selectedCustomerStage != null ||
-        selectedBusinessType != null ||
-        selectedFunnelStage != null ||
-        selectedPincode != null ||
-        selectedAssignedArea != null ||
+    return selectedCustomerStages.isNotEmpty ||
+        selectedBusinessTypes.isNotEmpty ||
+        selectedFunnelStages.isNotEmpty ||
+        selectedPincodes.isNotEmpty ||
+        selectedAssignedAreas.isNotEmpty ||
         selectedApprovalStatus != null;
   }
 
@@ -1147,31 +1307,13 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
             // Funnel Stage Filter
             if (availableFunnelStages.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                value: selectedFunnelStage,
-                decoration: const InputDecoration(
-                  labelText: 'Funnel Stage',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Funnel Stages'),
-                  ),
-                  ...availableFunnelStages.map(
-                    (stage) => DropdownMenuItem<String>(
-                      value: stage,
-                      child: Text(stage),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
+              _buildMultiSelectFilter(
+                'Funnel Stages',
+                availableFunnelStages,
+                selectedFunnelStages,
+                (selected) {
                   setState(() {
-                    selectedFunnelStage = value;
+                    selectedFunnelStages = selected;
                   });
                   _updateMapMarkers();
                 },
@@ -1181,31 +1323,13 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
             // Pincode Filter
             if (availablePincodes.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                value: selectedPincode,
-                decoration: const InputDecoration(
-                  labelText: 'Pincode',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Pincodes'),
-                  ),
-                  ...availablePincodes.map(
-                    (pincode) => DropdownMenuItem<String>(
-                      value: pincode,
-                      child: Text(pincode),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
+              _buildMultiSelectFilter(
+                'Pincodes',
+                availablePincodes,
+                selectedPincodes,
+                (selected) {
                   setState(() {
-                    selectedPincode = value;
+                    selectedPincodes = selected;
                   });
                   _updateMapMarkers();
                 },
@@ -1215,37 +1339,78 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
             // Assigned Area Filter
             if (availableAssignedAreas.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                value: selectedAssignedArea,
-                decoration: const InputDecoration(
-                  labelText: 'Assigned Area',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Areas'),
-                  ),
-                  ...availableAssignedAreas.map(
-                    (area) => DropdownMenuItem<String>(
-                      value: area,
-                      child: Text(area),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
+              _buildMultiSelectFilter(
+                'Assigned Areas',
+                availableAssignedAreas,
+                selectedAssignedAreas,
+                (selected) {
                   setState(() {
-                    selectedAssignedArea = value;
+                    selectedAssignedAreas = selected;
                   });
                   _updateMapMarkers();
                 },
               ),
               const SizedBox(height: 8),
             ],
+
+            // Customer Stage Filter
+            if (availableCustomerStages.isNotEmpty) ...[
+              _buildMultiSelectFilter(
+                'Customer Stages',
+                availableCustomerStages,
+                selectedCustomerStages,
+                (selected) {
+                  setState(() {
+                    selectedCustomerStages = selected;
+                  });
+                  _updateMapMarkers();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Business Type Filter
+            if (availableBusinessTypes.isNotEmpty) ...[
+              _buildMultiSelectFilter(
+                'Business Types',
+                availableBusinessTypes,
+                selectedBusinessTypes,
+                (selected) {
+                  setState(() {
+                    selectedBusinessTypes = selected;
+                  });
+                  _updateMapMarkers();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Approval Status Filter
+            DropdownButtonFormField<bool?>(
+              value: selectedApprovalStatus,
+              decoration: const InputDecoration(
+                labelText: 'Approval Status',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+              items: const [
+                DropdownMenuItem<bool?>(
+                  value: null,
+                  child: Text('All Statuses'),
+                ),
+                DropdownMenuItem<bool?>(value: true, child: Text('Approved')),
+                DropdownMenuItem<bool?>(value: false, child: Text('Pending')),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  selectedApprovalStatus = value;
+                });
+                _updateMapMarkers();
+              },
+            ),
 
             const Divider(),
 
@@ -1325,20 +1490,40 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   Widget _buildLegendCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Legend',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isLegendCollapsed = !_isLegendCollapsed;
+                });
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Legend',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _isLegendCollapsed ? Icons.expand_more : Icons.expand_less,
+                    size: 16,
+                    color: primaryColor,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            _buildLegendItem('My Location', Colors.blue),
-            _buildLegendItem('Approved Accounts', Colors.green),
-            _buildLegendItem('Pending Accounts', Colors.orange),
-            _buildLegendItem('Nearby Places', Colors.purple),
+            if (!_isLegendCollapsed) ...[
+              const SizedBox(height: 8),
+              _buildLegendItem('My Location', Colors.blue),
+              _buildLegendItem('Approved Accounts', Colors.green),
+              _buildLegendItem('Pending Accounts', Colors.orange),
+              _buildLegendItem('Nearby Places', Colors.purple),
+            ],
           ],
         ),
       ),
@@ -1394,6 +1579,157 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     return LatLngBounds(
       southwest: LatLng(minLat, minLng),
       northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  Widget _buildMultiSelectFilter(
+    String label,
+    List<String> options,
+    List<String> selectedValues,
+    Function(List<String>) onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: InkWell(
+            onTap: () => _showMultiSelectDialog(
+              label,
+              options,
+              selectedValues,
+              onChanged,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedValues.isEmpty
+                        ? 'All $label'
+                        : selectedValues.length == 1
+                        ? selectedValues.first
+                        : '${selectedValues.length} selected',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: selectedValues.isEmpty
+                          ? Colors.grey.shade600
+                          : Colors.black,
+                    ),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showMultiSelectDialog(
+    String title,
+    List<String> options,
+    List<String> selectedValues,
+    Function(List<String>) onChanged,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        List<String> tempSelected = List.from(selectedValues);
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Select $title'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 300,
+                child: Column(
+                  children: [
+                    // Select All / Clear All buttons
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              tempSelected = List.from(options);
+                            });
+                          },
+                          child: const Text('Select All'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              tempSelected.clear();
+                            });
+                          },
+                          child: const Text('Clear All'),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    // Options list
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final option = options[index];
+                          final isSelected = tempSelected.contains(option);
+
+                          return CheckboxListTile(
+                            title: Text(option),
+                            value: isSelected,
+                            onChanged: (bool? value) {
+                              setDialogState(() {
+                                if (value == true) {
+                                  tempSelected.add(option);
+                                } else {
+                                  tempSelected.remove(option);
+                                }
+                              });
+                            },
+                            activeColor: primaryColor,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    onChanged(tempSelected);
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
