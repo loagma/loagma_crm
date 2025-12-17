@@ -11,6 +11,7 @@ import '../../services/network_service.dart';
 import '../../services/task_assignment_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
+import '../../config/google_places_config.dart';
 
 class EnhancedSalesmanMapScreen extends StatefulWidget {
   const EnhancedSalesmanMapScreen({super.key});
@@ -38,11 +39,15 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   bool _showPlaces = true;
   bool _showAccounts = true;
   bool _showAccountsList = false;
-  String _selectedPlaceType = 'store';
+  List<String> _selectedPlaceTypes = ['store'];
   int _searchRadius = 1500;
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
   bool _isLegendCollapsed = false;
+
+  // Current Area State
+  String? _currentAreaName;
+  bool _isLoadingCurrentArea = false;
 
   // Filter states for accounts - changed to support multiple selections
   List<String> selectedCustomerStages = [];
@@ -310,23 +315,32 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     if (_currentPosition == null) return;
 
     try {
-      final nearbyResults = await GooglePlacesService.instance
-          .fetchNearbyPlaces(
-            lat: _currentPosition!.latitude,
-            lng: _currentPosition!.longitude,
-            radius: _searchRadius,
-            type: _selectedPlaceType,
-          );
+      List<PlaceInfo> allPlaces = [];
 
-      final places = nearbyResults
-          .map((result) => PlaceInfo.fromNearbyResult(result))
-          .toList();
+      // Load places for each selected place type
+      for (String placeType in _selectedPlaceTypes) {
+        final nearbyResults = await GooglePlacesService.instance
+            .fetchNearbyPlaces(
+              lat: _currentPosition!.latitude,
+              lng: _currentPosition!.longitude,
+              radius: _searchRadius,
+              type: placeType,
+            );
+
+        final places = nearbyResults
+            .map((result) => PlaceInfo.fromNearbyResult(result))
+            .toList();
+
+        allPlaces.addAll(places);
+      }
 
       setState(() {
-        nearbyPlaces = places;
+        nearbyPlaces = allPlaces;
       });
 
-      print('✅ Loaded ${nearbyPlaces.length} nearby places');
+      print(
+        '✅ Loaded ${nearbyPlaces.length} nearby places for ${_selectedPlaceTypes.length} place types',
+      );
       _updateMapMarkers();
     } catch (e) {
       print('Error loading places: $e');
@@ -862,9 +876,111 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Get current area name and load nearby shops
+  Future<void> _loadCurrentAreaShops() async {
+    if (_isLoadingCurrentArea) return;
+
+    setState(() {
+      _isLoadingCurrentArea = true;
+    });
+
+    try {
+      // Get current location if not available
+      if (_currentPosition == null) {
+        await _getCurrentLocation();
+      }
+
+      if (_currentPosition == null) {
+        _showError('Unable to get current location');
+        return;
+      }
+
+      print(
+        '🌍 Getting area name for current location: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
+      );
+
+      // Get area name using reverse geocoding
+      final areaName = await _getCurrentAreaName(_currentPosition!);
+
+      if (areaName != null) {
+        setState(() {
+          _currentAreaName = areaName;
+        });
+
+        print('📍 Current area: $areaName');
+
+        // Load nearby places for current location
+        await _loadNearbyPlaces();
+
+        // Focus map on current location
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+            15,
+          ),
+        );
+
+        _showError('Loaded shops near $areaName');
+      } else {
+        _showError('Unable to determine current area name');
+      }
+    } catch (e) {
+      print('❌ Error loading current area shops: $e');
+      _showError('Error loading current area: $e');
+    } finally {
+      setState(() {
+        _isLoadingCurrentArea = false;
+      });
+    }
+  }
+
+  /// Get current area name using reverse geocoding
+  Future<String?> _getCurrentAreaName(Position position) async {
+    try {
+      // Use Google Places Geocoding API to get area name
+      final url =
+          'https://maps.googleapis.com/maps/api/geocode/json'
+          '?latlng=${position.latitude},${position.longitude}'
+          '&key=${GooglePlacesConfig.apiKey}';
+
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final result = data['results'][0];
+
+          // Try to get area/locality from address components
+          for (final component in result['address_components']) {
+            final types = List<String>.from(component['types']);
+
+            // Look for sublocality, locality, or administrative_area_level_3
+            if (types.contains('sublocality') ||
+                types.contains('sublocality_level_1') ||
+                types.contains('locality') ||
+                types.contains('administrative_area_level_3')) {
+              return component['long_name'];
+            }
+          }
+
+          // Fallback to formatted address
+          return result['formatted_address']?.split(',')[0];
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error getting area name: $e');
+      return null;
+    }
   }
 
   void _clearAllFilters() {
@@ -886,7 +1002,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Enhanced Map View'),
+        title: const Text('Map View'),
         backgroundColor: primaryColor,
         actions: [
           IconButton(
@@ -928,7 +1044,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                 children: [
                   CircularProgressIndicator(color: primaryColor),
                   SizedBox(height: 16),
-                  Text('Loading enhanced map data...'),
+                  Text('Loading map data...'),
                 ],
               ),
             )
@@ -1017,14 +1133,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 // Focus on accounts
-                if (salesmanAccounts.isNotEmpty)
-                  FloatingActionButton(
-                    mini: true,
-                    backgroundColor: Colors.green,
-                    onPressed: _focusOnAccountsArea,
-                    tooltip: 'Focus on Accounts',
-                    child: const Icon(Icons.account_circle),
-                  ),
                 if (salesmanAccounts.isNotEmpty) const SizedBox(height: 8),
 
                 // My location
@@ -1052,18 +1160,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                 const SizedBox(height: 8),
 
                 // Fit all markers
-                FloatingActionButton(
-                  backgroundColor: primaryColor,
-                  onPressed: () {
-                    if (_markers.isNotEmpty) {
-                      _fitMarkersInView();
-                    } else {
-                      _showError('No markers to display');
-                    }
-                  },
-                  tooltip: 'Fit All Markers',
-                  child: const Icon(Icons.center_focus_strong),
-                ),
               ],
             ),
     );
@@ -1239,36 +1335,92 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   }
 
   Widget _buildFiltersPanel() {
-    return Card(
-      margin: const EdgeInsets.all(16),
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header
             Row(
               children: [
+                Icon(Icons.tune, color: primaryColor, size: 18),
+                const SizedBox(width: 6),
                 const Text(
                   'Filters & Controls',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C3E50),
+                  ),
                 ),
                 const Spacer(),
                 if (_hasActiveFilters())
-                  TextButton(
-                    onPressed: _clearAllFilters,
-                    child: const Text('Clear All'),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: InkWell(
+                      onTap: _clearAllFilters,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.clear_all,
+                            size: 12,
+                            color: Colors.red.shade600,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Clear All',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.red.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-            // Layer toggles
+            // Layer toggles in compact row
             Row(
               children: [
                 Expanded(
                   child: SwitchListTile(
-                    title: const Text('Show Accounts'),
-                    subtitle: Text('${_getFilteredAccounts().length} accounts'),
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: const Text(
+                      'Show Accounts',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    subtitle: Text(
+                      '${_getFilteredAccounts().length} accounts',
+                      style: const TextStyle(fontSize: 10),
+                    ),
                     value: _showAccounts,
                     onChanged: (value) {
                       setState(() {
@@ -1276,13 +1428,23 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                       });
                       _updateMapMarkers();
                     },
-                    activeColor: primaryColor,
+                    activeThumbColor: primaryColor,
                   ),
                 ),
                 Expanded(
                   child: SwitchListTile(
-                    title: const Text('Show Places'),
-                    subtitle: Text('${nearbyPlaces.length} places'),
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: const Text(
+                      'Show Places',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    subtitle: Text(
+                      _currentAreaName != null
+                          ? '${nearbyPlaces.length} places near $_currentAreaName'
+                          : '${nearbyPlaces.length} places',
+                      style: const TextStyle(fontSize: 10),
+                    ),
                     value: _showPlaces,
                     onChanged: (value) {
                       setState(() {
@@ -1290,7 +1452,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                       });
                       _updateMapMarkers();
                     },
-                    activeColor: primaryColor,
+                    activeThumbColor: primaryColor,
                   ),
                 ),
               ],
@@ -1298,160 +1460,118 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
             const Divider(),
 
-            // Account Filters
-            const Text(
-              'Account Filters:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            // Account Filters Header
+            Row(
+              children: [
+                Icon(Icons.filter_alt, color: primaryColor, size: 16),
+                const SizedBox(width: 4),
+                const Text(
+                  'Account Filters:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
 
-            // Funnel Stage Filter
-            if (availableFunnelStages.isNotEmpty) ...[
-              _buildMultiSelectFilter(
-                'Funnel Stages',
-                availableFunnelStages,
-                selectedFunnelStages,
-                (selected) {
-                  setState(() {
-                    selectedFunnelStages = selected;
-                  });
-                  _updateMapMarkers();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Pincode Filter
-            if (availablePincodes.isNotEmpty) ...[
-              _buildMultiSelectFilter(
-                'Pincodes',
-                availablePincodes,
-                selectedPincodes,
-                (selected) {
-                  setState(() {
-                    selectedPincodes = selected;
-                  });
-                  _updateMapMarkers();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Assigned Area Filter
-            if (availableAssignedAreas.isNotEmpty) ...[
-              _buildMultiSelectFilter(
-                'Assigned Areas',
-                availableAssignedAreas,
-                selectedAssignedAreas,
-                (selected) {
-                  setState(() {
-                    selectedAssignedAreas = selected;
-                  });
-                  _updateMapMarkers();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Customer Stage Filter
-            if (availableCustomerStages.isNotEmpty) ...[
-              _buildMultiSelectFilter(
-                'Customer Stages',
-                availableCustomerStages,
-                selectedCustomerStages,
-                (selected) {
-                  setState(() {
-                    selectedCustomerStages = selected;
-                  });
-                  _updateMapMarkers();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Business Type Filter
-            if (availableBusinessTypes.isNotEmpty) ...[
-              _buildMultiSelectFilter(
-                'Business Types',
-                availableBusinessTypes,
-                selectedBusinessTypes,
-                (selected) {
-                  setState(() {
-                    selectedBusinessTypes = selected;
-                  });
-                  _updateMapMarkers();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Approval Status Filter
-            DropdownButtonFormField<bool?>(
-              value: selectedApprovalStatus,
-              decoration: const InputDecoration(
-                labelText: 'Approval Status',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-              ),
-              items: const [
-                DropdownMenuItem<bool?>(
-                  value: null,
-                  child: Text('All Statuses'),
-                ),
-                DropdownMenuItem<bool?>(value: true, child: Text('Approved')),
-                DropdownMenuItem<bool?>(value: false, child: Text('Pending')),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  selectedApprovalStatus = value;
-                });
-                _updateMapMarkers();
-              },
-            ),
+            // Account Filters in 2-column grid
+            _buildAccountFiltersGrid(),
 
             const Divider(),
 
-            // Place type filter
-            const Text(
-              'Place Type:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            // Current Area Button
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoadingCurrentArea
+                        ? null
+                        : _loadCurrentAreaShops,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    icon: _isLoadingCurrentArea
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.my_location, size: 16),
+                    label: Text(
+                      _currentAreaName != null
+                          ? 'Current: $_currentAreaName'
+                          : 'Load Current Area Shops',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
+
+            //  filter - compact horizontal chips with multi-select
+            const Text(
+              'Place Types:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            const SizedBox(height: 6),
             SizedBox(
-              height: 40,
+              height: 32,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: _placeTypes.length,
                 itemBuilder: (context, index) {
                   final placeType = _placeTypes[index];
-                  final isSelected = _selectedPlaceType == placeType['type'];
+                  final isSelected = _selectedPlaceTypes.contains(
+                    placeType['type'],
+                  );
 
                   return Container(
-                    margin: const EdgeInsets.only(right: 8),
+                    margin: const EdgeInsets.only(right: 4),
                     child: FilterChip(
                       selected: isSelected,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
                       label: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             placeType['icon'],
-                            size: 16,
+                            size: 12,
                             color: isSelected ? Colors.white : primaryColor,
                           ),
-                          const SizedBox(width: 4),
-                          Text(placeType['name']),
+                          const SizedBox(width: 2),
+                          Text(
+                            placeType['name'],
+                            style: const TextStyle(fontSize: 10),
+                          ),
                         ],
                       ),
                       onSelected: (selected) {
-                        if (selected) {
-                          setState(() {
-                            _selectedPlaceType = placeType['type'];
-                          });
-                          _loadNearbyPlaces();
-                        }
+                        setState(() {
+                          if (selected) {
+                            _selectedPlaceTypes.add(placeType['type']);
+                          } else {
+                            _selectedPlaceTypes.remove(placeType['type']);
+                            // Ensure at least one place type is always selected
+                            if (_selectedPlaceTypes.isEmpty) {
+                              _selectedPlaceTypes.add('store');
+                            }
+                          }
+                        });
+                        _loadNearbyPlaces();
                       },
                       selectedColor: primaryColor,
                       checkmarkColor: Colors.white,
@@ -1461,10 +1581,13 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-            // Search radius
-            Text('Search Radius: ${_searchRadius}m'),
+            // Search radius - compact
+            Text(
+              'Search Radius: ${_searchRadius}m',
+              style: const TextStyle(fontSize: 12),
+            ),
             Slider(
               value: _searchRadius.toDouble(),
               min: 500,
@@ -1579,6 +1702,230 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     return LatLngBounds(
       southwest: LatLng(minLat, minLng),
       northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  Widget _buildAccountFiltersGrid() {
+    List<Widget> filterWidgets = [];
+
+    // Funnel Stages
+    if (availableFunnelStages.isNotEmpty) {
+      filterWidgets.add(
+        _buildCompactMultiSelectFilter(
+          'Funnel Stages',
+          availableFunnelStages,
+          selectedFunnelStages,
+          (selected) {
+            setState(() {
+              selectedFunnelStages = selected;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      );
+    }
+
+    // Pincodes
+    if (availablePincodes.isNotEmpty) {
+      filterWidgets.add(
+        _buildCompactMultiSelectFilter(
+          'Pincodes',
+          availablePincodes,
+          selectedPincodes,
+          (selected) {
+            setState(() {
+              selectedPincodes = selected;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      );
+    }
+
+    // Assigned Areas
+    if (availableAssignedAreas.isNotEmpty) {
+      filterWidgets.add(
+        _buildCompactMultiSelectFilter(
+          'Assigned Areas',
+          availableAssignedAreas,
+          selectedAssignedAreas,
+          (selected) {
+            setState(() {
+              selectedAssignedAreas = selected;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      );
+    }
+
+    // Customer Stages
+    if (availableCustomerStages.isNotEmpty) {
+      filterWidgets.add(
+        _buildCompactMultiSelectFilter(
+          'Customer Stages',
+          availableCustomerStages,
+          selectedCustomerStages,
+          (selected) {
+            setState(() {
+              selectedCustomerStages = selected;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      );
+    }
+
+    // Business Types
+    if (availableBusinessTypes.isNotEmpty) {
+      filterWidgets.add(
+        _buildCompactMultiSelectFilter(
+          'Business Types',
+          availableBusinessTypes,
+          selectedBusinessTypes,
+          (selected) {
+            setState(() {
+              selectedBusinessTypes = selected;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      );
+    }
+
+    // Approval Status
+    filterWidgets.add(_buildCompactDropdownFilter());
+
+    // Create 2-column grid
+    List<Widget> rows = [];
+    for (int i = 0; i < filterWidgets.length; i += 2) {
+      rows.add(
+        Row(
+          children: [
+            Expanded(child: filterWidgets[i]),
+            const SizedBox(width: 8),
+            Expanded(
+              child: i + 1 < filterWidgets.length
+                  ? filterWidgets[i + 1]
+                  : const SizedBox(),
+            ),
+          ],
+        ),
+      );
+      if (i + 2 < filterWidgets.length) {
+        rows.add(const SizedBox(height: 8));
+      }
+    }
+
+    return Column(children: rows);
+  }
+
+  Widget _buildCompactMultiSelectFilter(
+    String label,
+    List<String> options,
+    List<String> selectedValues,
+    Function(List<String>) onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: InkWell(
+            onTap: () => _showMultiSelectDialog(
+              label,
+              options,
+              selectedValues,
+              onChanged,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedValues.isEmpty
+                        ? 'All $label'
+                        : selectedValues.length == 1
+                        ? selectedValues.first
+                        : '${selectedValues.length} selected',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: selectedValues.isEmpty
+                          ? Colors.grey.shade600
+                          : Colors.black,
+                    ),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactDropdownFilter() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Approval Status',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 2),
+        DropdownButtonFormField<bool?>(
+          value: selectedApprovalStatus,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            fillColor: Colors.white,
+            filled: true,
+          ),
+          style: const TextStyle(fontSize: 11, color: Colors.black),
+          dropdownColor: Colors.white,
+          items: const [
+            DropdownMenuItem<bool?>(
+              value: null,
+              child: Text(
+                'All Statuses',
+                style: TextStyle(color: Colors.black),
+              ),
+            ),
+            DropdownMenuItem<bool?>(
+              value: true,
+              child: Text('Approved', style: TextStyle(color: Colors.black)),
+            ),
+            DropdownMenuItem<bool?>(
+              value: false,
+              child: Text('Pending', style: TextStyle(color: Colors.black)),
+            ),
+          ],
+          onChanged: (value) {
+            setState(() {
+              selectedApprovalStatus = value;
+            });
+            _updateMapMarkers();
+          },
+        ),
+      ],
     );
   }
 

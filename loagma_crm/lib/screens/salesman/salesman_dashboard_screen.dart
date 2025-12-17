@@ -928,7 +928,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 ),
               ),
               _buildActionCard(
-                'Enhanced Maps',
+                'Maps',
                 Icons.map,
                 Colors.orange,
                 () => Navigator.push(
