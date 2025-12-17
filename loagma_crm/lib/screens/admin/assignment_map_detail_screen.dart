@@ -332,13 +332,13 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     switch (stage.toLowerCase()) {
       case 'new':
         return BitmapDescriptor.hueYellow;
-      case 'lead':
+      case 'Lead':
         return BitmapDescriptor.hueOrange;
-      case 'prospect':
+      case 'Prospect':
         return BitmapDescriptor.hueBlue;
-      case 'follow-up':
+      case 'Customer':
         return BitmapDescriptor.hueCyan;
-      case 'converted':
+      case 'Inactive':
         return BitmapDescriptor.hueGreen;
       case 'lost':
         return BitmapDescriptor.hueRed;

@@ -24,6 +24,8 @@ class EnhancedSalesmanMapScreen extends StatefulWidget {
 class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     with TickerProviderStateMixin {
   GoogleMapController? _mapController;
+  bool _isMapReady = false;
+  bool _isControllerDisposed = false;
   Set<Marker> _markers = {};
   bool isLoading = true;
 
@@ -71,6 +73,35 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   static const Color primaryColor = Color(0xFFD7BE69);
   static const LatLng _defaultLocation = LatLng(28.6139, 77.2090); // Delhi
 
+  // Comprehensive predefined filter options
+  static const List<String> allFunnelStages = [
+    "Awareness",
+    "Interest",
+    "Consideration",
+    "Intent",
+    "Evaluation",
+    "Converted",
+  ];
+
+  static const List<String> allCustomerStages = [
+    'Lead',
+    'Prospect',
+    'Customer',
+    'Inactive',
+  ];
+
+  static const List<String> allBusinessTypes = [
+    "Kirana Store",
+    "Sweet Shop",
+    "Restaurant",
+    "Bakery",
+    "Caterer",
+    "Hostel",
+    "Hotel",
+    "Cafe",
+    "Other",
+  ];
+
   // Place types for business discovery
   final List<Map<String, dynamic>> _placeTypes = [
     {'type': 'store', 'name': 'Stores', 'icon': Icons.store},
@@ -111,8 +142,22 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
   @override
   void dispose() {
+    print('🧹 Disposing EnhancedSalesmanMapScreen...');
+
+    // Mark controller as disposed first to prevent any new operations
+    _isControllerDisposed = true;
+    _isMapReady = false;
+
+    // Clear the controller reference
+    _mapController = null;
+
+    // Dispose animation controller
     _filterAnimationController.dispose();
+
+    // Stop location tracking
     LocationService.instance.stopLocationTracking();
+
+    print('✅ EnhancedSalesmanMapScreen disposed successfully');
     super.dispose();
   }
 
@@ -274,23 +319,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   }
 
   void _extractFilterOptions() {
-    Set<String> funnelStages = {};
+    // Extract pincodes from actual data
     Set<String> pincodes = {};
-    Set<String> customerStages = {};
-    Set<String> businessTypes = {};
-
     for (var account in salesmanAccounts) {
-      if (account['funnelStage'] != null) {
-        funnelStages.add(account['funnelStage'].toString());
-      }
       if (account['pincode'] != null) {
         pincodes.add(account['pincode'].toString());
-      }
-      if (account['customerStage'] != null) {
-        customerStages.add(account['customerStage'].toString());
-      }
-      if (account['businessType'] != null) {
-        businessTypes.add(account['businessType'].toString());
       }
     }
 
@@ -303,11 +336,14 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     }
 
     setState(() {
-      availableFunnelStages = funnelStages.toList()..sort();
+      // Use comprehensive predefined lists for stages and business types
+      availableFunnelStages = List.from(allFunnelStages);
+      availableCustomerStages = List.from(allCustomerStages);
+      availableBusinessTypes = List.from(allBusinessTypes);
+
+      // Use extracted data for location-specific filters
       availablePincodes = pincodes.toList()..sort();
       availableAssignedAreas = assignedAreas.toList()..sort();
-      availableCustomerStages = customerStages.toList()..sort();
-      availableBusinessTypes = businessTypes.toList()..sort();
     });
   }
 
@@ -317,29 +353,47 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     try {
       List<PlaceInfo> allPlaces = [];
 
-      // Load places for each selected place type
-      for (String placeType in _selectedPlaceTypes) {
-        final nearbyResults = await GooglePlacesService.instance
-            .fetchNearbyPlaces(
-              lat: _currentPosition!.latitude,
-              lng: _currentPosition!.longitude,
-              radius: _searchRadius,
-              type: placeType,
-            );
+      // Load places for each selected place type with delay to avoid rate limiting
+      for (int i = 0; i < _selectedPlaceTypes.length; i++) {
+        String placeType = _selectedPlaceTypes[i];
 
-        final places = nearbyResults
-            .map((result) => PlaceInfo.fromNearbyResult(result))
-            .toList();
+        try {
+          final nearbyResults = await GooglePlacesService.instance
+              .fetchNearbyPlaces(
+                lat: _currentPosition!.latitude,
+                lng: _currentPosition!.longitude,
+                radius: _searchRadius,
+                type: placeType,
+              );
 
-        allPlaces.addAll(places);
+          final places = nearbyResults
+              .map((result) => PlaceInfo.fromNearbyResult(result))
+              .toList();
+
+          allPlaces.addAll(places);
+
+          // Add small delay between requests to avoid rate limiting
+          if (i < _selectedPlaceTypes.length - 1) {
+            await Future.delayed(const Duration(milliseconds: 200));
+          }
+        } catch (e) {
+          print('❌ Error loading places for type $placeType: $e');
+          // Continue with other place types even if one fails
+        }
+      }
+
+      // Remove duplicates based on place ID
+      final uniquePlaces = <String, PlaceInfo>{};
+      for (final place in allPlaces) {
+        uniquePlaces[place.placeId] = place;
       }
 
       setState(() {
-        nearbyPlaces = allPlaces;
+        nearbyPlaces = uniquePlaces.values.toList();
       });
 
       print(
-        '✅ Loaded ${nearbyPlaces.length} nearby places for ${_selectedPlaceTypes.length} place types',
+        '✅ Loaded ${nearbyPlaces.length} unique nearby places for ${_selectedPlaceTypes.length} place types',
       );
       _updateMapMarkers();
     } catch (e) {
@@ -622,9 +676,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _canFocusOnAccount(account)
-                    ? () {
+                    ? () async {
                         Navigator.pop(context);
-                        _focusOnAccount(account);
+                        await _focusOnAccount(account);
                       }
                     : null,
                 style: ElevatedButton.styleFrom(
@@ -650,95 +704,168 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     );
   }
 
-  void _focusOnAccount(Map<String, dynamic> account) {
-    if (account['latitude'] != null && account['longitude'] != null) {
-      try {
-        final lat = double.parse(account['latitude'].toString());
-        final lng = double.parse(account['longitude'].toString());
-
-        if (_isValidCoordinate(lat, lng)) {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
-          );
-        } else {
-          _showError(
-            'Invalid location coordinates for this account (lat: $lat, lng: $lng)',
-          );
-        }
-      } catch (e) {
-        print('❌ Error focusing on account: $e');
-        _showError('Error parsing location coordinates for this account');
-      }
-    } else {
-      _showError('No location data available for this account');
-    }
-  }
-
-  void _focusOnAccountsArea() {
-    final accountsWithLocation = salesmanAccounts.where((account) {
-      if (account['latitude'] == null || account['longitude'] == null)
-        return false;
-      try {
-        final lat = double.parse(account['latitude'].toString());
-        final lng = double.parse(account['longitude'].toString());
-        return _isValidCoordinate(lat, lng);
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-
-    if (accountsWithLocation.isEmpty) {
-      // Focus on current location if no accounts have location
-      if (_currentPosition != null) {
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-            12,
-          ),
-        );
-      }
+  Future<void> _focusOnAccount(Map<String, dynamic> account) async {
+    if (!mounted) {
+      print('🚫 Widget not mounted, cannot focus on account');
       return;
     }
 
-    if (accountsWithLocation.length == 1) {
-      // Focus on single account
-      final account = accountsWithLocation.first;
+    if (account['latitude'] == null || account['longitude'] == null) {
+      _showError('No location data available for this account');
+      return;
+    }
+
+    try {
       final lat = double.parse(account['latitude'].toString());
       final lng = double.parse(account['longitude'].toString());
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
-      );
-    } else {
-      // Calculate bounds for multiple accounts
-      double minLat = double.parse(
-        accountsWithLocation.first['latitude'].toString(),
-      );
-      double maxLat = minLat;
-      double minLng = double.parse(
-        accountsWithLocation.first['longitude'].toString(),
-      );
-      double maxLng = minLng;
 
-      for (final account in accountsWithLocation) {
-        final lat = double.parse(account['latitude'].toString());
-        final lng = double.parse(account['longitude'].toString());
-
-        minLat = minLat < lat ? minLat : lat;
-        maxLat = maxLat > lat ? maxLat : lat;
-        minLng = minLng < lng ? minLng : lng;
-        maxLng = maxLng > lng ? maxLng : lng;
+      if (!_isValidCoordinate(lat, lng)) {
+        _showError(
+          'Invalid location coordinates for this account (lat: $lat, lng: $lng)',
+        );
+        return;
       }
 
-      // Add padding to bounds
-      final latPadding = (maxLat - minLat) * 0.1;
-      final lngPadding = (maxLng - minLng) * 0.1;
+      final target = LatLng(lat, lng);
+      final accountName = account['personName'] ?? 'Unknown Account';
 
-      final bounds = LatLngBounds(
-        southwest: LatLng(minLat - latPadding, minLng - lngPadding),
-        northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+      print('🎯 Attempting to focus on account: $accountName at ($lat, $lng)');
+
+      // Check if map is ready before attempting to focus
+      if (!_isMapReady || _mapController == null || _isControllerDisposed) {
+        print('🚫 Map not ready for focusing on account');
+        _showError('Map is not ready. Please wait and try again.');
+        return;
+      }
+
+      final success = await _safeAnimateCamera(
+        CameraUpdate.newLatLngZoom(target, 18),
+        description: 'Focus on account: $accountName',
       );
 
-      _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+      if (success) {
+        print('✅ Successfully focused on account: $accountName');
+      } else {
+        print('❌ Failed to focus on account: $accountName');
+        _showError('Unable to focus on map. Please try again.');
+      }
+    } catch (e) {
+      print('❌ Error focusing on account: $e');
+      _showError('Error parsing location coordinates for this account');
+    }
+  }
+
+  Future<void> _focusOnAccountsArea() async {
+    if (!mounted) {
+      print('🚫 Widget not mounted, cannot focus on accounts area');
+      return;
+    }
+
+    // Check if map is ready
+    if (!_isMapReady || _mapController == null || _isControllerDisposed) {
+      print('🚫 Map not ready for focusing on accounts area');
+      return;
+    }
+
+    try {
+      final accountsWithLocation = salesmanAccounts.where((account) {
+        if (account['latitude'] == null || account['longitude'] == null)
+          return false;
+        try {
+          final lat = double.parse(account['latitude'].toString());
+          final lng = double.parse(account['longitude'].toString());
+          return _isValidCoordinate(lat, lng);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+
+      print(
+        '📊 Found ${accountsWithLocation.length} accounts with valid GPS coordinates',
+      );
+
+      if (accountsWithLocation.isEmpty) {
+        // Focus on current location if no accounts have location
+        if (_currentPosition != null) {
+          print('📍 No accounts with GPS, focusing on current location');
+          await _safeAnimateCamera(
+            CameraUpdate.newLatLngZoom(
+              LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+              12,
+            ),
+            description: 'Focus on current location (no accounts with GPS)',
+          );
+        } else {
+          print('📍 No current location available, using default location');
+          await _safeAnimateCamera(
+            CameraUpdate.newLatLngZoom(_defaultLocation, 10),
+            description: 'Focus on default location',
+          );
+        }
+        return;
+      }
+
+      if (accountsWithLocation.length == 1) {
+        // Focus on single account
+        final account = accountsWithLocation.first;
+        final lat = double.parse(account['latitude'].toString());
+        final lng = double.parse(account['longitude'].toString());
+        print('🎯 Focusing on single account at ($lat, $lng)');
+
+        await _safeAnimateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
+          description: 'Focus on single account area',
+        );
+      } else {
+        // Calculate bounds for multiple accounts
+        print(
+          '🎯 Calculating bounds for ${accountsWithLocation.length} accounts',
+        );
+
+        double minLat = double.parse(
+          accountsWithLocation.first['latitude'].toString(),
+        );
+        double maxLat = minLat;
+        double minLng = double.parse(
+          accountsWithLocation.first['longitude'].toString(),
+        );
+        double maxLng = minLng;
+
+        for (final account in accountsWithLocation) {
+          final lat = double.parse(account['latitude'].toString());
+          final lng = double.parse(account['longitude'].toString());
+
+          minLat = minLat < lat ? minLat : lat;
+          maxLat = maxLat > lat ? maxLat : lat;
+          minLng = minLng < lng ? minLng : lng;
+          maxLng = maxLng > lng ? maxLng : lng;
+        }
+
+        // Add padding to bounds (minimum 0.01 degrees)
+        final latPadding = ((maxLat - minLat) * 0.1).clamp(0.01, 0.1);
+        final lngPadding = ((maxLng - minLng) * 0.1).clamp(0.01, 0.1);
+
+        final bounds = LatLngBounds(
+          southwest: LatLng(minLat - latPadding, minLng - lngPadding),
+          northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+        );
+
+        print(
+          '🗺️ Bounds: SW(${minLat - latPadding}, ${minLng - lngPadding}) NE(${maxLat + latPadding}, ${maxLng + lngPadding})',
+        );
+
+        await _safeAnimateCamera(
+          CameraUpdate.newLatLngBounds(bounds, 100),
+          description: 'Focus on multiple accounts area',
+        );
+      }
+    } catch (e) {
+      print('❌ Error focusing on accounts area: $e');
+      // Fallback to default location
+      await _safeAnimateCamera(
+        CameraUpdate.newLatLngZoom(_defaultLocation, 10),
+        description: 'Fallback to default location after error',
+      );
     }
   }
 
@@ -883,6 +1010,68 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     }
   }
 
+  /// Check if the map is in a valid state for operations
+  bool _isMapInValidState() {
+    return mounted &&
+        !_isControllerDisposed &&
+        _isMapReady &&
+        _mapController != null;
+  }
+
+  /// Safe camera animation with comprehensive lifecycle checks
+  Future<bool> _safeAnimateCamera(
+    CameraUpdate update, {
+    String? description,
+    int maxRetries = 2,
+  }) async {
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      // Check if map is in valid state
+      if (!_isMapInValidState()) {
+        print(
+          '🚫 Map not in valid state, skipping camera animation: $description',
+        );
+        return false;
+      }
+
+      try {
+        // Additional safety check right before animation
+        if (_mapController == null) {
+          print(
+            '🚫 Controller became null just before animation: $description',
+          );
+          return false;
+        }
+
+        await _mapController!.animateCamera(update);
+        print('✅ Camera animation successful: $description');
+        return true;
+      } catch (e) {
+        print('❌ Camera animation failed (attempt ${attempt + 1}): $e');
+
+        // Handle disposal errors
+        if (e.toString().contains('disposed') ||
+            e.toString().contains('GoogleMapController was used after')) {
+          print('🔄 Controller was disposed, marking as disposed');
+          _isControllerDisposed = true;
+          _isMapReady = false;
+          _mapController = null;
+          return false;
+        }
+
+        // For other errors, retry if we have attempts left
+        if (attempt < maxRetries) {
+          print('🔄 Retrying camera animation in 200ms...');
+          await Future.delayed(const Duration(milliseconds: 200));
+          continue;
+        }
+
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   /// Get current area name and load nearby shops
   Future<void> _loadCurrentAreaShops() async {
     if (_isLoadingCurrentArea) return;
@@ -920,11 +1109,12 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         await _loadNearbyPlaces();
 
         // Focus map on current location
-        _mapController?.animateCamera(
+        await _safeAnimateCamera(
           CameraUpdate.newLatLngZoom(
             LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
             15,
           ),
+          description: 'Focus on current area: $areaName',
         );
 
         _showError('Loaded shops near $areaName');
@@ -1054,6 +1244,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
               children: [
                 // Map
                 GoogleMap(
+                  key: const ValueKey('enhanced_salesman_map'),
                   initialCameraPosition: CameraPosition(
                     target: _currentPosition != null
                         ? LatLng(
@@ -1064,21 +1255,59 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                     zoom: 12,
                   ),
                   markers: _markers,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
+                  onMapCreated: (controller) async {
+                    if (!mounted || _isControllerDisposed) {
+                      print(
+                        '🚫 Widget not mounted or controller disposed during map creation',
+                      );
+                      return;
+                    }
 
-                    // Delay to ensure map is fully loaded
-                    Future.delayed(const Duration(milliseconds: 1000), () {
-                      if (mounted && _mapController != null) {
-                        if (salesmanAccounts.isNotEmpty) {
-                          // Focus on accounts area first
-                          _focusOnAccountsArea();
-                        } else if (_markers.isNotEmpty) {
-                          // Fallback to fitting all markers
-                          _fitMarkersInView();
-                        }
+                    try {
+                      _mapController = controller;
+                      _isMapReady = true;
+                      _isControllerDisposed = false;
+
+                      print('🗺️ GoogleMap controller created and ready');
+
+                      // Wait for map to be fully initialized
+                      await Future.delayed(const Duration(milliseconds: 500));
+
+                      // Double-check state before proceeding
+                      if (!mounted || _isControllerDisposed || !_isMapReady) {
+                        print(
+                          '🚫 State changed during map initialization, aborting focus',
+                        );
+                        return;
                       }
-                    });
+
+                      // Focus on accounts area if available
+                      if (salesmanAccounts.isNotEmpty) {
+                        print(
+                          '🎯 Focusing on accounts area after map creation',
+                        );
+                        await _focusOnAccountsArea();
+                      } else if (_markers.isNotEmpty) {
+                        print(
+                          '🎯 Fitting all markers in view after map creation',
+                        );
+                        await _fitMarkersInView();
+                      } else {
+                        print('📍 No accounts or markers to focus on');
+                      }
+                    } catch (e) {
+                      print('❌ Error in onMapCreated: $e');
+                      _isControllerDisposed = true;
+                      _isMapReady = false;
+                      _mapController = null;
+
+                      // Show error to user
+                      if (mounted) {
+                        _showError(
+                          'Map initialization failed. Please refresh the screen.',
+                        );
+                      }
+                    }
                   },
                   myLocationEnabled: _locationPermissionGranted,
                   myLocationButtonEnabled: false,
@@ -1101,8 +1330,8 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                     ),
                   ),
 
-                // Legend and Controls
-                Positioned(bottom: 100, left: 16, child: _buildLegendCard()),
+                // Legend and Controls - positioned at bottom left
+                Positioned(bottom: 16, left: 16, child: _buildLegendCard()),
 
                 // Place Details Overlay
                 if (_showPlaceDetailsOverlay && _selectedPlace != null)
@@ -1139,9 +1368,17 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                 FloatingActionButton(
                   mini: true,
                   backgroundColor: primaryColor,
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!_isMapInValidState()) {
+                      _showError(
+                        'Map is not ready. Please wait and try again.',
+                      );
+                      return;
+                    }
+
                     if (_currentPosition != null) {
-                      _mapController?.animateCamera(
+                      print('📍 Focusing on my location from FAB');
+                      final success = await _safeAnimateCamera(
                         CameraUpdate.newLatLngZoom(
                           LatLng(
                             _currentPosition!.latitude,
@@ -1149,7 +1386,14 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                           ),
                           15,
                         ),
+                        description: 'Focus on my location',
                       );
+
+                      if (!success) {
+                        _showError(
+                          'Unable to focus on your location. Please try again.',
+                        );
+                      }
                     } else {
                       _showError('Current location not available');
                     }
@@ -1290,11 +1534,18 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                                   Icons.my_location,
                                   color: primaryColor,
                                 ),
-                                onPressed: () {
+                                onPressed: () async {
+                                  if (!_isMapInValidState()) {
+                                    _showError(
+                                      'Map is not ready. Please wait and try again.',
+                                    );
+                                    return;
+                                  }
+
                                   setState(() {
                                     _showAccountsList = false;
                                   });
-                                  _focusOnAccount(account);
+                                  await _focusOnAccount(account);
                                 },
                                 tooltip: 'Show on map',
                               )
@@ -1354,7 +1605,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            // Header with collapse arrow
             Row(
               children: [
                 Icon(Icons.tune, color: primaryColor, size: 18),
@@ -1402,6 +1653,28 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                       ),
                     ),
                   ),
+                const SizedBox(width: 8),
+                // Collapse arrow
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _showFilters = false;
+                    });
+                    _filterAnimationController.reverse();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.keyboard_arrow_up,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1583,17 +1856,17 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
             const SizedBox(height: 8),
 
-            // Search radius - compact
+            // Search radius - compact (in kilometers)
             Text(
-              'Search Radius: ${_searchRadius}m',
+              'Search Radius: ${(_searchRadius / 1000).toStringAsFixed(1)}km',
               style: const TextStyle(fontSize: 12),
             ),
             Slider(
               value: _searchRadius.toDouble(),
               min: 500,
-              max: 5000,
-              divisions: 9,
-              label: '${_searchRadius}m',
+              max: 50000, // 50km max
+              divisions: 99,
+              label: '${(_searchRadius / 1000).toStringAsFixed(1)}km',
               onChanged: (value) {
                 setState(() {
                   _searchRadius = value.round();
@@ -1612,41 +1885,66 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
   Widget _buildLegendCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Legend items (show first when collapsed)
+            if (!_isLegendCollapsed) ...[
+              _buildLegendItem('My Location', Colors.blue),
+              _buildLegendItem('Approved Accounts', Colors.green),
+              _buildLegendItem('Pending Accounts', Colors.orange),
+              _buildLegendItem('Nearby Places', Colors.purple),
+              const SizedBox(height: 8),
+            ],
+            // Header with highlighted collapse arrow
             InkWell(
               onTap: () {
                 setState(() {
                   _isLegendCollapsed = !_isLegendCollapsed;
                 });
               },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Legend',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.3),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _isLegendCollapsed ? Icons.expand_more : Icons.expand_less,
-                    size: 16,
-                    color: primaryColor,
-                  ),
-                ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Legend',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Icon(
+                        _isLegendCollapsed
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            if (!_isLegendCollapsed) ...[
-              const SizedBox(height: 8),
-              _buildLegendItem('My Location', Colors.blue),
-              _buildLegendItem('Approved Accounts', Colors.green),
-              _buildLegendItem('Pending Accounts', Colors.orange),
-              _buildLegendItem('Nearby Places', Colors.purple),
-            ],
           ],
         ),
       ),
@@ -1671,11 +1969,28 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     );
   }
 
-  void _fitMarkersInView() {
-    if (_markers.isEmpty || _mapController == null) return;
+  Future<void> _fitMarkersInView() async {
+    if (!mounted || _markers.isEmpty) {
+      print('🚫 Cannot fit markers: widget not mounted or no markers');
+      return;
+    }
 
-    final bounds = _calculateBounds(_markers);
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+    if (!_isMapReady || _mapController == null || _isControllerDisposed) {
+      print('🚫 Map not ready for fitting markers');
+      return;
+    }
+
+    try {
+      print('🎯 Fitting ${_markers.length} markers in view');
+      final bounds = _calculateBounds(_markers);
+
+      await _safeAnimateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 100),
+        description: 'Fit all markers in view',
+      );
+    } catch (e) {
+      print('❌ Error fitting markers in view: $e');
+    }
   }
 
   LatLngBounds _calculateBounds(Set<Marker> markers) {
@@ -1929,64 +2244,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     );
   }
 
-  Widget _buildMultiSelectFilter(
-    String label,
-    List<String> options,
-    List<String> selectedValues,
-    Function(List<String>) onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade400),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: InkWell(
-            onTap: () => _showMultiSelectDialog(
-              label,
-              options,
-              selectedValues,
-              onChanged,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    selectedValues.isEmpty
-                        ? 'All $label'
-                        : selectedValues.length == 1
-                        ? selectedValues.first
-                        : '${selectedValues.length} selected',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: selectedValues.isEmpty
-                          ? Colors.grey.shade600
-                          : Colors.black,
-                    ),
-                  ),
-                ),
-                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showMultiSelectDialog(
     String title,
     List<String> options,
@@ -2007,7 +2264,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                 height: 300,
                 child: Column(
                   children: [
-                    // Select All / Clear All buttons
+                    // Quick action buttons
                     Row(
                       children: [
                         TextButton(
