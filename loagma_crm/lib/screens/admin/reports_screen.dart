@@ -179,6 +179,14 @@ class _ReportsScreenState extends State<ReportsScreen>
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
           IconButton(
+            icon: const Icon(Icons.access_time),
+            onPressed: () {
+              // Navigate to attendance management
+              Navigator.pushNamed(context, '/dashboard/admin/attendance');
+            },
+            tooltip: 'Attendance Management',
+          ),
+          IconButton(
             icon: const Icon(Icons.analytics),
             onPressed: () {
               Navigator.push(
@@ -203,6 +211,88 @@ class _ReportsScreenState extends State<ReportsScreen>
       ),
       body: Column(
         children: [
+          // Enhanced Reports Banner
+          Container(
+            margin: const EdgeInsets.all(16),
+            child: Card(
+              elevation: 4,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFD7BE69).withValues(alpha: 0.1),
+                      const Color(0xFFD7BE69).withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD7BE69),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.analytics,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Enhanced Salesman Reports',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Advanced analytics with daily tracking, performance insights, and export features',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const EnhancedSalesmanReportsScreen(),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD7BE69),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      icon: const Icon(Icons.arrow_forward),
+                      label: const Text('Open Enhanced Reports'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           _buildFilterBar(),
           Expanded(
             child: isLoading
@@ -250,7 +340,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
