@@ -89,78 +89,84 @@ class _EnhancedSalesmanReportsScreenState
           }
 
           final salesmen = users.where((user) {
-            // Check multiple possible role field structures
-            bool isSalesman = false;
+            try {
+              // Check multiple possible role field structures
+              bool isSalesman = false;
 
-            // Tertiary check: roles array
-            if (!isSalesman && user['roles'] != null && user['roles'] is List) {
-              final roles = user['roles'] as List;
-              // Check for various salesman role variations including R002
-              isSalesman = roles.any(
-                (role) =>
-                    role.toString() == 'R002' || // Direct role ID
-                    role.toString().toLowerCase().contains('salesman') ||
-                    role.toString().toLowerCase().contains('sales'),
-              );
-              print(
-                '👥 User ${user['name']} roles array check: $roles -> $isSalesman',
-              );
+              // Tertiary check: roles array
+              if (!isSalesman &&
+                  user['roles'] != null &&
+                  user['roles'] is List) {
+                final roles = user['roles'] as List;
+                // Check for various salesman role variations including R002
+                isSalesman = roles.any(
+                  (role) =>
+                      role.toString() == 'R002' || // Direct role ID
+                      role.toString().toLowerCase().contains('salesman') ||
+                      role.toString().toLowerCase().contains('sales'),
+                );
+                print(
+                  '👥 User ${user['name']} roles array check: $roles -> $isSalesman',
+                );
+              }
+
+              // Primary check: role field (most reliable)
+              if (!isSalesman && user['role'] != null) {
+                final roleName = user['role'].toString().toLowerCase();
+                isSalesman =
+                    roleName.contains('salesman') || roleName.contains('sales');
+                print(
+                  '👥 User ${user['name']} role check: $roleName -> $isSalesman',
+                );
+              }
+
+              // Secondary check: roleId field (R002 = salesman)
+              if (!isSalesman && user['roleId'] != null) {
+                final roleId = user['roleId'].toString();
+                isSalesman =
+                    roleId == 'R002' || // Direct salesman role ID
+                    roleId.toLowerCase().contains('salesman') ||
+                    roleId.toLowerCase().contains('sales');
+                print(
+                  '👥 User ${user['name']} roleId check: $roleId -> $isSalesman',
+                );
+              }
+
+              // Debug each user
+              if (user['name'] != null) {
+                print(
+                  '👥 User: ${user['name']} (roleId: ${user['roleId']}, role: ${user['role']}, roles: ${user['roles']}) -> isSalesman: $isSalesman',
+                );
+              }
+
+              return isSalesman;
+            } catch (e) {
+              print('❌ Error processing user ${user['name']}: $e');
+              return false;
             }
-
-            // Primary check: role object with name (most reliable)
-            if (!isSalesman &&
-                user['role'] != null &&
-                user['role'] is Map &&
-                user['role']['name'] != null) {
-              final roleName = user['role']['name'].toString().toLowerCase();
-              isSalesman =
-                  roleName.contains('salesman') || roleName.contains('sales');
-              print(
-                '👥 User ${user['name']} role.name check: $roleName -> $isSalesman',
-              );
-            }
-
-            // Secondary check: roleId field (R002 = salesman)
-            if (!isSalesman && user['roleId'] != null) {
-              final roleId = user['roleId'].toString();
-              isSalesman =
-                  roleId == 'R002' || // Direct salesman role ID
-                  roleId.toLowerCase().contains('salesman') ||
-                  roleId.toLowerCase().contains('sales');
-              print(
-                '👥 User ${user['name']} roleId check: $roleId -> $isSalesman',
-              );
-            }
-
-            // Debug each user
-            if (user['name'] != null) {
-              print(
-                '👥 User: ${user['name']} (roleId: ${user['roleId']}, role: ${user['role']?['name']}, roles: ${user['roles']}) -> isSalesman: $isSalesman',
-              );
-            }
-
-            return isSalesman;
           }).toList();
 
           print('👥 Salesmen found: ${salesmen.length}');
-          if (salesmen.isNotEmpty) {
-            salesmen.forEach((salesman) {
-              print(
-                '  ✅ ${salesman['name']} (${salesman['id']}) - Roles: ${salesman['roles']}',
-              );
-            });
-          } else {
-            print('❌ No salesmen found. Checking all users for debugging:');
-            users.take(3).forEach((user) {
-              print(
-                '  🔍 ${user['name']} - Roles: ${user['roles']}, RoleId: ${user['roleId']}',
-              );
-            });
-          }
 
+          // Update state immediately
+          print('🔄 Setting salesmenList with ${salesmen.length} salesmen');
           setState(() {
             salesmenList = salesmen;
           });
+          print(
+            '✅ salesmenList updated. Current length: ${salesmenList.length}',
+          );
+
+          // Debug output (separate from state update)
+          if (salesmen.isNotEmpty) {
+            print('✅ Salesmen names:');
+            for (int i = 0; i < salesmen.length; i++) {
+              final salesman = salesmen[i];
+              print('  ${i + 1}. ${salesman['name']} (ID: ${salesman['id']})');
+            }
+          } else {
+            print('❌ No salesmen found');
+          }
         } else {
           print('❌ API response success = false: ${data['message']}');
         }
@@ -285,6 +291,14 @@ class _EnhancedSalesmanReportsScreenState
   }
 
   Widget _buildFilterSection() {
+    print(
+      '🎨 Building filter section. salesmenList length: ${salesmenList.length}',
+    );
+    if (salesmenList.isNotEmpty) {
+      print(
+        '🎨 First salesman: ${salesmenList.first['name']} (${salesmenList.first['id']})',
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -319,9 +333,12 @@ class _EnhancedSalesmanReportsScreenState
                       child: Text('All Salesmen'),
                     ),
                     ...salesmenList.map((salesman) {
+                      final id = salesman['id']?.toString() ?? '';
+                      final name = salesman['name']?.toString() ?? 'Unknown';
+                      print('🎯 Creating dropdown item: $name ($id)');
                       return DropdownMenuItem<String>(
-                        value: salesman['id'],
-                        child: Text(salesman['name'] ?? 'Unknown'),
+                        value: id.isNotEmpty ? id : null,
+                        child: Text(name),
                       );
                     }).toList(),
                   ],
@@ -491,7 +508,6 @@ class _EnhancedSalesmanReportsScreenState
           const SizedBox(height: 16),
 
           // Visit tracking info card
-          _buildVisitTrackingInfoCard(),
           const SizedBox(height: 24),
           // Summary cards
           const Text(
@@ -505,7 +521,7 @@ class _EnhancedSalesmanReportsScreenState
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.5,
+            childAspectRatio: 1.8,
             children: [
               _buildStatCard(
                 'Accounts Created',
@@ -610,27 +626,265 @@ class _EnhancedSalesmanReportsScreenState
 
   Widget _buildPerformanceTab() {
     final salesmenPerformance = reportsData['salesmenPerformance'] ?? [];
+    final selectedSalesman = reportsData['salesman'];
+    final summary = reportsData['summary'] ?? {};
+    final performanceMetrics = summary['performanceMetrics'] ?? {};
 
-    if (salesmenPerformance.isEmpty) {
-      return const Center(
+    // If a specific salesman is selected, show their individual performance
+    if (selectedSalesmanId != null && selectedSalesman != null) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.people_outline, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text('No performance data available'),
+            // Selected salesman header
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: primaryColor,
+                      radius: 30,
+                      child: Text(
+                        (selectedSalesman['name'] ?? 'U')[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedSalesman['name'] ?? 'Unknown',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Employee ID: ${selectedSalesman['id'] ?? 'N/A'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          if (selectedSalesman['contactNumber'] != null)
+                            Text(
+                              'Contact: ${selectedSalesman['contactNumber']}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Performance metrics for selected salesman
+            const Text(
+              'Performance Metrics',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+
+            // Key performance indicators
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.6,
+              children: [
+                _buildStatCard(
+                  'Accounts Created',
+                  summary['totalAccountsCreated']?.toString() ?? '0',
+                  Icons.add_business,
+                  infoColor,
+                ),
+                _buildStatCard(
+                  'Accounts Approved',
+                  summary['approvedAccounts']?.toString() ?? '0',
+                  Icons.verified,
+                  successColor,
+                ),
+                _buildStatCard(
+                  'Total Visits',
+                  summary['totalVisits']?.toString() ?? '0',
+                  Icons.location_on,
+                  primaryColor,
+                ),
+                _buildStatCard(
+                  'Approval Rate',
+                  '${((performanceMetrics['approvalRate'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}%',
+                  Icons.percent,
+                  performanceMetrics['approvalRate'] != null &&
+                          performanceMetrics['approvalRate'] >= 70
+                      ? successColor
+                      : performanceMetrics['approvalRate'] != null &&
+                            performanceMetrics['approvalRate'] >= 50
+                      ? warningColor
+                      : errorColor,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Detailed performance breakdown
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Detailed Performance',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricRow(
+                      'Accounts per Day',
+                      ((performanceMetrics['accountsPerDay'] ?? 0.0) as num)
+                          .toDouble()
+                          .toStringAsFixed(1),
+                      Icons.trending_up,
+                    ),
+                    const Divider(),
+                    _buildMetricRow(
+                      'Visits per Day',
+                      ((performanceMetrics['visitsPerDay'] ?? 0.0) as num)
+                          .toDouble()
+                          .toStringAsFixed(1),
+                      Icons.location_on,
+                    ),
+                    const Divider(),
+                    _buildMetricRow(
+                      'Average Work Hours',
+                      '${((performanceMetrics['averageWorkHours'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}h',
+                      Icons.access_time,
+                    ),
+                    const Divider(),
+                    _buildMetricRow(
+                      'Today\'s Accounts',
+                      summary['accountsCreatedToday']?.toString() ?? '0',
+                      Icons.today,
+                    ),
+                    const Divider(),
+                    _buildMetricRow(
+                      'Today\'s Visits',
+                      summary['visitsToday']?.toString() ?? '0',
+                      Icons.today,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Performance insights
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.insights, color: primaryColor),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Performance Insights',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPerformanceInsight(performanceMetrics, summary),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: salesmenPerformance.length,
-      itemBuilder: (context, index) {
-        final salesman = salesmenPerformance[index];
-        return _buildSalesmanPerformanceCard(salesman);
-      },
+    // If "All Salesmen" is selected, show comparison view
+    if (salesmenPerformance.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No performance data available',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Select "All Salesmen" to see team performance comparison',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show all salesmen performance comparison
+    return Column(
+      children: [
+        // Header for comparison view
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: primaryColor.withValues(alpha: 0.1),
+          child: Row(
+            children: [
+              Icon(Icons.leaderboard, color: primaryColor),
+              const SizedBox(width: 8),
+              const Text(
+                'Team Performance Comparison',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+
+        // Salesmen list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: salesmenPerformance.length,
+            itemBuilder: (context, index) {
+              final salesman = salesmenPerformance[index];
+              return _buildSalesmanPerformanceCard(salesman);
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -1110,25 +1364,33 @@ class _EnhancedSalesmanReportsScreenState
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
+            Icon(icon, size: 28, color: color),
+            const SizedBox(height: 6),
+            Flexible(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            const SizedBox(height: 2),
+            Flexible(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
             ),
           ],
         ),
@@ -1219,39 +1481,50 @@ class _EnhancedSalesmanReportsScreenState
             child: Column(
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildMiniStat(
-                      'Accounts',
-                      (salesman['accountsCreated'] ?? 0).toString(),
-                      Icons.business,
+                    Expanded(
+                      child: _buildMiniStat(
+                        'Accounts',
+                        (salesman['accountsCreated'] ?? 0).toString(),
+                        Icons.business,
+                      ),
                     ),
-                    _buildMiniStat(
-                      'Approved',
-                      (salesman['accountsApproved'] ?? 0).toString(),
-                      Icons.verified,
+                    Expanded(
+                      child: _buildMiniStat(
+                        'Approved',
+                        (salesman['accountsApproved'] ?? 0).toString(),
+                        Icons.verified,
+                      ),
                     ),
-                    _buildMiniStat(
-                      'Visits',
-                      (salesman['visits'] ?? 0).toString(),
-                      Icons.location_on,
+                    Expanded(
+                      child: _buildMiniStat(
+                        'Visits',
+                        (salesman['visits'] ?? 0).toString(),
+                        Icons.location_on,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildMiniStat(
-                      'Approval Rate',
-                      '${((salesman['approvalRate'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}%',
-                      Icons.percent,
+                    Expanded(
+                      child: _buildMiniStat(
+                        'Approval Rate',
+                        '${((salesman['approvalRate'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}%',
+                        Icons.percent,
+                      ),
                     ),
-                    _buildMiniStat(
-                      'Avg Hours',
-                      '${((salesman['averageWorkHours'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}h',
-                      Icons.access_time,
+                    Expanded(
+                      child: _buildMiniStat(
+                        'Avg Hours',
+                        '${((salesman['averageWorkHours'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}h',
+                        Icons.access_time,
+                      ),
                     ),
+                    const Expanded(
+                      child: SizedBox(),
+                    ), // Empty space for balance
                   ],
                 ),
               ],
@@ -1431,129 +1704,6 @@ class _EnhancedSalesmanReportsScreenState
     return csv.toString();
   }
 
-  Widget _buildVisitTrackingInfoCard() {
-    return Card(
-      elevation: 2,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: infoColor.withValues(alpha: 0.05),
-          border: Border.all(color: infoColor.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.info_outline, color: infoColor, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'How Visit Tracking Works',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _showVisitInstructions,
-                  icon: const Icon(Icons.help_outline, size: 16),
-                  label: const Text('Instructions'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: infoColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Visits are automatically tracked through the attendance system:',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            _buildInfoStep(
-              '1',
-              'Salesman opens the app and punches in with location',
-            ),
-            _buildInfoStep(
-              '2',
-              'System records attendance with GPS coordinates',
-            ),
-            _buildInfoStep(
-              '3',
-              'Each punch-in counts as one visit for the day',
-            ),
-            _buildInfoStep(
-              '4',
-              'Work hours are calculated from punch-in to punch-out',
-            ),
-            const SizedBox(height: 12),
-
-            // Action buttons row
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _viewAttendanceRecords,
-                    icon: const Icon(Icons.access_time, size: 16),
-                    label: const Text('View Attendance'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showAttendanceHelp,
-                    icon: const Icon(Icons.help, size: 16),
-                    label: const Text('Help Guide'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryColor,
-                      side: BorderSide(color: primaryColor),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: successColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: successColor, size: 16),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Tip: Encourage salesmen to punch in daily to track their field visits accurately',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildInfoStep(String number, String description) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -1584,6 +1734,106 @@ class _EnhancedSalesmanReportsScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPerformanceInsight(
+    Map<String, dynamic> performanceMetrics,
+    Map<String, dynamic> summary,
+  ) {
+    final approvalRate = (performanceMetrics['approvalRate'] ?? 0.0) as num;
+    final accountsPerDay = (performanceMetrics['accountsPerDay'] ?? 0.0) as num;
+    final visitsPerDay = (performanceMetrics['visitsPerDay'] ?? 0.0) as num;
+    final totalAccounts = summary['totalAccountsCreated'] ?? 0;
+
+    List<Widget> insights = [];
+
+    // Performance level insight
+    if (approvalRate >= 80 && accountsPerDay >= 3) {
+      insights.add(
+        _buildInsightItem(
+          Icons.star,
+          'Excellent Performance',
+          'High approval rate (${approvalRate.toStringAsFixed(1)}%) and good productivity',
+          successColor,
+        ),
+      );
+    } else if (approvalRate >= 60 && accountsPerDay >= 2) {
+      insights.add(
+        _buildInsightItem(
+          Icons.trending_up,
+          'Good Performance',
+          'Solid results with room for improvement',
+          primaryColor,
+        ),
+      );
+    } else {
+      insights.add(
+        _buildInsightItem(
+          Icons.trending_down,
+          'Needs Improvement',
+          'Consider additional training or support',
+          warningColor,
+        ),
+      );
+    }
+
+    // Productivity insight
+    if (accountsPerDay > 0) {
+      insights.add(
+        _buildInsightItem(
+          Icons.speed,
+          'Daily Productivity',
+          '${accountsPerDay.toStringAsFixed(1)} accounts created per day on average',
+          infoColor,
+        ),
+      );
+    }
+
+    // Visit efficiency
+    if (visitsPerDay > 0) {
+      insights.add(
+        _buildInsightItem(
+          Icons.location_on,
+          'Visit Frequency',
+          '${visitsPerDay.toStringAsFixed(1)} visits per day on average',
+          primaryColor,
+        ),
+      );
+    }
+
+    // Total contribution
+    if (totalAccounts > 0) {
+      insights.add(
+        _buildInsightItem(
+          Icons.business,
+          'Total Contribution',
+          '$totalAccounts accounts created in selected period',
+          infoColor,
+        ),
+      );
+    }
+
+    if (insights.isEmpty) {
+      insights.add(
+        _buildInsightItem(
+          Icons.info,
+          'No Data',
+          'No performance data available for the selected period',
+          Colors.grey,
+        ),
+      );
+    }
+
+    return Column(
+      children: insights
+          .map(
+            (insight) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: insight,
+            ),
+          )
+          .toList(),
     );
   }
 
