@@ -16,6 +16,7 @@ import '../screens/admin/manage_roles_screen.dart';
 import '../screens/admin/schedule_task_screen.dart';
 import '../screens/admin/view_tasks_screen.dart';
 import '../screens/admin/reports_screen.dart';
+import '../screens/admin/enhanced_salesman_reports_screen.dart';
 import '../screens/admin/modern_task_assignment_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
 
@@ -117,7 +118,14 @@ final GoRouter appRouter = GoRouter(
           path: 'tasks/view',
           builder: (_, __) => const ViewTasksScreen(),
         ),
-        GoRoute(path: 'reports', builder: (_, __) => const ReportsScreen()),
+        GoRoute(
+          path: 'reports',
+          builder: (_, __) => const EnhancedSalesmanReportsScreen(),
+        ),
+        GoRoute(
+          path: 'legacy-reports',
+          builder: (_, __) => const ReportsScreen(),
+        ),
         GoRoute(
           path: 'task-assignment',
           builder: (_, __) => const ModernTaskAssignmentScreen(),

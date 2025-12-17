@@ -139,13 +139,34 @@ export const getSalesmanReports = async (req, res) => {
       // All salesmen (if not specific salesman)
       salesmanId ? null : prisma.user.findMany({
         where: {
-          roles: { has: 'Salesman' }
+          isActive: true,
+          OR: [
+            {
+              role: {
+                name: {
+                  in: ['salesman', 'Salesman', 'Sales', 'sales']
+                }
+              }
+            },
+            {
+              roles: { 
+                hasSome: ['R002', 'salesman', 'Salesman', 'Sales', 'sales'] 
+              }
+            }
+          ]
         },
         select: {
           id: true,
           name: true,
           contactNumber: true,
-          createdAt: true
+          createdAt: true,
+          roles: true,
+          roleId: true,
+          role: {
+            select: {
+              name: true
+            }
+          }
         }
       })
     ]);
@@ -398,14 +419,35 @@ export const getAllSalesmenSummary = async (req, res) => {
     // Get all salesmen
     const salesmen = await prisma.user.findMany({
       where: {
-        roles: { has: 'Salesman' }
+        isActive: true,
+        OR: [
+          {
+            role: {
+              name: {
+                in: ['salesman', 'Salesman', 'Sales', 'sales']
+              }
+            }
+          },
+          {
+            roles: { 
+              hasSome: ['R002', 'salesman', 'Salesman', 'Sales', 'sales'] 
+            }
+          }
+        ]
       },
       select: {
         id: true,
         name: true,
         contactNumber: true,
         email: true,
-        createdAt: true
+        createdAt: true,
+        roles: true,
+        roleId: true,
+        role: {
+          select: {
+            name: true
+          }
+        }
       }
     });
 
