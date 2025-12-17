@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
+import 'enhanced_salesman_reports_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -176,6 +177,20 @@ class _ReportsScreenState extends State<ReportsScreen>
       appBar: AppBar(
         title: const Text('Performance Reports'),
         backgroundColor: const Color(0xFFD7BE69),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EnhancedSalesmanReportsScreen(),
+                ),
+              );
+            },
+            tooltip: 'Enhanced Reports',
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
