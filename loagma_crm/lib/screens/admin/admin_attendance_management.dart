@@ -5,6 +5,7 @@ import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import 'minimal_attendance_dashboard.dart';
 import 'live_tracking_screen.dart';
+import 'route_list_screen.dart';
 
 class AdminAttendanceManagement extends StatefulWidget {
   const AdminAttendanceManagement({Key? key}) : super(key: key);
@@ -231,43 +232,193 @@ class _AdminAttendanceManagementState extends State<AdminAttendanceManagement>
   }
 
   Widget _buildTrackingTab() {
-    return Center(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Employee Tracking',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Monitor employee locations and travel routes',
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 24),
+
+          // Live Tracking Card
+          _buildTrackingCard(
+            'Live Employee Tracking',
+            'Track employee locations in real-time',
+            Icons.location_on,
+            Colors.indigo,
+            () => _navigateToLiveTracking(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Route Tracking Card
+          _buildTrackingCard(
+            'Route Tracking & Playback',
+            'View complete travel routes with animated playback and analytics',
+            Icons.route,
+            Colors.purple,
+            () => _navigateToRouteTracking(),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Features List
+          const Text(
+            'Tracking Features',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+
+          _buildFeatureItem(
+            'Real-time GPS Tracking',
+            'Live location updates every 30 seconds',
+            Icons.gps_fixed,
+            Colors.green,
+          ),
+          const SizedBox(height: 12),
+          _buildFeatureItem(
+            'Route Visualization',
+            'Complete travel routes on Google Maps',
+            Icons.map,
+            Colors.blue,
+          ),
+          const SizedBox(height: 12),
+          _buildFeatureItem(
+            'Animated Playback',
+            'Watch salesman journey with moving markers',
+            Icons.play_circle,
+            Colors.orange,
+          ),
+          const SizedBox(height: 12),
+          _buildFeatureItem(
+            'Distance Analytics',
+            'Distance and speed charts over time',
+            Icons.analytics,
+            Colors.teal,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrackingCard(
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              colors: [
+                color.withValues(alpha: 0.1),
+                color.withValues(alpha: 0.05),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.white, size: 32),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: color, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.indigo.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
+              color: color.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
             ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.map, size: 64, color: Colors.indigo),
-                const SizedBox(height: 16),
-                const Text(
-                  'Live Employee Tracking',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
                 Text(
-                  'Track employee locations in real-time',
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => _navigateToLiveTracking(),
-                  icon: const Icon(Icons.location_on),
-                  label: const Text('Open Live Tracking'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -801,6 +952,13 @@ class _AdminAttendanceManagementState extends State<AdminAttendanceManagement>
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const LiveTrackingScreen()),
+    );
+  }
+
+  void _navigateToRouteTracking() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const RouteListScreen()),
     );
   }
 

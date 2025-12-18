@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/attendance_model.dart';
 import 'api_config.dart';
 import 'user_service.dart';
+import 'route_tracking_service.dart';
 
 class AttendanceService {
   static String get baseUrl => '${ApiConfig.baseUrl}/attendance';
@@ -15,24 +16,6 @@ class AttendanceService {
       return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
     } catch (e) {
       return false;
-    }
-  }
-
-  // Helper method to handle network errors
-  static String _getNetworkErrorMessage(dynamic error) {
-    final errorString = error.toString().toLowerCase();
-
-    if (errorString.contains('failed host lookup') ||
-        errorString.contains('socketexception')) {
-      return 'Network connection failed. Please check your internet connection and try again.';
-    } else if (errorString.contains('timeout')) {
-      return 'Request timeout. The server might be starting up. Please wait a moment and try again.';
-    } else if (errorString.contains('connection refused')) {
-      return 'Cannot connect to server. Please try again later.';
-    } else if (errorString.contains('handshake')) {
-      return 'SSL connection failed. Please check your network settings.';
-    } else {
-      return 'Network error occurred. Please check your connection and try again.';
     }
   }
 
@@ -111,13 +94,32 @@ class AttendanceService {
           'statusCode': response.statusCode,
         };
       } else if (response.statusCode == 201 || response.statusCode == 200) {
-        return {
+        final result = {
           'success': true,
           'message': data['message'] ?? 'Punched in successfully',
           'data': data['data'] != null
               ? AttendanceModel.fromJson(data['data'])
               : null,
         };
+
+        // Start route tracking for the new attendance session
+        // This extends existing functionality without modifying punch-in logic
+        if (result['data'] != null) {
+          final attendanceModel = result['data'] as AttendanceModel;
+          try {
+            await RouteTrackingService.instance.startRouteTracking(
+              attendanceModel.id,
+            );
+            print(
+              '✅ Route tracking started for attendance: ${attendanceModel.id}',
+            );
+          } catch (e) {
+            print('⚠️ Route tracking failed to start: $e');
+            // Don't fail punch-in if route tracking fails
+          }
+        }
+
+        return result;
       } else {
         return {
           'success': false,
@@ -200,13 +202,25 @@ class AttendanceService {
           'statusCode': response.statusCode,
         };
       } else if (response.statusCode == 200) {
-        return {
+        final result = {
           'success': true,
           'message': data['message'] ?? 'Punched out successfully',
           'data': data['data'] != null
               ? AttendanceModel.fromJson(data['data'])
               : null,
         };
+
+        // Stop route tracking when punch-out completes
+        // This extends existing functionality without modifying punch-out logic
+        try {
+          RouteTrackingService.instance.stopRouteTracking();
+          print('✅ Route tracking stopped for attendance: $attendanceId');
+        } catch (e) {
+          print('⚠️ Route tracking failed to stop: $e');
+          // Don't fail punch-out if route tracking fails
+        }
+
+        return result;
       } else {
         return {
           'success': false,

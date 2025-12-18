@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../services/user_service.dart';
+import 'route_list_screen.dart';
 
 class EnhancedAttendanceManagementScreen extends StatefulWidget {
   const EnhancedAttendanceManagementScreen({super.key});
@@ -1052,26 +1053,49 @@ class _EnhancedAttendanceManagementScreenState
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
-          child: Row(
+          child: Column(
             children: [
-              const Icon(Icons.map, color: Colors.blue),
-              const SizedBox(width: 8),
-              Text(
-                'Live Employee Tracking',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                children: [
+                  const Icon(Icons.map, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Live Employee Tracking',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () {
+                      setState(() => isMapExpanded = !isMapExpanded);
+                    },
+                    icon: Icon(
+                      isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                    ),
+                    tooltip: isMapExpanded ? 'Collapse Map' : 'Expand Map',
+                  ),
+                ],
               ),
-              const Spacer(),
-              IconButton(
-                onPressed: () {
-                  setState(() => isMapExpanded = !isMapExpanded);
-                },
-                icon: Icon(
-                  isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
+
+              // Route Tracking Button
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _navigateToRouteTracking(),
+                  icon: const Icon(Icons.route, size: 20),
+                  label: const Text('View Route Tracking & Playback'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
-                tooltip: isMapExpanded ? 'Collapse Map' : 'Expand Map',
               ),
             ],
           ),
@@ -1791,6 +1815,13 @@ class _EnhancedAttendanceManagementScreenState
           ),
         ],
       ),
+    );
+  }
+
+  void _navigateToRouteTracking() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const RouteListScreen()),
     );
   }
 }

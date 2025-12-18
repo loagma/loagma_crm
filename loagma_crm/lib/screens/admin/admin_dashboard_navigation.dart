@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:loagma_crm/screens/admin/comprehensive_attendance_dashboard.dart';
 import 'admin_attendance_management.dart';
-
 import 'live_tracking_screen.dart';
+import 'route_list_screen.dart';
 
 class AdminDashboardNavigation extends StatelessWidget {
   const AdminDashboardNavigation({Key? key}) : super(key: key);
@@ -90,6 +90,31 @@ class AdminDashboardNavigation extends StatelessWidget {
               ],
             ),
 
+            const SizedBox(height: 16),
+
+            // Route Tracking Card
+            Row(
+              children: [
+                Expanded(
+                  child: _buildQuickAccessCard(
+                    context,
+                    'Route Tracking',
+                    'Salesman travel routes',
+                    Icons.route,
+                    Colors.purple,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RouteListScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: SizedBox()), // Empty space for symmetry
+              ],
+            ),
+
             const SizedBox(height: 24),
 
             // Features List
@@ -107,6 +132,12 @@ class AdminDashboardNavigation extends StatelessWidget {
                     'Real-time GPS location tracking of all employees',
                     Icons.location_on,
                     Colors.red,
+                  ),
+                  _buildFeatureItem(
+                    'Route Tracking & Playback',
+                    'View complete travel routes with animated playback and analytics',
+                    Icons.route,
+                    Colors.purple,
                   ),
                   _buildFeatureItem(
                     'Dynamic Attendance Dashboard',
