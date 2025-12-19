@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import '../../services/attendance_service.dart';
+import '../../services/route_service.dart';
 import '../../models/attendance_model.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
@@ -13,12 +14,13 @@ class LiveTrackingScreen extends StatefulWidget {
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     with TickerProviderStateMixin {
-  // Colors
-  static const Color primaryColor = Color(0xFF2196F3);
-  static const Color successColor = Color(0xFF4CAF50);
-  static const Color warningColor = Color(0xFFFF9800);
+  // Colors - Updated for better UX
+  static const Color primaryColor = Color(0xFF1976D2);
+  static const Color activeColor = Color(0xFF4CAF50);
+  static const Color movingColor = Color(0xFF2E7D32);
+  static const Color stationaryColor = Color(0xFFFF9800);
   static const Color errorColor = Color(0xFFF44336);
-  static const Color backgroundColor = Color(0xFFF8FAFC);
+  static const Color backgroundColor = Color(0xFFFAFAFA);
 
   // Controllers
   GoogleMapController? _mapController;
@@ -28,12 +30,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   // Data
   List<AttendanceModel> activeEmployees = [];
   Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
   AttendanceModel? selectedEmployee;
+  Map<String, List<LatLng>> employeeRoutes = {};
 
   // State
   bool isLiveTrackingEnabled = true;
   bool isLoading = true;
-  bool showEmployeeList = true;
+  bool showRoutes = true;
 
   @override
   void initState() {
@@ -60,8 +64,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   void _startLiveTracking() {
     if (isLiveTrackingEnabled) {
-      _liveTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      // Real-time updates every 3 seconds for better accuracy
+      _liveTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
         _loadActiveEmployees();
+        _loadEmployeeRoutes();
       });
     }
   }
@@ -71,11 +77,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       final result = await AttendanceService.getLiveAttendanceDashboard();
       if (result['success'] == true && mounted) {
         final allAttendance = result['data']['attendances'] ?? [];
+        final newActiveEmployees = allAttendance
+            .where((a) => a.status == 'active')
+            .cast<AttendanceModel>()
+            .toList();
+
+        // Load current positions for active employees
+        await _loadCurrentPositions(newActiveEmployees);
+
         setState(() {
-          activeEmployees = allAttendance
-              .where((a) => a.status == 'active')
-              .cast<AttendanceModel>()
-              .toList();
+          activeEmployees = newActiveEmployees;
           isLoading = false;
         });
         _updateMapMarkers();
@@ -88,21 +99,133 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     }
   }
 
+  Future<void> _loadCurrentPositions(List<AttendanceModel> employees) async {
+    try {
+      final result = await AttendanceService.getCurrentPositions();
+      if (result['success'] == true && mounted) {
+        final positions = result['data']['positions'] as List;
+
+        // Update employee positions with current location data
+        for (var employee in employees) {
+          final positionData = positions.firstWhere(
+            (pos) => pos['employeeId'] == employee.employeeId,
+            orElse: () => null,
+          );
+
+          if (positionData != null) {
+            // Update employee with current position and travel data
+            employee.currentLatitude = positionData['currentLatitude'];
+            employee.currentLongitude = positionData['currentLongitude'];
+            employee.currentDistanceKm = positionData['currentDistanceKm'];
+            employee.isMoving = positionData['isMoving'] ?? false;
+            employee.speed = positionData['speed'] ?? 0.0;
+            employee.lastPositionUpdate =
+                positionData['lastPositionUpdate'] != null
+                ? DateTime.parse(positionData['lastPositionUpdate'])
+                : employee.punchInTime;
+          }
+        }
+      }
+    } catch (e) {
+      print('Failed to load current positions: $e');
+    }
+  }
+
+  Future<void> _loadEmployeeRoutes() async {
+    if (!showRoutes) return;
+
+    try {
+      for (var employee in activeEmployees) {
+        final result = await RouteService.getAttendanceRoute(employee.id);
+        if (result['success'] == true && mounted) {
+          final routePoints = result['data']['routePoints'] as List?;
+          if (routePoints != null && routePoints.isNotEmpty) {
+            employeeRoutes[employee.id] = routePoints
+                .map(
+                  (point) => LatLng(
+                    point['latitude'] as double,
+                    point['longitude'] as double,
+                  ),
+                )
+                .toList();
+          }
+        }
+      }
+      _updateRoutePolylines();
+    } catch (e) {
+      print('Failed to load employee routes: $e');
+    }
+  }
+
+  void _updateRoutePolylines() {
+    Set<Polyline> polylines = {};
+
+    for (var entry in employeeRoutes.entries) {
+      final employeeId = entry.key;
+      final routePoints = entry.value;
+
+      if (routePoints.length > 1) {
+        // Find employee to get movement status
+        final employee = activeEmployees.firstWhere(
+          (e) => e.id == employeeId,
+          orElse: () => activeEmployees.first,
+        );
+
+        polylines.add(
+          Polyline(
+            polylineId: PolylineId(employeeId),
+            points: routePoints,
+            color: employee.isMoving == true ? movingColor : stationaryColor,
+            width: 4,
+            patterns: employee.isMoving == true
+                ? []
+                : [PatternItem.dash(10), PatternItem.gap(5)],
+          ),
+        );
+      }
+    }
+
+    setState(() => _polylines = polylines);
+  }
+
   void _updateMapMarkers() {
     Set<Marker> markers = {};
 
     for (var employee in activeEmployees) {
+      // Use current position if available, otherwise fall back to punch-in position
+      final lat = employee.currentLatitude ?? employee.punchInLatitude;
+      final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
+      // Determine marker color based on movement status
+      final markerColor = employee.isMoving == true
+          ? BitmapDescriptor
+                .hueGreen // Moving - green
+          : BitmapDescriptor.hueOrange; // Stationary - orange
+
+      final workDuration = DateTime.now().difference(employee.punchInTime);
+      final hours = workDuration.inHours;
+      final minutes = workDuration.inMinutes % 60;
+
+      String snippet = 'Working for ${hours}h ${minutes}m';
+      if (employee.currentDistanceKm != null &&
+          employee.currentDistanceKm! > 0) {
+        snippet +=
+            ' • ${employee.currentDistanceKm!.toStringAsFixed(1)}km traveled';
+      }
+      if (employee.speed != null && employee.speed! > 0) {
+        snippet += ' • ${employee.speed!.toStringAsFixed(0)} km/h';
+      }
+
       markers.add(
         Marker(
           markerId: MarkerId(employee.id),
-          position: LatLng(employee.punchInLatitude, employee.punchInLongitude),
+          position: LatLng(lat, lng),
           infoWindow: InfoWindow(
-            title: employee.employeeName,
-            snippet: 'Active since ${_formatTime(employee.punchInTime)}',
+            title:
+                '${employee.employeeName} ${employee.isMoving == true ? '🚗' : '📍'}',
+            snippet: snippet,
           ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen,
-          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(markerColor),
           onTap: () => _showEmployeeDetails(employee),
         ),
       );
@@ -278,9 +401,34 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
               Expanded(
                 child: _buildStatItem(
                   'Status',
-                  employee.status.toUpperCase(),
-                  Icons.circle,
-                  employee.status == 'active' ? successColor : primaryColor,
+                  employee.isMoving == true ? 'MOVING' : 'STATIONARY',
+                  employee.isMoving == true
+                      ? Icons.directions_car
+                      : Icons.location_on,
+                  employee.isMoving == true ? movingColor : stationaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  'Distance',
+                  '${employee.currentDistanceKm?.toStringAsFixed(1) ?? '0.0'} km',
+                  Icons.route,
+                  primaryColor,
+                ),
+              ),
+              Expanded(
+                child: _buildStatItem(
+                  'Speed',
+                  '${employee.speed?.toStringAsFixed(0) ?? '0'} km/h',
+                  Icons.speed,
+                  employee.speed != null && employee.speed! > 0
+                      ? successColor
+                      : Colors.grey,
                 ),
               ),
             ],
@@ -404,11 +552,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   }
 
   void _focusOnEmployee(AttendanceModel employee) {
+    // Use current position if available, otherwise fall back to punch-in position
+    final lat = employee.currentLatitude ?? employee.punchInLatitude;
+    final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
     _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(employee.punchInLatitude, employee.punchInLongitude),
-        16,
-      ),
+      CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
     );
   }
 
@@ -587,7 +736,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     ),
                   ),
                   Text(
-                    '${activeEmployees.length} employees currently active',
+                    '${activeEmployees.length} employees • ${showRoutes ? 'Routes shown' : 'Routes hidden'}',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 14,
@@ -738,6 +887,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             'Working for ${hours}h ${minutes}m',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
+          if (employee.currentDistanceKm != null &&
+              employee.currentDistanceKm! > 0)
+            Text(
+              '${employee.currentDistanceKm!.toStringAsFixed(1)}km traveled',
+              style: TextStyle(fontSize: 11, color: Colors.blue.shade600),
+            ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -798,6 +953,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                   zoom: 11,
                 ),
                 markers: _markers,
+                polylines: _polylines,
                 onMapCreated: (controller) {
                   _mapController = controller;
                   if (_markers.isNotEmpty) {
@@ -877,9 +1033,28 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         ),
         const SizedBox(height: 12),
         FloatingActionButton(
+          heroTag: "routes",
+          onPressed: () {
+            setState(() {
+              showRoutes = !showRoutes;
+              if (showRoutes) {
+                _loadEmployeeRoutes();
+              } else {
+                _polylines.clear();
+              }
+            });
+          },
+          backgroundColor: showRoutes ? movingColor : Colors.grey,
+          child: Icon(
+            showRoutes ? Icons.route : Icons.route_outlined,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton(
           heroTag: "fit_view",
           onPressed: _fitMarkersInView,
-          backgroundColor: warningColor,
+          backgroundColor: stationaryColor,
           child: const Icon(Icons.center_focus_strong, color: Colors.white),
         ),
       ],

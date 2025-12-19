@@ -538,6 +538,29 @@ class AttendanceService {
     }
   }
 
+  // Admin: Get Current Positions of Active Employees (Live Tracking)
+  static Future<Map<String, dynamic>> getCurrentPositions() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/admin/current-positions'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data']};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch current positions',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
   // Admin: Get Employee Attendance Report
   static Future<Map<String, dynamic>> getEmployeeAttendanceReport({
     int? month,
