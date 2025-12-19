@@ -608,7 +608,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen>
                   const Icon(Icons.analytics, size: 20, color: Colors.purple),
                   const SizedBox(width: 8),
                   const Text(
-                    'Analytics Charts',
+                    'Route Summary',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
@@ -641,7 +641,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen>
                     ),
                     Expanded(
                       child: TabBarView(
-                        children: [_buildDistanceChart(), _buildSpeedChart()],
+                        children: [_buildRouteSummary(), _buildRouteDetails()],
                       ),
                     ),
                   ],

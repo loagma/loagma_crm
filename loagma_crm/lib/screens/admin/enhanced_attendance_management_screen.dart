@@ -340,7 +340,7 @@ class _EnhancedAttendanceManagementScreenState
                   if (attendance.totalDistanceKm != null)
                     _buildDetailRow(
                       'Distance Traveled',
-                      '${attendance.totalDistanceKm!.toStringAsFixed(2)} km',
+                      '${attendance.totalDistanceKm!.toStringAsFixed(2)} km ${attendance.status == 'completed' ? '(Route-based)' : '(Live tracking)'}',
                       Icons.directions,
                     ),
                   if (attendance.punchInAddress != null)

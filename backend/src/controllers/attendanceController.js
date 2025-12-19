@@ -11,6 +11,9 @@ import {
     getISTTimezoneInfo
 } from '../utils/timezone.js';
 
+// kiranastore hostel caterers sweets 
+//  date filter in list of aaccoumts
+
 const prisma = new PrismaClient();
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
@@ -128,13 +131,13 @@ export const punchIn = async (req, res) => {
 
         // Create attendance record with proper IST handling
         // Use the currentISTTime already declared above
-        
+
         // Store IST time directly in database for correct display
         const punchInTimeIST = currentISTTime;
-        
+
         // Get IST date for the date field (date only, no time)
         const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
-        
+
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
@@ -274,13 +277,63 @@ export const punchOut = async (req, res) => {
             });
         }
 
-        // Calculate distance with enhanced accuracy
-        const distance = calculateDistance(
-            attendance.punchInLatitude,
-            attendance.punchInLongitude,
-            lat,
-            lng
-        );
+        // Calculate actual travel distance from route points
+        let distance = 0;
+
+        try {
+            // Get route points for this attendance session
+            const routePoints = await prisma.routePoint.findMany({
+                where: {
+                    attendanceId: attendanceId
+                },
+                orderBy: {
+                    timestamp: 'asc'
+                }
+            });
+
+            if (routePoints.length > 1) {
+                // Calculate cumulative distance from route points
+                for (let i = 1; i < routePoints.length; i++) {
+                    const segmentDistance = calculateDistance(
+                        routePoints[i - 1].latitude,
+                        routePoints[i - 1].longitude,
+                        routePoints[i].latitude,
+                        routePoints[i].longitude
+                    );
+                    distance += segmentDistance;
+                }
+
+                // Add final segment from last route point to punch out location
+                const lastPoint = routePoints[routePoints.length - 1];
+                const finalSegment = calculateDistance(
+                    lastPoint.latitude,
+                    lastPoint.longitude,
+                    lat,
+                    lng
+                );
+                distance += finalSegment;
+
+                console.log(`📍 Calculated route distance: ${distance.toFixed(3)} km from ${routePoints.length} points`);
+            } else {
+                // Fallback to straight-line distance if no route points
+                distance = calculateDistance(
+                    attendance.punchInLatitude,
+                    attendance.punchInLongitude,
+                    lat,
+                    lng
+                );
+                console.log(`📍 Using straight-line distance: ${distance.toFixed(3)} km (no route data)`);
+            }
+        } catch (routeError) {
+            console.error('❌ Error calculating route distance:', routeError);
+            // Fallback to straight-line distance
+            distance = calculateDistance(
+                attendance.punchInLatitude,
+                attendance.punchInLongitude,
+                lat,
+                lng
+            );
+        }
 
         // Validate reasonable distance (optional check)
         if (distance > 1000) { // More than 1000 km seems unrealistic
@@ -397,7 +450,7 @@ export const getTodayAttendance = async (req, res) => {
             if (responseData.status === 'active') {
                 currentWorkHours = getCurrentWorkDurationIST(responseData.punchInTime);
             }
-            
+
             responseData = {
                 ...responseData,
                 currentWorkHours,
@@ -408,7 +461,7 @@ export const getTodayAttendance = async (req, res) => {
                 punchOutTimeISTFormatted: responseData.punchOutTime ? formatISTTime(responseData.punchOutTime, 'time') : null,
                 workDurationFormatted: currentWorkHours > 0 ? `${Math.floor(currentWorkHours)}h ${Math.round((currentWorkHours % 1) * 60)}m` : null
             };
-            
+
             console.log('Active attendance - current work hours:', currentWorkHours);
         }
 
@@ -423,7 +476,7 @@ export const getTodayAttendance = async (req, res) => {
         }));
 
         const currentISTTime = getCurrentISTTime();
-        
+
         res.status(200).json({
             success: true,
             data: responseData,
@@ -706,7 +759,7 @@ export const getLiveAttendanceDashboard = async (req, res) => {
                 punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
                 punchOutTimeIST: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'datetime') : null,
                 punchOutTimeISTFormatted: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'time') : null,
-                workDurationFormatted: currentWorkHours > 0 || attendance.totalWorkHours > 0 ? 
+                workDurationFormatted: currentWorkHours > 0 || attendance.totalWorkHours > 0 ?
                     `${Math.floor(attendance.totalWorkHours || currentWorkHours)}h ${Math.round(((attendance.totalWorkHours || currentWorkHours) % 1) * 60)}m` : null
             };
         });
@@ -903,7 +956,7 @@ export const getDetailedAttendance = async (req, res) => {
                 punchOutTimeIST: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'datetime') : null,
                 punchOutTimeISTFormatted: attendance.punchOutTime ? formatISTTime(attendance.punchOutTime, 'time') : null,
                 dateISTFormatted: formatISTTime(attendance.punchInTime, 'date'),
-                workDurationFormatted: (attendance.totalWorkHours || currentWorkHours) > 0 ? 
+                workDurationFormatted: (attendance.totalWorkHours || currentWorkHours) > 0 ?
                     `${Math.floor(attendance.totalWorkHours || currentWorkHours)}h ${Math.round(((attendance.totalWorkHours || currentWorkHours) % 1) * 60)}m` : null
             };
         });
@@ -929,6 +982,130 @@ export const getDetailedAttendance = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch detailed attendance',
+            error: error.message
+        });
+    }
+};
+
+// Get Current Positions of Active Employees (Admin - Live Tracking)
+export const getCurrentPositions = async (req, res) => {
+    try {
+        // Get today's active attendance sessions
+        const { startOfDay, endOfDay } = getISTDateRange();
+
+        const activeAttendances = await prisma.attendance.findMany({
+            where: {
+                status: 'active',
+                punchInTime: {
+                    gte: startOfDay,
+                    lt: endOfDay
+                }
+            },
+            select: {
+                id: true,
+                employeeId: true,
+                employeeName: true,
+                punchInTime: true,
+                punchInLatitude: true,
+                punchInLongitude: true
+            }
+        });
+
+        // Get latest route points for each active employee
+        const employeePositions = await Promise.all(
+            activeAttendances.map(async (attendance) => {
+                try {
+                    // Get the most recent route point
+                    const latestRoutePoint = await prisma.routePoint.findFirst({
+                        where: {
+                            attendanceId: attendance.id
+                        },
+                        orderBy: {
+                            timestamp: 'desc'
+                        }
+                    });
+
+                    // Calculate current travel distance
+                    let currentDistance = 0;
+                    const routePoints = await prisma.routePoint.findMany({
+                        where: {
+                            attendanceId: attendance.id
+                        },
+                        orderBy: {
+                            timestamp: 'asc'
+                        }
+                    });
+
+                    if (routePoints.length > 1) {
+                        for (let i = 1; i < routePoints.length; i++) {
+                            const segmentDistance = calculateDistance(
+                                routePoints[i - 1].latitude,
+                                routePoints[i - 1].longitude,
+                                routePoints[i].latitude,
+                                routePoints[i].longitude
+                            );
+                            currentDistance += segmentDistance;
+                        }
+                    }
+
+                    return {
+                        attendanceId: attendance.id,
+                        employeeId: attendance.employeeId,
+                        employeeName: attendance.employeeName,
+                        punchInTime: attendance.punchInTime,
+                        punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                        currentWorkHours: getCurrentWorkDurationIST(attendance.punchInTime),
+                        // Current position (latest route point or punch-in location)
+                        currentLatitude: latestRoutePoint?.latitude || attendance.punchInLatitude,
+                        currentLongitude: latestRoutePoint?.longitude || attendance.punchInLongitude,
+                        lastPositionUpdate: latestRoutePoint?.timestamp || attendance.punchInTime,
+                        lastPositionUpdateIST: latestRoutePoint
+                            ? formatISTTime(latestRoutePoint.timestamp, 'datetime')
+                            : formatISTTime(attendance.punchInTime, 'datetime'),
+                        // Travel metrics
+                        currentDistanceKm: Math.round(currentDistance * 1000) / 1000,
+                        totalRoutePoints: routePoints.length,
+                        isMoving: latestRoutePoint &&
+                            (Date.now() - latestRoutePoint.timestamp.getTime()) < 120000, // Moved in last 2 minutes
+                        speed: latestRoutePoint?.speed || 0
+                    };
+                } catch (error) {
+                    console.error(`Error getting position for employee ${attendance.employeeId}:`, error);
+                    return {
+                        attendanceId: attendance.id,
+                        employeeId: attendance.employeeId,
+                        employeeName: attendance.employeeName,
+                        punchInTime: attendance.punchInTime,
+                        punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                        currentWorkHours: getCurrentWorkDurationIST(attendance.punchInTime),
+                        currentLatitude: attendance.punchInLatitude,
+                        currentLongitude: attendance.punchInLongitude,
+                        lastPositionUpdate: attendance.punchInTime,
+                        lastPositionUpdateIST: formatISTTime(attendance.punchInTime, 'datetime'),
+                        currentDistanceKm: 0,
+                        totalRoutePoints: 0,
+                        isMoving: false,
+                        speed: 0,
+                        error: 'Failed to load route data'
+                    };
+                }
+            })
+        );
+
+        res.status(200).json({
+            success: true,
+            data: {
+                activeEmployees: employeePositions.length,
+                positions: employeePositions,
+                lastUpdated: new Date().toISOString(),
+                lastUpdatedIST: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
+            }
+        });
+    } catch (error) {
+        console.error('Get current positions error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch current positions',
             error: error.message
         });
     }
@@ -1057,5 +1234,6 @@ export default {
     getLiveAttendanceDashboard,
     getAttendanceAnalytics,
     getDetailedAttendance,
+    getCurrentPositions,
     getEmployeeAttendanceReport
 };
