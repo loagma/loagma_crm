@@ -73,9 +73,11 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   // Load salesmen
   Future<void> _loadSalesmen() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final result = await _service.fetchSalesmen();
+      if (!mounted) return;
       if (result['success'] == true) {
         setState(() {
           _salesmen = result['salesmen'] ?? [];
@@ -85,9 +87,12 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         _showError(result['message'] ?? 'Failed to load salesmen');
       }
     } catch (e) {
+      if (!mounted) return;
       _showError('Error: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

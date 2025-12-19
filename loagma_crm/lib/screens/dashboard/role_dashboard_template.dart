@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/user_service.dart';
 import '../../widgets/enterprise_sidebar.dart';
+import '../../widgets/notification_bell.dart';
 import '../salesman/salesman_dashboard_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
@@ -240,6 +241,9 @@ class RoleDashboardTemplate extends StatelessWidget {
         ],
       ),
       actions: [
+        // Show notification bell only for admin role
+        if (roleName.toLowerCase() == 'admin')
+          const NotificationBell(role: 'admin'),
         IconButton(
           icon: const Icon(Icons.logout),
           tooltip: "Logout",
@@ -333,7 +337,7 @@ class RoleDashboardTemplate extends StatelessWidget {
   Widget _header(Color color) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [color, color.withOpacity(0.7)]),
+        gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.7)]),
       ),
     );
   }

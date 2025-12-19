@@ -239,9 +239,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             final filters = ['all', 'punch_in', 'punch_out', 'unread'];
             _onFilterChanged(filters[index]);
           },
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
+          labelColor: Colors.black,
+          unselectedLabelColor: Colors.black54,
+          indicatorColor: Colors.black,
           tabs: [
             Tab(
               text: 'All',
@@ -441,7 +441,7 @@ class NotificationDetailsSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: Colors.grey[600],
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -449,9 +449,13 @@ class NotificationDetailsSheet extends StatelessWidget {
         children: [
           if (data['employeeName'] != null)
             _buildDataRow('Employee', data['employeeName']),
-          if (data['punchInTimeIST'] != null)
+          if (data['punchInTimeFormatted'] != null)
+            _buildDataRow('Punch In Time', data['punchInTimeFormatted'])
+          else if (data['punchInTimeIST'] != null)
             _buildDataRow('Punch In Time', data['punchInTimeIST']),
-          if (data['punchOutTimeIST'] != null)
+          if (data['punchOutTimeFormatted'] != null)
+            _buildDataRow('Punch Out Time', data['punchOutTimeFormatted'])
+          else if (data['punchOutTimeIST'] != null)
             _buildDataRow('Punch Out Time', data['punchOutTimeIST']),
           if (data['workDurationFormatted'] != null)
             _buildDataRow('Work Duration', data['workDurationFormatted']),

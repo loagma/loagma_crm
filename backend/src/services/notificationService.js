@@ -57,8 +57,25 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchInNotification(attendanceData) {
+        // Since punchInTime is already stored in IST, we need to format it correctly
+        const punchInTime = new Date(attendanceData.punchInTime);
+        const timeString = punchInTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        const dateTimeString = punchInTime.toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+
         const title = 'Salesman Punched In';
-        const message = `${attendanceData.employeeName} punched in at ${formatISTTime(attendanceData.punchInTime, 'time')}`;
+        const message = `${attendanceData.employeeName} punched in at ${timeString}`;
 
         return await this.createNotification({
             title,
@@ -71,7 +88,8 @@ class NotificationService {
                 employeeName: attendanceData.employeeName,
                 attendanceId: attendanceData.id,
                 punchInTime: attendanceData.punchInTime,
-                punchInTimeIST: formatISTTime(attendanceData.punchInTime, 'datetime'),
+                punchInTimeIST: dateTimeString,
+                punchInTimeFormatted: timeString,
                 location: {
                     latitude: attendanceData.punchInLatitude,
                     longitude: attendanceData.punchInLongitude,
@@ -86,11 +104,45 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchOutNotification(attendanceData) {
+        // Since both times are already stored in IST, format them correctly
+        const punchInTime = new Date(attendanceData.punchInTime);
+        const punchOutTime = new Date(attendanceData.punchOutTime);
+
+        const punchInTimeString = punchInTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        const punchOutTimeString = punchOutTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const punchInDateTimeString = punchInTime.toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+        const punchOutDateTimeString = punchOutTime.toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+
         const workHours = attendanceData.totalWorkHours || 0;
         const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
 
         const title = 'Salesman Punched Out';
-        const message = `${attendanceData.employeeName} punched out at ${formatISTTime(attendanceData.punchOutTime, 'time')} after working ${workDurationFormatted}`;
+        const message = `${attendanceData.employeeName} punched out at ${punchOutTimeString} after working ${workDurationFormatted}`;
 
         return await this.createNotification({
             title,
@@ -104,8 +156,10 @@ class NotificationService {
                 attendanceId: attendanceData.id,
                 punchInTime: attendanceData.punchInTime,
                 punchOutTime: attendanceData.punchOutTime,
-                punchInTimeIST: formatISTTime(attendanceData.punchInTime, 'datetime'),
-                punchOutTimeIST: formatISTTime(attendanceData.punchOutTime, 'datetime'),
+                punchInTimeIST: punchInDateTimeString,
+                punchOutTimeIST: punchOutDateTimeString,
+                punchInTimeFormatted: punchInTimeString,
+                punchOutTimeFormatted: punchOutTimeString,
                 totalWorkHours: attendanceData.totalWorkHours,
                 workDurationFormatted,
                 totalDistanceKm: attendanceData.totalDistanceKm,

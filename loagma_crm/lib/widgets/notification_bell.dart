@@ -77,7 +77,10 @@ class _NotificationBellState extends State<NotificationBell> {
         IconButton(
           icon: Icon(
             Icons.notifications,
-            color: widget.iconColor ?? Colors.white,
+            color:
+                widget.iconColor ??
+                Theme.of(context).appBarTheme.foregroundColor ??
+                const Color.fromARGB(255, 81, 81, 81),
             size: widget.iconSize ?? 24,
           ),
           onPressed: _openNotifications,
@@ -172,7 +175,7 @@ class NotificationItem extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _getTypeColor().withOpacity(0.1),
+                  color: _getTypeColor().withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(_getTypeIcon(), color: _getTypeColor(), size: 24),
