@@ -5,7 +5,8 @@ import {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     createNotification,
-    getAdminDashboardNotifications
+    getAdminDashboardNotifications,
+    createTestNotification
 } from '../controllers/notificationController.js';
 
 const router = express.Router();
@@ -27,5 +28,8 @@ router.patch('/mark-all-read', markAllNotificationsAsRead);
 
 // Create notification (Admin only)
 router.post('/', createNotification);
+
+// Create test notification (for debugging)
+router.post('/test', createTestNotification);
 
 export default router;

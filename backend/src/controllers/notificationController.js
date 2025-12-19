@@ -179,6 +179,65 @@ export const createNotification = async (req, res) => {
     }
 };
 
+// Test notification with current time (for debugging)
+export const createTestNotification = async (req, res) => {
+    try {
+        const currentTime = new Date();
+        const timeString = currentTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        const dateTimeString = currentTime.toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+
+        const testAttendanceData = {
+            id: 'test-attendance-id',
+            employeeId: 'test-employee-id',
+            employeeName: 'Test Employee',
+            punchInTime: currentTime,
+            punchOutTime: new Date(currentTime.getTime() + 2 * 60 * 60 * 1000), // 2 hours later
+            totalWorkHours: 2.0,
+            totalDistanceKm: 5.5,
+            punchInLatitude: 28.6139,
+            punchInLongitude: 77.2090,
+            punchInAddress: 'Test Location, Delhi',
+            punchOutLatitude: 28.6200,
+            punchOutLongitude: 77.2150,
+            punchOutAddress: 'Test End Location, Delhi'
+        };
+
+        // Create both punch-in and punch-out test notifications
+        const punchInNotification = await NotificationService.createPunchInNotification(testAttendanceData);
+        const punchOutNotification = await NotificationService.createPunchOutNotification(testAttendanceData);
+
+        res.status(201).json({
+            success: true,
+            message: 'Test notifications created successfully',
+            data: {
+                currentTime: dateTimeString,
+                timeString: timeString,
+                punchInNotification,
+                punchOutNotification
+            }
+        });
+    } catch (error) {
+        console.error('❌ Create test notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create test notification',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
 // Get admin dashboard notifications (recent punch-in/punch-out activities)
 export const getAdminDashboardNotifications = async (req, res) => {
     try {
@@ -229,5 +288,6 @@ export default {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     createNotification,
-    getAdminDashboardNotifications
+    getAdminDashboardNotifications,
+    createTestNotification
 };

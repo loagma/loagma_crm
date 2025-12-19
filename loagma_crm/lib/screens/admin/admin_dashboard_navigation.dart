@@ -20,7 +20,7 @@ class AdminDashboardNavigation extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          const NotificationBell(role: 'admin', iconColor: Colors.white),
+          const NotificationBell(role: 'admin', iconColor: Colors.grey),
           const SizedBox(width: 8),
         ],
       ),
