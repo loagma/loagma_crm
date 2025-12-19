@@ -16,9 +16,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     with TickerProviderStateMixin {
   // Colors - Updated for better UX
   static const Color primaryColor = Color(0xFF1976D2);
-  static const Color activeColor = Color(0xFF4CAF50);
+  static const Color successColor = Color(0xFF4CAF50);
   static const Color movingColor = Color(0xFF2E7D32);
-  static const Color stationaryColor = Color(0xFFFF9800);
+  static const Color warningColor = Color(0xFFFF9800);
   static const Color errorColor = Color(0xFFF44336);
   static const Color backgroundColor = Color(0xFFFAFAFA);
 
@@ -175,7 +175,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           Polyline(
             polylineId: PolylineId(employeeId),
             points: routePoints,
-            color: employee.isMoving == true ? movingColor : stationaryColor,
+            color: employee.isMoving == true ? movingColor : warningColor,
             width: 4,
             patterns: employee.isMoving == true
                 ? []
@@ -405,7 +405,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                   employee.isMoving == true
                       ? Icons.directions_car
                       : Icons.location_on,
-                  employee.isMoving == true ? movingColor : stationaryColor,
+                  employee.isMoving == true ? movingColor : warningColor,
                 ),
               ),
             ],
@@ -1054,7 +1054,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         FloatingActionButton(
           heroTag: "fit_view",
           onPressed: _fitMarkersInView,
-          backgroundColor: stationaryColor,
+          backgroundColor: warningColor,
           child: const Icon(Icons.center_focus_strong, color: Colors.white),
         ),
       ],

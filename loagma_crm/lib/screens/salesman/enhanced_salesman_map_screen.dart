@@ -59,6 +59,14 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   List<String> selectedAssignedAreas = [];
   bool? selectedApprovalStatus;
 
+  // Temporary filter states (before applying)
+  List<String> tempSelectedCustomerStages = [];
+  List<String> tempSelectedBusinessTypes = [];
+  List<String> tempSelectedFunnelStages = [];
+  List<String> tempSelectedPincodes = [];
+  List<String> tempSelectedAssignedAreas = [];
+  bool? tempSelectedApprovalStatus;
+
   // Available filter options
   List<String> availableFunnelStages = [];
   List<String> availablePincodes = [];
@@ -112,6 +120,14 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
       'name': 'Supermarkets',
       'icon': Icons.local_grocery_store,
     },
+    {
+      'type': 'convenience_store',
+      'name': 'Kirana Store',
+      'icon': Icons.storefront,
+    },
+    {'type': 'lodging', 'name': 'Hostel', 'icon': Icons.hotel},
+    {'type': 'meal_takeaway', 'name': 'Caterers', 'icon': Icons.takeout_dining},
+    {'type': 'food', 'name': 'Sweets', 'icon': Icons.cake},
     {'type': 'bank', 'name': 'Banks', 'icon': Icons.account_balance},
     {
       'type': 'gas_station',
@@ -135,6 +151,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
       parent: _filterAnimationController,
       curve: Curves.easeInOut,
     );
+
+    // Initialize temporary filters
+    _resetTempFilters();
 
     GooglePlacesService.instance.initialize();
     _initializeMap();
@@ -1181,8 +1200,58 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
       selectedPincodes.clear();
       selectedAssignedAreas.clear();
       selectedApprovalStatus = null;
+      // Also clear temporary filters
+      tempSelectedCustomerStages.clear();
+      tempSelectedBusinessTypes.clear();
+      tempSelectedFunnelStages.clear();
+      tempSelectedPincodes.clear();
+      tempSelectedAssignedAreas.clear();
+      tempSelectedApprovalStatus = null;
     });
     _updateMapMarkers();
+  }
+
+  void _applyFilters() {
+    setState(() {
+      selectedCustomerStages = List.from(tempSelectedCustomerStages);
+      selectedBusinessTypes = List.from(tempSelectedBusinessTypes);
+      selectedFunnelStages = List.from(tempSelectedFunnelStages);
+      selectedPincodes = List.from(tempSelectedPincodes);
+      selectedAssignedAreas = List.from(tempSelectedAssignedAreas);
+      selectedApprovalStatus = tempSelectedApprovalStatus;
+    });
+    _updateMapMarkers();
+  }
+
+  bool get _hasFilterChanges {
+    return !_listsEqual(selectedCustomerStages, tempSelectedCustomerStages) ||
+        !_listsEqual(selectedBusinessTypes, tempSelectedBusinessTypes) ||
+        !_listsEqual(selectedFunnelStages, tempSelectedFunnelStages) ||
+        !_listsEqual(selectedPincodes, tempSelectedPincodes) ||
+        !_listsEqual(selectedAssignedAreas, tempSelectedAssignedAreas) ||
+        selectedApprovalStatus != tempSelectedApprovalStatus;
+  }
+
+  bool _listsEqual(List<String> list1, List<String> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (!list2.contains(list1[i])) return false;
+    }
+    for (int i = 0; i < list2.length; i++) {
+      if (!list1.contains(list2[i])) return false;
+    }
+    return true;
+  }
+
+  void _resetTempFilters() {
+    setState(() {
+      tempSelectedCustomerStages = List.from(selectedCustomerStages);
+      tempSelectedBusinessTypes = List.from(selectedBusinessTypes);
+      tempSelectedFunnelStages = List.from(selectedFunnelStages);
+      tempSelectedPincodes = List.from(selectedPincodes);
+      tempSelectedAssignedAreas = List.from(selectedAssignedAreas);
+      tempSelectedApprovalStatus = selectedApprovalStatus;
+    });
   }
 
   @override
@@ -1753,6 +1822,57 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
             // Account Filters in 2-column grid
             _buildAccountFiltersGrid(),
 
+            const SizedBox(height: 8),
+
+            // Apply Filters Button
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _hasFilterChanges ? _applyFilters : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _hasFilterChanges
+                          ? primaryColor
+                          : Colors.grey[300],
+                      foregroundColor: _hasFilterChanges
+                          ? Colors.white
+                          : Colors.grey[600],
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: _hasFilterChanges ? 2 : 0,
+                    ),
+                    icon: Icon(
+                      _hasFilterChanges ? Icons.check : Icons.filter_alt,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _hasFilterChanges ? 'Apply Filters' : 'No Changes',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (_hasFilterChanges)
+                  TextButton.icon(
+                    onPressed: _resetTempFilters,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Reset', style: TextStyle(fontSize: 12)),
+                  ),
+              ],
+            ),
+
             const Divider(),
 
             // Current Area Button
@@ -2029,12 +2149,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         _buildCompactMultiSelectFilter(
           'Funnel Stages',
           availableFunnelStages,
-          selectedFunnelStages,
+          tempSelectedFunnelStages,
           (selected) {
             setState(() {
-              selectedFunnelStages = selected;
+              tempSelectedFunnelStages = selected;
             });
-            _updateMapMarkers();
           },
         ),
       );
@@ -2046,12 +2165,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         _buildCompactMultiSelectFilter(
           'Pincodes',
           availablePincodes,
-          selectedPincodes,
+          tempSelectedPincodes,
           (selected) {
             setState(() {
-              selectedPincodes = selected;
+              tempSelectedPincodes = selected;
             });
-            _updateMapMarkers();
           },
         ),
       );
@@ -2063,12 +2181,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         _buildCompactMultiSelectFilter(
           'Assigned Areas',
           availableAssignedAreas,
-          selectedAssignedAreas,
+          tempSelectedAssignedAreas,
           (selected) {
             setState(() {
-              selectedAssignedAreas = selected;
+              tempSelectedAssignedAreas = selected;
             });
-            _updateMapMarkers();
           },
         ),
       );
@@ -2080,12 +2197,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         _buildCompactMultiSelectFilter(
           'Customer Stages',
           availableCustomerStages,
-          selectedCustomerStages,
+          tempSelectedCustomerStages,
           (selected) {
             setState(() {
-              selectedCustomerStages = selected;
+              tempSelectedCustomerStages = selected;
             });
-            _updateMapMarkers();
           },
         ),
       );
@@ -2097,12 +2213,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         _buildCompactMultiSelectFilter(
           'Business Types',
           availableBusinessTypes,
-          selectedBusinessTypes,
+          tempSelectedBusinessTypes,
           (selected) {
             setState(() {
-              selectedBusinessTypes = selected;
+              tempSelectedBusinessTypes = selected;
             });
-            _updateMapMarkers();
           },
         ),
       );
@@ -2207,7 +2322,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         ),
         const SizedBox(height: 2),
         DropdownButtonFormField<bool?>(
-          value: selectedApprovalStatus,
+          value: tempSelectedApprovalStatus,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -2235,9 +2350,8 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
           ],
           onChanged: (value) {
             setState(() {
-              selectedApprovalStatus = value;
+              tempSelectedApprovalStatus = value;
             });
-            _updateMapMarkers();
           },
         ),
       ],

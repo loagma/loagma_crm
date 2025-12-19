@@ -3,6 +3,7 @@ import 'package:loagma_crm/screens/admin/comprehensive_attendance_dashboard.dart
 import 'admin_attendance_management.dart';
 import 'live_tracking_screen.dart';
 import 'route_list_screen.dart';
+import '../../widgets/notification_bell.dart';
 
 class AdminDashboardNavigation extends StatelessWidget {
   const AdminDashboardNavigation({Key? key}) : super(key: key);
@@ -18,6 +19,10 @@ class AdminDashboardNavigation extends StatelessWidget {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          const NotificationBell(role: 'admin', iconColor: Colors.white),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

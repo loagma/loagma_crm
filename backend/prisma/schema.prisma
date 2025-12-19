@@ -126,6 +126,7 @@ model User {
   role               Role?               @relation(fields: [roleId], references: [id])
   areaAssignments    AreaAssignment[]
   routeLogs          SalesmanRouteLog[]  // Route tracking logs for this salesman
+  notifications      Notification[]      // Notifications targeted to this user
 }
 
 model EmployeeArea {
@@ -399,4 +400,28 @@ model SalesmanRouteLog {
   @@index([employeeId])     // Query routes by salesman
   @@index([attendanceId])   // Query routes by attendance session
   @@index([recordedAt])     // Query routes by time for chronological ordering
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  title       String
+  message     String
+  type        String    // punch_in, punch_out, general, alert
+  priority    String    @default("normal") // low, normal, high, urgent
+  targetRole  String?   // admin, salesman, telecaller, etc. (null means all)
+  targetUserId String?  // specific user (null means all users with targetRole)
+  data        Json?     // additional data (attendance info, etc.)
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  targetUser  User?     @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+  
+  @@index([targetRole])
+  @@index([targetUserId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
 }

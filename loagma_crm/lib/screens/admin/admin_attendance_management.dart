@@ -6,6 +6,7 @@ import '../../models/attendance_model.dart';
 import 'minimal_attendance_dashboard.dart';
 import 'live_tracking_screen.dart';
 import 'route_list_screen.dart';
+import '../../widgets/notification_bell.dart';
 
 class AdminAttendanceManagement extends StatefulWidget {
   const AdminAttendanceManagement({Key? key}) : super(key: key);
@@ -100,6 +101,7 @@ class _AdminAttendanceManagementState extends State<AdminAttendanceManagement>
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          const NotificationBell(role: 'admin', iconColor: Colors.white),
           IconButton(
             icon: Icon(isRefreshing ? Icons.hourglass_empty : Icons.refresh),
             onPressed: isRefreshing ? null : _refreshData,
