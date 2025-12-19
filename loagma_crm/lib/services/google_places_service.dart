@@ -210,6 +210,10 @@ class GooglePlacesService {
       'shoe_store',
       'book_store',
       'florist',
+      'convenience_store', // Kirana Store equivalent
+      'lodging', // Hostel equivalent
+      'meal_takeaway', // Caterers equivalent
+      'food', // Sweets/confectionery equivalent
     ];
   }
 }

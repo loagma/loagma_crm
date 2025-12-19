@@ -34,6 +34,10 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
   bool? selectedActiveStatus;
   bool isFilterExpanded = false;
 
+  // Date filter states
+  DateTime? selectedFromDate;
+  DateTime? selectedToDate;
+
   @override
   void initState() {
     super.initState();
@@ -207,6 +211,50 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
           selectedActiveStatus == null ||
           account['isActive'] == selectedActiveStatus;
 
+      // Date filter logic
+      bool matchesDateRange = true;
+      if (selectedFromDate != null || selectedToDate != null) {
+        final createdAtStr = account['createdAt']?.toString();
+        if (createdAtStr != null) {
+          try {
+            final createdAt = DateTime.parse(createdAtStr);
+            final createdDate = DateTime(
+              createdAt.year,
+              createdAt.month,
+              createdAt.day,
+            );
+
+            if (selectedFromDate != null) {
+              final fromDate = DateTime(
+                selectedFromDate!.year,
+                selectedFromDate!.month,
+                selectedFromDate!.day,
+              );
+              if (createdDate.isBefore(fromDate)) {
+                matchesDateRange = false;
+              }
+            }
+
+            if (selectedToDate != null && matchesDateRange) {
+              final toDate = DateTime(
+                selectedToDate!.year,
+                selectedToDate!.month,
+                selectedToDate!.day,
+              );
+              if (createdDate.isAfter(toDate)) {
+                matchesDateRange = false;
+              }
+            }
+          } catch (e) {
+            // If date parsing fails, exclude from results when date filter is active
+            matchesDateRange = false;
+          }
+        } else {
+          // If no createdAt field, exclude from results when date filter is active
+          matchesDateRange = false;
+        }
+      }
+
       return matchesSearch &&
           matchesStage &&
           matchesBusinessType &&
@@ -215,7 +263,8 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
           matchesCity &&
           matchesPincode &&
           matchesApproval &&
-          matchesActive;
+          matchesActive &&
+          matchesDateRange;
     }).toList();
   }
 
@@ -229,6 +278,7 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     if (selectedPincode != null) count++;
     if (selectedApprovalStatus != null) count++;
     if (selectedActiveStatus != null) count++;
+    if (selectedFromDate != null || selectedToDate != null) count++;
     return count;
   }
 
@@ -242,6 +292,8 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
       selectedPincode = null;
       selectedApprovalStatus = null;
       selectedActiveStatus = null;
+      selectedFromDate = null;
+      selectedToDate = null;
     });
   }
 
@@ -741,6 +793,78 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                             _buildActiveFilterChip('Inactive', false),
                           ],
                         ),
+                        const SizedBox(height: 12),
+
+                        // Date Range Filter
+                        Text(
+                          'Created Date Range',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDateFilterButton(
+                                'From Date',
+                                selectedFromDate,
+                                (date) =>
+                                    setState(() => selectedFromDate = date),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildDateFilterButton(
+                                'To Date',
+                                selectedToDate,
+                                (date) => setState(() => selectedToDate = date),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (selectedFromDate != null ||
+                            selectedToDate != null) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _getDateRangeText(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    selectedFromDate = null;
+                                    selectedToDate = null;
+                                  });
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  'Clear Dates',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.red[600],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -997,6 +1121,92 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildDateFilterButton(
+    String label,
+    DateTime? selectedDate,
+    Function(DateTime?) onDateSelected,
+  ) {
+    return InkWell(
+      onTap: () async {
+        final DateTime? picked = await showDatePicker(
+          context: context,
+          initialDate: selectedDate ?? DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(context).copyWith(
+                colorScheme: Theme.of(
+                  context,
+                ).colorScheme.copyWith(primary: const Color(0xFFD7BE69)),
+              ),
+              child: child!,
+            );
+          },
+        );
+        if (picked != null) {
+          onDateSelected(picked);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selectedDate != null
+              ? const Color(0xFFD7BE69).withOpacity(0.1)
+              : Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selectedDate != null
+                ? const Color(0xFFD7BE69)
+                : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.calendar_today,
+              size: 14,
+              color: selectedDate != null
+                  ? const Color(0xFFD7BE69)
+                  : Colors.grey[600],
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                selectedDate != null
+                    ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                    : label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: selectedDate != null
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  color: selectedDate != null
+                      ? const Color(0xFFD7BE69)
+                      : Colors.grey[600],
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getDateRangeText() {
+    if (selectedFromDate != null && selectedToDate != null) {
+      return 'From ${selectedFromDate!.day}/${selectedFromDate!.month}/${selectedFromDate!.year} to ${selectedToDate!.day}/${selectedToDate!.month}/${selectedToDate!.year}';
+    } else if (selectedFromDate != null) {
+      return 'From ${selectedFromDate!.day}/${selectedFromDate!.month}/${selectedFromDate!.year}';
+    } else if (selectedToDate != null) {
+      return 'Up to ${selectedToDate!.day}/${selectedToDate!.month}/${selectedToDate!.year}';
+    }
+    return '';
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {

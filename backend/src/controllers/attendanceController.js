@@ -10,6 +10,7 @@ import {
     getCurrentWorkDurationIST,
     getISTTimezoneInfo
 } from '../utils/timezone.js';
+import NotificationService from '../services/notificationService.js';
 
 // kiranastore hostel caterers sweets 
 //  date filter in list of aaccoumts
@@ -176,6 +177,15 @@ export const punchIn = async (req, res) => {
                 ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
             }
         };
+
+        // Create punch-in notification for admin
+        try {
+            await NotificationService.createPunchInNotification(attendance);
+            console.log('✅ Punch-in notification sent to admin');
+        } catch (notificationError) {
+            console.error('⚠️ Failed to send punch-in notification:', notificationError);
+            // Don't fail the punch-in if notification fails
+        }
 
         res.status(201).json({
             success: true,
@@ -388,6 +398,15 @@ export const punchOut = async (req, res) => {
                 ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
             }
         };
+
+        // Create punch-out notification for admin
+        try {
+            await NotificationService.createPunchOutNotification(updatedAttendance);
+            console.log('✅ Punch-out notification sent to admin');
+        } catch (notificationError) {
+            console.error('⚠️ Failed to send punch-out notification:', notificationError);
+            // Don't fail the punch-out if notification fails
+        }
 
         res.status(200).json({
             success: true,
