@@ -264,6 +264,11 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         approvalCode: approvalCode ?? validApprovalCode,
       );
 
+      print(
+        '🔍 Punch-in with approval code: ${approvalCode ?? validApprovalCode}',
+      );
+      print('🔍 Punch-in response: $response');
+
       Navigator.pop(context); // Close loading
 
       if (response['success'] == true) {
@@ -591,12 +596,16 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                       // Refresh status after approval request
                       setState(() {});
                     },
-                    onApprovalReceived: () {
-                      // Set flag that approval is received and allow punch in
+                    onApprovalCodeValidated: (String approvalCode) {
+                      // Store the actual validated approval code
+                      print('🔍 Received approval code: $approvalCode');
                       setState(() {
-                        validApprovalCode =
-                            'validated'; // This will be handled by the widget
+                        validApprovalCode = approvalCode;
                       });
+                    },
+                    onApprovalReceived: () {
+                      // Keep for backward compatibility - this will be called after onApprovalCodeValidated
+                      // The actual code is now stored via onApprovalCodeValidated callback
                     },
                   ),
                 )

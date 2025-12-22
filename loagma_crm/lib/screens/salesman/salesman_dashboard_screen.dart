@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../services/attendance_service.dart';
 import '../../services/task_assignment_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/attendance_status_widget.dart';
+import '../../widgets/notification_bell.dart';
 import 'sr_area_allotment_screen.dart';
 import 'enhanced_salesman_map_screen.dart';
 
@@ -45,6 +47,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
 
+  // Notification bell key for refreshing
+  final GlobalKey<NotificationBellState> _notificationBellKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +63,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     );
     fetchDashboardData();
     _loadTodayAttendance();
+    _startNotificationRefresh();
+  }
+
+  void _startNotificationRefresh() {
+    // Refresh notifications every 30 seconds to catch approval notifications
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _notificationBellKey.currentState?.refreshNotifications();
+      }
+    });
   }
 
   Future<void> _loadTodayAttendance() async {
@@ -427,6 +442,14 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                                       ),
                                     ],
                                   ),
+                                ),
+                                // Notification Bell
+                                NotificationBell(
+                                  key: _notificationBellKey,
+                                  userId: UserService.currentUserId,
+                                  role: UserService.currentRole,
+                                  iconColor: Colors.white,
+                                  iconSize: 28,
                                 ),
                               ],
                             ),
