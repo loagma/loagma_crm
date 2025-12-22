@@ -10,8 +10,10 @@ import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
 import '../../services/late_punch_approval_service.dart';
+import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/late_punch_approval_widget.dart';
+import '../../widgets/early_punch_out_approval_widget.dart';
 import '../../utils/custom_toast.dart';
 
 class EnhancedPunchScreen extends StatefulWidget {
@@ -43,6 +45,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   // Late punch approval
   bool isAfterCutoff = false;
   String? validApprovalCode;
+
+  // Early punch-out approval
+  bool isBeforeEarlyPunchOutCutoff = false;
+  String? validEarlyPunchOutCode;
 
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
@@ -85,9 +91,15 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     final wasAfterCutoff = isAfterCutoff;
     final newIsAfterCutoff = LatePunchApprovalService.isAfterCutoffTime();
 
-    if (wasAfterCutoff != newIsAfterCutoff) {
+    final wasBeforeEarlyPunchOutCutoff = isBeforeEarlyPunchOutCutoff;
+    final newIsBeforeEarlyPunchOutCutoff =
+        EarlyPunchOutApprovalService.isBeforeEarlyPunchOutCutoff();
+
+    if (wasAfterCutoff != newIsAfterCutoff ||
+        wasBeforeEarlyPunchOutCutoff != newIsBeforeEarlyPunchOutCutoff) {
       setState(() {
         isAfterCutoff = newIsAfterCutoff;
+        isBeforeEarlyPunchOutCutoff = newIsBeforeEarlyPunchOutCutoff;
       });
     }
   }
@@ -915,7 +927,411 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 20),
+
+          // Early Punch-Out Approval Widget or Punch-Out Button
+          if (isBeforeEarlyPunchOutCutoff && currentAttendance != null)
+            EarlyPunchOutApprovalWidget(
+              attendanceId: currentAttendance!.id,
+              onApprovalRequested: () {
+                // Refresh status after approval request
+                setState(() {});
+              },
+              onApprovalReceived: () {
+                // Set flag that approval is received and allow punch out
+                setState(() {
+                  validEarlyPunchOutCode = 'validated';
+                });
+              },
+            )
+          else
+            _buildPunchOutButton(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPunchOutButton() {
+    final canPunchOut = _currentPosition != null && !isLoadingLocation;
+
+    return Column(
+      children: [
+        if (isBeforeEarlyPunchOutCutoff) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange[200]!),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Early punch-out requires approval (${EarlyPunchOutApprovalService.getTimeUntilEarlyPunchOutCutoff()})',
+                    style: TextStyle(
+                      color: Colors.orange[700],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Normal punch-out available after 6:30 PM',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: canPunchOut ? () => _handlePunchOut() : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 3,
+            ),
+            child: isLoadingAttendance
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.logout, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        canPunchOut ? 'PUNCH OUT' : 'Getting Location...',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handlePunchOut({String? earlyPunchOutCode}) async {
+    HapticFeedback.mediumImpact();
+
+    // Check location
+    if (_currentPosition == null) {
+      CustomToast.showError(context, 'Location required for punch out');
+      return;
+    }
+
+    // Check if attendance exists
+    if (currentAttendance == null) {
+      CustomToast.showError(context, 'No active attendance session found');
+      return;
+    }
+
+    // Show punch out dialog
+    final result = await _showPunchOutDialog();
+    if (result == null || result['confirmed'] != true) return;
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final response = await AttendanceService.punchOut(
+        attendanceId: currentAttendance!.id,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        photo: result['photoBase64'],
+        bikeKmEnd: result['bikeKm'],
+        earlyPunchOutCode: earlyPunchOutCode ?? validEarlyPunchOutCode,
+      );
+
+      Navigator.pop(context); // Close loading
+
+      if (response['success'] == true) {
+        final attendance = response['data'] as AttendanceModel?;
+        setState(() {
+          currentAttendance = attendance;
+          isPunchedIn = false;
+          punchInTime = null;
+          validEarlyPunchOutCode = null; // Clear used code
+        });
+        CustomToast.showSuccess(context, 'Punched out successfully!');
+      } else {
+        // Check if it's an early punch-out error that requires approval
+        if (response['message']?.contains('6:30 PM') == true) {
+          CustomToast.showError(context, response['message']);
+        } else {
+          CustomToast.showError(
+            context,
+            response['message'] ?? 'Failed to punch out',
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      CustomToast.showError(context, 'Error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showPunchOutDialog() async {
+    File? photo;
+    String? photoBase64;
+    final bikeKmController = TextEditingController();
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.logout, color: Colors.red, size: 28),
+              ),
+              const SizedBox(width: 12),
+              const Text('Punch Out Details'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Photo Section
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.camera_alt,
+                            size: 20,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Photo *',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (photo != null)
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                photo!,
+                                height: 150,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: IconButton(
+                                icon: const Icon(Icons.close),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    photo = null;
+                                    photoBase64 = null;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final pickedPhoto = await _imagePicker.pickImage(
+                                source: ImageSource.camera,
+                                imageQuality: 50,
+                                maxWidth: 1024,
+                                maxHeight: 1024,
+                              );
+                              if (pickedPhoto != null) {
+                                final file = File(pickedPhoto.path);
+                                final bytes = await file.readAsBytes();
+                                setState(() {
+                                  photo = file;
+                                  photoBase64 = base64Encode(bytes);
+                                });
+                              }
+                            } catch (e) {
+                              CustomToast.showError(
+                                context,
+                                'Error capturing photo',
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.camera_alt),
+                          label: const Text('Take Photo'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            minimumSize: const Size(double.infinity, 45),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Bike KM Section
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.speed, size: 20, color: Colors.red),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Bike KM Reading',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: bikeKmController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: 'Enter ending KM reading',
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          suffixText: 'km',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Summary
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildInfoRow(Icons.access_time, 'Time', currentTime),
+                      const Divider(height: 20),
+                      _buildInfoRow(
+                        Icons.location_on,
+                        'Location',
+                        '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                      ),
+                      const Divider(height: 20),
+                      _buildInfoRow(
+                        Icons.timer,
+                        'Work Duration',
+                        _getCurrentDurationText(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (photo == null) {
+                  CustomToast.showError(context, 'Please take a photo');
+                  return;
+                }
+                Navigator.pop(context, {
+                  'confirmed': true,
+                  'photo': photo,
+                  'photoBase64': photoBase64,
+                  'bikeKm': bikeKmController.text.trim(),
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+              icon: const Icon(Icons.check),
+              label: const Text('Punch Out'),
+            ),
+          ],
+        ),
       ),
     );
   }

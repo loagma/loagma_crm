@@ -20,6 +20,7 @@ import salesmanReportsRoutes from './routes/salesmanReportsRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import latePunchApprovalRoutes from './routes/latePunchApprovalRoutes.js';
+import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js';
 
 const app = express();
 
@@ -73,6 +74,7 @@ app.use('/salesman-reports', salesmanReportsRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/late-punch-approval', latePunchApprovalRoutes);
+app.use('/early-punch-out-approval', earlyPunchOutApprovalRoutes);
 
 // 404 Handler
 app.use((req, res) => {
