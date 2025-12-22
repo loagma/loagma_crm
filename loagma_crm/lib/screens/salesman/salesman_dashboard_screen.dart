@@ -1028,9 +1028,18 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     } else if (diff.inDays > 0) {
       return '${diff.inDays}d ago';
     } else if (diff.inHours > 0) {
-      return '${diff.inHours}h ago';
+      // Show hours and minutes for better precision
+      final hours = diff.inHours;
+      final minutes = diff.inMinutes % 60;
+      if (minutes > 0) {
+        return '${hours}h ${minutes}m ago';
+      } else {
+        return '${hours}h ago';
+      }
     } else if (diff.inMinutes > 0) {
       return '${diff.inMinutes}m ago';
+    } else if (diff.inSeconds > 30) {
+      return '${diff.inSeconds}s ago';
     } else {
       return 'Just now';
     }

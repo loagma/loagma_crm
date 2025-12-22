@@ -19,6 +19,7 @@ import '../screens/admin/reports_screen.dart';
 import '../screens/admin/enhanced_salesman_reports_screen.dart';
 import '../screens/admin/modern_task_assignment_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
+import '../screens/admin/approval_requests_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -32,7 +33,7 @@ import '../screens/shared/employee_list_screen.dart';
 import '../screens/salesman/salesman_accounts_screen.dart';
 import '../screens/salesman/salesman_assignments_screen.dart';
 import '../screens/salesman/salesman_map_screen.dart';
-import '../screens/salesman/salesman_punch_screen.dart';
+import '../screens/salesman/enhanced_punch_screen.dart';
 
 // Telecaller screens
 import '../screens/telecaller/verify_account_master_screen.dart';
@@ -141,6 +142,10 @@ final GoRouter appRouter = GoRouter(
           path: 'attendance',
           builder: (_, __) => const EnhancedAttendanceManagementScreen(),
         ),
+        GoRoute(
+          path: 'approvals',
+          builder: (_, __) => const ApprovalRequestsScreen(),
+        ),
 
         // Shared routes (Admin, Salesman, etc.)
         GoRoute(
@@ -177,7 +182,7 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const SalesmanAssignmentsScreen(),
         ),
         GoRoute(path: 'map', builder: (_, __) => const SalesmanMapScreen()),
-        GoRoute(path: 'punch', builder: (_, __) => const SalesmanPunchScreen()),
+        GoRoute(path: 'punch', builder: (_, __) => const EnhancedPunchScreen()),
 
         // Telecaller-specific routes
         GoRoute(

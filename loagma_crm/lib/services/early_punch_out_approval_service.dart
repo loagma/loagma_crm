@@ -397,16 +397,30 @@ class EarlyPunchOutApprovalService {
     }
   }
 
-  // Helper method to check if current time is before 6:30 PM
+  // Helper method to check if current time is before 6:30 PM IST
   static bool isBeforeEarlyPunchOutCutoff() {
-    final now = DateTime.now();
+    // Get current time in IST (UTC+5:30)
+    final now = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
     final cutoffTime = DateTime(now.year, now.month, now.day, 18, 30);
-    return now.isBefore(cutoffTime);
+    final isBefore = now.isBefore(cutoffTime);
+
+    print(
+      '🕘 Current IST time: ${now.hour}:${now.minute.toString().padLeft(2, '0')}',
+    );
+    print('🕘 Early punch-out cutoff time: 18:30');
+    print('🕘 Is before cutoff: $isBefore');
+
+    return isBefore;
   }
 
   // Helper method to format time remaining until early punch-out cutoff
   static String getTimeUntilEarlyPunchOutCutoff() {
-    final now = DateTime.now();
+    // Get current time in IST (UTC+5:30)
+    final now = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
     final cutoffTime = DateTime(now.year, now.month, now.day, 18, 30);
 
     if (now.isAfter(cutoffTime)) {

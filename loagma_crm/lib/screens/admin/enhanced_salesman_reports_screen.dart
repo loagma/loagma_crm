@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -18,6 +19,7 @@ class _EnhancedSalesmanReportsScreenState
     extends State<EnhancedSalesmanReportsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  Timer? _refreshTimer;
 
   bool isLoading = true;
   String? errorMessage;
@@ -43,10 +45,23 @@ class _EnhancedSalesmanReportsScreenState
     _tabController = TabController(length: 4, vsync: this);
     _loadSalesmenList();
     _loadReports();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    // Refresh every 60 seconds to update time displays
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      if (mounted) {
+        setState(() {
+          // This will trigger a rebuild and update all time displays
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -1854,9 +1869,18 @@ class _EnhancedSalesmanReportsScreenState
     } else if (diff.inDays > 0) {
       return '${diff.inDays}d ago';
     } else if (diff.inHours > 0) {
-      return '${diff.inHours}h ago';
+      // Show hours and minutes for better precision
+      final hours = diff.inHours;
+      final minutes = diff.inMinutes % 60;
+      if (minutes > 0) {
+        return '${hours}h ${minutes}m ago';
+      } else {
+        return '${hours}h ago';
+      }
     } else if (diff.inMinutes > 0) {
       return '${diff.inMinutes}m ago';
+    } else if (diff.inSeconds > 30) {
+      return '${diff.inSeconds}s ago';
     } else {
       return 'Just now';
     }

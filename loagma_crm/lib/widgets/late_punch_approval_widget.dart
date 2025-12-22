@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../services/late_punch_approval_service.dart';
 import '../services/user_service.dart';
 import '../utils/custom_toast.dart';
@@ -25,21 +26,37 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   bool _isValidatingCode = false;
   Map<String, dynamic>? _approvalStatus;
   bool _isLoadingStatus = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadApprovalStatus();
+    _startAutoRefresh();
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _reasonController.dispose();
     _approvalCodeController.dispose();
     super.dispose();
   }
 
+  void _startAutoRefresh() {
+    // Auto-refresh every 10 seconds to check for approval updates
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted &&
+          _approvalStatus != null &&
+          _approvalStatus!['status'] == 'PENDING') {
+        _loadApprovalStatus();
+      }
+    });
+  }
+
   Future<void> _loadApprovalStatus() async {
+    if (!mounted) return;
+
     setState(() => _isLoadingStatus = true);
 
     try {
@@ -51,9 +68,26 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
       );
 
       if (result['success'] == true && mounted) {
+        final newStatus = result['data'];
+        final oldStatus = _approvalStatus?['status'];
+        final newStatusValue = newStatus?['status'];
+
         setState(() {
-          _approvalStatus = result['data'];
+          _approvalStatus = newStatus;
         });
+
+        // Show notification if status changed from PENDING to APPROVED
+        if (oldStatus == 'PENDING' && newStatusValue == 'APPROVED') {
+          CustomToast.showSuccess(
+            context,
+            'Your late punch-in request has been approved! Enter the code to punch in.',
+          );
+        } else if (oldStatus == 'PENDING' && newStatusValue == 'REJECTED') {
+          CustomToast.showError(
+            context,
+            'Your late punch-in request has been rejected.',
+          );
+        }
       }
     } catch (e) {
       print('Error loading approval status: $e');
@@ -323,11 +357,24 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Please wait for admin approval. You will receive a notification.',
+                    'Auto-refreshing every 10 seconds. You will receive a notification when approved.',
                     style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _loadApprovalStatus,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh Status'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.amber[700],
+                  side: BorderSide(color: Colors.amber[300]!),
+                ),
+              ),
             ),
           ],
         ),
