@@ -357,6 +357,86 @@ export const punchOut = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const punchOutTimeIST = currentISTTime;
 
+        // Check if current time is before 6:30 PM (early punch-out cutoff)
+        const earlyPunchOutCutoff = new Date(currentISTTime);
+        earlyPunchOutCutoff.setHours(18, 30, 0, 0); // 6:30 PM
+        const isEarlyPunchOut = currentISTTime < earlyPunchOutCutoff;
+
+        let earlyPunchOutApprovalId = null;
+        let usedEarlyPunchOutCode = null;
+
+        // If before cutoff time, validate approval code
+        if (isEarlyPunchOut) {
+            const { earlyPunchOutCode } = req.body;
+            
+            if (!earlyPunchOutCode) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Punch-out is blocked before 6:30 PM. Please request approval from admin first.',
+                    requiresApproval: true,
+                    cutoffTime: '6:30 PM',
+                    isEarlyPunchOut: true
+                });
+            }
+
+            // Validate early punch-out approval code
+            const { startOfDay, endOfDay } = getISTDateRange();
+            const approvalRequest = await prisma.earlyPunchOutApproval.findFirst({
+                where: {
+                    employeeId: attendance.employeeId,
+                    attendanceId: attendanceId,
+                    approvalCode: earlyPunchOutCode.trim(),
+                    status: 'APPROVED',
+                    requestDate: {
+                        gte: startOfDay,
+                        lt: endOfDay
+                    }
+                }
+            });
+
+            if (!approvalRequest) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid approval code or no approved request found for this session'
+                });
+            }
+
+            // Check if code is already used
+            if (approvalRequest.codeUsed) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Approval code has already been used'
+                });
+            }
+
+            // Check if code is expired
+            if (approvalRequest.codeExpiresAt && currentISTTime > approvalRequest.codeExpiresAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Approval code has expired. Please request a new approval.'
+                });
+            }
+
+            // Mark approval code as used
+            await prisma.earlyPunchOutApproval.update({
+                where: { id: approvalRequest.id },
+                data: {
+                    codeUsed: true,
+                    codeUsedAt: currentISTTime
+                }
+            });
+
+            earlyPunchOutApprovalId = approvalRequest.id;
+            usedEarlyPunchOutCode = earlyPunchOutCode.trim();
+
+            console.log('✅ Early punch-out approved with code:', {
+                employeeId: attendance.employeeId,
+                attendanceId,
+                approvalCode: usedEarlyPunchOutCode,
+                approvalRequestId: earlyPunchOutApprovalId
+            });
+        }
+
         // Validate punch out time (should be after punch in)
         if (punchOutTimeIST <= attendance.punchInTime) {
             return res.status(400).json({
@@ -451,7 +531,11 @@ export const punchOut = async (req, res) => {
                 bikeKmEnd: bikeKmEnd || null,
                 totalDistanceKm: Math.round(distance * 1000) / 1000, // Round to 3 decimal places
                 totalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
-                status: 'completed'
+                status: 'completed',
+                // Early punch-out fields
+                isEarlyPunchOut,
+                earlyPunchOutApprovalId,
+                earlyPunchOutCode: usedEarlyPunchOutCode
             }
         });
 

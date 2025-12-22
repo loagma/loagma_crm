@@ -291,6 +291,94 @@ class NotificationService {
     }
 
     /**
+     * Create early punch-out approval request notification (to admin)
+     * @param {Object} approvalData - Approval request data
+     */
+    static async createEarlyPunchOutApprovalNotification(approvalData) {
+        const requestTime = new Date(approvalData.createdAt);
+        const timeString = requestTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const title = 'Early Punch-Out Approval Request';
+        const message = `${approvalData.employeeName} requested approval for early punch-out at ${timeString}`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'early_punch_out_approval',
+            priority: 'high',
+            targetRole: 'admin',
+            data: {
+                requestId: approvalData.id,
+                employeeId: approvalData.employeeId,
+                employeeName: approvalData.employeeName,
+                attendanceId: approvalData.attendanceId,
+                reason: approvalData.reason,
+                requestTime: approvalData.createdAt,
+                requestTimeFormatted: timeString,
+                status: approvalData.status,
+                actionRequired: true
+            }
+        });
+    }
+
+    /**
+     * Create early punch-out approval response notification (to employee)
+     * @param {Object} approvalData - Updated approval request data
+     * @param {string} decision - 'APPROVED' or 'REJECTED'
+     */
+    static async createEarlyPunchOutApprovalResponseNotification(approvalData, decision) {
+        const isApproved = decision === 'APPROVED';
+        const responseTime = new Date(approvalData.approvedAt);
+        const timeString = responseTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        let title, message;
+        if (isApproved) {
+            const expiryTime = new Date(approvalData.codeExpiresAt);
+            const expiryTimeString = expiryTime.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+
+            title = 'Early Punch-Out Approved';
+            message = `Your early punch-out request has been approved. Code: ${approvalData.approvalCode} (expires at ${expiryTimeString})`;
+        } else {
+            title = 'Early Punch-Out Request Rejected';
+            message = `Your early punch-out request has been rejected at ${timeString}`;
+        }
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'early_punch_out_approval',
+            priority: isApproved ? 'high' : 'normal',
+            targetUserId: approvalData.employeeId,
+            data: {
+                requestId: approvalData.id,
+                attendanceId: approvalData.attendanceId,
+                status: decision,
+                approvalCode: isApproved ? approvalData.approvalCode : null,
+                approvedBy: approvalData.approver?.name,
+                approvedAt: approvalData.approvedAt,
+                approvedTimeFormatted: timeString,
+                codeExpiresAt: isApproved ? approvalData.codeExpiresAt : null,
+                codeExpiresAtFormatted: isApproved ? expiryTimeString : null,
+                adminRemarks: approvalData.adminRemarks,
+                reason: approvalData.reason,
+                actionRequired: isApproved
+            }
+        });
+    }
+
+    /**
      * Get notifications for a specific user or role
      * @param {Object} filters - Filter options
      * @param {string} [filters.userId] - User ID

@@ -129,6 +129,8 @@ model User {
   notifications      Notification[]      // Notifications targeted to this user
   lateApprovalRequests LatePunchApproval[] @relation("EmployeeLateApprovals") // Late punch-in requests by this employee
   approvedLateRequests LatePunchApproval[] @relation("AdminLateApprovals") // Late punch-in requests approved by this admin
+  earlyPunchOutRequests EarlyPunchOutApproval[] @relation("EmployeeEarlyPunchOutApprovals") // Early punch-out requests by this employee
+  approvedEarlyPunchOutRequests EarlyPunchOutApproval[] @relation("AdminEarlyPunchOutApprovals") // Early punch-out requests approved by this admin
 }
 
 model EmployeeArea {
@@ -350,6 +352,11 @@ model Attendance {
   lateApprovalId      String?   // Reference to the approval request
   approvalCode        String?   // The code used for late punch-in
   
+  // Early Punch-Out Approval Fields
+  isEarlyPunchOut     Boolean   @default(false) // Whether this was an early punch-out
+  earlyPunchOutApprovalId String? // Reference to the early punch-out approval request
+  earlyPunchOutCode   String?   // The code used for early punch-out
+  
   // Metadata
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -462,6 +469,41 @@ model LatePunchApproval {
   approver        User?     @relation("AdminLateApprovals", fields: [approvedBy], references: [id])
   
   @@index([employeeId])
+  @@index([status])
+  @@index([requestDate])
+  @@index([approvalCode])
+}
+
+// NEW MODEL: Early Punch-Out Approval Requests
+model EarlyPunchOutApproval {
+  id              String    @id @default(cuid())
+  employeeId      String    // Salesman requesting approval
+  employeeName    String    // Salesman name for easy reference
+  attendanceId    String    // Current attendance session ID
+  requestDate     DateTime  @default(now()) // Date of the request
+  punchOutDate    DateTime  // Intended punch-out date
+  reason          String    // Reason for early punch-out
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  
+  // Admin response
+  approvedBy      String?   // Admin who approved/rejected
+  approvedAt      DateTime? // When the decision was made
+  adminRemarks    String?   // Admin's remarks/comments
+  approvalCode    String?   // Generated OTP/code for approved requests
+  codeExpiresAt   DateTime? // When the approval code expires
+  codeUsed        Boolean   @default(false) // Whether the code has been used
+  codeUsedAt      DateTime? // When the code was used for punch-out
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  employee        User      @relation("EmployeeEarlyPunchOutApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?     @relation("AdminEarlyPunchOutApprovals", fields: [approvedBy], references: [id])
+  
+  @@index([employeeId])
+  @@index([attendanceId])
   @@index([status])
   @@index([requestDate])
   @@index([approvalCode])
