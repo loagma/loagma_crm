@@ -18,10 +18,10 @@ class NotificationBell extends StatefulWidget {
   });
 
   @override
-  State<NotificationBell> createState() => _NotificationBellState();
+  State<NotificationBell> createState() => NotificationBellState();
 }
 
-class _NotificationBellState extends State<NotificationBell> {
+class NotificationBellState extends State<NotificationBell> {
   int unreadCount = 0;
   bool isLoading = false;
 
@@ -55,6 +55,11 @@ class _NotificationBellState extends State<NotificationBell> {
         setState(() => isLoading = false);
       }
     }
+  }
+
+  // Public method to refresh notifications from parent widgets
+  void refreshNotifications() {
+    _loadNotificationCounts();
   }
 
   void _openNotifications() {
