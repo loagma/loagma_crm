@@ -609,6 +609,9 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget _buildAccountCard(Map<String, dynamic> account) {
     DateTime createdAt = DateTime.parse(account['createdAt']);
     String timeAgo = _getTimeAgo(createdAt);
+    String formattedDateTime = DateFormat(
+      'MMM dd, yyyy • hh:mm a',
+    ).format(createdAt);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -648,6 +651,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              formattedDateTime,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
             ),
           ],
         ),

@@ -1419,6 +1419,9 @@ class _EnhancedSalesmanReportsScreenState
   Widget _buildAccountCard(Map<String, dynamic> account) {
     final createdAt = DateTime.parse(account['createdAt']);
     final timeAgo = _getTimeAgo(createdAt);
+    final formattedDateTime = DateFormat(
+      'MMM dd, yyyy • hh:mm a',
+    ).format(createdAt);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1444,6 +1447,10 @@ class _EnhancedSalesmanReportsScreenState
             Text(
               'Created $timeAgo',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            Text(
+              formattedDateTime,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],
         ),
