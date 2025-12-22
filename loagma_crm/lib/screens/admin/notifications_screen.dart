@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../services/notification_service.dart';
+import '../../services/admin_approval_service.dart';
 import '../../models/notification_model.dart';
 import '../../widgets/notification_bell.dart';
+import 'approval_requests_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final String? userId;
@@ -17,6 +19,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     with TickerProviderStateMixin {
   List<NotificationModel> notifications = [];
   NotificationCounts? counts;
+  Map<String, dynamic>? approvalCounts;
   bool isLoading = true;
   bool isLoadingMore = false;
   String selectedFilter = 'all';
@@ -32,10 +35,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _scrollController.addListener(_onScroll);
     _loadNotifications();
     _loadCounts();
+    _loadApprovalCounts();
   }
 
   @override
@@ -143,6 +147,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
   }
 
+  Future<void> _loadApprovalCounts() async {
+    try {
+      final result = await AdminApprovalService.getApprovalCounts();
+      if (result['success'] == true && mounted) {
+        setState(() {
+          approvalCounts = result['data'];
+        });
+      }
+    } catch (e) {
+      print('Error loading approval counts: $e');
+    }
+  }
+
   Future<void> _markAsRead(String notificationId) async {
     final success = await NotificationService.markAsRead(notificationId);
     if (success && mounted) {
@@ -236,12 +253,26 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         bottom: TabBar(
           controller: _tabController,
           onTap: (index) {
-            final filters = ['all', 'punch_in', 'punch_out', 'unread'];
-            _onFilterChanged(filters[index]);
+            if (index == 4) {
+              // Navigate to approval requests screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ApprovalRequestsScreen(),
+                ),
+              ).then((_) {
+                // Refresh counts when returning
+                _loadApprovalCounts();
+              });
+            } else {
+              final filters = ['all', 'punch_in', 'punch_out', 'unread'];
+              _onFilterChanged(filters[index]);
+            }
           },
           labelColor: Colors.black,
           unselectedLabelColor: Colors.black54,
           indicatorColor: Colors.black,
+          isScrollable: true,
           tabs: [
             Tab(
               text: 'All',
@@ -267,41 +298,30 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   ? _buildTabBadge(counts!.unread.toString())
                   : null,
             ),
+            Tab(
+              text: 'Approvals',
+              icon: approvalCounts != null && approvalCounts!['total'] > 0
+                  ? _buildTabBadge(approvalCounts!['total'].toString())
+                  : null,
+            ),
           ],
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () => _loadNotifications(refresh: true),
-        child: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: primaryColor),
-              )
-            : notifications.isEmpty
-            ? _buildEmptyState()
-            : ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: notifications.length + (isLoadingMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == notifications.length) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: CircularProgressIndicator(color: primaryColor),
-                      ),
-                    );
-                  }
-
-                  final notification = notifications[index];
-                  return NotificationItem(
-                    notification: notification,
-                    onTap: () => _showNotificationDetails(notification),
-                    onMarkAsRead: notification.isRead
-                        ? null
-                        : () => _markAsRead(notification.id),
-                  );
-                },
-              ),
+        onRefresh: () async {
+          await _loadNotifications(refresh: true);
+          await _loadApprovalCounts();
+        },
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildNotificationsList(), // All
+            _buildNotificationsList(), // Punch In
+            _buildNotificationsList(), // Punch Out
+            _buildNotificationsList(), // Unread
+            _buildApprovalsPlaceholder(), // Approvals (placeholder)
+          ],
+        ),
       ),
     );
   }
@@ -363,6 +383,88 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             'Notifications will appear here when salesmen punch in or out',
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationsList() {
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: primaryColor),
+      );
+    }
+
+    if (notifications.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: notifications.length + (isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == notifications.length) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(color: primaryColor),
+            ),
+          );
+        }
+
+        final notification = notifications[index];
+        return NotificationItem(
+          notification: notification,
+          onTap: () => _showNotificationDetails(notification),
+          onMarkAsRead: notification.isRead
+              ? null
+              : () => _markAsRead(notification.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildApprovalsPlaceholder() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.approval, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Approval Requests',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This tab will automatically navigate to the approval requests screen',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ApprovalRequestsScreen(),
+                ),
+              ).then((_) {
+                _loadApprovalCounts();
+              });
+            },
+            icon: const Icon(Icons.approval),
+            label: const Text('View Approval Requests'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),

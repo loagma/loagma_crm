@@ -88,20 +88,15 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   }
 
   void _checkCutoffTime() {
-    final wasAfterCutoff = isAfterCutoff;
     final newIsAfterCutoff = LatePunchApprovalService.isAfterCutoffTime();
-
-    final wasBeforeEarlyPunchOutCutoff = isBeforeEarlyPunchOutCutoff;
     final newIsBeforeEarlyPunchOutCutoff =
         EarlyPunchOutApprovalService.isBeforeEarlyPunchOutCutoff();
 
-    if (wasAfterCutoff != newIsAfterCutoff ||
-        wasBeforeEarlyPunchOutCutoff != newIsBeforeEarlyPunchOutCutoff) {
-      setState(() {
-        isAfterCutoff = newIsAfterCutoff;
-        isBeforeEarlyPunchOutCutoff = newIsBeforeEarlyPunchOutCutoff;
-      });
-    }
+    // Always update state to ensure UI reflects current time
+    setState(() {
+      isAfterCutoff = newIsAfterCutoff;
+      isBeforeEarlyPunchOutCutoff = newIsBeforeEarlyPunchOutCutoff;
+    });
   }
 
   Future<void> _initializeLocationService() async {
@@ -133,31 +128,12 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         }
       }
 
-      final success = await locationService.startLocationTracking();
+      // Try to get location with timeout
+      try {
+        final initialPosition = await locationService
+            .getCurrentLocation()
+            .timeout(const Duration(seconds: 10));
 
-      if (success && mounted) {
-        locationService.locationStream.listen(
-          (Position position) {
-            if (mounted) {
-              setState(() {
-                _currentPosition = position;
-                locationStatus =
-                    'Location active (±${position.accuracy.toStringAsFixed(0)}m)';
-                isLoadingLocation = false;
-              });
-            }
-          },
-          onError: (error) {
-            if (mounted) {
-              setState(() {
-                locationStatus = 'Location error: ${error.toString()}';
-                isLoadingLocation = false;
-              });
-            }
-          },
-        );
-
-        final initialPosition = await locationService.getCurrentLocation();
         if (initialPosition != null && mounted) {
           setState(() {
             _currentPosition = initialPosition;
@@ -166,12 +142,40 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
             isLoadingLocation = false;
           });
         }
-      } else {
-        if (mounted) {
-          setState(() {
-            locationStatus = 'Failed to start location tracking';
-            isLoadingLocation = false;
-          });
+      } catch (timeoutError) {
+        // If location times out, try to start tracking anyway
+        print('Location timeout, trying to start tracking: $timeoutError');
+
+        final success = await locationService.startLocationTracking();
+
+        if (success && mounted) {
+          locationService.locationStream.listen(
+            (Position position) {
+              if (mounted) {
+                setState(() {
+                  _currentPosition = position;
+                  locationStatus =
+                      'Location active (±${position.accuracy.toStringAsFixed(0)}m)';
+                  isLoadingLocation = false;
+                });
+              }
+            },
+            onError: (error) {
+              if (mounted) {
+                setState(() {
+                  locationStatus = 'Location error. Tap refresh to retry.';
+                  isLoadingLocation = false;
+                });
+              }
+            },
+          );
+        } else {
+          if (mounted) {
+            setState(() {
+              locationStatus = 'Location timeout. Tap refresh to retry.';
+              isLoadingLocation = false;
+            });
+          }
         }
       }
     } catch (e) {
@@ -557,7 +561,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Enhanced Punch System'),
+        title: const Text('Punch System'),
         backgroundColor: primaryColor,
         elevation: 0,
       ),
@@ -1377,6 +1381,12 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                IconButton(
+                  onPressed: _initializeLocationService,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh Location',
                 ),
             ],
           ),
