@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
@@ -814,6 +815,25 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   Widget _buildRecentAccountCard(Map<String, dynamic> account) {
     final isApproved = account['isApproved'] == true;
 
+    // Add time information if createdAt is available
+    String? timeInfo;
+    String? dateTimeInfo;
+    if (account['createdAt'] != null) {
+      try {
+        final createdAt = DateTime.parse(account['createdAt']);
+        final timeAgo = _getTimeAgo(createdAt);
+        final formattedDateTime = DateFormat(
+          'MMM dd, yyyy • hh:mm a',
+        ).format(createdAt);
+        timeInfo = 'Created $timeAgo';
+        dateTimeInfo = formattedDateTime;
+      } catch (e) {
+        // Handle parsing error gracefully
+        timeInfo = null;
+        dateTimeInfo = null;
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -863,6 +883,19 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   account['contactNumber'] ?? 'N/A',
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
+                if (timeInfo != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    timeInfo,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+                ],
+                if (dateTimeInfo != null) ...[
+                  Text(
+                    dateTimeInfo,
+                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                  ),
+                ],
               ],
             ),
           ),
@@ -983,5 +1016,23 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
         ),
       ),
     );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final Duration diff = DateTime.now().difference(dateTime);
+
+    if (diff.inDays > 365) {
+      return '${(diff.inDays / 365).floor()}y ago';
+    } else if (diff.inDays > 30) {
+      return '${(diff.inDays / 30).floor()}mo ago';
+    } else if (diff.inDays > 0) {
+      return '${diff.inDays}d ago';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours}h ago';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

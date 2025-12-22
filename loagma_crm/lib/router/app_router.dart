@@ -34,6 +34,9 @@ import '../screens/salesman/salesman_assignments_screen.dart';
 import '../screens/salesman/salesman_map_screen.dart';
 import '../screens/salesman/salesman_punch_screen.dart';
 
+// Telecaller screens
+import '../screens/telecaller/verify_account_master_screen.dart';
+
 // Guards & Services
 import 'auth_guard.dart';
 import 'role_guard.dart';
@@ -175,6 +178,27 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(path: 'map', builder: (_, __) => const SalesmanMapScreen()),
         GoRoute(path: 'punch', builder: (_, __) => const SalesmanPunchScreen()),
+
+        // Telecaller-specific routes
+        GoRoute(
+          path: 'verify-accounts',
+          builder: (_, __) => const VerifyAccountMasterScreen(),
+        ),
+        GoRoute(
+          path: 'call-history',
+          builder: (_, __) => Scaffold(
+            appBar: AppBar(
+              title: const Text('Call History'),
+              backgroundColor: const Color(0xFFD7BE69),
+            ),
+            body: const Center(
+              child: Text(
+                'Call History - Coming Soon!',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ),
+        ),
       ],
     ),
   ],

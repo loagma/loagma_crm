@@ -180,6 +180,117 @@ class NotificationService {
     }
 
     /**
+     * Create late punch-in approval request notification (to admin)
+     * @param {Object} approvalData - Approval request data
+     */
+    static async createLatePunchApprovalNotification(approvalData) {
+        const requestTime = new Date(approvalData.createdAt);
+        const timeString = requestTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const title = 'Late Punch-In Approval Request';
+        const message = `${approvalData.employeeName} requested approval for late punch-in at ${timeString}`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'late_punch_approval',
+            priority: 'high',
+            targetRole: 'admin',
+            data: {
+                requestId: approvalData.id,
+                employeeId: approvalData.employeeId,
+                employeeName: approvalData.employeeName,
+                reason: approvalData.reason,
+                requestTime: approvalData.createdAt,
+                requestTimeFormatted: timeString,
+                status: approvalData.status,
+                actionRequired: true
+            }
+        });
+    }
+
+    /**
+     * Create late punch-in approval granted notification (to employee)
+     * @param {Object} approvalData - Approval request data
+     * @param {string} approvalCode - Generated approval code
+     */
+    static async createLatePunchApprovedNotification(approvalData, approvalCode) {
+        const approvedTime = new Date(approvalData.approvedAt);
+        const timeString = approvedTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const expiryTime = new Date(approvalData.codeExpiresAt);
+        const expiryTimeString = expiryTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const title = 'Late Punch-In Approved';
+        const message = `Your late punch-in request has been approved. Use code: ${approvalCode} (expires at ${expiryTimeString})`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'late_punch_approval',
+            priority: 'high',
+            targetUserId: approvalData.employeeId,
+            data: {
+                requestId: approvalData.id,
+                approvalCode: approvalCode,
+                approvedBy: approvalData.approver?.name,
+                approvedAt: approvalData.approvedAt,
+                approvedTimeFormatted: timeString,
+                codeExpiresAt: approvalData.codeExpiresAt,
+                codeExpiresAtFormatted: expiryTimeString,
+                adminRemarks: approvalData.adminRemarks,
+                status: 'APPROVED',
+                actionRequired: true
+            }
+        });
+    }
+
+    /**
+     * Create late punch-in rejection notification (to employee)
+     * @param {Object} approvalData - Approval request data
+     */
+    static async createLatePunchRejectedNotification(approvalData) {
+        const rejectedTime = new Date(approvalData.approvedAt);
+        const timeString = rejectedTime.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
+        const title = 'Late Punch-In Request Rejected';
+        const message = `Your late punch-in request has been rejected at ${timeString}`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'late_punch_approval',
+            priority: 'normal',
+            targetUserId: approvalData.employeeId,
+            data: {
+                requestId: approvalData.id,
+                rejectedBy: approvalData.approver?.name,
+                rejectedAt: approvalData.approvedAt,
+                rejectedTimeFormatted: timeString,
+                adminRemarks: approvalData.adminRemarks,
+                reason: approvalData.reason,
+                status: 'REJECTED'
+            }
+        });
+    }
+
+    /**
      * Get notifications for a specific user or role
      * @param {Object} filters - Filter options
      * @param {string} [filters.userId] - User ID

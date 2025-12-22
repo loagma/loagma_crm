@@ -40,7 +40,8 @@ export const punchIn = async (req, res) => {
             punchInLongitude,
             punchInPhoto,
             punchInAddress,
-            bikeKmStart
+            bikeKmStart,
+            approvalCode // New field for late punch-in approval
         } = req.body;
 
         // Enhanced validation
@@ -65,6 +66,82 @@ export const punchIn = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const { startOfDay, endOfDay } = getISTDateRange();
 
+        // Check if current time is after 9:45 AM (cutoff time)
+        const cutoffTime = new Date(currentISTTime);
+        cutoffTime.setHours(9, 45, 0, 0); // 9:45 AM
+        const isAfterCutoff = currentISTTime > cutoffTime;
+
+        let isLatePunchIn = false;
+        let lateApprovalId = null;
+        let usedApprovalCode = null;
+
+        // If after cutoff time, validate approval code
+        if (isAfterCutoff) {
+            if (!approvalCode) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Punch-in is blocked after 9:45 AM. Please request approval from admin first.',
+                    requiresApproval: true,
+                    cutoffTime: '9:45 AM'
+                });
+            }
+
+            // Validate approval code
+            const approvalRequest = await prisma.latePunchApproval.findFirst({
+                where: {
+                    employeeId,
+                    approvalCode: approvalCode.trim(),
+                    status: 'APPROVED',
+                    requestDate: {
+                        gte: startOfDay,
+                        lt: endOfDay
+                    }
+                }
+            });
+
+            if (!approvalRequest) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid approval code or no approved request found for today'
+                });
+            }
+
+            // Check if code is already used
+            if (approvalRequest.codeUsed) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Approval code has already been used'
+                });
+            }
+
+            // Check if code is expired
+            if (approvalRequest.codeExpiresAt && currentISTTime > approvalRequest.codeExpiresAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Approval code has expired. Please request a new approval.'
+                });
+            }
+
+            // Mark approval code as used
+            await prisma.latePunchApproval.update({
+                where: { id: approvalRequest.id },
+                data: {
+                    codeUsed: true,
+                    codeUsedAt: currentISTTime
+                }
+            });
+
+            isLatePunchIn = true;
+            lateApprovalId = approvalRequest.id;
+            usedApprovalCode = approvalCode.trim();
+
+            console.log('✅ Late punch-in approved with code:', {
+                employeeId,
+                approvalCode: usedApprovalCode,
+                approvalRequestId: lateApprovalId
+            });
+        }
+
         // Check for any active attendance (not just today)
         const activeAttendance = await prisma.attendance.findFirst({
             where: {
@@ -80,7 +157,9 @@ export const punchIn = async (req, res) => {
         console.log('📅 IST Date range:', {
             startOfDay: startOfDay.toISOString(),
             endOfDay: endOfDay.toISOString(),
-            currentIST: currentISTTime.toISOString()
+            currentIST: currentISTTime.toISOString(),
+            isAfterCutoff,
+            isLatePunchIn
         });
 
         if (activeAttendance) {
@@ -152,7 +231,11 @@ export const punchIn = async (req, res) => {
                 bikeKmStart: bikeKmStart || null,
                 status: 'active',
                 totalWorkHours: 0,
-                totalDistanceKm: 0
+                totalDistanceKm: 0,
+                // Late punch-in fields
+                isLatePunchIn,
+                lateApprovalId,
+                approvalCode: usedApprovalCode
             }
         });
 
@@ -162,7 +245,9 @@ export const punchIn = async (req, res) => {
             punchInTimeUTC: attendance.punchInTime.toISOString(),
             punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
             status: attendance.status,
-            sessionNumber: todaySessionsCount + 1
+            sessionNumber: todaySessionsCount + 1,
+            isLatePunchIn: attendance.isLatePunchIn,
+            lateApprovalId: attendance.lateApprovalId
         });
 
         // Enhance response with IST information and session details
@@ -187,9 +272,13 @@ export const punchIn = async (req, res) => {
             // Don't fail the punch-in if notification fails
         }
 
+        const successMessage = isLatePunchIn
+            ? `Late punch-in approved and completed! Session ${todaySessionsCount + 1} started.`
+            : `Punched in successfully! Session ${todaySessionsCount + 1} started.`;
+
         res.status(201).json({
             success: true,
-            message: `Punched in successfully! Session ${todaySessionsCount + 1} started.`,
+            message: successMessage,
             data: responseData
         });
     } catch (error) {

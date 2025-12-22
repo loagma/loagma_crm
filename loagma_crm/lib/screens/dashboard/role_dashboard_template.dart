@@ -153,6 +153,31 @@ class RoleDashboardTemplate extends StatelessWidget {
           SidebarItem("Punch", Icons.map_outlined, "/dashboard/salesman/punch"),
         ];
 
+      case "telecaller":
+        return [
+          SidebarItem("Dashboard", Icons.dashboard, "/dashboard/telecaller"),
+          SidebarItem(
+            "Account Master",
+            Icons.person_add_outlined,
+            "/dashboard/telecaller/account/master",
+          ),
+          SidebarItem(
+            "Manage Accounts",
+            Icons.manage_accounts_outlined,
+            "/dashboard/telecaller/account/all",
+          ),
+          SidebarItem(
+            "Verify Accounts",
+            Icons.verified_user_outlined,
+            "/dashboard/telecaller/verify-accounts",
+          ),
+          SidebarItem(
+            "Call History",
+            Icons.call_outlined,
+            "/dashboard/telecaller/call-history",
+          ),
+        ];
+
       default:
         return [
           SidebarItem("Dashboard", Icons.dashboard, "/dashboard/$roleName"),

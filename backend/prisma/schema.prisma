@@ -127,6 +127,8 @@ model User {
   areaAssignments    AreaAssignment[]
   routeLogs          SalesmanRouteLog[]  // Route tracking logs for this salesman
   notifications      Notification[]      // Notifications targeted to this user
+  lateApprovalRequests LatePunchApproval[] @relation("EmployeeLateApprovals") // Late punch-in requests by this employee
+  approvedLateRequests LatePunchApproval[] @relation("AdminLateApprovals") // Late punch-in requests approved by this admin
 }
 
 model EmployeeArea {
@@ -343,6 +345,11 @@ model Attendance {
   totalDistanceKm     Float?    // Distance between punch in and punch out
   status              String    @default("active") // active, completed
   
+  // Late Punch-In Approval Fields
+  isLatePunchIn       Boolean   @default(false) // Whether this was a late punch-in
+  lateApprovalId      String?   // Reference to the approval request
+  approvalCode        String?   // The code used for late punch-in
+  
   // Metadata
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -354,6 +361,7 @@ model Attendance {
   @@index([date])
   @@index([status])
   @@index([punchInTime])
+  @@index([isLatePunchIn])
 }
 
 model AreaAssignment {
@@ -406,7 +414,7 @@ model Notification {
   id          String    @id @default(cuid())
   title       String
   message     String
-  type        String    // punch_in, punch_out, general, alert
+  type        String    // punch_in, punch_out, general, alert, late_punch_approval
   priority    String    @default("normal") // low, normal, high, urgent
   targetRole  String?   // admin, salesman, telecaller, etc. (null means all)
   targetUserId String?  // specific user (null means all users with targetRole)
@@ -424,4 +432,37 @@ model Notification {
   @@index([type])
   @@index([isRead])
   @@index([createdAt])
+}
+
+// NEW MODEL: Late Punch-In Approval Requests
+model LatePunchApproval {
+  id              String    @id @default(cuid())
+  employeeId      String    // Salesman requesting approval
+  employeeName    String    // Salesman name for easy reference
+  requestDate     DateTime  @default(now()) // Date of the request
+  punchInDate     DateTime  // Intended punch-in date
+  reason          String    // Reason for late punch-in
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  
+  // Admin response
+  approvedBy      String?   // Admin who approved/rejected
+  approvedAt      DateTime? // When the decision was made
+  adminRemarks    String?   // Admin's remarks/comments
+  approvalCode    String?   // Generated OTP/code for approved requests
+  codeExpiresAt   DateTime? // When the approval code expires
+  codeUsed        Boolean   @default(false) // Whether the code has been used
+  codeUsedAt      DateTime? // When the code was used for punch-in
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  employee        User      @relation("EmployeeLateApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?     @relation("AdminLateApprovals", fields: [approvedBy], references: [id])
+  
+  @@index([employeeId])
+  @@index([status])
+  @@index([requestDate])
+  @@index([approvalCode])
 }
