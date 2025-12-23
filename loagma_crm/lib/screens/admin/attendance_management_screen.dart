@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../utils/time_formatting_utils.dart';
 
 class AttendanceManagementScreen extends StatefulWidget {
   const AttendanceManagementScreen({super.key});
@@ -115,7 +116,7 @@ class _AttendanceManagementScreenState extends State<AttendanceManagementScreen>
             infoWindow: InfoWindow(
               title: record['employeeName'],
               snippet:
-                  '${record['employeeCode']} • Last update: ${_getTimeAgo(record['lastLocationUpdate'])}',
+                  '${record['employeeCode']} • Last update: ${TimeFormattingUtils.getTimeAgoSafe(record['lastLocationUpdate'])}',
             ),
             icon: BitmapDescriptor.defaultMarkerWithHue(
               BitmapDescriptor.hueGreen,
@@ -129,22 +130,6 @@ class _AttendanceManagementScreenState extends State<AttendanceManagementScreen>
     setState(() {
       _markers = markers;
     });
-  }
-
-  String _getTimeAgo(DateTime? dateTime) {
-    if (dateTime == null) return 'Unknown';
-
-    final difference = DateTime.now().difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
   }
 
   List<Map<String, dynamic>> get filteredRecords {
@@ -455,7 +440,7 @@ class _AttendanceManagementScreenState extends State<AttendanceManagementScreen>
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          'Last update: ${_getTimeAgo(employee['lastLocationUpdate'])}',
+          'Last update: ${TimeFormattingUtils.getTimeAgoSafe(employee['lastLocationUpdate'])}',
           style: const TextStyle(fontSize: 12),
         ),
         trailing: IconButton(
@@ -525,7 +510,9 @@ class _AttendanceManagementScreenState extends State<AttendanceManagementScreen>
             const SizedBox(height: 8),
             _buildDetailRow(
               'Last Update',
-              _getTimeAgo(employee['lastLocationUpdate']),
+              TimeFormattingUtils.getTimeAgoSafe(
+                employee['lastLocationUpdate'],
+              ),
             ),
           ],
         ),

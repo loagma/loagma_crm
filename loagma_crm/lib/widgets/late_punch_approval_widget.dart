@@ -47,8 +47,8 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   }
 
   void _startAutoRefresh() {
-    // Auto-refresh every 5 seconds to check for approval updates (more frequent for better UX)
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    // Auto-refresh every 3 seconds to check for approval updates (more frequent for better UX)
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mounted && _approvalStatus != null) {
         final status = _approvalStatus!['status'];
         // Refresh for PENDING (waiting for admin) and APPROVED (checking for expiration)
@@ -453,7 +453,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Auto-refreshing every 5 seconds. You will receive a notification when approved.',
+                    'Auto-refreshing every 3 seconds. You will receive a notification when approved.',
                     style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
@@ -507,18 +507,20 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   size: 24,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isExpired
-                      ? 'Approval Code Expired'
-                      : isUsed
-                      ? 'Approval Code Used'
-                      : 'Request Approved',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isExpired || isUsed
-                        ? Colors.red[800]
-                        : Colors.green[800],
+                Expanded(
+                  child: Text(
+                    isExpired
+                        ? 'Approval Code Expired'
+                        : isUsed
+                        ? 'Approval Code Used'
+                        : 'Request Approved - Enter Code',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isExpired || isUsed
+                          ? Colors.red[800]
+                          : Colors.green[800],
+                    ),
                   ),
                 ),
               ],
@@ -558,27 +560,84 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                 ),
               ),
             ] else ...[
-              Text(
-                'Your late punch-in request has been approved. Enter the approval code to punch in.',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: Colors.green[700],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your late punch-in request has been approved! Enter the 6-digit code from your notification to continue.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.green[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _approvalCodeController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Enter Approval Code',
-                  hintText: '6-digit code',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.vpn_key),
+                maxLength: 6,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 4,
                 ),
+                decoration: InputDecoration(
+                  labelText: 'Enter 6-Digit Approval Code',
+                  hintText: '000000',
+                  counterText: '',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[500]!, width: 2),
+                  ),
+                  prefixIcon: const Icon(Icons.vpn_key, color: Colors.green),
+                  filled: true,
+                  fillColor: Colors.green[50],
+                ),
+                onChanged: (value) {
+                  // Auto-validate when 6 digits are entered
+                  if (value.length == 6) {
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                      if (mounted && _approvalCodeController.text.length == 6) {
+                        _validateApprovalCode();
+                      }
+                    });
+                  }
+                },
               ),
               const SizedBox(height: 8),
-              Text(
-                'Code expires at: ${_approvalStatus!['codeExpiresAt'] ?? 'N/A'}',
-                style: TextStyle(fontSize: 12, color: Colors.orange[700]),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 16, color: Colors.orange[700]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Code expires at: ${_approvalStatus!['codeExpiresAt'] ?? 'N/A'}',
+                      style: TextStyle(fontSize: 12, color: Colors.orange[700]),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -588,10 +647,11 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 4,
                   ),
                   child: _isValidatingCode
                       ? const SizedBox(
@@ -604,12 +664,19 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                             ),
                           ),
                         )
-                      : const Text(
-                          'Validate Code & Punch In',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.login, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Validate Code & Punch In',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                 ),
               ),
@@ -618,9 +685,9 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green[50],
+                color: Colors.blue[50],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!),
+                border: Border.all(color: Colors.blue[200]!),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -629,7 +696,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                     'Approval Details:',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.green[800],
+                      color: Colors.blue[800],
                     ),
                   ),
                   const SizedBox(height: 4),

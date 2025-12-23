@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
+import '../../utils/time_formatting_utils.dart';
 import 'enhanced_salesman_reports_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -608,10 +609,10 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   Widget _buildAccountCard(Map<String, dynamic> account) {
     DateTime createdAt = DateTime.parse(account['createdAt']);
-    String timeAgo = _getTimeAgo(createdAt);
-    String formattedDateTime = DateFormat(
-      'MMM dd, yyyy • hh:mm a',
-    ).format(createdAt);
+    String timeAgo = TimeFormattingUtils.getRelativeTime(createdAt);
+    String formattedDateTime = TimeFormattingUtils.getFormattedDateTime(
+      createdAt,
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -771,23 +772,5 @@ class _ReportsScreenState extends State<ReportsScreen>
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
-  }
-
-  String _getTimeAgo(DateTime dateTime) {
-    Duration diff = DateTime.now().difference(dateTime);
-
-    if (diff.inDays > 365) {
-      return '${(diff.inDays / 365).floor()}y ago';
-    } else if (diff.inDays > 30) {
-      return '${(diff.inDays / 30).floor()}mo ago';
-    } else if (diff.inDays > 0) {
-      return '${diff.inDays}d ago';
-    } else if (diff.inHours > 0) {
-      return '${diff.inHours}h ago';
-    } else if (diff.inMinutes > 0) {
-      return '${diff.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
   }
 }
