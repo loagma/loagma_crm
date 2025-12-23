@@ -2,7 +2,8 @@ import express from 'express';
 import {
     storeRoutePoint,
     getAttendanceRoute,
-    getRouteSummary
+    getRouteSummary,
+    getHistoricalRoutes
 } from '../controllers/routeController.js';
 
 const router = express.Router();
@@ -23,5 +24,9 @@ router.get('/attendance/:attendanceId', getAttendanceRoute);
 // GET /api/routes/summary - Get route summary for multiple sessions
 // Used by Admin dashboard to show route overview and statistics
 router.get('/summary', getRouteSummary);
+
+// GET /api/routes/historical - Get historical routes with date-wise filtering
+// Used by Admin to view past routes with home location marking
+router.get('/historical', getHistoricalRoutes);
 
 export default router;

@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:intl/intl.dart';
 import '../../services/route_service.dart';
 
-/// Simple route visualization - just map and basic info
+/// Enhanced route visualization with home location marking and date picker
 class RouteVisualizationScreen extends StatefulWidget {
-  final String attendanceId;
+  final String? attendanceId;
+  final String? employeeId;
   final String employeeName;
+  final bool showDatePicker;
 
   const RouteVisualizationScreen({
     super.key,
-    required this.attendanceId,
+    this.attendanceId,
+    this.employeeId,
     required this.employeeName,
+    this.showDatePicker = false,
   });
 
   @override
@@ -29,10 +34,74 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
   double _totalDistance = 0.0;
   int _totalPoints = 0;
 
+  // Date picker for historical routes
+  DateTime _selectedDate = DateTime.now();
+  List<Map<String, dynamic>> _availableDates = [];
+  String? _selectedAttendanceId;
+
   @override
   void initState() {
     super.initState();
-    _loadRoute();
+    if (widget.showDatePicker && widget.employeeId != null) {
+      _loadAvailableDates();
+    } else if (widget.attendanceId != null) {
+      _loadRoute();
+    }
+  }
+
+  Future<void> _loadAvailableDates() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Load route summary for the past 30 days
+      final endDate = DateTime.now();
+      final startDate = endDate.subtract(const Duration(days: 30));
+
+      final result = await RouteService.getRouteSummary(
+        employeeId: widget.employeeId,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      if (result['success'] && result['data'] != null) {
+        final List<dynamic> summaryData = result['data'];
+        setState(() {
+          _availableDates = summaryData
+              .where((item) => item['hasRoute'] == true)
+              .map(
+                (item) => {
+                  'date': DateTime.parse(item['date']),
+                  'attendanceId': item['attendanceId'],
+                  'routePointsCount': item['routePointsCount'],
+                },
+              )
+              .toList();
+        });
+
+        // Load the most recent date by default
+        if (_availableDates.isNotEmpty) {
+          final mostRecent = _availableDates.first;
+          _selectedDate = mostRecent['date'];
+          _selectedAttendanceId = mostRecent['attendanceId'];
+          _loadRoute();
+        }
+      } else {
+        setState(() {
+          _error = 'No route data available for this employee';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Unable to load available dates. Please try again.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadRoute() async {
@@ -42,11 +111,19 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
         _error = null;
       });
 
-      final result = await RouteService.getAttendanceRoute(widget.attendanceId);
+      final attendanceId = widget.attendanceId ?? _selectedAttendanceId;
+      if (attendanceId == null) {
+        setState(() {
+          _error = 'No attendance session selected';
+        });
+        return;
+      }
+
+      final result = await RouteService.getAttendanceRoute(attendanceId);
 
       if (result['success'] && result['data'] != null) {
         final routeData = result['data'];
-        _buildRoute(routeData);
+        _buildEnhancedRoute(routeData);
       } else {
         setState(() {
           _error =
@@ -58,7 +135,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       setState(() {
         _error = 'Unable to load route data. Please try again.';
       });
-      print('Route loading error: $e'); // For debugging
+      print('Route loading error: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -66,45 +143,31 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     }
   }
 
-  void _buildRoute(Map<String, dynamic> routeData) {
-    // Handle different possible data structures
-    List<dynamic> routePoints = [];
-    Map<String, dynamic>? startLocation;
-    Map<String, dynamic>? endLocation;
+  void _buildEnhancedRoute(Map<String, dynamic> routeData) {
+    final List<dynamic> routePoints = routeData['routePoints'] ?? [];
+    final Map<String, dynamic>? homeLocation = routeData['homeLocation'];
+    final Map<String, dynamic>? startLocation = routeData['startLocation'];
+    final Map<String, dynamic>? endLocation = routeData['endLocation'];
 
-    // Try to extract route points from different possible structures
-    if (routeData['routePoints'] != null) {
-      routePoints = routeData['routePoints'] as List<dynamic>;
-    } else if (routeData['route'] != null &&
-        routeData['route']['points'] != null) {
-      routePoints = routeData['route']['points'] as List<dynamic>;
-    }
-
-    // Try to extract start/end locations
-    startLocation = routeData['startLocation'] ?? routeData['start'];
-    endLocation = routeData['endLocation'] ?? routeData['end'];
-
-    if (routePoints.isEmpty && startLocation == null && endLocation == null) {
+    if (routePoints.isEmpty && homeLocation == null && startLocation == null) {
       setState(() {
         _error = 'No route data available';
       });
       return;
     }
 
-    // Create route polyline
+    // Create route polyline from GPS points
     List<LatLng> points = [];
-
-    // Add route points if available
     if (routePoints.isNotEmpty) {
       points = routePoints
           .map((point) {
             try {
               return LatLng(
-                (point['latitude'] ?? point['lat']).toDouble(),
-                (point['longitude'] ?? point['lng']).toDouble(),
+                point['latitude'].toDouble(),
+                point['longitude'].toDouble(),
               );
             } catch (e) {
-              print('Error parsing point: $point, error: $e');
+              print('Error parsing route point: $point, error: $e');
               return null;
             }
           })
@@ -113,46 +176,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           .toList();
     }
 
-    // Add start and end points if available
-    LatLng? startLatLng;
-    LatLng? endLatLng;
-
-    if (startLocation != null) {
-      try {
-        startLatLng = LatLng(
-          (startLocation['latitude'] ?? startLocation['lat']).toDouble(),
-          (startLocation['longitude'] ?? startLocation['lng']).toDouble(),
-        );
-        if (points.isEmpty || points.first != startLatLng) {
-          points.insert(0, startLatLng);
-        }
-      } catch (e) {
-        print('Error parsing start location: $e');
-      }
-    }
-
-    if (endLocation != null) {
-      try {
-        endLatLng = LatLng(
-          (endLocation['latitude'] ?? endLocation['lat']).toDouble(),
-          (endLocation['longitude'] ?? endLocation['lng']).toDouble(),
-        );
-        if (points.isEmpty || points.last != endLatLng) {
-          points.add(endLatLng);
-        }
-      } catch (e) {
-        print('Error parsing end location: $e');
-      }
-    }
-
-    if (points.isEmpty) {
-      setState(() {
-        _error = 'No valid route points found';
-      });
-      return;
-    }
-
-    // Calculate distance
+    // Calculate total distance
     double distance = 0.0;
     for (int i = 1; i < points.length; i++) {
       distance += RouteService.calculateDistance(
@@ -168,75 +192,140 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       _totalPoints = points.length;
 
       // Create polyline with golden theme color
-      _polylines = {
-        Polyline(
-          polylineId: const PolylineId('route'),
-          points: points,
-          color: const Color(0xFFD7BE69), // Golden theme color
-          width: 4,
-        ),
-      };
+      _polylines = {};
+      if (points.length > 1) {
+        _polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: points,
+            color: const Color(0xFFD7BE69), // Golden theme color
+            width: 4,
+          ),
+        );
+      }
 
       // Create markers
       _markers = {};
 
-      if (startLatLng != null) {
-        _markers.add(
-          Marker(
-            markerId: const MarkerId('start'),
-            position: startLatLng,
-            infoWindow: const InfoWindow(title: 'Start'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueGreen,
+      // Home location marker (most important - where salesman started working)
+      if (homeLocation != null) {
+        try {
+          final homeLatLng = LatLng(
+            homeLocation['latitude'].toDouble(),
+            homeLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('home'),
+              position: homeLatLng,
+              infoWindow: InfoWindow(
+                title: '🏠 Home Location',
+                snippet:
+                    'Started working here at ${_formatTime(homeLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueBlue, // Blue for home
+              ),
             ),
-          ),
-        );
+          );
+        } catch (e) {
+          print('Error creating home marker: $e');
+        }
       }
 
-      if (endLatLng != null) {
-        _markers.add(
-          Marker(
-            markerId: const MarkerId('end'),
-            position: endLatLng,
-            infoWindow: const InfoWindow(title: 'End'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
+      // Start location marker (punch-in location)
+      if (startLocation != null) {
+        try {
+          final startLatLng = LatLng(
+            startLocation['latitude'].toDouble(),
+            startLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('start'),
+              position: startLatLng,
+              infoWindow: InfoWindow(
+                title: '🟢 Punch In',
+                snippet: 'Started at ${_formatTime(startLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen, // Green for start
+              ),
             ),
-          ),
-        );
+          );
+        } catch (e) {
+          print('Error creating start marker: $e');
+        }
+      }
+
+      // End location marker (punch-out location)
+      if (endLocation != null) {
+        try {
+          final endLatLng = LatLng(
+            endLocation['latitude'].toDouble(),
+            endLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('end'),
+              position: endLatLng,
+              infoWindow: InfoWindow(
+                title: '🔴 Punch Out',
+                snippet: 'Ended at ${_formatTime(endLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueRed, // Red for end
+              ),
+            ),
+          );
+        } catch (e) {
+          print('Error creating end marker: $e');
+        }
+      }
+
+      // Fit map to show all markers
+      if (_markers.isNotEmpty && _mapController != null) {
+        _fitMapToMarkers();
       }
     });
-
-    // Fit map to show route
-    _fitMapToRoute(points);
   }
 
-  void _fitMapToRoute(List<LatLng> points) {
-    if (points.isEmpty || _mapController == null) return;
+  String _formatTime(dynamic timeData) {
+    try {
+      final DateTime time = DateTime.parse(timeData.toString());
+      return DateFormat('HH:mm').format(time);
+    } catch (e) {
+      return 'Unknown time';
+    }
+  }
 
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
+  void _fitMapToMarkers() {
+    if (_markers.isEmpty) return;
 
-    for (final point in points) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLng) minLng = point.longitude;
-      if (point.longitude > maxLng) maxLng = point.longitude;
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+
+    for (final marker in _markers) {
+      final lat = marker.position.latitude;
+      final lng = marker.position.longitude;
+
+      minLat = lat < minLat ? lat : minLat;
+      maxLat = lat > maxLat ? lat : maxLat;
+      minLng = lng < minLng ? lng : minLng;
+      maxLng = lng > maxLng ? lng : maxLng;
     }
 
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngBounds(
-          LatLngBounds(
-            southwest: LatLng(minLat, minLng),
-            northeast: LatLng(maxLat, maxLng),
-          ),
-          100.0,
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
         ),
-      );
-    });
+        100.0, // padding
+      ),
+    );
   }
 
   @override
@@ -244,161 +333,226 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.employeeName),
-        backgroundColor: const Color(0xFFD7BE69), // Golden theme
+        backgroundColor: const Color(0xFFD7BE69),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadRoute),
+          if (widget.showDatePicker && _availableDates.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.calendar_today),
+              onPressed: _showDatePicker,
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: widget.showDatePicker ? _loadAvailableDates : _loadRoute,
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFFD7BE69), // Golden theme
-              ),
+              child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
             )
           : _error != null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _loadRoute,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD7BE69),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 12,
-                      ),
-                    ),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
+          ? _buildErrorState()
           : Column(
               children: [
-                // Simple info bar with golden theme
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD7BE69).withOpacity(0.1),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: const Color(0xFFD7BE69).withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Column(
-                        children: [
-                          Text(
-                            '${_totalDistance.toStringAsFixed(1)} km',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFD7BE69),
-                            ),
-                          ),
-                          Text(
-                            'Distance',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        width: 1,
-                        height: 40,
-                        color: const Color(0xFFD7BE69).withOpacity(0.3),
-                      ),
-                      Column(
-                        children: [
-                          Text(
-                            '$_totalPoints',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFD7BE69),
-                            ),
-                          ),
-                          Text(
-                            'Points',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                // Date selector for historical routes
+                if (widget.showDatePicker && _availableDates.isNotEmpty)
+                  _buildDateSelector(),
+
+                // Route info bar
+                _buildInfoBar(),
+
                 // Map
-                Expanded(
-                  child: _markers.isEmpty && _polylines.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.route,
-                                size: 64,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No route data available',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'This attendance session may not have route tracking enabled',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GoogleMap(
-                          onMapCreated: (controller) {
-                            _mapController = controller;
-                          },
-                          initialCameraPosition: const CameraPosition(
-                            target: LatLng(28.6139, 77.2090),
-                            zoom: 10,
-                          ),
-                          markers: _markers,
-                          polylines: _polylines,
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: true,
-                        ),
-                ),
+                Expanded(child: _buildMap()),
               ],
             ),
     );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: widget.showDatePicker ? _loadAvailableDates : _loadRoute,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD7BE69),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateSelector() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today, color: Color(0xFFD7BE69)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Selected Date',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                Text(
+                  DateFormat('EEEE, MMMM dd, yyyy').format(_selectedDate),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _showDatePicker,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD7BE69),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Change Date'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBar() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD7BE69).withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFD7BE69).withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildInfoItem('${_totalDistance.toStringAsFixed(1)} km', 'Distance'),
+          _buildDivider(),
+          _buildInfoItem('$_totalPoints', 'GPS Points'),
+          _buildDivider(),
+          _buildInfoItem('${_markers.length}', 'Locations'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFD7BE69),
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      width: 1,
+      height: 40,
+      color: const Color(0xFFD7BE69).withOpacity(0.3),
+    );
+  }
+
+  Widget _buildMap() {
+    return GoogleMap(
+      onMapCreated: (GoogleMapController controller) {
+        _mapController = controller;
+        if (_markers.isNotEmpty) {
+          _fitMapToMarkers();
+        }
+      },
+      initialCameraPosition: const CameraPosition(
+        target: LatLng(28.6139, 77.2090), // Default to Delhi
+        zoom: 12,
+      ),
+      markers: _markers,
+      polylines: _polylines,
+      mapType: MapType.normal,
+      myLocationEnabled: false,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: true,
+      compassEnabled: true,
+      mapToolbarEnabled: false,
+    );
+  }
+
+  Future<void> _showDatePicker() async {
+    if (_availableDates.isEmpty) return;
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: _availableDates.last['date'],
+      lastDate: _availableDates.first['date'],
+      selectableDayPredicate: (DateTime date) {
+        return _availableDates.any(
+          (item) =>
+              item['date'].year == date.year &&
+              item['date'].month == date.month &&
+              item['date'].day == date.day,
+        );
+      },
+    );
+
+    if (selectedDate != null) {
+      final selectedItem = _availableDates.firstWhere(
+        (item) =>
+            item['date'].year == selectedDate.year &&
+            item['date'].month == selectedDate.month &&
+            item['date'].day == selectedDate.day,
+        orElse: () => _availableDates.first,
+      );
+
+      setState(() {
+        _selectedDate = selectedItem['date'];
+        _selectedAttendanceId = selectedItem['attendanceId'];
+      });
+
+      _loadRoute();
+    }
   }
 }

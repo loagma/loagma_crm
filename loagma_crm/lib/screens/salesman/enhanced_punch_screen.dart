@@ -95,6 +95,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       if (mounted) {
         _updateCurrentTime();
         _checkCutoffTime();
+        // Trigger rebuild to update duration display when punched in
+        if (isPunchedIn) {
+          setState(() {});
+        }
       }
     });
   }
@@ -1189,11 +1193,13 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 // Refresh status after approval request
                 setState(() {});
               },
-              onApprovalReceived: () {
-                // Set flag that approval is received and allow punch out
+              onApprovalCodeValidated: (String approvalCode) {
+                // Store the validated approval code and trigger punch out
                 setState(() {
-                  validEarlyPunchOutCode = 'validated';
+                  validEarlyPunchOutCode = approvalCode;
                 });
+                // Automatically trigger punch out with the validated code
+                _handlePunchOut(earlyPunchOutCode: approvalCode);
               },
             )
           else

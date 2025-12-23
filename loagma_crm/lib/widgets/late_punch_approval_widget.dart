@@ -635,6 +635,35 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              if (isExpired) ...[
+                // Add "Request New Approval" button for expired codes
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () {
+                            // Reset the approval status to show the request form
+                            setState(() {
+                              _approvalStatus = null;
+                              _reasonController.clear();
+                              _approvalCodeController.clear();
+                            });
+                          },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Request New Approval'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (isUsed) ...[
                 const SizedBox(height: 16),
                 SizedBox(
