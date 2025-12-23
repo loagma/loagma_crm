@@ -5,7 +5,6 @@ import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import 'minimal_attendance_dashboard.dart';
 import 'live_tracking_screen.dart';
-import 'route_list_screen.dart';
 import '../../widgets/notification_bell.dart';
 
 class AdminAttendanceManagement extends StatefulWidget {
@@ -960,7 +959,7 @@ class _AdminAttendanceManagementState extends State<AdminAttendanceManagement>
   void _navigateToRouteTracking() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const RouteListScreen()),
+      MaterialPageRoute(builder: (context) => const LiveTrackingScreen()),
     );
   }
 

@@ -5,7 +5,7 @@ import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../services/user_service.dart';
-import 'route_list_screen.dart';
+import 'live_tracking_screen.dart';
 
 class EnhancedAttendanceManagementScreen extends StatefulWidget {
   const EnhancedAttendanceManagementScreen({super.key});
@@ -1821,7 +1821,7 @@ class _EnhancedAttendanceManagementScreenState
   void _navigateToRouteTracking() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const RouteListScreen()),
+      MaterialPageRoute(builder: (context) => const LiveTrackingScreen()),
     );
   }
 }

@@ -82,17 +82,56 @@ Successfully implemented comprehensive home location marking and date-wise route
 
 ## Usage Instructions
 
+### How to Access the Date Filter
+1. **From Live Tracking Tab**: Click the "View Route Tracking & Playback" button
+2. **Navigate to Historical Routes**: Click the "Historical Routes" tab (third tab)
+3. **Use Date Filter**: 
+   - Click the calendar icon next to the date
+   - Select any date from the past 30 days
+   - Routes for that date will automatically load
+
 ### For Admins
 1. **Live Tracking Tab**: View real-time employee positions and home locations
 2. **Route Playback Tab**: Select employee and date for detailed route analysis (framework ready)
-3. **Historical Routes Tab**: View past routes with date filtering and employee selection
+3. **Historical Routes Tab**: 
+   - **Date Picker**: Click calendar icon to select date
+   - **Employee Filter**: Choose specific salesman or "All Salesmen"
+   - **Load Routes Button**: Click to refresh data for selected filters
+   - **Map View**: Purple markers for home locations, green for start, red for end
 4. **Toggle Controls**: Use app bar buttons to show/hide routes and home locations
+
+### Step-by-Step Date Filter Usage
+1. Open Live Tracking from attendance management
+2. Click "Historical Routes" tab
+3. Click the calendar icon (📅) next to the current date
+4. Select the date you want to view routes for
+5. Optionally select a specific employee from dropdown
+6. Click "Load Routes" button or routes load automatically
+7. View the map with home locations (purple markers) and route paths
 
 ### Automatic Features
 - Home locations are automatically marked when employees punch in
 - Route tracking runs in background during active attendance
 - GPS points stored every 25 seconds with intelligent filtering
 - Home location identification happens without manual intervention
+
+## Troubleshooting
+
+### If Date Filter Doesn't Show Routes
+1. **Check Date Range**: Only past 30 days are available
+2. **Verify Employee Activity**: Ensure employees worked on selected date
+3. **Check Network**: Ensure backend API is accessible
+4. **Refresh Data**: Click "Load Routes" button to refresh
+
+### If Home Locations Don't Appear
+1. **Toggle Home Locations**: Use home icon in app bar to show/hide
+2. **Check Route Data**: Home locations only appear if GPS tracking was active
+3. **Verify Punch-In**: Home locations are marked at first GPS point after punch-in
+
+### Navigation Issues
+- Ensure you're clicking "View Route Tracking & Playback" button from Live Tracking tab
+- The button now correctly navigates to the full LiveTrackingScreen with three tabs
+- If you see old RouteListScreen, the navigation has been updated
 
 ## Future Enhancements Ready
 - Route playback animation in Route Playback tab
