@@ -333,217 +333,231 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setState) => Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.login, color: Colors.green, size: 28),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(width: 12),
-              const Text('Punch In Details'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Photo Section
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
+              contentPadding: const EdgeInsets.all(20),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.login,
+                      color: Colors.green,
+                      size: 28,
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.camera_alt,
-                            size: 20,
-                            color: Colors.green,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Photo *',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                  const SizedBox(width: 12),
+                  const Text('Punch In Details'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Photo Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 12),
-                      if (photo != null)
-                        Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                photo!,
-                                height: 150,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.camera_alt,
+                                size: 20,
+                                color: Colors.green,
                               ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton(
-                                icon: const Icon(Icons.close),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Photo *',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (photo != null)
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    photo!,
+                                    height: 150,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    photo = null;
-                                    photoBase64 = null;
-                                  });
-                                },
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        photo = null;
+                                        photoBase64 = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                try {
+                                  final pickedPhoto = await _imagePicker
+                                      .pickImage(
+                                        source: ImageSource.camera,
+                                        imageQuality: 50,
+                                        maxWidth: 1024,
+                                        maxHeight: 1024,
+                                      );
+                                  if (pickedPhoto != null) {
+                                    final file = File(pickedPhoto.path);
+                                    final bytes = await file.readAsBytes();
+                                    setState(() {
+                                      photo = file;
+                                      photoBase64 = base64Encode(bytes);
+                                    });
+                                  }
+                                } catch (e) {
+                                  CustomToast.showError(
+                                    context,
+                                    'Error capturing photo',
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Take Photo'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                minimumSize: const Size.fromHeight(45),
                               ),
                             ),
-                          ],
-                        )
-                      else
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            try {
-                              final pickedPhoto = await _imagePicker.pickImage(
-                                source: ImageSource.camera,
-                                imageQuality: 50,
-                                maxWidth: 1024,
-                                maxHeight: 1024,
-                              );
-                              if (pickedPhoto != null) {
-                                final file = File(pickedPhoto.path);
-                                final bytes = await file.readAsBytes();
-                                setState(() {
-                                  photo = file;
-                                  photoBase64 = base64Encode(bytes);
-                                });
-                              }
-                            } catch (e) {
-                              CustomToast.showError(
-                                context,
-                                'Error capturing photo',
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Take Photo'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            minimumSize: const Size(double.infinity, 45),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Bike KM Section
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    // Bike KM Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.speed,
-                            size: 20,
-                            color: Colors.green,
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.speed,
+                                size: 20,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Bike KM Reading',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Bike KM Reading',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: bikeKmController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: 'Enter starting KM reading',
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              suffixText: 'km',
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: bikeKmController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          hintText: 'Enter starting KM reading',
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          suffixText: 'km',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Summary
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildInfoRow(Icons.access_time, 'Time', currentTime),
-                      const Divider(height: 20),
-                      _buildInfoRow(
-                        Icons.location_on,
-                        'Location',
-                        '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                    // Summary
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!),
                       ),
-                    ],
+                      child: Column(
+                        children: [
+                          _buildInfoRow(Icons.access_time, 'Time', currentTime),
+                          const Divider(height: 20),
+                          _buildInfoRow(
+                            Icons.location_on,
+                            'Location',
+                            '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    if (photo == null) {
+                      CustomToast.showError(context, 'Please take a photo');
+                      return;
+                    }
+                    Navigator.pop(context, {
+                      'confirmed': true,
+                      'photo': photo,
+                      'photoBase64': photoBase64,
+                      'bikeKm': bikeKmController.text.trim(),
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Punch In'),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                if (photo == null) {
-                  CustomToast.showError(context, 'Please take a photo');
-                  return;
-                }
-                Navigator.pop(context, {
-                  'confirmed': true,
-                  'photo': photo,
-                  'photoBase64': photoBase64,
-                  'bikeKm': bikeKmController.text.trim(),
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              icon: const Icon(Icons.check),
-              label: const Text('Punch In'),
-            ),
-          ],
         ),
       ),
     );
@@ -618,36 +632,116 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               if (isPunchedIn)
                 _buildPunchedInCard()
               else if (isAfterCutoff)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: LatePunchApprovalWidget(
-                    key: ValueKey(
-                      'late_punch_${DateTime.now().millisecondsSinceEpoch ~/ 10000}',
-                    ), // Refresh every 10 seconds
-                    onApprovalRequested: () {
-                      // Refresh status after approval request
-                      setState(() {});
-                    },
-                    onApprovalCodeValidated: (String approvalCode) {
-                      // Store the actual validated approval code
-                      print('🔍 Received approval code: $approvalCode');
-                      setState(() {
-                        validApprovalCode = approvalCode;
-                      });
+                Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: LatePunchApprovalWidget(
+                        onApprovalRequested: () {
+                          // Refresh status after approval request
+                          setState(() {});
+                        },
+                        onApprovalCodeValidated: (String approvalCode) {
+                          // Store the actual validated approval code
+                          setState(() {
+                            validApprovalCode = approvalCode;
+                          });
 
-                      // Automatically trigger punch-in dialog as per requirement 1.3
-                      // "WHEN the salesman enters a valid approval code, THEN the system SHALL validate the code and automatically trigger the punch-in dialog"
-                      Future.delayed(const Duration(milliseconds: 500), () {
-                        if (mounted) {
-                          _handlePunchIn();
-                        }
-                      });
-                    },
-                    onApprovalReceived: () {
-                      // Keep for backward compatibility - this will be called after onApprovalCodeValidated
-                      // The actual code is now stored via onApprovalCodeValidated callback
-                    },
-                  ),
+                          // Show success message
+                          CustomToast.showSuccess(
+                            context,
+                            'Approval code validated! You can now punch in.',
+                          );
+                        },
+                        onApprovalReceived: () {
+                          // Refresh attendance status when approval is received or code is used
+                          _loadTodayPunchData();
+                        },
+                      ),
+                    ),
+                    // Show punch-in button when approval code is validated
+                    if (validApprovalCode != null) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green[200]!),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green[700],
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Approval code validated! You can now punch in.',
+                                      style: TextStyle(
+                                        color: Colors.green[700],
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 60,
+                              child: ElevatedButton(
+                                onPressed:
+                                    (_currentPosition != null &&
+                                        !isLoadingLocation)
+                                    ? () => _handlePunchIn()
+                                    : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  elevation: 4,
+                                ),
+                                child: isLoadingAttendance
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white,
+                                      )
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.login, size: 28),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            (_currentPosition != null &&
+                                                    !isLoadingLocation)
+                                                ? 'PUNCH IN WITH APPROVAL'
+                                                : 'Getting Location...',
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 1.0,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 )
               else
                 _buildPunchButton(),
@@ -692,8 +786,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         boxShadow: [
           BoxShadow(
             color: primaryColor.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            blurRadius: 10.0,
+            offset: const Offset(0.0, 5.0),
           ),
         ],
       ),
@@ -705,7 +799,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               fontSize: 36,
               fontWeight: FontWeight.bold,
               color: Colors.white,
-              letterSpacing: 2,
+              letterSpacing: 2.0,
             ),
           ),
           const SizedBox(height: 6),
@@ -909,7 +1003,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
+                            letterSpacing: 1.0,
                           ),
                         ),
                       ],
@@ -988,7 +1082,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
-                    letterSpacing: 1,
+                    letterSpacing: 1.0,
                   ),
                 ),
               ],
@@ -1101,7 +1195,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ],
@@ -1185,219 +1279,237 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setState) => Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.logout, color: Colors.red, size: 28),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(width: 12),
-              const Text('Punch Out Details'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Photo Section
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
+              contentPadding: const EdgeInsets.all(20),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.logout,
+                      color: Colors.red,
+                      size: 28,
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.camera_alt,
-                            size: 20,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Photo *',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                  const SizedBox(width: 12),
+                  const Text('Punch Out Details'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Photo Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 12),
-                      if (photo != null)
-                        Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                photo!,
-                                height: 150,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.camera_alt,
+                                size: 20,
+                                color: Colors.red,
                               ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton(
-                                icon: const Icon(Icons.close),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Photo *',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (photo != null)
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    photo!,
+                                    height: 150,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    photo = null;
-                                    photoBase64 = null;
-                                  });
-                                },
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        photo = null;
+                                        photoBase64 = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                try {
+                                  final pickedPhoto = await _imagePicker
+                                      .pickImage(
+                                        source: ImageSource.camera,
+                                        imageQuality: 50,
+                                        maxWidth: 1024,
+                                        maxHeight: 1024,
+                                      );
+                                  if (pickedPhoto != null) {
+                                    final file = File(pickedPhoto.path);
+                                    final bytes = await file.readAsBytes();
+                                    setState(() {
+                                      photo = file;
+                                      photoBase64 = base64Encode(bytes);
+                                    });
+                                  }
+                                } catch (e) {
+                                  CustomToast.showError(
+                                    context,
+                                    'Error capturing photo',
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Take Photo'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                minimumSize: const Size.fromHeight(45),
                               ),
                             ),
-                          ],
-                        )
-                      else
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            try {
-                              final pickedPhoto = await _imagePicker.pickImage(
-                                source: ImageSource.camera,
-                                imageQuality: 50,
-                                maxWidth: 1024,
-                                maxHeight: 1024,
-                              );
-                              if (pickedPhoto != null) {
-                                final file = File(pickedPhoto.path);
-                                final bytes = await file.readAsBytes();
-                                setState(() {
-                                  photo = file;
-                                  photoBase64 = base64Encode(bytes);
-                                });
-                              }
-                            } catch (e) {
-                              CustomToast.showError(
-                                context,
-                                'Error capturing photo',
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Take Photo'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            minimumSize: const Size(double.infinity, 45),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Bike KM Section
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    // Bike KM Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.speed, size: 20, color: Colors.red),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Bike KM Reading',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.speed,
+                                size: 20,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Bike KM Reading',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: bikeKmController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: 'Enter ending KM reading',
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              suffixText: 'km',
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: bikeKmController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          hintText: 'Enter ending KM reading',
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          suffixText: 'km',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Summary
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildInfoRow(Icons.access_time, 'Time', currentTime),
-                      const Divider(height: 20),
-                      _buildInfoRow(
-                        Icons.location_on,
-                        'Location',
-                        '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                    // Summary
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!),
                       ),
-                      const Divider(height: 20),
-                      _buildInfoRow(
-                        Icons.timer,
-                        'Work Duration',
-                        _getCurrentDurationText(),
+                      child: Column(
+                        children: [
+                          _buildInfoRow(Icons.access_time, 'Time', currentTime),
+                          const Divider(height: 20),
+                          _buildInfoRow(
+                            Icons.location_on,
+                            'Location',
+                            '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                          ),
+                          const Divider(height: 20),
+                          _buildInfoRow(
+                            Icons.timer,
+                            'Work Duration',
+                            _getCurrentDurationText(),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    if (photo == null) {
+                      CustomToast.showError(context, 'Please take a photo');
+                      return;
+                    }
+                    Navigator.pop(context, {
+                      'confirmed': true,
+                      'photo': photo,
+                      'photoBase64': photoBase64,
+                      'bikeKm': bikeKmController.text.trim(),
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Punch Out'),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                if (photo == null) {
-                  CustomToast.showError(context, 'Please take a photo');
-                  return;
-                }
-                Navigator.pop(context, {
-                  'confirmed': true,
-                  'photo': photo,
-                  'photoBase64': photoBase64,
-                  'bikeKm': bikeKmController.text.trim(),
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              icon: const Icon(Icons.check),
-              label: const Text('Punch Out'),
-            ),
-          ],
         ),
       ),
     );

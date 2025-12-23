@@ -122,20 +122,12 @@ export const punchIn = async (req, res) => {
                 });
             }
 
-            // Mark approval code as used
-            await prisma.latePunchApproval.update({
-                where: { id: approvalRequest.id },
-                data: {
-                    codeUsed: true,
-                    codeUsedAt: currentISTTime
-                }
-            });
-
+            // Don't mark code as used yet - we'll do it after attendance is created successfully
             isLatePunchIn = true;
             lateApprovalId = approvalRequest.id;
             usedApprovalCode = approvalCode.trim();
 
-            console.log('✅ Late punch-in approved with code:', {
+            console.log('✅ Late punch-in approval code validated:', {
                 employeeId,
                 approvalCode: usedApprovalCode,
                 approvalRequestId: lateApprovalId
@@ -249,6 +241,26 @@ export const punchIn = async (req, res) => {
             isLatePunchIn: attendance.isLatePunchIn,
             lateApprovalId: attendance.lateApprovalId
         });
+
+        // Mark approval code as used AFTER attendance is created successfully
+        if (isLatePunchIn && lateApprovalId) {
+            try {
+                await prisma.latePunchApproval.update({
+                    where: { id: lateApprovalId },
+                    data: {
+                        codeUsed: true,
+                        codeUsedAt: currentISTTime
+                    }
+                });
+                console.log('✅ Late punch-in approval code marked as used:', {
+                    approvalRequestId: lateApprovalId,
+                    approvalCode: usedApprovalCode
+                });
+            } catch (updateError) {
+                console.error('⚠️ Failed to mark approval code as used:', updateError);
+                // Don't fail the punch-in if this update fails
+            }
+        }
 
         // Enhance response with IST information and session details
         const responseData = {

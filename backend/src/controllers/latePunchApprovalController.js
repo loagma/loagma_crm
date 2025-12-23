@@ -494,6 +494,35 @@ export const getEmployeeApprovalStatus = async (req, res) => {
             isCodeExpired = getCurrentISTTime() > approvalRequest.codeExpiresAt;
         }
 
+        // If code is marked as used, verify the user is actually punched in
+        // If not, reset the code status so they can try again
+        let actualCodeUsed = approvalRequest.codeUsed;
+        if (approvalRequest.codeUsed) {
+            const existingAttendance = await prisma.attendance.findFirst({
+                where: {
+                    employeeId,
+                    punchInTime: {
+                        gte: startOfDay,
+                        lt: endOfDay
+                    },
+                    status: 'active'
+                }
+            });
+
+            if (!existingAttendance) {
+                // Code was marked as used but user isn't punched in - reset the code
+                console.log('⚠️ Code marked as used but no active attendance found. Resetting code status.');
+                await prisma.latePunchApproval.update({
+                    where: { id: approvalRequest.id },
+                    data: {
+                        codeUsed: false,
+                        codeUsedAt: null
+                    }
+                });
+                actualCodeUsed = false;
+            }
+        }
+
         const responseData = {
             requestId: approvalRequest.id,
             status: approvalRequest.status,
@@ -505,8 +534,8 @@ export const getEmployeeApprovalStatus = async (req, res) => {
             hasApprovalCode: !!approvalRequest.approvalCode,
             codeExpired: isCodeExpired,
             codeExpiresAt: approvalRequest.codeExpiresAt ? formatISTTime(approvalRequest.codeExpiresAt, 'datetime') : null,
-            codeUsed: approvalRequest.codeUsed,
-            codeUsedAt: approvalRequest.codeUsedAt ? formatISTTime(approvalRequest.codeUsedAt, 'datetime') : null
+            codeUsed: actualCodeUsed,
+            codeUsedAt: actualCodeUsed && approvalRequest.codeUsedAt ? formatISTTime(approvalRequest.codeUsedAt, 'datetime') : null
         };
 
         res.status(200).json({
