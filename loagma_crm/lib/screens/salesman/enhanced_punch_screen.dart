@@ -64,6 +64,18 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Force refresh when screen becomes active again
+    // This helps catch approval status changes when user returns from notifications
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkCutoffTime();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     LocationService.instance.stopLocationTracking();
@@ -254,6 +266,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         return;
       }
 
+      // Use the stored validApprovalCode if no specific code is passed
+      // This ensures the validated code from the widget is used correctly
+      final codeToUse = approvalCode ?? validApprovalCode;
+
       final response = await AttendanceService.punchIn(
         employeeId: employeeId,
         employeeName: employeeName,
@@ -261,12 +277,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         longitude: _currentPosition!.longitude,
         photo: result['photoBase64'],
         bikeKmStart: result['bikeKm'],
-        approvalCode: approvalCode ?? validApprovalCode,
+        approvalCode: codeToUse,
       );
 
-      print(
-        '🔍 Punch-in with approval code: ${approvalCode ?? validApprovalCode}',
-      );
+      print('🔍 Punch-in with approval code: $codeToUse');
       print('🔍 Punch-in response: $response');
 
       Navigator.pop(context); // Close loading
@@ -277,22 +291,35 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           currentAttendance = attendance;
           isPunchedIn = true;
           punchInTime = attendance?.punchInTime;
-          validApprovalCode = null; // Clear used code
+          validApprovalCode = null; // Clear used code only on success
         });
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
+        // On failure, retain the approval code so user can retry without re-validation
+        // Only clear the code if it's specifically an invalid/expired code error
+        final errorMessage = response['message'] ?? '';
+        if (errorMessage.contains('invalid') ||
+            errorMessage.contains('expired') ||
+            errorMessage.contains('used')) {
+          setState(() {
+            validApprovalCode = null; // Clear invalid/expired code
+          });
+        }
+        // For other errors (network, location, etc.), keep the code for retry
+
         // Check if it's a late punch-in error that requires approval
-        if (response['message']?.contains('9:45 AM') == true) {
-          CustomToast.showError(context, response['message']);
+        if (errorMessage.contains('9:45 AM')) {
+          CustomToast.showError(context, errorMessage);
         } else {
           CustomToast.showError(
             context,
-            response['message'] ?? 'Failed to punch in',
+            errorMessage.isNotEmpty ? errorMessage : 'Failed to punch in',
           );
         }
       }
     } catch (e) {
       Navigator.pop(context);
+      // On exception, retain the approval code for retry
       CustomToast.showError(context, 'Error: $e');
     }
   }
@@ -574,6 +601,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         onRefresh: () async {
           await _loadTodayPunchData();
           await _initializeLocationService();
+          // Force refresh of approval status by rebuilding the widget
+          setState(() {});
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -592,6 +621,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: LatePunchApprovalWidget(
+                    key: ValueKey(
+                      'late_punch_${DateTime.now().millisecondsSinceEpoch ~/ 10000}',
+                    ), // Refresh every 10 seconds
                     onApprovalRequested: () {
                       // Refresh status after approval request
                       setState(() {});
@@ -601,6 +633,14 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                       print('🔍 Received approval code: $approvalCode');
                       setState(() {
                         validApprovalCode = approvalCode;
+                      });
+
+                      // Automatically trigger punch-in dialog as per requirement 1.3
+                      // "WHEN the salesman enters a valid approval code, THEN the system SHALL validate the code and automatically trigger the punch-in dialog"
+                      Future.delayed(const Duration(milliseconds: 500), () {
+                        if (mounted) {
+                          _handlePunchIn();
+                        }
                       });
                     },
                     onApprovalReceived: () {
@@ -620,6 +660,20 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           ),
         ),
       ),
+      floatingActionButton: isAfterCutoff && !isPunchedIn
+          ? FloatingActionButton.small(
+              onPressed: () {
+                // Force refresh the approval widget
+                setState(() {});
+                CustomToast.showSuccess(
+                  context,
+                  'Refreshing approval status...',
+                );
+              },
+              backgroundColor: Colors.orange,
+              child: const Icon(Icons.refresh, color: Colors.white),
+            )
+          : null,
     );
   }
 

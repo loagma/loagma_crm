@@ -1,9 +1,9 @@
 # Implementation Plan
 
 - [x] 1. Enhance Late Punch Approval Widget Callback System
-  - Add callback parameter to pass validated approval code to parent screen
-  - Update `onApprovalReceived` callback to include the actual approval code
-  - Modify `_validateApprovalCode()` method to pass code in callback
+  - ~~Add callback parameter to pass validated approval code to parent screen~~ ✅ Already implemented
+  - ~~Update `onApprovalReceived` callback to include the actual approval code~~ ✅ Already implemented
+  - ~~Modify `_validateApprovalCode()` method to pass code in callback~~ ✅ Already implemented
   - _Requirements: 1.2, 1.3, 3.1, 4.5_
 
 - [x]* 1.1 Write property test for approval code validation callback
@@ -14,11 +14,19 @@
   - **Property 3: Code validation triggers punch dialog**
   - **Validates: Requirements 1.3**
 
-- [ ] 2. Fix Enhanced Punch Screen Approval Code Integration
-  - Update `onApprovalReceived` callback to receive and store actual approval code
-  - Modify `_handlePunchIn()` to use the validated approval code from widget
-  - Fix state management to store actual code instead of 'validated' string
-  - Add proper state cleanup after successful punch-in
+- [x] 2. Verify and Fix Enhanced Punch Screen Approval Code Integration
+
+
+
+
+
+
+
+
+  - ~~Update `onApprovalReceived` callback to receive and store actual approval code~~ ✅ Already implemented
+  - Verify `_handlePunchIn()` correctly uses the validated approval code from widget
+  - Verify state management stores actual code correctly
+  - Verify proper state cleanup after successful punch-in
   - _Requirements: 1.3, 1.4, 1.5, 3.1, 3.2, 3.3, 3.4_
 
 - [ ]* 2.1 Write property test for approval code state management
@@ -40,22 +48,26 @@
   - ~~Update the account card widget to show creation information~~ ✅ Already implemented
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ]* 3.1 Write property test for timestamp display
+- [x]* 3.1 Write property test for timestamp display
   - **Property 6: Account creation date display**
   - **Validates: Requirements 2.1**
 
-- [ ]* 3.2 Write property test for relative time formatting
+- [x]* 3.2 Write property test for relative time formatting
   - **Property 7: Relative time formatting for recent accounts**
   - **Validates: Requirements 2.2**
 
-- [ ]* 3.3 Write property test for full date formatting
+- [x]* 3.3 Write property test for full date formatting
   - **Property 8: Full date formatting for older accounts**
   - **Validates: Requirements 2.3**
 
-- [ ] 4. Create Centralized Time Formatting Utilities
-  - Extract `_getTimeAgo()` method to a shared utility file
-  - Create `TimeFormattingUtils` class with static methods
-  - Update all screens to use centralized utility
+- [x] 4. Create Centralized Time Formatting Utilities
+
+
+
+
+  - Extract `_getTimeAgo()` method from multiple screens to a shared utility file
+  - Create `utils/time_formatting_utils.dart` with static methods
+  - Update salesman dashboard, admin reports, and attendance management screens to use centralized utility
   - Add logic to determine relative vs absolute time display (24-hour threshold)
   - _Requirements: 2.2, 2.3, 2.4_
 
@@ -71,8 +83,8 @@
   - **Validates: Requirements 3.5**
 
 - [ ] 6. Implement Code Retention on Punch-In Failure
-  - Modify punch-in error handling to retain validated approval code
-  - Add logic to clear code only on successful punch-in
+  - Verify punch-in error handling retains validated approval code
+  - Ensure code is cleared only on successful punch-in
   - Update error messages to indicate code is still valid for retry
   - _Requirements: 3.4_
 

@@ -13,7 +13,7 @@ const router = express.Router();
 
 // Employee routes
 router.post('/request', requestLatePunchApproval);
-router.get('/status/:employeeId', getEmployeeApprovalStatus);
+router.get('/employee/:employeeId/status', getEmployeeApprovalStatus);
 router.post('/validate-code', validateApprovalCode);
 
 // Admin routes
