@@ -165,6 +165,57 @@ class RouteService {
     }
   }
 
+  /// Fetch historical routes for a specific employee and date
+  /// Used by Admin to view date-wise route tracking
+  ///
+  /// Parameters:
+  /// - employeeId: ID of the salesman
+  /// - date: Specific date to fetch routes for
+  ///
+  /// Returns:
+  /// - Historical route data for the specified date with home locations marked
+  static Future<Map<String, dynamic>> getHistoricalRoutes({
+    required String employeeId,
+    required DateTime date,
+  }) async {
+    try {
+      final dateString = date.toIso8601String().split(
+        'T',
+      )[0]; // YYYY-MM-DD format
+
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/routes/historical')
+          .replace(
+            queryParameters: {'employeeId': employeeId, 'date': dateString},
+          );
+
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': data['data'],
+          'message': data['message'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch historical routes',
+        };
+      }
+    } catch (e) {
+      print('❌ RouteService.getHistoricalRoutes error: $e');
+      return {
+        'success': false,
+        'message': 'Network error while fetching historical routes',
+      };
+    }
+  }
+
   /// Calculate distance between two GPS points using Haversine formula
   /// Used for distance calculations in route analysis and graphs
   ///

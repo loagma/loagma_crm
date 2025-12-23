@@ -1,6 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../services/api_config.dart';
+import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/route_service.dart';
 import '../../models/attendance_model.dart';
@@ -14,34 +19,43 @@ class LiveTrackingScreen extends StatefulWidget {
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     with TickerProviderStateMixin {
-  // Colors - Updated for better UX
-  static const Color primaryColor = Color(0xFF1976D2);
-  static const Color successColor = Color(0xFF4CAF50);
-  static const Color movingColor = Color(0xFF2E7D32);
-  static const Color warningColor = Color(0xFFFF9800);
-  static const Color errorColor = Color(0xFFF44336);
-  static const Color backgroundColor = Color(0xFFFAFAFA);
-
-  // Controllers
+  late TabController _tabController;
+  Timer? _refreshTimer;
+  Timer? _liveTimer;
   GoogleMapController? _mapController;
   late AnimationController _pulseController;
-  Timer? _liveTimer;
+
+  bool isLoading = true;
+  String? errorMessage;
 
   // Data
   List<AttendanceModel> activeEmployees = [];
+  List<Map<String, dynamic>> historicalRoutes = [];
+  String? selectedSalesmanId;
+  DateTime selectedDate = DateTime.now();
+
+  // Map data
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
-  AttendanceModel? selectedEmployee;
   Map<String, List<LatLng>> employeeRoutes = {};
+  Map<String, LatLng> homeLocations =
+      {}; // Store home locations for each employee
 
   // State
   bool isLiveTrackingEnabled = true;
-  bool isLoading = true;
   bool showRoutes = true;
+  bool showHomeLocations = true;
+
+  // Colors
+  static const Color primaryColor = Color(0xFFD7BE69);
+  static const Color successColor = Color(0xFF4CAF50);
+  static const Color warningColor = Color(0xFFFF9800);
+  static const Color errorColor = Color(0xFFF44336);
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _initializeAnimations();
     _loadActiveEmployees();
     _startLiveTracking();
@@ -51,7 +65,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   void dispose() {
     _pulseController.dispose();
     _liveTimer?.cancel();
+    _refreshTimer?.cancel();
     _mapController?.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -64,7 +80,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   void _startLiveTracking() {
     if (isLiveTrackingEnabled) {
-      // Real-time updates every 3 seconds for better accuracy
       _liveTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
         _loadActiveEmployees();
         _loadEmployeeRoutes();
@@ -82,8 +97,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             .cast<AttendanceModel>()
             .toList();
 
-        // Load current positions for active employees
         await _loadCurrentPositions(newActiveEmployees);
+        await _loadHomeLocations(newActiveEmployees);
 
         setState(() {
           activeEmployees = newActiveEmployees;
@@ -105,7 +120,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       if (result['success'] == true && mounted) {
         final positions = result['data']['positions'] as List;
 
-        // Update employee positions with current location data
         for (var employee in employees) {
           final positionData = positions.firstWhere(
             (pos) => pos['employeeId'] == employee.employeeId,
@@ -113,7 +127,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           );
 
           if (positionData != null) {
-            // Update employee with current position and travel data
             employee.currentLatitude = positionData['currentLatitude'];
             employee.currentLongitude = positionData['currentLongitude'];
             employee.currentDistanceKm = positionData['currentDistanceKm'];
@@ -128,6 +141,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       }
     } catch (e) {
       print('Failed to load current positions: $e');
+    }
+  }
+
+  Future<void> _loadHomeLocations(List<AttendanceModel> employees) async {
+    try {
+      for (var employee in employees) {
+        homeLocations[employee.employeeId] = LatLng(
+          employee.punchInLatitude,
+          employee.punchInLongitude,
+        );
+      }
+    } catch (e) {
+      print('Failed to load home locations: $e');
     }
   }
 
@@ -157,6 +183,146 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     }
   }
 
+  Future<void> _loadHistoricalRoutes() async {
+    try {
+      setState(() => isLoading = true);
+
+      final result = await _getHistoricalRoutes(
+        selectedDate,
+        selectedSalesmanId,
+      );
+      if (result['success'] == true && mounted) {
+        setState(() {
+          historicalRoutes = List<Map<String, dynamic>>.from(
+            result['data'] ?? [],
+          );
+          isLoading = false;
+        });
+        _updateHistoricalMapData();
+      } else {
+        setState(() {
+          historicalRoutes = [];
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          historicalRoutes = [];
+          isLoading = false;
+        });
+        _showErrorSnackBar('Failed to load historical routes: $e');
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _getHistoricalRoutes(
+    DateTime date,
+    String? employeeId,
+  ) async {
+    try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final queryParams = <String, String>{
+        'date': DateFormat('yyyy-MM-dd').format(date),
+      };
+
+      // If specific employee selected, add employeeId
+      if (employeeId != null) {
+        queryParams['employeeId'] = employeeId;
+      }
+
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/routes/historical',
+      ).replace(queryParameters: queryParams);
+
+      final response = await http.get(uri, headers: headers);
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data':
+              data['data']['routes'] ??
+              [], // Extract routes array from nested data
+          'message': data['message'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch historical routes',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  void _updateMapMarkers() {
+    Set<Marker> markers = {};
+
+    // Add current position markers for active employees
+    for (var employee in activeEmployees) {
+      if (employee.currentLatitude != null &&
+          employee.currentLongitude != null) {
+        markers.add(
+          Marker(
+            markerId: MarkerId('current_${employee.employeeId}'),
+            position: LatLng(
+              employee.currentLatitude!,
+              employee.currentLongitude!,
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              employee.isMoving == true
+                  ? BitmapDescriptor.hueGreen
+                  : BitmapDescriptor.hueOrange,
+            ),
+            infoWindow: InfoWindow(
+              title: employee.employeeName,
+              snippet:
+                  'Current Location - ${employee.isMoving == true ? "Moving" : "Stationary"}',
+            ),
+          ),
+        );
+      }
+    }
+
+    // Add home location markers if enabled
+    if (showHomeLocations) {
+      for (var entry in homeLocations.entries) {
+        final employeeId = entry.key;
+        final homeLocation = entry.value;
+        final employee = activeEmployees.firstWhere(
+          (e) => e.employeeId == employeeId,
+          orElse: () => activeEmployees.first,
+        );
+
+        markers.add(
+          Marker(
+            markerId: MarkerId('home_$employeeId'),
+            position: homeLocation,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueViolet,
+            ),
+            infoWindow: InfoWindow(
+              title: '🏠 ${employee.employeeName} - Home',
+              snippet:
+                  'Started work at ${DateFormat('hh:mm a').format(employee.punchInTime)}',
+            ),
+          ),
+        );
+      }
+    }
+
+    setState(() {
+      _markers = markers;
+    });
+  }
+
   void _updateRoutePolylines() {
     Set<Polyline> polylines = {};
 
@@ -165,7 +331,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       final routePoints = entry.value;
 
       if (routePoints.length > 1) {
-        // Find employee to get movement status
         final employee = activeEmployees.firstWhere(
           (e) => e.id == employeeId,
           orElse: () => activeEmployees.first,
@@ -175,889 +340,638 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           Polyline(
             polylineId: PolylineId(employeeId),
             points: routePoints,
-            color: employee.isMoving == true ? movingColor : warningColor,
-            width: 4,
-            patterns: employee.isMoving == true
-                ? []
-                : [PatternItem.dash(10), PatternItem.gap(5)],
+            color: employee.isMoving == true ? successColor : warningColor,
+            width: 3,
           ),
         );
       }
     }
 
-    setState(() => _polylines = polylines);
-  }
-
-  void _updateMapMarkers() {
-    Set<Marker> markers = {};
-
-    for (var employee in activeEmployees) {
-      // Use current position if available, otherwise fall back to punch-in position
-      final lat = employee.currentLatitude ?? employee.punchInLatitude;
-      final lng = employee.currentLongitude ?? employee.punchInLongitude;
-
-      // Determine marker color based on movement status
-      final markerColor = employee.isMoving == true
-          ? BitmapDescriptor
-                .hueGreen // Moving - green
-          : BitmapDescriptor.hueOrange; // Stationary - orange
-
-      final workDuration = DateTime.now().difference(employee.punchInTime);
-      final hours = workDuration.inHours;
-      final minutes = workDuration.inMinutes % 60;
-
-      String snippet = 'Working for ${hours}h ${minutes}m';
-      if (employee.currentDistanceKm != null &&
-          employee.currentDistanceKm! > 0) {
-        snippet +=
-            ' • ${employee.currentDistanceKm!.toStringAsFixed(1)}km traveled';
-      }
-      if (employee.speed != null && employee.speed! > 0) {
-        snippet += ' • ${employee.speed!.toStringAsFixed(0)} km/h';
-      }
-
-      markers.add(
-        Marker(
-          markerId: MarkerId(employee.id),
-          position: LatLng(lat, lng),
-          infoWindow: InfoWindow(
-            title:
-                '${employee.employeeName} ${employee.isMoving == true ? '🚗' : '📍'}',
-            snippet: snippet,
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(markerColor),
-          onTap: () => _showEmployeeDetails(employee),
-        ),
-      );
-    }
-
-    setState(() => _markers = markers);
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: errorColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-  }
-
-  String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _toggleLiveTracking() {
     setState(() {
-      isLiveTrackingEnabled = !isLiveTrackingEnabled;
-      if (isLiveTrackingEnabled) {
-        _startLiveTracking();
-      } else {
-        _liveTimer?.cancel();
-      }
+      _polylines = polylines;
     });
   }
 
-  void _showEmployeeDetails(AttendanceModel employee) {
-    setState(() => selectedEmployee = employee);
+  void _updateHistoricalMapData() {
+    Set<Marker> markers = {};
+    Set<Polyline> polylines = {};
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    _buildEmployeeHeader(employee),
-                    const SizedBox(height: 24),
-                    _buildEmployeeStats(employee),
-                    const SizedBox(height: 24),
-                    _buildEmployeeLocation(employee),
-                    const SizedBox(height: 24),
-                    _buildEmployeeActions(employee),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+    for (var route in historicalRoutes) {
+      final employeeId = route['employeeId'] as String;
+      final employeeName = route['employeeName'] as String;
+      final homeLocation = route['homeLocation'] as Map<String, dynamic>?;
+      final startLocation = route['startLocation'] as Map<String, dynamic>?;
+      final endLocation = route['endLocation'] as Map<String, dynamic>?;
+      final routePreview = route['routePreview'] as List?;
 
-  Widget _buildEmployeeHeader(AttendanceModel employee) {
-    final workDuration = DateTime.now().difference(employee.punchInTime);
-    final hours = workDuration.inHours;
-    final minutes = workDuration.inMinutes % 60;
+      // Add home location marker (purple marker for where salesman started working)
+      if (homeLocation != null) {
+        final homeLatLng = LatLng(
+          homeLocation['latitude'] as double,
+          homeLocation['longitude'] as double,
+        );
 
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 30,
-          backgroundColor: successColor,
-          child: Text(
-            employee.employeeName.isNotEmpty
-                ? employee.employeeName[0].toUpperCase()
-                : '?',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+        markers.add(
+          Marker(
+            markerId: MarkerId('historical_home_$employeeId'),
+            position: homeLatLng,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueViolet,
+            ),
+            infoWindow: InfoWindow(
+              title: '🏠 $employeeName - Home',
+              snippet:
+                  'Started: ${DateFormat('hh:mm a').format(DateTime.parse(homeLocation['time']))}',
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                employee.employeeName,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                employee.employeeId,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: successColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Working for ${hours}h ${minutes}m',
-                  style: const TextStyle(
-                    color: successColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+        );
+      }
 
-  Widget _buildEmployeeStats(AttendanceModel employee) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Today\'s Details',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Punch In',
-                  _formatTime(employee.punchInTime),
-                  Icons.login,
-                  successColor,
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  'Status',
-                  employee.isMoving == true ? 'MOVING' : 'STATIONARY',
-                  employee.isMoving == true
-                      ? Icons.directions_car
-                      : Icons.location_on,
-                  employee.isMoving == true ? movingColor : warningColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Distance',
-                  '${employee.currentDistanceKm?.toStringAsFixed(1) ?? '0.0'} km',
-                  Icons.route,
-                  primaryColor,
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  'Speed',
-                  '${employee.speed?.toStringAsFixed(0) ?? '0'} km/h',
-                  Icons.speed,
-                  employee.speed != null && employee.speed! > 0
-                      ? successColor
-                      : Colors.grey,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmployeeLocation(AttendanceModel employee) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Location Details',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.location_on, color: primaryColor, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${employee.punchInLatitude.toStringAsFixed(6)}, ${employee.punchInLongitude.toStringAsFixed(6)}',
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-          if (employee.punchInAddress != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.place, color: primaryColor, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    employee.punchInAddress!,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-              ],
+      // Add punch-in location marker (start location - green)
+      if (startLocation != null) {
+        markers.add(
+          Marker(
+            markerId: MarkerId('historical_start_$employeeId'),
+            position: LatLng(
+              startLocation['latitude'] as double,
+              startLocation['longitude'] as double,
             ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmployeeActions(AttendanceModel employee) {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _focusOnEmployee(employee);
-            },
-            icon: const Icon(Icons.my_location),
-            label: const Text('Show on Map'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
+            infoWindow: InfoWindow(
+              title: '▶️ $employeeName - Punch In',
+              snippet:
+                  'Started: ${DateFormat('hh:mm a').format(DateTime.parse(startLocation['time']))}',
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => _showEmployeeHistory(employee),
-            icon: const Icon(Icons.history),
-            label: const Text('View History'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: primaryColor,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+        );
+      }
+
+      // Add punch-out location marker if available (end location - red)
+      if (endLocation != null) {
+        markers.add(
+          Marker(
+            markerId: MarkerId('historical_end_$employeeId'),
+            position: LatLng(
+              endLocation['latitude'] as double,
+              endLocation['longitude'] as double,
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+            infoWindow: InfoWindow(
+              title: '⏹️ $employeeName - Punch Out',
+              snippet:
+                  'Ended: ${DateFormat('hh:mm a').format(DateTime.parse(endLocation['time']))}',
             ),
           ),
-        ),
-      ],
-    );
-  }
+        );
+      }
 
-  void _focusOnEmployee(AttendanceModel employee) {
-    // Use current position if available, otherwise fall back to punch-in position
-    final lat = employee.currentLatitude ?? employee.punchInLatitude;
-    final lng = employee.currentLongitude ?? employee.punchInLongitude;
+      // Add route polyline from preview points
+      if (routePreview != null && routePreview.length > 1) {
+        final points = routePreview
+            .map(
+              (point) => LatLng(
+                point['latitude'] as double,
+                point['longitude'] as double,
+              ),
+            )
+            .toList();
 
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
-    );
-  }
-
-  void _showEmployeeHistory(AttendanceModel employee) {
-    // Navigate to employee history screen
-    Navigator.pushNamed(
-      context,
-      '/admin/employee-history',
-      arguments: employee,
-    );
-  }
-
-  void _fitMarkersInView() {
-    if (_markers.isEmpty || _mapController == null) return;
-
-    if (_markers.length == 1) {
-      final marker = _markers.first;
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(marker.position, 14),
-      );
-      return;
+        polylines.add(
+          Polyline(
+            polylineId: PolylineId('historical_route_$employeeId'),
+            points: points,
+            color: Colors.blue,
+            width: 3,
+            patterns: [PatternItem.dash(10), PatternItem.gap(5)],
+          ),
+        );
+      }
     }
 
-    double minLat = _markers.first.position.latitude;
-    double maxLat = _markers.first.position.latitude;
-    double minLng = _markers.first.position.longitude;
-    double maxLng = _markers.first.position.longitude;
-
-    for (var marker in _markers) {
-      if (marker.position.latitude < minLat) minLat = marker.position.latitude;
-      if (marker.position.latitude > maxLat) maxLat = marker.position.latitude;
-      if (marker.position.longitude < minLng)
-        minLng = marker.position.longitude;
-      if (marker.position.longitude > maxLng)
-        maxLng = marker.position.longitude;
-    }
-
-    final latPadding = (maxLat - minLat) * 0.1;
-    final lngPadding = (maxLng - minLng) * 0.1;
-
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat - latPadding, minLng - lngPadding),
-          northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
-        ),
-        100,
-      ),
-    );
+    setState(() {
+      _markers = markers;
+      _polylines = polylines;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: backgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(),
-          if (isLoading)
-            const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            _buildLiveStatusHeader(),
-            _buildActiveEmployeesSection(),
-            _buildMapSection(),
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text('Live Employee Tracking'),
+        backgroundColor: primaryColor,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.location_on), text: 'Live Tracking'),
+            Tab(icon: Icon(Icons.route), text: 'Route Playback'),
+            Tab(icon: Icon(Icons.history), text: 'Historical Routes'),
           ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(showHomeLocations ? Icons.home : Icons.home_outlined),
+            onPressed: () {
+              setState(() {
+                showHomeLocations = !showHomeLocations;
+              });
+              _updateMapMarkers();
+            },
+            tooltip: 'Toggle Home Locations',
+          ),
+          IconButton(
+            icon: Icon(showRoutes ? Icons.route : Icons.route_outlined),
+            onPressed: () {
+              setState(() {
+                showRoutes = !showRoutes;
+              });
+              if (showRoutes) {
+                _loadEmployeeRoutes();
+              } else {
+                setState(() {
+                  _polylines.clear();
+                });
+              }
+            },
+            tooltip: 'Toggle Routes',
+          ),
         ],
       ),
-      floatingActionButton: _buildFloatingActions(),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildLiveTrackingTab(),
+          _buildRoutePlaybackTab(),
+          _buildHistoricalRoutesTab(),
+        ],
+      ),
     );
   }
 
-  Widget _buildAppBar() {
-    return SliverAppBar(
-      expandedHeight: 120,
-      floating: false,
-      pinned: true,
-      backgroundColor: primaryColor,
-      flexibleSpace: FlexibleSpaceBar(
-        title: const Text(
-          'Live Tracking',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
-            ),
+  Widget _buildLiveTrackingTab() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Row(
+            children: [
+              Icon(
+                isLiveTrackingEnabled ? Icons.play_circle : Icons.pause_circle,
+                color: isLiveTrackingEnabled ? successColor : warningColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isLiveTrackingEnabled
+                    ? 'Live Tracking Active'
+                    : 'Live Tracking Paused',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isLiveTrackingEnabled ? successColor : warningColor,
+                ),
+              ),
+              const Spacer(),
+              Switch(
+                value: isLiveTrackingEnabled,
+                onChanged: (value) {
+                  setState(() {
+                    isLiveTrackingEnabled = value;
+                  });
+                  if (value) {
+                    _startLiveTracking();
+                  } else {
+                    _liveTimer?.cancel();
+                  }
+                },
+              ),
+            ],
           ),
-          child: const Center(
-            child: Icon(Icons.location_on, size: 60, color: Colors.white24),
+        ),
+        Expanded(child: _buildMap()),
+        _buildActiveEmployeesList(),
+      ],
+    );
+  }
+
+  Widget _buildRoutePlaybackTab() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            children: [
+              const Text(
+                'Route Playback',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedSalesmanId,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Employee',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Select Employee'),
+                        ),
+                        ...activeEmployees.map(
+                          (employee) => DropdownMenuItem<String>(
+                            value: employee.employeeId,
+                            child: Text(employee.employeeName),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedSalesmanId = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    onPressed: _selectDate,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            isLiveTrackingEnabled ? Icons.pause : Icons.play_arrow,
-            color: Colors.white,
-          ),
-          onPressed: _toggleLiveTracking,
-          tooltip: isLiveTrackingEnabled
-              ? 'Pause Live Tracking'
-              : 'Resume Live Tracking',
-        ),
-        IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.white),
-          onPressed: _loadActiveEmployees,
-          tooltip: 'Refresh Data',
+        Expanded(
+          child: selectedSalesmanId == null
+              ? const Center(
+                  child: Text(
+                    'Select an employee to view route playback',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.blue[50],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.play_arrow),
+                            onPressed: () {
+                              // TODO: Implement route playback animation
+                              _showInfoSnackBar(
+                                'Route playback animation will be implemented',
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.pause),
+                            onPressed: () {
+                              // TODO: Pause playback
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.stop),
+                            onPressed: () {
+                              // TODO: Stop playback
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.speed),
+                            onPressed: () {
+                              // TODO: Change playback speed
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(child: _buildMap()),
+                  ],
+                ),
         ),
       ],
     );
   }
 
-  Widget _buildLiveStatusHeader() {
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isLiveTrackingEnabled
-                ? [successColor, successColor.withValues(alpha: 0.8)]
-                : [Colors.grey.shade400, Colors.grey.shade600],
+  Widget _buildHistoricalRoutesTab() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Historical Routes - ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    onPressed: _selectDate,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedSalesmanId,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Salesman',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('All Salesmen'),
+                        ),
+                        ...activeEmployees.map(
+                          (employee) => DropdownMenuItem<String>(
+                            value: employee.employeeId,
+                            child: Text(employee.employeeName),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedSalesmanId = value;
+                        });
+                        _loadHistoricalRoutes();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _loadHistoricalRoutes,
+                    child: const Text('Load Routes'),
+                  ),
+                ],
+              ),
+            ],
           ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: (isLiveTrackingEnabled ? successColor : Colors.grey)
-                  .withValues(alpha: 0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
         ),
-        child: Row(
-          children: [
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: isLiveTrackingEnabled
-                      ? 1.0 + (_pulseController.value * 0.1)
-                      : 1.0,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Icon(
-                      isLiveTrackingEnabled
-                          ? Icons.location_on
-                          : Icons.location_off,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildMap(),
+        ),
+        if (historicalRoutes.isNotEmpty) _buildHistoricalRoutesSummary(),
+      ],
+    );
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != selectedDate) {
+      setState(() {
+        selectedDate = picked;
+      });
+      _loadHistoricalRoutes();
+    }
+  }
+
+  Widget _buildMap() {
+    return GoogleMap(
+      onMapCreated: (GoogleMapController controller) {
+        _mapController = controller;
+      },
+      initialCameraPosition: const CameraPosition(
+        target: LatLng(28.6139, 77.2090),
+        zoom: 10,
+      ),
+      markers: _markers,
+      polylines: _polylines,
+      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
+      zoomControlsEnabled: true,
+      mapToolbarEnabled: false,
+    );
+  }
+
+  Widget _buildActiveEmployeesList() {
+    if (activeEmployees.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: const Text(
+          'No active employees found',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return Container(
+      height: 120,
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Active Employees (${activeEmployees.length})',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: activeEmployees.length,
+              itemBuilder: (context, index) {
+                final employee = activeEmployees[index];
+                return Container(
+                  width: 200,
+                  margin: const EdgeInsets.only(left: 16, bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            employee.isMoving == true
+                                ? Icons.directions_run
+                                : Icons.location_on,
+                            color: employee.isMoving == true
+                                ? successColor
+                                : warningColor,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              employee.employeeName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Working: ${_getWorkingDuration(employee.punchInTime)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      if (employee.currentDistanceKm != null)
+                        Text(
+                          'Distance: ${employee.currentDistanceKm!.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Live Tracking ${isLiveTrackingEnabled ? 'Active' : 'Paused'}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '${activeEmployees.length} employees • ${showRoutes ? 'Routes shown' : 'Routes hidden'}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: isLiveTrackingEnabled,
-              onChanged: (_) => _toggleLiveTracking(),
-              activeThumbColor: Colors.white,
-              activeTrackColor: Colors.white.withValues(alpha: 0.3),
-              inactiveThumbColor: Colors.white.withValues(alpha: 0.7),
-              inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActiveEmployeesSection() {
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.people, color: primaryColor, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Active Employees (${activeEmployees.length})',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (activeEmployees.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.people_outline, size: 48, color: Colors.grey),
-                      SizedBox(height: 8),
-                      Text(
-                        'No active employees right now',
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: activeEmployees.length,
-                  itemBuilder: (context, index) {
-                    final employee = activeEmployees[index];
-                    return _buildActiveEmployeeCard(employee);
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActiveEmployeeCard(AttendanceModel employee) {
-    final workDuration = DateTime.now().difference(employee.punchInTime);
-    final hours = workDuration.inHours;
-    final minutes = workDuration.inMinutes % 60;
-
-    return Container(
-      width: 160,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: successColor.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: successColor.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHistoricalRoutesSummary() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: successColor,
-                child: Text(
-                  employee.employeeName.isNotEmpty
-                      ? employee.employeeName[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: successColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'LIVE',
-                  style: TextStyle(
-                    color: successColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            'Routes Summary (${historicalRoutes.length})',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Text(
-            employee.employeeName,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            'Working for ${hours}h ${minutes}m',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
-          if (employee.currentDistanceKm != null &&
-              employee.currentDistanceKm! > 0)
-            Text(
-              '${employee.currentDistanceKm!.toStringAsFixed(1)}km traveled',
-              style: TextStyle(fontSize: 11, color: Colors.blue.shade600),
+          SizedBox(
+            height: 80,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: historicalRoutes.length,
+              itemBuilder: (context, index) {
+                final route = historicalRoutes[index];
+                final routeSummary =
+                    route['routeSummary'] as Map<String, dynamic>?;
+                final startLocation =
+                    route['startLocation'] as Map<String, dynamic>?;
+                final endLocation =
+                    route['endLocation'] as Map<String, dynamic>?;
+
+                return Container(
+                  width: 180,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        route['employeeName'],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      if (startLocation != null)
+                        Text(
+                          'Start: ${DateFormat('hh:mm a').format(DateTime.parse(startLocation['time']))}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      if (endLocation != null)
+                        Text(
+                          'End: ${DateFormat('hh:mm a').format(DateTime.parse(endLocation['time']))}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      if (routeSummary != null &&
+                          routeSummary['totalWorkHours'] != null)
+                        Text(
+                          'Hours: ${routeSummary['totalWorkHours'].toStringAsFixed(1)}h',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _showEmployeeDetails(employee),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'View',
-                    style: TextStyle(fontSize: 12, color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => _focusOnEmployee(employee),
-                icon: const Icon(Icons.my_location, size: 18),
-                style: IconButton.styleFrom(
-                  backgroundColor: warningColor.withValues(alpha: 0.1),
-                  foregroundColor: warningColor,
-                ),
-              ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMapSection() {
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        height: 400,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              GoogleMap(
-                initialCameraPosition: const CameraPosition(
-                  target: LatLng(28.6139, 77.2090),
-                  zoom: 11,
-                ),
-                markers: _markers,
-                polylines: _polylines,
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                  if (_markers.isNotEmpty) {
-                    _fitMarkersInView();
-                  }
-                },
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                mapToolbarEnabled: false,
-              ),
-              Positioned(
-                top: 16,
-                left: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        color: successColor,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_markers.length} Active',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: FloatingActionButton.small(
-                  onPressed: _fitMarkersInView,
-                  backgroundColor: Colors.white,
-                  child: const Icon(
-                    Icons.center_focus_strong,
-                    color: primaryColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  String _getWorkingDuration(DateTime punchInTime) {
+    final duration = DateTime.now().difference(punchInTime);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    return '${hours}h ${minutes}m';
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: errorColor),
     );
   }
 
-  Widget _buildFloatingActions() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FloatingActionButton(
-          heroTag: "refresh",
-          onPressed: _loadActiveEmployees,
-          backgroundColor: primaryColor,
-          child: const Icon(Icons.refresh, color: Colors.white),
-        ),
-        const SizedBox(height: 12),
-        FloatingActionButton(
-          heroTag: "routes",
-          onPressed: () {
-            setState(() {
-              showRoutes = !showRoutes;
-              if (showRoutes) {
-                _loadEmployeeRoutes();
-              } else {
-                _polylines.clear();
-              }
-            });
-          },
-          backgroundColor: showRoutes ? movingColor : Colors.grey,
-          child: Icon(
-            showRoutes ? Icons.route : Icons.route_outlined,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        FloatingActionButton(
-          heroTag: "fit_view",
-          onPressed: _fitMarkersInView,
-          backgroundColor: warningColor,
-          child: const Icon(Icons.center_focus_strong, color: Colors.white),
-        ),
-      ],
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.blue),
     );
   }
 }

@@ -5,10 +5,11 @@ const prisma = new PrismaClient();
  * Store GPS route point for active attendance session
  * Only accepts points when attendance status is 'active'
  * Lightweight endpoint optimized for frequent GPS updates
+ * Automatically marks first point as home location
  */
 const storeRoutePoint = async (req, res) => {
     try {
-        const { employeeId, attendanceId, latitude, longitude, speed, accuracy } = req.body;
+        const { employeeId, attendanceId, latitude, longitude, speed, accuracy, isHomeLocation } = req.body;
 
         // Validate required fields
         if (!employeeId || !attendanceId || !latitude || !longitude) {
@@ -29,7 +30,7 @@ const storeRoutePoint = async (req, res) => {
         // Check if attendance session exists and is active
         const attendance = await prisma.attendance.findUnique({
             where: { id: attendanceId },
-            select: { status: true, employeeId: true }
+            select: { status: true, employeeId: true, punchInTime: true }
         });
 
         if (!attendance) {
@@ -55,6 +56,14 @@ const storeRoutePoint = async (req, res) => {
             });
         }
 
+        // Check if this is the first route point (home location)
+        const existingPointsCount = await prisma.salesmanRouteLog.count({
+            where: { attendanceId }
+        });
+
+        const isFirstPoint = existingPointsCount === 0;
+        const shouldMarkAsHome = isFirstPoint || isHomeLocation === true;
+
         // Store the GPS route point
         const routePoint = await prisma.salesmanRouteLog.create({
             data: {
@@ -64,16 +73,19 @@ const storeRoutePoint = async (req, res) => {
                 longitude: parseFloat(longitude),
                 speed: speed ? parseFloat(speed) : null,
                 accuracy: accuracy ? parseFloat(accuracy) : null,
-                recordedAt: new Date()
+                recordedAt: new Date(),
+                // Add metadata to identify home location
+                isHomeLocation: shouldMarkAsHome
             }
         });
 
         res.status(201).json({
             success: true,
-            message: 'Route point stored successfully',
+            message: shouldMarkAsHome ? 'Home location marked and route point stored' : 'Route point stored successfully',
             data: {
                 id: routePoint.id,
-                recordedAt: routePoint.recordedAt
+                recordedAt: routePoint.recordedAt,
+                isHomeLocation: shouldMarkAsHome
             }
         });
 
@@ -90,6 +102,7 @@ const storeRoutePoint = async (req, res) => {
  * Fetch all route points for a specific attendance session
  * Returns ordered GPS points with start/end locations for Admin map view
  * Optimized response for map rendering and route playback
+ * Includes home location identification
  */
 const getAttendanceRoute = async (req, res) => {
     try {
@@ -114,7 +127,8 @@ const getAttendanceRoute = async (req, res) => {
                         longitude: true,
                         speed: true,
                         accuracy: true,
-                        recordedAt: true
+                        recordedAt: true,
+                        isHomeLocation: true
                     }
                 }
             }
@@ -127,6 +141,10 @@ const getAttendanceRoute = async (req, res) => {
             });
         }
 
+        // Find home location (first point or explicitly marked)
+        const homeLocation = attendance.routeLogs.find(point => point.isHomeLocation) || 
+                            (attendance.routeLogs.length > 0 ? attendance.routeLogs[0] : null);
+
         // Prepare response optimized for map rendering
         const response = {
             success: true,
@@ -136,6 +154,14 @@ const getAttendanceRoute = async (req, res) => {
                 employeeName: attendance.employeeName,
                 date: attendance.date,
                 status: attendance.status,
+
+                // Home location (where salesman started working)
+                homeLocation: homeLocation ? {
+                    latitude: homeLocation.latitude,
+                    longitude: homeLocation.longitude,
+                    time: homeLocation.recordedAt,
+                    isMarked: true
+                } : null,
 
                 // Start location (punch-in)
                 startLocation: {
@@ -160,7 +186,8 @@ const getAttendanceRoute = async (req, res) => {
                     longitude: point.longitude,
                     speed: point.speed,
                     accuracy: point.accuracy,
-                    timestamp: point.recordedAt
+                    timestamp: point.recordedAt,
+                    isHomeLocation: point.isHomeLocation || false
                 })),
 
                 // Summary statistics
@@ -169,7 +196,8 @@ const getAttendanceRoute = async (req, res) => {
                     duration: attendance.punchOutTime ?
                         Math.round((new Date(attendance.punchOutTime) - new Date(attendance.punchInTime)) / (1000 * 60)) : // minutes
                         null,
-                    totalWorkHours: attendance.totalWorkHours
+                    totalWorkHours: attendance.totalWorkHours,
+                    hasHomeLocation: homeLocation !== null
                 }
             }
         };
@@ -241,8 +269,136 @@ const getRouteSummary = async (req, res) => {
     }
 };
 
+/**
+ * Get historical routes for date-wise tracking
+ * Returns routes grouped by date with home locations marked
+ */
+const getHistoricalRoutes = async (req, res) => {
+    try {
+        const { employeeId, date, startDate, endDate } = req.query;
+
+        const whereClause = {};
+
+        // Handle single date or date range
+        if (date) {
+            const targetDate = new Date(date);
+            const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+            whereClause.date = {
+                gte: startOfDay,
+                lte: endOfDay
+            };
+        } else if (startDate || endDate) {
+            whereClause.date = {};
+            if (startDate) whereClause.date.gte = new Date(startDate);
+            if (endDate) whereClause.date.lte = new Date(endDate);
+        }
+
+        // Add employeeId filter only if provided
+        if (employeeId) {
+            whereClause.employeeId = employeeId;
+        }
+
+        // Fetch attendance sessions with route data
+        const attendanceSessions = await prisma.attendance.findMany({
+            where: whereClause,
+            include: {
+                routeLogs: {
+                    orderBy: { recordedAt: 'asc' },
+                    select: {
+                        id: true,
+                        latitude: true,
+                        longitude: true,
+                        speed: true,
+                        accuracy: true,
+                        recordedAt: true,
+                        isHomeLocation: true
+                    }
+                }
+            },
+            orderBy: { date: 'desc' }
+        });
+
+        // Group and format the data
+        const historicalRoutes = attendanceSessions.map(session => {
+            const homeLocation = session.routeLogs.find(point => point.isHomeLocation) || 
+                               (session.routeLogs.length > 0 ? session.routeLogs[0] : null);
+
+            return {
+                attendanceId: session.id,
+                employeeId: session.employeeId,
+                employeeName: session.employeeName,
+                date: session.date,
+                status: session.status,
+                
+                // Home location where salesman started
+                homeLocation: homeLocation ? {
+                    latitude: homeLocation.latitude,
+                    longitude: homeLocation.longitude,
+                    time: homeLocation.recordedAt,
+                    isMarked: true
+                } : null,
+
+                // Punch locations
+                startLocation: {
+                    latitude: session.punchInLatitude,
+                    longitude: session.punchInLongitude,
+                    time: session.punchInTime,
+                    address: session.punchInAddress
+                },
+
+                endLocation: session.punchOutTime ? {
+                    latitude: session.punchOutLatitude,
+                    longitude: session.punchOutLongitude,
+                    time: session.punchOutTime,
+                    address: session.punchOutAddress
+                } : null,
+
+                // Route summary
+                routeSummary: {
+                    totalPoints: session.routeLogs.length,
+                    hasRoute: session.routeLogs.length > 0,
+                    hasHomeLocation: homeLocation !== null,
+                    duration: session.punchOutTime ?
+                        Math.round((new Date(session.punchOutTime) - new Date(session.punchInTime)) / (1000 * 60)) :
+                        null,
+                    totalWorkHours: session.totalWorkHours
+                },
+
+                // First few route points for preview
+                routePreview: session.routeLogs.slice(0, 10).map(point => ({
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    timestamp: point.recordedAt,
+                    isHomeLocation: point.isHomeLocation || false
+                }))
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                routes: historicalRoutes,
+                totalSessions: historicalRoutes.length,
+                dateRange: {
+                    from: startDate || date,
+                    to: endDate || date
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching historical routes:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching historical routes'
+        });
+    }
+};
+
 export {
     storeRoutePoint,
     getAttendanceRoute,
-    getRouteSummary
+    getRouteSummary,
+    getHistoricalRoutes
 };

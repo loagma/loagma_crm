@@ -398,23 +398,25 @@ model AreaAssignment {
 // This model stores GPS points during active attendance sessions
 // for route visualization and playback in Admin dashboard
 model SalesmanRouteLog {
-  id           String   @id @default(cuid())
-  employeeId   String   // Reference to User (salesman)
-  attendanceId String   // Reference to Attendance session
-  latitude     Float    // GPS latitude coordinate
-  longitude    Float    // GPS longitude coordinate
-  speed        Float?   // Optional: Speed in km/h if available
-  accuracy     Float?   // Optional: GPS accuracy in meters
-  recordedAt   DateTime @default(now()) // Timestamp when GPS point was recorded
+  id             String   @id @default(cuid())
+  employeeId     String   // Reference to User (salesman)
+  attendanceId   String   // Reference to Attendance session
+  latitude       Float    // GPS latitude coordinate
+  longitude      Float    // GPS longitude coordinate
+  speed          Float?   // Optional: Speed in km/h if available
+  accuracy       Float?   // Optional: GPS accuracy in meters
+  isHomeLocation Boolean  @default(false) // Mark if this is the home/starting location
+  recordedAt     DateTime @default(now()) // Timestamp when GPS point was recorded
   
   // Relations
-  employee     User       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employee       User       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  attendance     Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   
   // Indexes for performance optimization
   @@index([employeeId])     // Query routes by salesman
   @@index([attendanceId])   // Query routes by attendance session
   @@index([recordedAt])     // Query routes by time for chronological ordering
+  @@index([isHomeLocation]) // Query home locations
 }
 
 model Notification {
