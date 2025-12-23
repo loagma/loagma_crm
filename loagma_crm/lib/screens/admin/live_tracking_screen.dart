@@ -8,6 +8,7 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/route_service.dart';
+import '../../services/admin_live_tracking_socket.dart';
 import '../../models/attendance_model.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
@@ -24,12 +25,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   Timer? _liveTimer;
   GoogleMapController? _mapController;
   late AnimationController _pulseController;
+  StreamSubscription? _locationSubscription;
+  StreamSubscription? _connectionSubscription;
 
   bool isLoading = true;
   String? errorMessage;
 
   // Data
   List<AttendanceModel> activeEmployees = [];
+  List<Map<String, dynamic>> allEmployees =
+      []; // All employees for historical dropdown
   List<Map<String, dynamic>> historicalRoutes = [];
   String? selectedSalesmanId;
   DateTime selectedDate = DateTime.now();
@@ -56,13 +61,20 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged); // Add tab change listener
     _initializeAnimations();
     _loadActiveEmployees();
+    _loadAllEmployees(); // Load all employees for historical dropdown
     _startLiveTracking();
+    _initializeWebSocket(); // Initialize WebSocket for real-time updates
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
+    _locationSubscription?.cancel();
+    _connectionSubscription?.cancel();
+    AdminLiveTrackingSocket.instance.disconnect();
     _pulseController.dispose();
     _liveTimer?.cancel();
     _refreshTimer?.cancel();
@@ -80,10 +92,182 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   void _startLiveTracking() {
     if (isLiveTrackingEnabled) {
-      _liveTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-        _loadActiveEmployees();
-        _loadEmployeeRoutes();
+      // Reduce REST polling frequency since WebSocket handles real-time updates
+      _liveTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+        _loadActiveEmployees(); // Only for employee list updates
       });
+    }
+  }
+
+  /// Initialize WebSocket connection for real-time location updates
+  Future<void> _initializeWebSocket() async {
+    try {
+      // Connect to WebSocket
+      final connected = await AdminLiveTrackingSocket.instance.connect();
+      if (!connected) {
+        print('⚠️ WebSocket connection failed, falling back to REST polling');
+        return;
+      }
+
+      // Listen to real-time location updates
+      _locationSubscription = AdminLiveTrackingSocket.instance.locationStream
+          .listen(
+            _handleRealTimeLocationUpdate,
+            onError: (error) {
+              print('❌ WebSocket location stream error: $error');
+            },
+          );
+
+      // Listen to connection status
+      _connectionSubscription = AdminLiveTrackingSocket
+          .instance
+          .connectionStream
+          .listen(_handleConnectionStatusChange);
+
+      print('✅ WebSocket initialized for real-time tracking');
+    } catch (e) {
+      print('❌ Error initializing WebSocket: $e');
+    }
+  }
+
+  /// Handle real-time location updates from WebSocket
+  void _handleRealTimeLocationUpdate(LocationUpdate update) {
+    if (!mounted || _tabController.index != 0)
+      return; // Only update on Live Tracking tab
+
+    try {
+      final salesmanId = update.salesmanId;
+      final location = update.location;
+
+      // Find employee in active list
+      final employeeIndex = activeEmployees.indexWhere(
+        (emp) => emp.employeeId == salesmanId,
+      );
+
+      if (employeeIndex != -1) {
+        // Update employee's current position
+        final employee = activeEmployees[employeeIndex];
+        employee.currentLatitude = location.latitude;
+        employee.currentLongitude = location.longitude;
+        employee.lastPositionUpdate = location.timestamp;
+        employee.isMoving = true; // Assume moving if sending updates
+
+        // Update marker smoothly without rebuilding map
+        _updateSalesmanMarker(employee, location);
+
+        // Update route polyline
+        _updateSalesmanRoute(salesmanId, location.latLng);
+
+        print('📍 Real-time update for ${employee.employeeName}');
+      }
+    } catch (e) {
+      print('❌ Error handling real-time location update: $e');
+    }
+  }
+
+  /// Update specific salesman marker smoothly
+  void _updateSalesmanMarker(
+    AttendanceModel employee,
+    SalesmanLocation location,
+  ) {
+    final markerId = MarkerId('current_${employee.employeeId}');
+
+    // Find existing marker
+    final existingMarker = _markers.firstWhere(
+      (marker) => marker.markerId == markerId,
+      orElse: () => Marker(markerId: markerId),
+    );
+
+    // Create updated marker
+    final updatedMarker = existingMarker.copyWith(
+      positionParam: location.latLng,
+      infoWindowParam: InfoWindow(
+        title: employee.employeeName,
+        snippet:
+            'Live Location - Moving (${DateFormat('HH:mm:ss').format(location.timestamp)})',
+      ),
+    );
+
+    // Update marker set
+    setState(() {
+      _markers.removeWhere((marker) => marker.markerId == markerId);
+      _markers.add(updatedMarker);
+    });
+  }
+
+  /// Update salesman route polyline
+  void _updateSalesmanRoute(String salesmanId, LatLng newPoint) {
+    if (!showRoutes) return;
+
+    final polylineId = PolylineId('realtime_$salesmanId');
+    final route = AdminLiveTrackingSocket.instance.getSalesmanRoute(salesmanId);
+
+    if (route.length > 1) {
+      final polyline = Polyline(
+        polylineId: polylineId,
+        points: route,
+        color: successColor,
+        width: 3,
+      );
+
+      setState(() {
+        _polylines.removeWhere((p) => p.polylineId == polylineId);
+        _polylines.add(polyline);
+      });
+    }
+  }
+
+  /// Handle WebSocket connection status changes
+  void _handleConnectionStatusChange(bool isConnected) {
+    if (mounted) {
+      setState(() {
+        // Update UI to show connection status
+      });
+
+      if (isConnected) {
+        _showInfoSnackBar('Real-time tracking connected');
+      } else {
+        _showErrorSnackBar('Real-time tracking disconnected');
+      }
+    }
+  }
+
+  void _onTabChanged() {
+    // Prevent map control conflicts during tab changes
+    if (_mapController != null) {
+      // Small delay to allow tab animation to complete
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            // Force map to refresh its state
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _loadAllEmployees() async {
+    try {
+      // Load all employees who have attendance records for dropdown
+      final result = await AttendanceService.getAllAttendance(limit: 1000);
+      if (result['success'] == true && mounted) {
+        final attendances = result['data'] as List<AttendanceModel>;
+
+        // Extract unique employees
+        final uniqueEmployees = <String, Map<String, dynamic>>{};
+        for (var attendance in attendances) {
+          uniqueEmployees[attendance.employeeId] = {
+            'employeeId': attendance.employeeId,
+            'employeeName': attendance.employeeName,
+          };
+        }
+
+        setState(() {
+          allEmployees = uniqueEmployees.values.toList();
+        });
+      }
+    } catch (e) {
+      print('Failed to load all employees: $e');
     }
   }
 
@@ -712,10 +896,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                           value: null,
                           child: Text('All Salesmen'),
                         ),
-                        ...activeEmployees.map(
+                        ...allEmployees.map(
                           (employee) => DropdownMenuItem<String>(
-                            value: employee.employeeId,
-                            child: Text(employee.employeeName),
+                            value: employee['employeeId'],
+                            child: Text(employee['employeeName']),
                           ),
                         ),
                       ],

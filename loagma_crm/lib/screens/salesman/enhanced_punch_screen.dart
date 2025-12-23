@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
+import '../../services/live_location_socket.dart';
 import '../../services/late_punch_approval_service.dart';
 import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
@@ -78,6 +79,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _stopLiveLocationTracking(); // Stop WebSocket tracking on dispose
     LocationService.instance.stopLocationTracking();
     super.dispose();
   }
@@ -297,6 +299,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = attendance?.punchInTime;
           validApprovalCode = null; // Clear used code only on success
         });
+
+        // Start WebSocket live location tracking
+        _startLiveLocationTracking();
+
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
         // On failure, retain the approval code so user can retry without re-validation
@@ -1349,6 +1355,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = null;
           validEarlyPunchOutCode = null; // Clear used code
         });
+
+        // Stop WebSocket live location tracking
+        _stopLiveLocationTracking();
+
         CustomToast.showSuccess(context, 'Punched out successfully!');
       } else {
         // Check if it's an early punch-out error that requires approval
@@ -1805,5 +1815,29 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         ],
       ),
     );
+  }
+
+  /// Start WebSocket live location tracking
+  Future<void> _startLiveLocationTracking() async {
+    try {
+      final started = await LiveLocationSocket.instance.startTracking();
+      if (started) {
+        print('✅ WebSocket live location tracking started');
+      } else {
+        print('⚠️ Failed to start WebSocket live location tracking');
+      }
+    } catch (e) {
+      print('❌ Error starting WebSocket live location tracking: $e');
+    }
+  }
+
+  /// Stop WebSocket live location tracking
+  void _stopLiveLocationTracking() {
+    try {
+      LiveLocationSocket.instance.stopTracking();
+      print('🛑 WebSocket live location tracking stopped');
+    } catch (e) {
+      print('❌ Error stopping WebSocket live location tracking: $e');
+    }
   }
 }

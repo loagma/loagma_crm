@@ -98,11 +98,36 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server
+// Start server with WebSocket support
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
+const WS_PORT = process.env.WS_PORT || 8081;
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
     console.log(`✅ Server running on http://${HOST}:${PORT}`);
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Initialize WebSocket server for live tracking
+import LiveTrackingServer from './ws/liveTrackingServer.js';
+const liveTrackingServer = new LiveTrackingServer();
+liveTrackingServer.initialize(WS_PORT);
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received, shutting down gracefully');
+    liveTrackingServer.shutdown();
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 SIGINT received, shutting down gracefully');
+    liveTrackingServer.shutdown();
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+    });
 });
