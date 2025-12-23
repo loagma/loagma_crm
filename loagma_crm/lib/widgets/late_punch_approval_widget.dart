@@ -29,6 +29,10 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   Map<String, dynamic>? _approvalStatus;
   bool _isLoadingStatus = false;
   Timer? _refreshTimer;
+  bool _isUserTyping = false; // Track if user is actively typing
+  Timer? _typingTimer; // Timer to detect when user stops typing
+  bool _codeValidatedSuccessfully =
+      false; // Track if code was validated successfully
 
   @override
   void initState() {
@@ -41,20 +45,41 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _typingTimer?.cancel();
     _reasonController.dispose();
     _approvalCodeController.dispose();
     super.dispose();
   }
 
   void _startAutoRefresh() {
-    // Auto-refresh every 3 seconds to check for approval updates (more frequent for better UX)
-    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (mounted && _approvalStatus != null) {
+    // Auto-refresh every 10 seconds, but pause when user is typing
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted && _approvalStatus != null && !_isUserTyping) {
         final status = _approvalStatus!['status'];
-        // Refresh for PENDING (waiting for admin) and APPROVED (checking for expiration)
-        if (status == 'PENDING' || status == 'APPROVED') {
+        // Only refresh for PENDING status to avoid disrupting OTP input
+        if (status == 'PENDING') {
           _loadApprovalStatus();
         }
+      }
+    });
+  }
+
+  void _onUserStartedTyping() {
+    if (!mounted) return;
+
+    setState(() {
+      _isUserTyping = true;
+    });
+
+    // Cancel existing timer
+    _typingTimer?.cancel();
+
+    // Set timer to detect when user stops typing (5 seconds of inactivity)
+    _typingTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _isUserTyping = false;
+        });
       }
     });
   }
@@ -124,14 +149,21 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
         }
       } else if (result['success'] == false && mounted) {
         // Handle API errors
-        print('❌ Error loading approval status: ${result['message']}');
+        final errorMessage = result['message'] ?? 'Unknown error';
+        print('❌ Error loading approval status: $errorMessage');
+
+        // Only show error toast for non-404 errors to avoid spam
+        if (result['statusCode'] != 404) {
+          CustomToast.showError(context, 'Failed to load approval status');
+        }
 
         // If we get a "not found" error but we had a pending status,
         // it might mean the request was processed, so try again after a short delay
         if (_approvalStatus?['status'] == 'PENDING' &&
-            result['message']?.contains('not found') == true) {
-          print('🔄 Pending request not found, retrying in 2 seconds...');
-          Future.delayed(const Duration(seconds: 2), () {
+            (result['statusCode'] == 404 ||
+                errorMessage.contains('not found'))) {
+          print('🔄 Pending request not found, retrying in 3 seconds...');
+          Future.delayed(const Duration(seconds: 3), () {
             if (mounted) {
               _loadApprovalStatus();
             }
@@ -140,6 +172,16 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
       }
     } catch (e) {
       print('Error loading approval status: $e');
+      if (mounted) {
+        // Only show error for non-network errors
+        if (!e.toString().contains('SocketException') &&
+            !e.toString().contains('timeout')) {
+          CustomToast.showError(
+            context,
+            'Network error. Please check your connection.',
+          );
+        }
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoadingStatus = false);
@@ -261,6 +303,11 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           result['message'] ?? 'Approval code is valid',
         );
 
+        // Mark code as validated successfully
+        setState(() {
+          _codeValidatedSuccessfully = true;
+        });
+
         // Call the new callback with the actual approval code
         widget.onApprovalCodeValidated?.call(approvalCode);
 
@@ -285,6 +332,35 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   Widget build(BuildContext context) {
     if (_isLoadingStatus) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    // If code was validated successfully, show a minimal success state
+    if (_codeValidatedSuccessfully) {
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.green[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green[200]!),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green[700], size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Approval code validated successfully! You can now punch in.',
+                style: TextStyle(
+                  color: Colors.green[700],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     // Show approval code input if request is approved
@@ -453,7 +529,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Auto-refreshing every 3 seconds. You will receive a notification when approved.',
+                    'Auto-refreshing every 10 seconds when not typing. You will receive a notification when approved.',
                     style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
@@ -559,6 +635,28 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   ],
                 ),
               ),
+              if (isUsed) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Notify parent to refresh attendance status
+                      widget.onApprovalReceived?.call();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh Attendance Status'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ] else ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -615,11 +713,20 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   filled: true,
                   fillColor: Colors.green[50],
                 ),
+                onTap: () {
+                  // User started interacting with the field
+                  _onUserStartedTyping();
+                },
                 onChanged: (value) {
+                  // User is typing
+                  _onUserStartedTyping();
+
                   // Auto-validate when 6 digits are entered
                   if (value.length == 6) {
-                    Future.delayed(const Duration(milliseconds: 500), () {
-                      if (mounted && _approvalCodeController.text.length == 6) {
+                    Future.delayed(const Duration(milliseconds: 1500), () {
+                      if (mounted &&
+                          _approvalCodeController.text.length == 6 &&
+                          !_isValidatingCode) {
                         _validateApprovalCode();
                       }
                     });
