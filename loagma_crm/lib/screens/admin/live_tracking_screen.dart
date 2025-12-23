@@ -311,11 +311,18 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           );
 
           if (positionData != null) {
-            employee.currentLatitude = positionData['currentLatitude'];
-            employee.currentLongitude = positionData['currentLongitude'];
-            employee.currentDistanceKm = positionData['currentDistanceKm'];
+            // Safe type conversion for numeric values
+            employee.currentLatitude = _safeToDouble(
+              positionData['currentLatitude'],
+            );
+            employee.currentLongitude = _safeToDouble(
+              positionData['currentLongitude'],
+            );
+            employee.currentDistanceKm = _safeToDouble(
+              positionData['currentDistanceKm'],
+            );
             employee.isMoving = positionData['isMoving'] ?? false;
-            employee.speed = positionData['speed'] ?? 0.0;
+            employee.speed = _safeToDouble(positionData['speed']) ?? 0.0;
             employee.lastPositionUpdate =
                 positionData['lastPositionUpdate'] != null
                 ? DateTime.parse(positionData['lastPositionUpdate'])
@@ -326,6 +333,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     } catch (e) {
       print('Failed to load current positions: $e');
     }
+  }
+
+  // Helper method for safe type conversion
+  double? _safeToDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   Future<void> _loadHomeLocations(List<AttendanceModel> employees) async {
@@ -774,10 +790,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                           value: null,
                           child: Text('Select Employee'),
                         ),
-                        ...activeEmployees.map(
+                        ...allEmployees.map(
                           (employee) => DropdownMenuItem<String>(
-                            value: employee.employeeId,
-                            child: Text(employee.employeeName),
+                            value: employee['employeeId'],
+                            child: Text(employee['employeeName']),
                           ),
                         ),
                       ],

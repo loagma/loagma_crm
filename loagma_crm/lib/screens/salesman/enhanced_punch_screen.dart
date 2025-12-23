@@ -110,6 +110,15 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     final newIsBeforeEarlyPunchOutCutoff =
         EarlyPunchOutApprovalService.isBeforeEarlyPunchOutCutoff();
 
+    print(
+      '🕘 Cutoff check: isAfterCutoff=$newIsAfterCutoff, isBeforeEarlyPunchOutCutoff=$newIsBeforeEarlyPunchOutCutoff',
+    );
+    print('🕘 Current DateTime.now(): ${DateTime.now()}');
+    print('🕘 Current DateTime.now().toUtc(): ${DateTime.now().toUtc()}');
+    print(
+      '🕘 Current IST calculated: ${DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30))}',
+    );
+
     // Always update state to ensure UI reflects current time
     setState(() {
       isAfterCutoff = newIsAfterCutoff;
@@ -222,12 +231,16 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       final attendance = await AttendanceService.getTodayAttendance(employeeId);
 
       if (attendance != null) {
+        print(
+          '📊 Loaded attendance: isPunchedIn=${attendance.isPunchedIn}, punchInTime=${attendance.punchInTime}',
+        );
         setState(() {
           currentAttendance = attendance;
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
         });
       } else {
+        print('📊 No attendance found for today');
         setState(() {
           currentAttendance = null;
           isPunchedIn = false;
@@ -688,9 +701,15 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   }
 
   Duration get liveWorkDuration {
-    if (punchInTime == null) return Duration.zero;
+    if (punchInTime == null) {
+      print('⏰ Duration calculation: punchInTime is null');
+      return Duration.zero;
+    }
     final now = DateTime.now();
     final diff = now.difference(punchInTime!);
+    print(
+      '⏰ Duration calculation: punchInTime=$punchInTime, now=$now, diff=${diff.inSeconds}s',
+    );
     return diff.isNegative ? Duration.zero : diff;
   }
 
@@ -1209,7 +1228,24 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               },
             )
           else
-            _buildPunchOutButton(),
+            Column(
+              children: [
+                // Debug info
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.yellow[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'DEBUG: isBeforeEarlyPunchOutCutoff=$isBeforeEarlyPunchOutCutoff, currentAttendance=${currentAttendance != null}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
+                _buildPunchOutButton(),
+              ],
+            ),
         ],
       ),
     );
@@ -1220,59 +1256,32 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
 
     return Column(
       children: [
-        if (isBeforeEarlyPunchOutCutoff) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange[200]!),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.orange[700], size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Early punch-out requires approval (${EarlyPunchOutApprovalService.getTimeUntilEarlyPunchOutCutoff()})',
-                    style: TextStyle(
-                      color: Colors.orange[700],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+        // Show info message based on current time
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Normal punch-out available after 6:30 PM',
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-        ] else ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue[200]!),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Normal punch-out available after 6:30 PM',
-                    style: TextStyle(
-                      color: Colors.blue[700],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+        ),
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           height: 50,
@@ -1298,7 +1307,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
                         ),
                       ),
                     ],
