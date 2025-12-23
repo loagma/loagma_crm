@@ -399,35 +399,84 @@ class EarlyPunchOutApprovalService {
 
   // Helper method to check if current time is before 6:30 PM IST
   static bool isBeforeEarlyPunchOutCutoff() {
-    // Get current time in IST (UTC+5:30)
-    final now = DateTime.now().toUtc().add(
-      const Duration(hours: 5, minutes: 30),
-    );
-    final cutoffTime = DateTime(now.year, now.month, now.day, 18, 30);
-    final isBefore = now.isBefore(cutoffTime);
+    // Get current local time
+    final now = DateTime.now();
 
-    print(
-      '🕘 Current IST time: ${now.hour}:${now.minute.toString().padLeft(2, '0')}',
+    // Check if we're already in IST timezone (UTC+5:30)
+    final timeZoneOffset = now.timeZoneOffset;
+    final isAlreadyIST =
+        timeZoneOffset.inHours == 5 && timeZoneOffset.inMinutes == 330;
+
+    DateTime istTime;
+    if (isAlreadyIST) {
+      // Already in IST, use local time directly
+      istTime = now;
+    } else {
+      // Convert from UTC to IST
+      final utcNow = now.toUtc();
+      istTime = utcNow.add(const Duration(hours: 5, minutes: 30));
+    }
+
+    // Create cutoff time for the same day in IST
+    final cutoffTime = DateTime(
+      istTime.year,
+      istTime.month,
+      istTime.day,
+      18,
+      30,
     );
-    print('🕘 Early punch-out cutoff time: 18:30');
+    final isBefore = istTime.isBefore(cutoffTime);
+
+    print('🕘 System local time: ${now.toString()}');
+    print(
+      '🕘 System timezone offset: ${timeZoneOffset.inHours}:${(timeZoneOffset.inMinutes % 60).toString().padLeft(2, '0')}',
+    );
+    print('🕘 Is already IST: $isAlreadyIST');
+    print(
+      '🕘 IST time used: ${istTime.toString()} (${istTime.hour}:${istTime.minute.toString().padLeft(2, '0')})',
+    );
+    print('🕘 Early punch-out cutoff: ${cutoffTime.toString()} (18:30 IST)');
     print('🕘 Is before cutoff: $isBefore');
+    print(
+      '🕘 Time difference: ${cutoffTime.difference(istTime).inMinutes} minutes',
+    );
 
     return isBefore;
   }
 
   // Helper method to format time remaining until early punch-out cutoff
   static String getTimeUntilEarlyPunchOutCutoff() {
-    // Get current time in IST (UTC+5:30)
-    final now = DateTime.now().toUtc().add(
-      const Duration(hours: 5, minutes: 30),
-    );
-    final cutoffTime = DateTime(now.year, now.month, now.day, 18, 30);
+    // Get current local time
+    final now = DateTime.now();
 
-    if (now.isAfter(cutoffTime)) {
+    // Check if we're already in IST timezone (UTC+5:30)
+    final timeZoneOffset = now.timeZoneOffset;
+    final isAlreadyIST =
+        timeZoneOffset.inHours == 5 && timeZoneOffset.inMinutes == 330;
+
+    DateTime istTime;
+    if (isAlreadyIST) {
+      // Already in IST, use local time directly
+      istTime = now;
+    } else {
+      // Convert from UTC to IST
+      final utcNow = now.toUtc();
+      istTime = utcNow.add(const Duration(hours: 5, minutes: 30));
+    }
+
+    final cutoffTime = DateTime(
+      istTime.year,
+      istTime.month,
+      istTime.day,
+      18,
+      30,
+    );
+
+    if (istTime.isAfter(cutoffTime)) {
       return 'Can punch out normally';
     }
 
-    final difference = cutoffTime.difference(now);
+    final difference = cutoffTime.difference(istTime);
     final hours = difference.inHours;
     final minutes = difference.inMinutes % 60;
 

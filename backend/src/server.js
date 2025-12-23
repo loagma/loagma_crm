@@ -111,7 +111,18 @@ const server = app.listen(PORT, HOST, () => {
 // Initialize WebSocket server for live tracking
 import LiveTrackingServer from './ws/liveTrackingServer.js';
 const liveTrackingServer = new LiveTrackingServer();
-liveTrackingServer.initialize(WS_PORT);
+
+// For production, use the same HTTP server for WebSocket
+// For development, use separate port
+if (process.env.NODE_ENV === 'production') {
+    // Production: Use HTTP server for WebSocket upgrade
+    liveTrackingServer.initialize(PORT, server);
+    console.log(`🔗 WebSocket server attached to HTTP server on port ${PORT}`);
+} else {
+    // Development: Use separate WebSocket port
+    liveTrackingServer.initialize(WS_PORT);
+    console.log(`🔗 WebSocket server running on separate port ${WS_PORT}`);
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

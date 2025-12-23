@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:geolocator/geolocator.dart';
 import 'user_service.dart';
@@ -126,15 +125,31 @@ class LiveLocationSocket {
   /// Build WebSocket URL with authentication
   String _buildWebSocketUrl(String token) {
     final baseUrl = ApiConfig.baseUrl;
-    final wsUrl = baseUrl
+
+    // Convert HTTP/HTTPS to WS/WSS
+    String wsUrl = baseUrl
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    // Use separate WebSocket port (8081) or same server
-    final wsPort = '8081'; // Configure based on your setup
-    final wsHost = Uri.parse(wsUrl).host;
+    String finalUrl;
+    // For production (hosted services), use the same port as HTTP server
+    // For local development, use separate WebSocket port (8081)
+    if (baseUrl.contains('onrender.com') ||
+        baseUrl.contains('herokuapp.com') ||
+        baseUrl.contains('https://')) {
+      // Production: Use same server and port
+      finalUrl = '$wsUrl?token=$token';
+      print('🔗 Using production WebSocket URL: $finalUrl');
+    } else {
+      // Local development: Use separate WebSocket port
+      final uri = Uri.parse(wsUrl);
+      final wsHost = uri.host;
+      final wsPort = '8081';
+      finalUrl = 'ws://$wsHost:$wsPort?token=$token';
+      print('🔗 Using local WebSocket URL: $finalUrl');
+    }
 
-    return 'ws://$wsHost:$wsPort?token=$token';
+    return finalUrl;
   }
 
   /// Disconnect from WebSocket
