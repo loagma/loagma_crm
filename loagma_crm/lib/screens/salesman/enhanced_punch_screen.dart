@@ -332,257 +332,348 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        final screenWidth = MediaQuery.of(context).size.width;
+
+        return StatefulBuilder(
+          builder: (context, setState) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
+            child: Container(
+              width: screenWidth * 0.9,
+              constraints: BoxConstraints(
+                maxWidth: 400,
+                maxHeight: screenHeight * 0.8,
               ),
-              contentPadding: const EdgeInsets.all(20),
-              title: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Header
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.login,
-                      color: Colors.green,
-                      size: 28,
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.login,
+                            color: Colors.green,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Punch In Details',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Text('Punch In Details'),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Photo Section
-                    Container(
+                  // Content
+                  Flexible(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.camera_alt,
-                                size: 20,
-                                color: Colors.green,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Photo *',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                          // Photo Section
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.camera_alt,
+                                      size: 18,
+                                      color: Colors.green[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Photo *',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                if (photo != null)
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.file(
+                                          photo!,
+                                          height: 120,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              photo = null;
+                                              photoBase64 = null;
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        try {
+                                          final pickedPhoto = await _imagePicker
+                                              .pickImage(
+                                                source: ImageSource.camera,
+                                                imageQuality: 50,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                              );
+                                          if (pickedPhoto != null) {
+                                            final file = File(pickedPhoto.path);
+                                            final bytes = await file
+                                                .readAsBytes();
+                                            setState(() {
+                                              photo = file;
+                                              photoBase64 = base64Encode(bytes);
+                                            });
+                                          }
+                                        } catch (e) {
+                                          CustomToast.showError(
+                                            context,
+                                            'Error capturing photo',
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.camera_alt,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Take Photo'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 12),
-                          if (photo != null)
-                            Stack(
+                          // Bike KM Section
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    photo!,
-                                    height: 150,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.close),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.speed,
+                                      size: 18,
+                                      color: Colors.green[700],
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        photo = null;
-                                        photoBase64 = null;
-                                      });
-                                    },
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Bike KM Reading',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: bikeKmController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter starting KM',
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    suffixText: 'km',
                                   ),
                                 ),
                               ],
-                            )
-                          else
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                try {
-                                  final pickedPhoto = await _imagePicker
-                                      .pickImage(
-                                        source: ImageSource.camera,
-                                        imageQuality: 50,
-                                        maxWidth: 1024,
-                                        maxHeight: 1024,
-                                      );
-                                  if (pickedPhoto != null) {
-                                    final file = File(pickedPhoto.path);
-                                    final bytes = await file.readAsBytes();
-                                    setState(() {
-                                      photo = file;
-                                      photoBase64 = base64Encode(bytes);
-                                    });
-                                  }
-                                } catch (e) {
-                                  CustomToast.showError(
-                                    context,
-                                    'Error capturing photo',
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.camera_alt),
-                              label: const Text('Take Photo'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                minimumSize: const Size.fromHeight(45),
-                              ),
                             ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Bike KM Section
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.speed,
-                                size: 20,
-                                color: Colors.green,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Bike KM Reading',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
                           ),
                           const SizedBox(height: 12),
-                          TextField(
-                            controller: bikeKmController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              hintText: 'Enter starting KM reading',
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              suffixText: 'km',
+                          // Summary
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.access_time,
+                                      size: 16,
+                                      color: Colors.blue[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Time: $currentTime',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.location_on,
+                                      size: 16,
+                                      color: Colors.blue[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Location: ${_currentPosition?.latitude.toStringAsFixed(4) ?? "N/A"}, ${_currentPosition?.longitude.toStringAsFixed(4) ?? "N/A"}',
+                                        style: const TextStyle(fontSize: 13),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Summary
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[200]!),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildInfoRow(Icons.access_time, 'Time', currentTime),
-                          const Divider(height: 20),
-                          _buildInfoRow(
-                            Icons.location_on,
-                            'Location',
-                            '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
-                          ),
-                        ],
+                  ),
+                  // Actions
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    if (photo == null) {
-                      CustomToast.showError(context, 'Please take a photo');
-                      return;
-                    }
-                    Navigator.pop(context, {
-                      'confirmed': true,
-                      'photo': photo,
-                      'photoBase64': photoBase64,
-                      'bikeKm': bikeKmController.text.trim(),
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              if (photo == null) {
+                                CustomToast.showError(
+                                  context,
+                                  'Please take a photo',
+                                );
+                                return;
+                              }
+                              Navigator.pop(context, {
+                                'confirmed': true,
+                                'photo': photo,
+                                'photoBase64': photoBase64,
+                                'bikeKm': bikeKmController.text.trim(),
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Punch In'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Punch In'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: 8),
-        Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: const TextStyle(color: Colors.black87, fontSize: 14),
-              children: [
-                TextSpan(
-                  text: '$label: ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextSpan(text: value),
-              ],
-            ),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1278,240 +1369,363 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        final screenWidth = MediaQuery.of(context).size.width;
+
+        return StatefulBuilder(
+          builder: (context, setState) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
+            child: Container(
+              width: screenWidth * 0.9,
+              constraints: BoxConstraints(
+                maxWidth: 400,
+                maxHeight: screenHeight * 0.8,
               ),
-              contentPadding: const EdgeInsets.all(20),
-              title: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Header
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.logout,
-                      color: Colors.red,
-                      size: 28,
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.logout,
+                            color: Colors.red,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Punch Out Details',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Text('Punch Out Details'),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Photo Section
-                    Container(
+                  // Content
+                  Flexible(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.camera_alt,
-                                size: 20,
-                                color: Colors.red,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Photo *',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                          // Photo Section
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.camera_alt,
+                                      size: 18,
+                                      color: Colors.red[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Photo *',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                if (photo != null)
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.file(
+                                          photo!,
+                                          height: 120,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              photo = null;
+                                              photoBase64 = null;
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        try {
+                                          final pickedPhoto = await _imagePicker
+                                              .pickImage(
+                                                source: ImageSource.camera,
+                                                imageQuality: 50,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                              );
+                                          if (pickedPhoto != null) {
+                                            final file = File(pickedPhoto.path);
+                                            final bytes = await file
+                                                .readAsBytes();
+                                            setState(() {
+                                              photo = file;
+                                              photoBase64 = base64Encode(bytes);
+                                            });
+                                          }
+                                        } catch (e) {
+                                          CustomToast.showError(
+                                            context,
+                                            'Error capturing photo',
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.camera_alt,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Take Photo'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 12),
-                          if (photo != null)
-                            Stack(
+                          // Bike KM Section
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    photo!,
-                                    height: 150,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.close),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.speed,
+                                      size: 18,
+                                      color: Colors.red[700],
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        photo = null;
-                                        photoBase64 = null;
-                                      });
-                                    },
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Bike KM Reading',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: bikeKmController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter ending KM',
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    suffixText: 'km',
                                   ),
                                 ),
                               ],
-                            )
-                          else
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                try {
-                                  final pickedPhoto = await _imagePicker
-                                      .pickImage(
-                                        source: ImageSource.camera,
-                                        imageQuality: 50,
-                                        maxWidth: 1024,
-                                        maxHeight: 1024,
-                                      );
-                                  if (pickedPhoto != null) {
-                                    final file = File(pickedPhoto.path);
-                                    final bytes = await file.readAsBytes();
-                                    setState(() {
-                                      photo = file;
-                                      photoBase64 = base64Encode(bytes);
-                                    });
-                                  }
-                                } catch (e) {
-                                  CustomToast.showError(
-                                    context,
-                                    'Error capturing photo',
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.camera_alt),
-                              label: const Text('Take Photo'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                minimumSize: const Size.fromHeight(45),
-                              ),
                             ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Bike KM Section
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.speed,
-                                size: 20,
-                                color: Colors.red,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Bike KM Reading',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
                           ),
                           const SizedBox(height: 12),
-                          TextField(
-                            controller: bikeKmController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              hintText: 'Enter ending KM reading',
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              suffixText: 'km',
+                          // Summary
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.access_time,
+                                      size: 16,
+                                      color: Colors.blue[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Time: $currentTime',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.location_on,
+                                      size: 16,
+                                      color: Colors.blue[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Location: ${_currentPosition?.latitude.toStringAsFixed(4) ?? "N/A"}, ${_currentPosition?.longitude.toStringAsFixed(4) ?? "N/A"}',
+                                        style: const TextStyle(fontSize: 13),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.timer,
+                                      size: 16,
+                                      color: Colors.blue[700],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Duration: ${_getCurrentDurationText()}',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Summary
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[200]!),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildInfoRow(Icons.access_time, 'Time', currentTime),
-                          const Divider(height: 20),
-                          _buildInfoRow(
-                            Icons.location_on,
-                            'Location',
-                            '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
-                          ),
-                          const Divider(height: 20),
-                          _buildInfoRow(
-                            Icons.timer,
-                            'Work Duration',
-                            _getCurrentDurationText(),
-                          ),
-                        ],
+                  ),
+                  // Actions
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    if (photo == null) {
-                      CustomToast.showError(context, 'Please take a photo');
-                      return;
-                    }
-                    Navigator.pop(context, {
-                      'confirmed': true,
-                      'photo': photo,
-                      'photoBase64': photoBase64,
-                      'bikeKm': bikeKmController.text.trim(),
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              if (photo == null) {
+                                CustomToast.showError(
+                                  context,
+                                  'Please take a photo',
+                                );
+                                return;
+                              }
+                              Navigator.pop(context, {
+                                'confirmed': true,
+                                'photo': photo,
+                                'photoBase64': photoBase64,
+                                'bikeKm': bikeKmController.text.trim(),
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Punch Out'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Punch Out'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

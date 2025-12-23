@@ -35,7 +35,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _scrollController.addListener(_onScroll);
     _loadNotifications();
     _loadCounts();
@@ -69,25 +69,18 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
 
     try {
-      String? typeFilter;
       bool unreadOnly = false;
 
       switch (selectedFilter) {
-        case 'punch_in':
-          typeFilter = 'punch_in';
-          break;
-        case 'punch_out':
-          typeFilter = 'punch_out';
-          break;
-        case 'unread':
-          unreadOnly = true;
+        case 'punch_management':
+          // Filter will be applied client-side for punch_in and punch_out
           break;
       }
 
       final result = await NotificationService.getNotifications(
         userId: widget.userId,
         role: widget.role ?? 'admin',
-        type: typeFilter,
+        type: selectedFilter == 'punch_management' ? null : null,
         unreadOnly: unreadOnly,
         limit: limit,
         offset: currentOffset,
@@ -253,7 +246,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         bottom: TabBar(
           controller: _tabController,
           onTap: (index) {
-            if (index == 4) {
+            if (index == 2) {
               // Navigate to approval requests screen
               Navigator.push(
                 context,
@@ -265,37 +258,30 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 _loadApprovalCounts();
               });
             } else {
-              final filters = ['all', 'punch_in', 'punch_out', 'unread'];
+              final filters = ['all', 'punch_management'];
               _onFilterChanged(filters[index]);
             }
           },
           labelColor: Colors.black,
           unselectedLabelColor: Colors.black54,
           indicatorColor: Colors.black,
-          isScrollable: true,
+          isScrollable: false,
           tabs: [
             Tab(
               text: 'All',
-              icon: counts != null
-                  ? _buildTabBadge(counts!.total.toString())
-                  : null,
-            ),
-            Tab(
-              text: 'Punch In',
-              icon: counts?.punchIn != null
-                  ? _buildTabBadge(counts!.punchIn.toString())
-                  : null,
-            ),
-            Tab(
-              text: 'Punch Out',
-              icon: counts?.punchOut != null
-                  ? _buildTabBadge(counts!.punchOut.toString())
-                  : null,
-            ),
-            Tab(
-              text: 'Unread',
-              icon: counts != null
+              icon: counts != null && counts!.unread > 0
                   ? _buildTabBadge(counts!.unread.toString())
+                  : null,
+            ),
+            Tab(
+              text: 'Punch Management',
+              icon:
+                  counts != null &&
+                      ((counts!.punchIn ?? 0) + (counts!.punchOut ?? 0)) > 0
+                  ? _buildTabBadge(
+                      ((counts!.punchIn ?? 0) + (counts!.punchOut ?? 0))
+                          .toString(),
+                    )
                   : null,
             ),
             Tab(
@@ -316,9 +302,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           controller: _tabController,
           children: [
             _buildNotificationsList(), // All
-            _buildNotificationsList(), // Punch In
-            _buildNotificationsList(), // Punch Out
-            _buildNotificationsList(), // Unread
+            _buildNotificationsList(), // Punch Management
             _buildApprovalsPlaceholder(), // Approvals (placeholder)
           ],
         ),
@@ -351,17 +335,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     IconData icon;
 
     switch (selectedFilter) {
-      case 'punch_in':
-        message = 'No punch-in notifications';
-        icon = Icons.login;
-        break;
-      case 'punch_out':
-        message = 'No punch-out notifications';
-        icon = Icons.logout;
-        break;
-      case 'unread':
-        message = 'No unread notifications';
-        icon = Icons.mark_email_read;
+      case 'punch_management':
+        message = 'No punch notifications';
+        icon = Icons.access_time;
         break;
       default:
         message = 'No notifications yet';

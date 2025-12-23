@@ -57,22 +57,10 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchInNotification(attendanceData) {
-        // Since punchInTime is already stored in IST, we need to format it correctly
+        // Since punchInTime is already stored in IST, use formatISTTime for consistent formatting
         const punchInTime = new Date(attendanceData.punchInTime);
-        const timeString = punchInTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-        const dateTimeString = punchInTime.toLocaleString('en-IN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
+        const timeString = formatISTTime(punchInTime, 'time');
+        const dateTimeString = formatISTTime(punchInTime, 'datetime');
 
         const title = 'Salesman Punched In';
         const message = `${attendanceData.employeeName} punched in at ${timeString}`;
@@ -104,39 +92,14 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchOutNotification(attendanceData) {
-        // Since both times are already stored in IST, format them correctly
+        // Since both times are already stored in IST, use formatISTTime for consistent formatting
         const punchInTime = new Date(attendanceData.punchInTime);
         const punchOutTime = new Date(attendanceData.punchOutTime);
 
-        const punchInTimeString = punchInTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-        const punchOutTimeString = punchOutTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-
-        const punchInDateTimeString = punchInTime.toLocaleString('en-IN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-        const punchOutDateTimeString = punchOutTime.toLocaleString('en-IN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
+        const punchInTimeString = formatISTTime(punchInTime, 'time');
+        const punchOutTimeString = formatISTTime(punchOutTime, 'time');
+        const punchInDateTimeString = formatISTTime(punchInTime, 'datetime');
+        const punchOutDateTimeString = formatISTTime(punchOutTime, 'datetime');
 
         const workHours = attendanceData.totalWorkHours || 0;
         const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
@@ -184,12 +147,12 @@ class NotificationService {
      * @param {Object} approvalData - Approval request data
      */
     static async createLatePunchApprovalNotification(approvalData) {
+        // Use the punchInDate which is the actual time the user wants to punch in
         const requestTime = new Date(approvalData.createdAt);
-        const timeString = requestTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
+        
+        // Format time in IST using formatISTTime utility
+        const timeString = formatISTTime(requestTime, 'time');
+        const dateTimeString = formatISTTime(requestTime, 'datetime');
 
         const title = 'Late Punch-In Approval Request';
         const message = `${approvalData.employeeName} requested approval for late punch-in at ${timeString}`;
@@ -207,6 +170,7 @@ class NotificationService {
                 reason: approvalData.reason,
                 requestTime: approvalData.createdAt,
                 requestTimeFormatted: timeString,
+                requestTimeIST: dateTimeString,
                 status: approvalData.status,
                 actionRequired: true
             }
@@ -296,11 +260,10 @@ class NotificationService {
      */
     static async createEarlyPunchOutApprovalNotification(approvalData) {
         const requestTime = new Date(approvalData.createdAt);
-        const timeString = requestTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
+        
+        // Format time in IST using formatISTTime utility
+        const timeString = formatISTTime(requestTime, 'time');
+        const dateTimeString = formatISTTime(requestTime, 'datetime');
 
         const title = 'Early Punch-Out Approval Request';
         const message = `${approvalData.employeeName} requested approval for early punch-out at ${timeString}`;
@@ -319,6 +282,7 @@ class NotificationService {
                 reason: approvalData.reason,
                 requestTime: approvalData.createdAt,
                 requestTimeFormatted: timeString,
+                requestTimeIST: dateTimeString,
                 status: approvalData.status,
                 actionRequired: true
             }

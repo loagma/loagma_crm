@@ -428,19 +428,6 @@ class _EarlyPunchOutApprovalWidgetState
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _loadApprovalStatus,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh Status'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.amber[700],
-                  side: BorderSide(color: Colors.amber[300]!),
-                ),
-              ),
-            ),
           ],
         ),
       ),
