@@ -537,12 +537,12 @@ let distance = 0;
 
 try {
     // Get route points for this attendance session
-    const routePoints = await prisma.routePoint.findMany({
+    const routePoints = await prisma.salesmanRouteLog.findMany({
         where: {
             attendanceId: attendanceId
         },
         orderBy: {
-            timestamp: 'asc'
+            recordedAt: 'asc'
         }
     });
 
@@ -1284,23 +1284,23 @@ export const getCurrentPositions = async (req, res) => {
             activeAttendances.map(async (attendance) => {
                 try {
                     // Get the most recent route point
-                    const latestRoutePoint = await prisma.routePoint.findFirst({
+                    const latestRoutePoint = await prisma.salesmanRouteLog.findFirst({
                         where: {
                             attendanceId: attendance.id
                         },
                         orderBy: {
-                            timestamp: 'desc'
+                            recordedAt: 'desc'
                         }
                     });
 
                     // Calculate current travel distance
                     let currentDistance = 0;
-                    const routePoints = await prisma.routePoint.findMany({
+                    const routePoints = await prisma.salesmanRouteLog.findMany({
                         where: {
                             attendanceId: attendance.id
                         },
                         orderBy: {
-                            timestamp: 'asc'
+                            recordedAt: 'asc'
                         }
                     });
 
@@ -1326,15 +1326,15 @@ export const getCurrentPositions = async (req, res) => {
                         // Current position (latest route point or punch-in location)
                         currentLatitude: latestRoutePoint?.latitude || attendance.punchInLatitude,
                         currentLongitude: latestRoutePoint?.longitude || attendance.punchInLongitude,
-                        lastPositionUpdate: latestRoutePoint?.timestamp || attendance.punchInTime,
+                        lastPositionUpdate: latestRoutePoint?.recordedAt || attendance.punchInTime,
                         lastPositionUpdateIST: latestRoutePoint
-                            ? formatISTTime(latestRoutePoint.timestamp, 'datetime')
+                            ? formatISTTime(latestRoutePoint.recordedAt, 'datetime')
                             : formatISTTime(attendance.punchInTime, 'datetime'),
                         // Travel metrics
                         currentDistanceKm: Math.round(currentDistance * 1000) / 1000,
                         totalRoutePoints: routePoints.length,
                         isMoving: latestRoutePoint &&
-                            (Date.now() - latestRoutePoint.timestamp.getTime()) < 120000, // Moved in last 2 minutes
+                            (Date.now() - latestRoutePoint.recordedAt.getTime()) < 120000, // Moved in last 2 minutes
                         speed: latestRoutePoint?.speed || 0
                     };
                 } catch (error) {
