@@ -58,6 +58,8 @@ class LiveTrackingServer {
         try {
             const url = new URL(info.req.url, 'ws://localhost');
             const token = url.searchParams.get('token');
+            const userType = url.searchParams.get('userType'); // admin or salesman
+            const employeeId = url.searchParams.get('employeeId'); // for salesman connections
             
             if (!token) {
                 console.log('❌ WebSocket connection rejected: No token provided');
@@ -67,11 +69,24 @@ class LiveTrackingServer {
             // Handle development mode token
             if (token === 'dev_mode_token') {
                 console.log('✅ WebSocket connection verified for development mode');
-                info.req.user = {
-                    id: 'dev_admin',
-                    roles: ['admin'],
-                    name: 'Dev Admin'
-                };
+                
+                if (userType === 'salesman' && employeeId) {
+                    // Development mode salesman connection
+                    info.req.user = {
+                        id: employeeId,
+                        roles: ['salesman'],
+                        name: `Dev Salesman ${employeeId}`
+                    };
+                    console.log(`🔧 Dev mode salesman connection: ${employeeId}`);
+                } else {
+                    // Development mode admin connection (default)
+                    info.req.user = {
+                        id: 'dev_admin',
+                        roles: ['admin'],
+                        name: 'Dev Admin'
+                    };
+                    console.log('🔧 Dev mode admin connection');
+                }
                 return true;
             }
 

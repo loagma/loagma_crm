@@ -131,8 +131,12 @@ class LiveLocationSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
+    // Get current user ID for salesman authentication
+    final salesmanId = UserService.currentUserId ?? 'unknown';
+
     // Always use the same server and port for WebSocket
-    final finalUrl = '$wsUrl/ws?token=$token';
+    final finalUrl =
+        '$wsUrl/ws?token=$token&userType=salesman&employeeId=$salesmanId';
     print('🔗 Using WebSocket URL: $finalUrl');
 
     return finalUrl;
