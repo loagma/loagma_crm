@@ -82,7 +82,7 @@ class EarlyPunchOutApprovalService {
 
   // Check approval status for attendance
   static Future<Map<String, dynamic>> getApprovalStatus(
-    int attendanceId,
+    String attendanceId,
   ) async {
     try {
       final token = UserService.token;
@@ -105,6 +105,7 @@ class EarlyPunchOutApprovalService {
       print(
         '📊 Early punch-out approval status response: ${response.statusCode}',
       );
+      print('📊 Response data: $data');
 
       if (response.statusCode == 401) {
         return {

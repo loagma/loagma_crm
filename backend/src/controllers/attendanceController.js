@@ -66,10 +66,45 @@ export const punchIn = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const { startOfDay, endOfDay } = getISTDateRange();
 
-        // Check if current time is after 9:45 AM (cutoff time)
+        // Get employee's working hours configuration
+        const employee = await prisma.user.findUnique({
+            where: { id: employeeId },
+            select: {
+                workStartTime: true,
+                workEndTime: true,
+                latePunchInGraceMinutes: true,
+                earlyPunchOutGraceMinutes: true,
+                name: true
+            }
+        });
+
+        if (!employee) {
+            return res.status(404).json({
+                success: false,
+                message: 'Employee not found'
+            });
+        }
+
+        // Parse employee's work start time and add grace period
+        const workStartTime = employee.workStartTime || '09:00:00';
+        const graceMinutes = employee.latePunchInGraceMinutes || 45;
+        
+        // Create cutoff time based on employee's schedule
+        const [startHour, startMinute] = workStartTime.split(':').map(Number);
         const cutoffTime = new Date(currentISTTime);
-        cutoffTime.setHours(9, 45, 0, 0); // 9:45 AM
+        cutoffTime.setHours(startHour, startMinute + graceMinutes, 0, 0);
+        
         const isAfterCutoff = currentISTTime > cutoffTime;
+
+        console.log('⏰ Employee working hours check:', {
+            employeeId,
+            employeeName: employee.name,
+            workStartTime,
+            graceMinutes,
+            cutoffTime: `${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}`,
+            currentTime: `${currentISTTime.getHours()}:${currentISTTime.getMinutes().toString().padStart(2, '0')}`,
+            isAfterCutoff
+        });
 
         let isLatePunchIn = false;
         let lateApprovalId = null;
@@ -80,9 +115,9 @@ export const punchIn = async (req, res) => {
             if (!approvalCode) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Punch-in is blocked after 9:45 AM. Please request approval from admin first.',
+                    message: `Punch-in is blocked after ${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}. Please request approval from admin first.`,
                     requiresApproval: true,
-                    cutoffTime: '9:45 AM'
+                    cutoffTime: `${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}`
                 });
             }
 
@@ -400,10 +435,45 @@ export const punchOut = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const punchOutTimeIST = currentISTTime;
 
-        // Check if current time is before 6:30 PM (early punch-out cutoff)
+        // Get employee's working hours configuration
+        const employee = await prisma.user.findUnique({
+            where: { id: attendance.employeeId },
+            select: {
+                workStartTime: true,
+                workEndTime: true,
+                latePunchInGraceMinutes: true,
+                earlyPunchOutGraceMinutes: true,
+                name: true
+            }
+        });
+
+        if (!employee) {
+            return res.status(404).json({
+                success: false,
+                message: 'Employee not found'
+            });
+        }
+
+        // Parse employee's work end time and subtract grace period
+        const workEndTime = employee.workEndTime || '18:00:00';
+        const graceMinutes = employee.earlyPunchOutGraceMinutes || 30;
+        
+        // Create early punch-out cutoff time based on employee's schedule
+        const [endHour, endMinute] = workEndTime.split(':').map(Number);
         const earlyPunchOutCutoff = new Date(currentISTTime);
-        earlyPunchOutCutoff.setHours(18, 30, 0, 0); // 6:30 PM
+        earlyPunchOutCutoff.setHours(endHour, endMinute - graceMinutes, 0, 0);
+        
         const isEarlyPunchOut = currentISTTime < earlyPunchOutCutoff;
+
+        console.log('⏰ Employee early punch-out check:', {
+            employeeId: attendance.employeeId,
+            employeeName: employee.name,
+            workEndTime,
+            graceMinutes,
+            earlyPunchOutCutoff: `${earlyPunchOutCutoff.getHours()}:${earlyPunchOutCutoff.getMinutes().toString().padStart(2, '0')}`,
+            currentTime: `${currentISTTime.getHours()}:${currentISTTime.getMinutes().toString().padStart(2, '0')}`,
+            isEarlyPunchOut
+        });
 
         let earlyPunchOutApprovalId = null;
         let usedEarlyPunchOutCode = null;
@@ -415,9 +485,9 @@ export const punchOut = async (req, res) => {
             if (!earlyPunchOutCode) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Punch-out is blocked before 6:30 PM. Please request approval from admin first.',
+                    message: `Punch-out is blocked before ${earlyPunchOutCutoff.getHours()}:${earlyPunchOutCutoff.getMinutes().toString().padStart(2, '0')}. Please request approval from admin first.`,
                     requiresApproval: true,
-                    cutoffTime: '6:30 PM',
+                    cutoffTime: `${earlyPunchOutCutoff.getHours()}:${earlyPunchOutCutoff.getMinutes().toString().padStart(2, '0')}`,
                     isEarlyPunchOut: true
                 });
             }
