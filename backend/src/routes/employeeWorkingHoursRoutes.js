@@ -5,6 +5,7 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // Get employee working hours configuration
+// NOTE: This returns hardcoded defaults until migration is run
 router.get('/:employeeId', async (req, res) => {
     try {
         const { employeeId } = req.params;
@@ -13,11 +14,7 @@ router.get('/:employeeId', async (req, res) => {
             where: { id: employeeId },
             select: {
                 id: true,
-                name: true,
-                workStartTime: true,
-                workEndTime: true,
-                latePunchInGraceMinutes: true,
-                earlyPunchOutGraceMinutes: true
+                name: true
             }
         });
 
@@ -28,11 +25,11 @@ router.get('/:employeeId', async (req, res) => {
             });
         }
 
-        // Calculate cutoff times
-        const workStartTime = employee.workStartTime || '09:00:00';
-        const workEndTime = employee.workEndTime || '18:00:00';
-        const latePunchInGrace = employee.latePunchInGraceMinutes || 45;
-        const earlyPunchOutGrace = employee.earlyPunchOutGraceMinutes || 30;
+        // Use hardcoded defaults for now (will be dynamic after migration)
+        const workStartTime = '09:00:00';
+        const workEndTime = '18:00:00';
+        const latePunchInGrace = 45;
+        const earlyPunchOutGrace = 30;
 
         // Parse times and calculate cutoffs
         const [startHour, startMinute] = workStartTime.split(':').map(Number);
@@ -72,64 +69,12 @@ router.get('/:employeeId', async (req, res) => {
 });
 
 // Update employee working hours (admin only)
+// NOTE: This is disabled until migration is run
 router.put('/:employeeId', async (req, res) => {
-    try {
-        const { employeeId } = req.params;
-        const {
-            workStartTime,
-            workEndTime,
-            latePunchInGraceMinutes,
-            earlyPunchOutGraceMinutes
-        } = req.body;
-
-        // Validate time format (HH:MM:SS)
-        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-        
-        if (workStartTime && !timeRegex.test(workStartTime)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid work start time format. Use HH:MM:SS'
-            });
-        }
-
-        if (workEndTime && !timeRegex.test(workEndTime)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid work end time format. Use HH:MM:SS'
-            });
-        }
-
-        const updatedEmployee = await prisma.user.update({
-            where: { id: employeeId },
-            data: {
-                workStartTime,
-                workEndTime,
-                latePunchInGraceMinutes,
-                earlyPunchOutGraceMinutes
-            },
-            select: {
-                id: true,
-                name: true,
-                workStartTime: true,
-                workEndTime: true,
-                latePunchInGraceMinutes: true,
-                earlyPunchOutGraceMinutes: true
-            }
-        });
-
-        res.json({
-            success: true,
-            message: 'Employee working hours updated successfully',
-            data: updatedEmployee
-        });
-
-    } catch (error) {
-        console.error('Error updating employee working hours:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update employee working hours'
-        });
-    }
+    res.status(503).json({
+        success: false,
+        message: 'Working hours update is not available yet. Please run the migration first via POST /api/migration/working-hours'
+    });
 });
 
 export default router;

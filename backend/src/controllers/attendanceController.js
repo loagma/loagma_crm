@@ -66,32 +66,20 @@ export const punchIn = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const { startOfDay, endOfDay } = getISTDateRange();
 
-        // Get employee's working hours configuration
+        // Get employee info (working hours will be added via migration later)
+        // For now, use hardcoded defaults
         let employee;
         try {
             employee = await prisma.user.findUnique({
                 where: { id: employeeId },
-                select: {
-                    workStartTime: true,
-                    workEndTime: true,
-                    latePunchInGraceMinutes: true,
-                    earlyPunchOutGraceMinutes: true,
-                    name: true
-                }
-            });
-        } catch (error) {
-            // Fallback for production database without working hours columns
-            console.log('⚠️ Working hours columns not found, using defaults');
-            employee = await prisma.user.findUnique({
-                where: { id: employeeId },
                 select: { name: true }
             });
-            if (employee) {
-                employee.workStartTime = '09:00:00';
-                employee.workEndTime = '18:00:00';
-                employee.latePunchInGraceMinutes = 45;
-                employee.earlyPunchOutGraceMinutes = 30;
-            }
+        } catch (error) {
+            console.log('⚠️ Error fetching employee:', error.message);
+            return res.status(404).json({
+                success: false,
+                message: 'Employee not found'
+            });
         }
 
         if (!employee) {
@@ -101,11 +89,11 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Parse employee's work start time and add grace period
-        const workStartTime = employee.workStartTime || '09:00:00';
-        const graceMinutes = employee.latePunchInGraceMinutes || 45;
+        // Use hardcoded defaults for now (will be dynamic after migration)
+        const workStartTime = '09:00:00';
+        const graceMinutes = 45;
         
-        // Create cutoff time based on employee's schedule
+        // Create cutoff time based on schedule
         const [startHour, startMinute] = workStartTime.split(':').map(Number);
         const cutoffTime = new Date(currentISTTime);
         cutoffTime.setHours(startHour, startMinute + graceMinutes, 0, 0);
@@ -451,32 +439,20 @@ export const punchOut = async (req, res) => {
         const currentISTTime = getCurrentISTTime();
         const punchOutTimeIST = currentISTTime;
 
-        // Get employee's working hours configuration
+        // Get employee info (working hours will be added via migration later)
+        // For now, use hardcoded defaults
         let employee;
         try {
             employee = await prisma.user.findUnique({
                 where: { id: attendance.employeeId },
-                select: {
-                    workStartTime: true,
-                    workEndTime: true,
-                    latePunchInGraceMinutes: true,
-                    earlyPunchOutGraceMinutes: true,
-                    name: true
-                }
-            });
-        } catch (error) {
-            // Fallback for production database without working hours columns
-            console.log('⚠️ Working hours columns not found, using defaults');
-            employee = await prisma.user.findUnique({
-                where: { id: attendance.employeeId },
                 select: { name: true }
             });
-            if (employee) {
-                employee.workStartTime = '09:00:00';
-                employee.workEndTime = '18:00:00';
-                employee.latePunchInGraceMinutes = 45;
-                employee.earlyPunchOutGraceMinutes = 30;
-            }
+        } catch (error) {
+            console.log('⚠️ Error fetching employee:', error.message);
+            return res.status(404).json({
+                success: false,
+                message: 'Employee not found'
+            });
         }
 
         if (!employee) {
@@ -486,11 +462,11 @@ export const punchOut = async (req, res) => {
             });
         }
 
-        // Parse employee's work end time and subtract grace period
-        const workEndTime = employee.workEndTime || '18:00:00';
-        const graceMinutes = employee.earlyPunchOutGraceMinutes || 30;
+        // Use hardcoded defaults for now (will be dynamic after migration)
+        const workEndTime = '18:00:00';
+        const graceMinutes = 30;
         
-        // Create early punch-out cutoff time based on employee's schedule
+        // Create early punch-out cutoff time based on schedule
         const [endHour, endMinute] = workEndTime.split(':').map(Number);
         const earlyPunchOutCutoff = new Date(currentISTTime);
         earlyPunchOutCutoff.setHours(endHour, endMinute - graceMinutes, 0, 0);
