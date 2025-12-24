@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -50,6 +51,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   bool isLiveTrackingEnabled = true;
   bool showRoutes = true;
   bool showHomeLocations = true;
+  String? selectedEmployeeId; // Track selected employee for highlighting
 
   // Colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -93,9 +95,31 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   void _startLiveTracking() {
     if (isLiveTrackingEnabled) {
       // Reduce REST polling frequency since WebSocket handles real-time updates
-      _liveTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-        _loadActiveEmployees(); // Only for employee list updates
+      // Only refresh employee list, not positions (WebSocket handles positions)
+      _liveTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+        _refreshEmployeeListOnly(); // Only refresh employee list, not map
       });
+    }
+  }
+
+  /// Refresh only the employee list without rebuilding the map
+  Future<void> _refreshEmployeeListOnly() async {
+    try {
+      final result = await AttendanceService.getLiveAttendanceDashboard();
+      if (result['success'] == true && mounted) {
+        final allAttendance = result['data']['attendances'] ?? [];
+        final newActiveEmployees = allAttendance
+            .where((a) => a.status == 'active')
+            .cast<AttendanceModel>()
+            .toList();
+
+        // Only update the employee list, don't rebuild map markers
+        setState(() {
+          activeEmployees = newActiveEmployees;
+        });
+      }
+    } catch (e) {
+      print('Failed to refresh employee list: $e');
     }
   }
 
@@ -241,6 +265,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           setState(() {
             // Force map to refresh its state
           });
+
+          // Load routes when switching to live tracking tab
+          if (_tabController.index == 0 &&
+              showRoutes &&
+              activeEmployees.isNotEmpty) {
+            _loadEmployeeRoutes();
+          }
         }
       });
     }
@@ -289,6 +320,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           isLoading = false;
         });
         _updateMapMarkers();
+
+        // Load routes if enabled and on live tracking tab
+        if (showRoutes && _tabController.index == 0) {
+          _loadEmployeeRoutes();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -469,6 +505,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     for (var employee in activeEmployees) {
       if (employee.currentLatitude != null &&
           employee.currentLongitude != null) {
+        final isSelected = selectedEmployeeId == employee.employeeId;
         markers.add(
           Marker(
             markerId: MarkerId('current_${employee.employeeId}'),
@@ -477,12 +514,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
               employee.currentLongitude!,
             ),
             icon: BitmapDescriptor.defaultMarkerWithHue(
-              employee.isMoving == true
+              isSelected
+                  ? BitmapDescriptor
+                        .hueBlue // Highlight selected employee
+                  : employee.isMoving == true
                   ? BitmapDescriptor.hueGreen
                   : BitmapDescriptor.hueOrange,
             ),
             infoWindow: InfoWindow(
-              title: employee.employeeName,
+              title: '${isSelected ? '⭐ ' : ''}${employee.employeeName}',
               snippet:
                   'Current Location - ${employee.isMoving == true ? "Moving" : "Stationary"}',
             ),
@@ -501,15 +541,20 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           orElse: () => activeEmployees.first,
         );
 
+        final isSelected = selectedEmployeeId == employeeId;
         markers.add(
           Marker(
             markerId: MarkerId('home_$employeeId'),
             position: homeLocation,
             icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueViolet,
+              isSelected
+                  ? BitmapDescriptor
+                        .hueBlue // Highlight selected employee's home
+                  : BitmapDescriptor.hueViolet,
             ),
             infoWindow: InfoWindow(
-              title: '🏠 ${employee.employeeName} - Home',
+              title:
+                  '🏠 ${isSelected ? '⭐ ' : ''}${employee.employeeName} - Home',
               snippet:
                   'Started work at ${DateFormat('hh:mm a').format(employee.punchInTime)}',
             ),
@@ -521,6 +566,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     setState(() {
       _markers = markers;
     });
+
+    // If an employee is selected, focus the camera on them
+    if (selectedEmployeeId != null) {
+      _focusOnSelectedEmployee();
+    }
   }
 
   void _updateRoutePolylines() {
@@ -536,12 +586,18 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           orElse: () => activeEmployees.first,
         );
 
+        final isSelected = selectedEmployeeId == employee.employeeId;
         polylines.add(
           Polyline(
             polylineId: PolylineId(employeeId),
             points: routePoints,
-            color: employee.isMoving == true ? successColor : warningColor,
-            width: 3,
+            color: isSelected
+                ? Colors
+                      .blue // Highlight selected employee's route
+                : employee.isMoving == true
+                ? successColor
+                : warningColor,
+            width: isSelected ? 5 : 3, // Make selected route thicker
           ),
         );
       }
@@ -550,6 +606,31 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     setState(() {
       _polylines = polylines;
     });
+  }
+
+  /// Focus camera on selected employee
+  void _focusOnSelectedEmployee() {
+    if (selectedEmployeeId == null || _mapController == null) return;
+
+    final selectedEmployee = activeEmployees.firstWhere(
+      (e) => e.employeeId == selectedEmployeeId,
+      orElse: () => activeEmployees.first,
+    );
+
+    if (selectedEmployee.currentLatitude != null &&
+        selectedEmployee.currentLongitude != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(
+              selectedEmployee.currentLatitude!,
+              selectedEmployee.currentLongitude!,
+            ),
+            zoom: 15.0,
+          ),
+        ),
+      );
+    }
   }
 
   void _updateHistoricalMapData() {
@@ -705,6 +786,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       ),
       body: TabBarView(
         controller: _tabController,
+        physics:
+            const NeverScrollableScrollPhysics(), // Disable physical tab switching for better map controls
         children: [
           _buildLiveTrackingTab(),
           _buildRoutePlaybackTab(),
@@ -776,7 +859,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: selectedSalesmanId,
+                      value: selectedSalesmanId,
                       decoration: const InputDecoration(
                         labelText: 'Select Employee',
                         border: OutlineInputBorder(),
@@ -801,6 +884,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                         setState(() {
                           selectedSalesmanId = value;
                         });
+                        if (value != null) {
+                          _loadRoutePlaybackData();
+                        }
                       },
                     ),
                   ),
@@ -814,57 +900,155 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             ],
           ),
         ),
-        Expanded(
-          child: selectedSalesmanId == null
-              ? const Center(
-                  child: Text(
-                    'Select an employee to view route playback',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                )
-              : Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.blue[50],
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.play_arrow),
-                            onPressed: () {
-                              // TODO: Implement route playback animation
-                              _showInfoSnackBar(
-                                'Route playback animation will be implemented',
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.pause),
-                            onPressed: () {
-                              // TODO: Pause playback
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.stop),
-                            onPressed: () {
-                              // TODO: Stop playback
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.speed),
-                            onPressed: () {
-                              // TODO: Change playback speed
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(child: _buildMap()),
-                  ],
+        if (selectedSalesmanId != null) ...[
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Colors.blue[50],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.play_arrow),
+                  onPressed: () {
+                    _showInfoSnackBar(
+                      'Playing route for ${DateFormat('MMM dd').format(selectedDate)}',
+                    );
+                  },
                 ),
-        ),
+                IconButton(
+                  icon: const Icon(Icons.pause),
+                  onPressed: () {
+                    _showInfoSnackBar('Route playback paused');
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.stop),
+                  onPressed: () {
+                    _showInfoSnackBar('Route playback stopped');
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.speed),
+                  onPressed: () {
+                    _showInfoSnackBar('Playback speed: 2x');
+                  },
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: _buildMap()),
+        ] else
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Select an employee to view route playback',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  /// Load route data for playback
+  Future<void> _loadRoutePlaybackData() async {
+    if (selectedSalesmanId == null) return;
+
+    try {
+      setState(() => isLoading = true);
+
+      final result = await _getHistoricalRoutes(
+        selectedDate,
+        selectedSalesmanId,
+      );
+      if (result['success'] == true && mounted) {
+        final routes = List<Map<String, dynamic>>.from(result['data'] ?? []);
+
+        if (routes.isNotEmpty) {
+          setState(() {
+            historicalRoutes = routes;
+            isLoading = false;
+          });
+          _updateHistoricalMapData();
+          _focusMapOnRoute();
+        } else {
+          setState(() {
+            historicalRoutes = [];
+            isLoading = false;
+          });
+          _showInfoSnackBar('No route data found for selected date');
+        }
+      } else {
+        setState(() {
+          historicalRoutes = [];
+          isLoading = false;
+        });
+        _showErrorSnackBar('Failed to load route data');
+      }
+    } catch (e) {
+      setState(() {
+        historicalRoutes = [];
+        isLoading = false;
+      });
+      _showErrorSnackBar('Error loading route: $e');
+    }
+  }
+
+  /// Focus map camera on the loaded route
+  void _focusMapOnRoute() {
+    if (historicalRoutes.isEmpty || _mapController == null) return;
+
+    try {
+      final route = historicalRoutes.first;
+      final routePreview = route['routePreview'] as List?;
+
+      if (routePreview != null && routePreview.isNotEmpty) {
+        final bounds = _calculateRouteBounds(routePreview);
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(bounds, 100.0),
+        );
+      } else {
+        // Focus on start location if no route preview
+        final startLocation = route['startLocation'] as Map<String, dynamic>?;
+        if (startLocation != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(
+                  startLocation['latitude'] as double,
+                  startLocation['longitude'] as double,
+                ),
+                zoom: 14.0,
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error focusing on route: $e');
+    }
+  }
+
+  /// Calculate bounds for a route
+  LatLngBounds _calculateRouteBounds(List routePoints) {
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+
+    for (var point in routePoints) {
+      final lat = point['latitude'] as double;
+      final lng = point['longitude'] as double;
+
+      minLat = math.min(minLat, lat);
+      maxLat = math.max(maxLat, lat);
+      minLng = math.min(minLng, lng);
+      maxLng = math.max(maxLng, lng);
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
     );
   }
 
@@ -999,9 +1183,28 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(
-              'Active Employees (${activeEmployees.length})',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            child: Row(
+              children: [
+                Text(
+                  'Active Employees (${activeEmployees.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (selectedEmployeeId != null)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        selectedEmployeeId = null;
+                      });
+                      _updateMapMarkers();
+                      _updateRoutePolylines();
+                    },
+                    child: const Text('Clear Selection'),
+                  ),
+              ],
             ),
           ),
           Expanded(
@@ -1010,59 +1213,102 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
               itemCount: activeEmployees.length,
               itemBuilder: (context, index) {
                 final employee = activeEmployees[index];
-                return Container(
-                  width: 200,
-                  margin: const EdgeInsets.only(left: 16, bottom: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            employee.isMoving == true
-                                ? Icons.directions_run
-                                : Icons.location_on,
-                            color: employee.isMoving == true
-                                ? successColor
-                                : warningColor,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              employee.employeeName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                final isSelected = selectedEmployeeId == employee.employeeId;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      selectedEmployeeId = isSelected
+                          ? null
+                          : employee.employeeId;
+                    });
+                    _updateMapMarkers();
+                    _updateRoutePolylines();
+                    if (!isSelected) {
+                      _focusOnSelectedEmployee();
+                    }
+                  },
+                  child: Container(
+                    width: 200,
+                    margin: const EdgeInsets.only(left: 16, bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue[100] : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected ? Colors.blue : Colors.grey[300]!,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              employee.isMoving == true
+                                  ? Icons.directions_run
+                                  : Icons.location_on,
+                              color: isSelected
+                                  ? Colors.blue
+                                  : employee.isMoving == true
+                                  ? successColor
+                                  : warningColor,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                employee.employeeName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: isSelected ? Colors.blue[800] : null,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (isSelected)
+                              const Icon(
+                                Icons.star,
+                                color: Colors.blue,
+                                size: 16,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Working: ${_getWorkingDuration(employee.punchInTime)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected ? Colors.blue[700] : Colors.grey,
+                          ),
+                        ),
+                        if (employee.currentDistanceKm != null)
+                          Text(
+                            'Distance: ${employee.currentDistanceKm!.toStringAsFixed(1)} km',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isSelected
+                                  ? Colors.blue[700]
+                                  : Colors.grey,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Working: ${_getWorkingDuration(employee.punchInTime)}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      if (employee.currentDistanceKm != null)
+                        const SizedBox(height: 2),
                         Text(
-                          'Distance: ${employee.currentDistanceKm!.toStringAsFixed(1)} km',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
+                          isSelected
+                              ? 'Tap to deselect'
+                              : 'Tap to highlight on map',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: isSelected
+                                ? Colors.blue[600]
+                                : Colors.grey[600],
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },

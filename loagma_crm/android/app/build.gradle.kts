@@ -1,3 +1,5 @@
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -35,6 +37,17 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    applicationVariants.all {
+        outputs.forEach { output ->
+            val appName = "loagmaCRM"
+            val buildType = buildType.name
+            val versionName = versionName ?: "1.0"
+
+            val apkName = "$appName-$buildType-v$versionName.apk"
+
+            (output as BaseVariantOutputImpl).outputFileName = apkName
         }
     }
 }

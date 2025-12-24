@@ -24,9 +24,7 @@ class EarlyPunchOutApprovalWidget extends StatefulWidget {
 class _EarlyPunchOutApprovalWidgetState
     extends State<EarlyPunchOutApprovalWidget> {
   final _reasonController = TextEditingController();
-  final _approvalCodeController = TextEditingController();
   bool _isSubmitting = false;
-  bool _isValidatingCode = false;
   Map<String, dynamic>? _approvalStatus;
   bool _isLoadingStatus = false;
   Timer? _refreshTimer;
@@ -42,7 +40,6 @@ class _EarlyPunchOutApprovalWidgetState
   void dispose() {
     _refreshTimer?.cancel();
     _reasonController.dispose();
-    _approvalCodeController.dispose();
     super.dispose();
   }
 
@@ -66,11 +63,9 @@ class _EarlyPunchOutApprovalWidgetState
       final employeeId = UserService.currentUserId;
       if (employeeId == null) return;
 
-      final result =
-          await EarlyPunchOutApprovalService.getEmployeeEarlyPunchOutStatus(
-            employeeId,
-            attendanceId: widget.attendanceId,
-          );
+      final result = await EarlyPunchOutApprovalService.getApprovalStatus(
+        int.parse(widget.attendanceId),
+      );
 
       if (result['success'] == true && mounted) {
         final newStatus = result['data'];
@@ -83,15 +78,22 @@ class _EarlyPunchOutApprovalWidgetState
 
         // Show notification if status changed from PENDING to APPROVED
         if (oldStatus == 'PENDING' && newStatusValue == 'APPROVED') {
-          CustomToast.showSuccess(
-            context,
-            'Your early punch-out request has been approved! Enter the code to punch out.',
-          );
+          if (mounted) {
+            CustomToast.showSuccess(
+              context,
+              'Your early punch-out request has been approved! You can now punch out.',
+            );
+
+            // Call the callback to enable punch-out (no OTP needed)
+            widget.onApprovalCodeValidated?.call('APPROVED');
+          }
         } else if (oldStatus == 'PENDING' && newStatusValue == 'REJECTED') {
-          CustomToast.showError(
-            context,
-            'Your early punch-out request has been rejected.',
-          );
+          if (mounted) {
+            CustomToast.showError(
+              context,
+              'Your early punch-out request has been rejected.',
+            );
+          }
         }
       }
     } catch (e) {
@@ -119,7 +121,9 @@ class _EarlyPunchOutApprovalWidgetState
       final employeeName = UserService.name;
 
       if (employeeId == null || employeeName == null) {
-        CustomToast.showError(context, 'User information not available');
+        if (mounted) {
+          CustomToast.showError(context, 'User information not available');
+        }
         return;
       }
 
@@ -132,70 +136,40 @@ class _EarlyPunchOutApprovalWidgetState
           );
 
       if (result['success'] == true) {
-        CustomToast.showSuccess(
-          context,
-          result['message'] ?? 'Approval request submitted successfully',
-        );
+        if (mounted) {
+          CustomToast.showSuccess(
+            context,
+            result['message'] ?? 'Approval request submitted successfully',
+          );
+        }
         _reasonController.clear();
+
+        // Set a temporary pending status immediately
+        setState(() {
+          _approvalStatus = {
+            'status': 'PENDING',
+            'reason': _reasonController.text.trim(),
+            'requestTime': DateTime.now().toString(),
+          };
+        });
+
         await _loadApprovalStatus();
         widget.onApprovalRequested?.call();
       } else {
-        CustomToast.showError(
-          context,
-          result['message'] ?? 'Failed to submit approval request',
-        );
-      }
-    } catch (e) {
-      CustomToast.showError(context, 'Error: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
-    }
-  }
-
-  Future<void> _validateApprovalCode() async {
-    if (_approvalCodeController.text.trim().isEmpty) {
-      CustomToast.showError(context, 'Please enter the approval code');
-      return;
-    }
-
-    setState(() => _isValidatingCode = true);
-
-    try {
-      final employeeId = UserService.currentUserId;
-      if (employeeId == null) return;
-
-      final result =
-          await EarlyPunchOutApprovalService.validateEarlyPunchOutCode(
-            employeeId: employeeId,
-            attendanceId: widget.attendanceId,
-            approvalCode: _approvalCodeController.text.trim(),
+        if (mounted) {
+          CustomToast.showError(
+            context,
+            result['message'] ?? 'Failed to submit approval request',
           );
-
-      if (result['success'] == true) {
-        CustomToast.showSuccess(
-          context,
-          result['message'] ?? 'Approval code is valid',
-        );
-        // Pass the validated approval code to the parent
-        widget.onApprovalCodeValidated?.call(
-          _approvalCodeController.text.trim(),
-        );
-      } else {
-        final errorMessage = result['message'] ?? 'Invalid approval code';
-        CustomToast.showError(context, errorMessage);
-
-        // If the error indicates expired code, refresh the approval status
-        if (errorMessage.contains('expired')) {
-          await _loadApprovalStatus();
         }
       }
     } catch (e) {
-      CustomToast.showError(context, 'Error: $e');
+      if (mounted) {
+        CustomToast.showError(context, 'Error: $e');
+      }
     } finally {
       if (mounted) {
-        setState(() => _isValidatingCode = false);
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -206,9 +180,9 @@ class _EarlyPunchOutApprovalWidgetState
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Show approval code input if request is approved
+    // Show approved status - user can now punch out directly
     if (_approvalStatus != null && _approvalStatus!['status'] == 'APPROVED') {
-      return _buildApprovalCodeInput();
+      return _buildApprovedStatus();
     }
 
     // Show pending status if request is pending
@@ -296,26 +270,16 @@ class _EarlyPunchOutApprovalWidgetState
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Reason for Early Punch-Out',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 8),
             TextField(
               controller: _reasonController,
               maxLines: 3,
-              maxLength: 200,
               decoration: InputDecoration(
-                hintText:
-                    'Please provide a detailed reason for early punch-out (minimum 10 characters)',
+                labelText: 'Reason for Early Punch-Out *',
+                hintText: 'Please provide a detailed reason...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                contentPadding: const EdgeInsets.all(12),
+                prefixIcon: const Icon(Icons.edit_note),
               ),
             ),
             const SizedBox(height: 16),
@@ -343,10 +307,10 @@ class _EarlyPunchOutApprovalWidgetState
                         ),
                       )
                     : const Text(
-                        'Request Approval',
+                        'Request Approval from Admin',
                         style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
               ),
@@ -382,6 +346,11 @@ class _EarlyPunchOutApprovalWidgetState
               ],
             ),
             const SizedBox(height: 12),
+            Text(
+              'Your early punch-out request is pending admin approval.',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -393,30 +362,33 @@ class _EarlyPunchOutApprovalWidgetState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Your early punch-out request is being reviewed by admin.',
-                    style: TextStyle(fontSize: 14, color: Colors.amber[700]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Reason: ${_approvalStatus!['reason']}',
+                    'Request Details:',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber[800],
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Time: ${_approvalStatus!['requestTime'] ?? 'N/A'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  Text(
+                    'Reason: ${_approvalStatus!['reason'] ?? 'N/A'}',
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue, size: 16),
-                const SizedBox(width: 6),
+                Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Auto-refreshing every 10 seconds. You will receive a notification when approved.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    'Auto-refreshing every 10 seconds. You will be notified when approved.',
+                    style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
               ],
@@ -425,9 +397,17 @@ class _EarlyPunchOutApprovalWidgetState
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _loadApprovalStatus,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh Status'),
+                onPressed: _isLoadingStatus ? null : _loadApprovalStatus,
+                icon: _isLoadingStatus
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 16),
+                label: Text(
+                  _isLoadingStatus ? 'Refreshing...' : 'Refresh Status',
+                ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.amber[700],
                   side: BorderSide(color: Colors.amber[300]!),
@@ -440,221 +420,81 @@ class _EarlyPunchOutApprovalWidgetState
     );
   }
 
-  Widget _buildApprovalCodeInput() {
-    final isExpired =
-        _approvalStatus!['codeExpiresAt'] != null &&
-        DateTime.now().isAfter(
-          DateTime.parse(_approvalStatus!['codeExpiresAt']),
-        );
-    final isUsed = _approvalStatus!['codeUsed'] == true;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  isExpired || isUsed ? Icons.error : Icons.check_circle,
-                  color: isExpired || isUsed ? Colors.red : Colors.green,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    isExpired
-                        ? 'Approval Code Expired'
-                        : isUsed
-                        ? 'Approval Code Used'
-                        : 'Request Approved',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isExpired || isUsed
-                          ? Colors.red[800]
-                          : Colors.green[800],
-                    ),
+  Widget _buildApprovedStatus() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green[700], size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Request Approved!',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (isExpired || isUsed) ...[
-              Text(
-                isExpired
-                    ? 'Your approval code has expired. Please request a new approval from admin.'
-                    : 'Your approval code has already been used for punch-out.',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, size: 16, color: Colors.orange[700]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isExpired
-                            ? 'Code expired. Contact admin for a new approval.'
-                            : 'Code already used. Check your attendance status.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (isExpired) ...[
-                // Add "Request New Approval" button for expired codes
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () {
-                            // Reset the approval status to show the request form
-                            setState(() {
-                              _approvalStatus = null;
-                              _reasonController.clear();
-                              _approvalCodeController.clear();
-                            });
-                          },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Request New Approval'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              if (isUsed) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      // Notify parent to refresh attendance status
-                      widget.onApprovalRequested?.call();
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh Status'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green[200]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Your early punch-out request has been approved. Enter the approval code to punch out.',
-                      style: TextStyle(fontSize: 14, color: Colors.green[700]),
-                    ),
-                    if (_approvalStatus!['adminRemarks'] != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Admin Note: ${_approvalStatus!['adminRemarks']}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Enter Approval Code',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[700],
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _approvalCodeController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: InputDecoration(
-                  hintText: 'Enter 6-digit approval code',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                  counterText: '',
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isValidatingCode ? null : _validateApprovalCode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: _isValidatingCode
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Text(
-                          'Validate Code & Punch Out',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                 ),
               ),
             ],
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your early punch-out request has been approved by admin. You can now punch out directly.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.green[700],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Approval Details:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green[800],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Approved by: ${_approvalStatus!['approvedBy'] ?? 'Admin'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  'Approved at: ${_approvalStatus!['approvedAt'] ?? 'N/A'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (_approvalStatus!['adminRemarks'] != null) ...[
+                  Text(
+                    'Remarks: ${_approvalStatus!['adminRemarks']}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -684,6 +524,11 @@ class _EarlyPunchOutApprovalWidgetState
               ],
             ),
             const SizedBox(height: 12),
+            Text(
+              'Your early punch-out request has been rejected by admin. You cannot punch out early today.',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -695,17 +540,28 @@ class _EarlyPunchOutApprovalWidgetState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Your early punch-out request has been rejected.',
-                    style: TextStyle(fontSize: 14, color: Colors.red[700]),
+                    'Rejection Details:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red[800],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Rejected by: ${_approvalStatus!['approvedBy'] ?? 'Admin'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  Text(
+                    'Rejected at: ${_approvalStatus!['approvedAt'] ?? 'N/A'}',
+                    style: const TextStyle(fontSize: 12),
                   ),
                   if (_approvalStatus!['adminRemarks'] != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
                       'Reason: ${_approvalStatus!['adminRemarks']}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: Colors.red[600],
                       ),
                     ),
                   ],
@@ -713,34 +569,24 @@ class _EarlyPunchOutApprovalWidgetState
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'You can submit a new request with a different reason if needed.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.orange[700]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You must work until 6:30 PM or contact your supervisor.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange[700]),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _approvalStatus = null;
-                    _reasonController.clear();
-                  });
-                },
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Submit New Request'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.orange[700],
-                  side: BorderSide(color: Colors.orange[300]!),
-                ),
+                ],
               ),
             ),
           ],

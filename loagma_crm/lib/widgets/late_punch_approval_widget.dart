@@ -23,16 +23,10 @@ class LatePunchApprovalWidget extends StatefulWidget {
 
 class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   final _reasonController = TextEditingController();
-  final _approvalCodeController = TextEditingController();
   bool _isSubmitting = false;
-  bool _isValidatingCode = false;
   Map<String, dynamic>? _approvalStatus;
   bool _isLoadingStatus = false;
   Timer? _refreshTimer;
-  bool _isUserTyping = false; // Track if user is actively typing
-  Timer? _typingTimer; // Timer to detect when user stops typing
-  bool _codeValidatedSuccessfully =
-      false; // Track if code was validated successfully
 
   @override
   void initState() {
@@ -45,63 +39,19 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _typingTimer?.cancel();
     _reasonController.dispose();
-    _approvalCodeController.dispose();
     super.dispose();
   }
 
   void _startAutoRefresh() {
-    // Auto-refresh every 10 seconds, but pause when user is typing
+    // Auto-refresh every 10 seconds to check for admin approval
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted && _approvalStatus != null && !_isUserTyping) {
+      if (mounted && _approvalStatus != null) {
         final status = _approvalStatus!['status'];
-        // Only refresh for PENDING status to avoid disrupting OTP input
+        // Only refresh for PENDING status
         if (status == 'PENDING') {
           _loadApprovalStatus();
         }
-      }
-    });
-  }
-
-  void _onUserStartedTyping() {
-    if (!mounted) return;
-
-    setState(() {
-      _isUserTyping = true;
-    });
-
-    // Cancel existing timer
-    _typingTimer?.cancel();
-
-    // Set timer to detect when user stops typing (5 seconds of inactivity)
-    _typingTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() {
-          _isUserTyping = false;
-        });
-      }
-    });
-  }
-
-  void _startBurstRefresh() {
-    // When we have a pending status, refresh more aggressively for the first minute
-    // to catch quick admin approvals
-    int burstCount = 0;
-    Timer.periodic(const Duration(seconds: 2), (timer) {
-      burstCount++;
-      if (!mounted || burstCount > 30) {
-        // Stop after 30 attempts (1 minute)
-        timer.cancel();
-        return;
-      }
-
-      final status = _approvalStatus?['status'];
-      if (status == 'PENDING') {
-        _loadApprovalStatus();
-      } else {
-        // Status changed, stop burst refresh
-        timer.cancel();
       }
     });
   }
@@ -115,7 +65,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
       final employeeId = UserService.currentUserId;
       if (employeeId == null) return;
 
-      final result = await LatePunchApprovalService.getEmployeeApprovalStatus(
+      final result = await LatePunchApprovalService.getApprovalStatus(
         employeeId,
       );
 
@@ -125,7 +75,6 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
         final newStatusValue = newStatus?['status'];
 
         print('🔍 Approval status loaded: $newStatus');
-        print('🔍 Old status: $oldStatus, New status: $newStatusValue');
 
         setState(() {
           _approvalStatus = newStatus;
@@ -136,9 +85,11 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           print('🎉 Status changed from PENDING to APPROVED!');
           CustomToast.showSuccess(
             context,
-            'Your late punch-in request has been approved! Enter the code to punch in.',
+            'Your late punch-in request has been approved! You can now punch in.',
           );
-          // Trigger a notification refresh in the parent if needed
+
+          // Call the callback to enable punch-in (no OTP needed)
+          widget.onApprovalCodeValidated?.call('APPROVED');
           widget.onApprovalReceived?.call();
         } else if (oldStatus == 'PENDING' && newStatusValue == 'REJECTED') {
           print('❌ Status changed from PENDING to REJECTED!');
@@ -156,32 +107,9 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
         if (result['statusCode'] != 404) {
           CustomToast.showError(context, 'Failed to load approval status');
         }
-
-        // If we get a "not found" error but we had a pending status,
-        // it might mean the request was processed, so try again after a short delay
-        if (_approvalStatus?['status'] == 'PENDING' &&
-            (result['statusCode'] == 404 ||
-                errorMessage.contains('not found'))) {
-          print('🔄 Pending request not found, retrying in 3 seconds...');
-          Future.delayed(const Duration(seconds: 3), () {
-            if (mounted) {
-              _loadApprovalStatus();
-            }
-          });
-        }
       }
     } catch (e) {
       print('Error loading approval status: $e');
-      if (mounted) {
-        // Only show error for non-network errors
-        if (!e.toString().contains('SocketException') &&
-            !e.toString().contains('timeout')) {
-          CustomToast.showError(
-            context,
-            'Network error. Please check your connection.',
-          );
-        }
-      }
     } finally {
       if (mounted) {
         setState(() => _isLoadingStatus = false);
@@ -234,9 +162,6 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           };
         });
 
-        // Start burst refresh to catch quick admin responses
-        _startBurstRefresh();
-
         // Then load the actual status from server
         await _loadApprovalStatus();
         widget.onApprovalRequested?.call();
@@ -253,9 +178,6 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                   result['data']['requestTime'] ?? DateTime.now().toString(),
             };
           });
-
-          // Start burst refresh for existing pending request
-          _startBurstRefresh();
 
           CustomToast.showSuccess(
             context,
@@ -277,95 +199,15 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
     }
   }
 
-  Future<void> _validateApprovalCode() async {
-    if (_approvalCodeController.text.trim().isEmpty) {
-      CustomToast.showError(context, 'Please enter the approval code');
-      return;
-    }
-
-    setState(() => _isValidatingCode = true);
-
-    try {
-      final employeeId = UserService.currentUserId;
-      if (employeeId == null) return;
-
-      final approvalCode = _approvalCodeController.text.trim();
-      final result = await LatePunchApprovalService.validateApprovalCode(
-        employeeId: employeeId,
-        approvalCode: approvalCode,
-      );
-
-      print('🔍 Code validation result: $result');
-
-      if (result['success'] == true) {
-        CustomToast.showSuccess(
-          context,
-          result['message'] ?? 'Approval code is valid',
-        );
-
-        // Mark code as validated successfully
-        setState(() {
-          _codeValidatedSuccessfully = true;
-        });
-
-        // Call the new callback with the actual approval code
-        widget.onApprovalCodeValidated?.call(approvalCode);
-
-        // Keep the old callback for backward compatibility
-        widget.onApprovalReceived?.call();
-      } else {
-        CustomToast.showError(
-          context,
-          result['message'] ?? 'Invalid approval code',
-        );
-      }
-    } catch (e) {
-      CustomToast.showError(context, 'Error: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isValidatingCode = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoadingStatus) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // If code was validated successfully, show a minimal success state
-    if (_codeValidatedSuccessfully) {
-      return Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.green[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green[200]!),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green[700], size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Approval code validated successfully! You can now punch in.',
-                style: TextStyle(
-                  color: Colors.green[700],
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Show approval code input if request is approved
+    // Show approved status - user can now punch in directly
     if (_approvalStatus != null && _approvalStatus!['status'] == 'APPROVED') {
-      return _buildApprovalCodeInput();
+      return _buildApprovedStatus();
     }
 
     // Show pending status if request is pending
@@ -529,7 +371,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Auto-refreshing every 10 seconds when not typing. You will receive a notification when approved.',
+                    'Auto-refreshing every 10 seconds. You will be notified when approved.',
                     style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
@@ -562,299 +404,81 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
     );
   }
 
-  Widget _buildApprovalCodeInput() {
-    final isExpired = _approvalStatus!['codeExpired'] == true;
-    final isUsed = _approvalStatus!['codeUsed'] == true;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  isExpired || isUsed ? Icons.error : Icons.check_circle,
-                  color: isExpired || isUsed ? Colors.red : Colors.green,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    isExpired
-                        ? 'Approval Code Expired'
-                        : isUsed
-                        ? 'Approval Code Used'
-                        : 'Request Approved - Enter Code',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isExpired || isUsed
-                          ? Colors.red[800]
-                          : Colors.green[800],
-                    ),
+  Widget _buildApprovedStatus() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green[700], size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Request Approved!',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (isExpired || isUsed) ...[
-              Text(
-                isExpired
-                    ? 'Your approval code has expired. Please request a new approval from admin.'
-                    : 'Your approval code has already been used for punch-in.',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, size: 16, color: Colors.orange[700]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isExpired
-                            ? 'Code expired. Contact admin for a new approval.'
-                            : 'Code already used. Check your attendance status.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (isExpired) ...[
-                // Add "Request New Approval" button for expired codes
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () {
-                            // Reset the approval status to show the request form
-                            setState(() {
-                              _approvalStatus = null;
-                              _reasonController.clear();
-                              _approvalCodeController.clear();
-                            });
-                          },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Request New Approval'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              if (isUsed) ...[
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      // Notify parent to refresh attendance status
-                      widget.onApprovalReceived?.call();
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh Attendance Status'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      size: 16,
-                      color: Colors.green[700],
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Your late punch-in request has been approved! Enter the 6-digit code from your notification to continue.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.green[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _approvalCodeController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Enter 6-Digit Approval Code',
-                  hintText: '000000',
-                  counterText: '',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.green[300]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.green[500]!, width: 2),
-                  ),
-                  prefixIcon: const Icon(Icons.vpn_key, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.green[50],
-                ),
-                onTap: () {
-                  // User started interacting with the field
-                  _onUserStartedTyping();
-                },
-                onChanged: (value) {
-                  // User is typing
-                  _onUserStartedTyping();
-
-                  // Auto-validate when 6 digits are entered
-                  if (value.length == 6) {
-                    Future.delayed(const Duration(milliseconds: 1500), () {
-                      if (mounted &&
-                          _approvalCodeController.text.length == 6 &&
-                          !_isValidatingCode) {
-                        _validateApprovalCode();
-                      }
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.schedule, size: 16, color: Colors.orange[700]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Code expires at: ${_approvalStatus!['codeExpiresAt'] ?? 'N/A'}',
-                      style: TextStyle(fontSize: 12, color: Colors.orange[700]),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isValidatingCode ? null : _validateApprovalCode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 4,
-                  ),
-                  child: _isValidatingCode
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.login, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Validate Code & Punch In',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
                 ),
               ),
             ],
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Approval Details:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue[800],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Approved by: ${_approvalStatus!['approvedBy'] ?? 'Admin'}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  Text(
-                    'Approved at: ${_approvalStatus!['approvedAt'] ?? 'N/A'}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  if (_approvalStatus!['adminRemarks'] != null) ...[
-                    Text(
-                      'Remarks: ${_approvalStatus!['adminRemarks']}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your late punch-in request has been approved by admin. You can now punch in directly.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.green[700],
+              fontWeight: FontWeight.w500,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Approval Details:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green[800],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Approved by: ${_approvalStatus!['approvedBy'] ?? 'Admin'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  'Approved at: ${_approvalStatus!['approvedAt'] ?? 'N/A'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (_approvalStatus!['adminRemarks'] != null) ...[
+                  Text(
+                    'Remarks: ${_approvalStatus!['adminRemarks']}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
