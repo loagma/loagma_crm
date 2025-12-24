@@ -67,16 +67,32 @@ export const punchIn = async (req, res) => {
         const { startOfDay, endOfDay } = getISTDateRange();
 
         // Get employee's working hours configuration
-        const employee = await prisma.user.findUnique({
-            where: { id: employeeId },
-            select: {
-                workStartTime: true,
-                workEndTime: true,
-                latePunchInGraceMinutes: true,
-                earlyPunchOutGraceMinutes: true,
-                name: true
+        let employee;
+        try {
+            employee = await prisma.user.findUnique({
+                where: { id: employeeId },
+                select: {
+                    workStartTime: true,
+                    workEndTime: true,
+                    latePunchInGraceMinutes: true,
+                    earlyPunchOutGraceMinutes: true,
+                    name: true
+                }
+            });
+        } catch (error) {
+            // Fallback for production database without working hours columns
+            console.log('⚠️ Working hours columns not found, using defaults');
+            employee = await prisma.user.findUnique({
+                where: { id: employeeId },
+                select: { name: true }
+            });
+            if (employee) {
+                employee.workStartTime = '09:00:00';
+                employee.workEndTime = '18:00:00';
+                employee.latePunchInGraceMinutes = 45;
+                employee.earlyPunchOutGraceMinutes = 30;
             }
-        });
+        }
 
         if (!employee) {
             return res.status(404).json({
@@ -436,16 +452,32 @@ export const punchOut = async (req, res) => {
         const punchOutTimeIST = currentISTTime;
 
         // Get employee's working hours configuration
-        const employee = await prisma.user.findUnique({
-            where: { id: attendance.employeeId },
-            select: {
-                workStartTime: true,
-                workEndTime: true,
-                latePunchInGraceMinutes: true,
-                earlyPunchOutGraceMinutes: true,
-                name: true
+        let employee;
+        try {
+            employee = await prisma.user.findUnique({
+                where: { id: attendance.employeeId },
+                select: {
+                    workStartTime: true,
+                    workEndTime: true,
+                    latePunchInGraceMinutes: true,
+                    earlyPunchOutGraceMinutes: true,
+                    name: true
+                }
+            });
+        } catch (error) {
+            // Fallback for production database without working hours columns
+            console.log('⚠️ Working hours columns not found, using defaults');
+            employee = await prisma.user.findUnique({
+                where: { id: attendance.employeeId },
+                select: { name: true }
+            });
+            if (employee) {
+                employee.workStartTime = '09:00:00';
+                employee.workEndTime = '18:00:00';
+                employee.latePunchInGraceMinutes = 45;
+                employee.earlyPunchOutGraceMinutes = 30;
             }
-        });
+        }
 
         if (!employee) {
             return res.status(404).json({
