@@ -49,9 +49,9 @@ router.post('/request', async (req, res) => {
                 employeeName,
                 attendanceId,
                 requestDate: new Date(),
-                requestTime: requestTime || new Date().toISOString(),
-                status: 'PENDING',
-                reason: 'Early punch-out request'
+                punchOutDate: new Date(), // Add the missing required field
+                reason: 'Early punch-out request',
+                status: 'PENDING'
             }
         });
 
@@ -77,7 +77,7 @@ router.get('/status/:attendanceId', async (req, res) => {
 
         const approval = await prisma.earlyPunchOutApproval.findFirst({
             where: {
-                attendanceId: parseInt(attendanceId),
+                attendanceId: attendanceId, // Remove parseInt - attendanceId is a string
                 status: 'APPROVED'
             }
         });
