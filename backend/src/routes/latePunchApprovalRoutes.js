@@ -57,9 +57,9 @@ router.post('/request', async (req, res) => {
                 employeeId,
                 employeeName,
                 requestDate: new Date(),
-                requestTime: requestTime || new Date().toISOString(),
-                status: 'PENDING',
-                reason: 'Late punch-in request'
+                punchInDate: new Date(), // Add the missing required field
+                reason: 'Late punch-in request',
+                status: 'PENDING'
             }
         });
 
