@@ -61,7 +61,18 @@ class LiveTrackingServer {
                 return false;
             }
 
-            // Verify JWT token
+            // Handle development mode token
+            if (token === 'dev_mode_token') {
+                console.log('✅ WebSocket connection verified for development mode');
+                info.req.user = {
+                    id: 'dev_admin',
+                    roles: ['admin'],
+                    name: 'Dev Admin'
+                };
+                return true;
+            }
+
+            // Verify JWT token for production
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
             
             // Store user info for later use
