@@ -75,7 +75,7 @@ export const punchIn = async (req, res) => {
         let lateApprovalId = null;
         let usedApprovalCode = null;
 
-        // If after cutoff time, validate approval code
+        // If after cutoff time, validate approval
         if (isAfterCutoff) {
             if (!approvalCode) {
                 return res.status(400).json({
@@ -86,52 +86,83 @@ export const punchIn = async (req, res) => {
                 });
             }
 
-            // Validate approval code
-            const approvalRequest = await prisma.latePunchApproval.findFirst({
-                where: {
-                    employeeId,
-                    approvalCode: approvalCode.trim(),
-                    status: 'APPROVED',
-                    requestDate: {
-                        gte: startOfDay,
-                        lt: endOfDay
+            // For simplified approval system, check if user has any approved request for today
+            if (approvalCode === 'APPROVED') {
+                const approvalRequest = await prisma.latePunchApproval.findFirst({
+                    where: {
+                        employeeId,
+                        status: 'APPROVED',
+                        requestDate: {
+                            gte: startOfDay,
+                            lt: endOfDay
+                        }
                     }
+                });
+
+                if (!approvalRequest) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'No approved request found for today. Please request approval from admin first.'
+                    });
                 }
-            });
 
-            if (!approvalRequest) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid approval code or no approved request found for today'
+                // Set approval details for attendance record
+                isLatePunchIn = true;
+                lateApprovalId = approvalRequest.id;
+                usedApprovalCode = 'APPROVED';
+
+                console.log('✅ Late punch-in approval validated (simplified system):', {
+                    employeeId,
+                    approvalRequestId: lateApprovalId
+                });
+            } else {
+                // Legacy OTP code validation (for backward compatibility)
+                const approvalRequest = await prisma.latePunchApproval.findFirst({
+                    where: {
+                        employeeId,
+                        approvalCode: approvalCode.trim(),
+                        status: 'APPROVED',
+                        requestDate: {
+                            gte: startOfDay,
+                            lt: endOfDay
+                        }
+                    }
+                });
+
+                if (!approvalRequest) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid approval code or no approved request found for today'
+                    });
+                }
+
+                // Check if code is already used
+                if (approvalRequest.codeUsed) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Approval code has already been used'
+                    });
+                }
+
+                // Check if code is expired
+                if (approvalRequest.codeExpiresAt && currentISTTime > approvalRequest.codeExpiresAt) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Approval code has expired. Please request a new approval.'
+                    });
+                }
+
+                // Set approval details for attendance record
+                isLatePunchIn = true;
+                lateApprovalId = approvalRequest.id;
+                usedApprovalCode = approvalCode.trim();
+
+                console.log('✅ Late punch-in approval code validated (legacy system):', {
+                    employeeId,
+                    approvalCode: usedApprovalCode,
+                    approvalRequestId: lateApprovalId
                 });
             }
-
-            // Check if code is already used
-            if (approvalRequest.codeUsed) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Approval code has already been used'
-                });
-            }
-
-            // Check if code is expired
-            if (approvalRequest.codeExpiresAt && currentISTTime > approvalRequest.codeExpiresAt) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Approval code has expired. Please request a new approval.'
-                });
-            }
-
-            // Don't mark code as used yet - we'll do it after attendance is created successfully
-            isLatePunchIn = true;
-            lateApprovalId = approvalRequest.id;
-            usedApprovalCode = approvalCode.trim();
-
-            console.log('✅ Late punch-in approval code validated:', {
-                employeeId,
-                approvalCode: usedApprovalCode,
-                approvalRequestId: lateApprovalId
-            });
         }
 
         // Check for any active attendance (not just today)
@@ -377,7 +408,7 @@ export const punchOut = async (req, res) => {
         let earlyPunchOutApprovalId = null;
         let usedEarlyPunchOutCode = null;
 
-        // If before cutoff time, validate approval code
+        // If before cutoff time, validate approval
         if (isEarlyPunchOut) {
             const { earlyPunchOutCode } = req.body;
             
@@ -391,32 +422,96 @@ export const punchOut = async (req, res) => {
                 });
             }
 
-            // Validate early punch-out approval code
-            const { startOfDay, endOfDay } = getISTDateRange();
-            const approvalRequest = await prisma.earlyPunchOutApproval.findFirst({
-                where: {
-                    employeeId: attendance.employeeId,
-                    attendanceId: attendanceId,
-                    approvalCode: earlyPunchOutCode.trim(),
-                    status: 'APPROVED',
-                    requestDate: {
-                        gte: startOfDay,
-                        lt: endOfDay
+            // For simplified approval system, check if user has any approved request for this attendance
+            if (earlyPunchOutCode === 'APPROVED') {
+                const { startOfDay, endOfDay } = getISTDateRange();
+                const approvalRequest = await prisma.earlyPunchOutApproval.findFirst({
+                    where: {
+                        employeeId: attendance.employeeId,
+                        attendanceId: attendanceId,
+                        status: 'APPROVED',
+                        requestDate: {
+                            gte: startOfDay,
+                            lt: endOfDay
+                        }
                     }
-                }
-            });
+                });
 
-            if (!approvalRequest) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid approval code or no approved request found for this session'
+                if (!approvalRequest) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'No approved request found for this session. Please request approval from admin first.'
+                    });
+                }
+
+                // Set approval details
+                earlyPunchOutApprovalId = approvalRequest.id;
+                usedEarlyPunchOutCode = 'APPROVED';
+
+                console.log('✅ Early punch-out approval validated (simplified system):', {
+                    employeeId: attendance.employeeId,
+                    attendanceId,
+                    approvalRequestId: earlyPunchOutApprovalId
+                });
+            } else {
+                // Legacy OTP code validation (for backward compatibility)
+                const { startOfDay, endOfDay } = getISTDateRange();
+                const approvalRequest = await prisma.earlyPunchOutApproval.findFirst({
+                    where: {
+                        employeeId: attendance.employeeId,
+                        attendanceId: attendanceId,
+                        approvalCode: earlyPunchOutCode.trim(),
+                        status: 'APPROVED',
+                        requestDate: {
+                            gte: startOfDay,
+                            lt: endOfDay
+                        }
+                    }
+                });
+
+                if (!approvalRequest) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid approval code or no approved request found for this session'
+                    });
+                }
+
+                // Check if code is already used
+                if (approvalRequest.codeUsed) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Approval code has already been used'
+                    });
+                }
+
+                // Check if code is expired
+                if (approvalRequest.codeExpiresAt && currentISTTime > approvalRequest.codeExpiresAt) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Approval code has expired. Please request a new approval.'
+                    });
+                }
+
+                // Mark approval code as used
+                await prisma.earlyPunchOutApproval.update({
+                    where: { id: approvalRequest.id },
+                    data: {
+                        codeUsed: true,
+                        codeUsedAt: currentISTTime
+                    }
+                });
+
+                earlyPunchOutApprovalId = approvalRequest.id;
+                usedEarlyPunchOutCode = earlyPunchOutCode.trim();
+
+                console.log('✅ Early punch-out approved with code (legacy system):', {
+                    employeeId: attendance.employeeId,
+                    attendanceId,
+                    approvalCode: usedEarlyPunchOutCode,
+                    approvalRequestId: earlyPunchOutApprovalId
                 });
             }
-
-            // Check if code is already used
-            if (approvalRequest.codeUsed) {
-                return res.status(400).json({
-                    success: false,
+        }
                     message: 'Approval code has already been used'
                 });
             }
@@ -427,26 +522,6 @@ export const punchOut = async (req, res) => {
                     success: false,
                     message: 'Approval code has expired. Please request a new approval.'
                 });
-            }
-
-            // Mark approval code as used
-            await prisma.earlyPunchOutApproval.update({
-                where: { id: approvalRequest.id },
-                data: {
-                    codeUsed: true,
-                    codeUsedAt: currentISTTime
-                }
-            });
-
-            earlyPunchOutApprovalId = approvalRequest.id;
-            usedEarlyPunchOutCode = earlyPunchOutCode.trim();
-
-            console.log('✅ Early punch-out approved with code:', {
-                employeeId: attendance.employeeId,
-                attendanceId,
-                approvalCode: usedEarlyPunchOutCode,
-                approvalRequestId: earlyPunchOutApprovalId
-            });
         }
 
         // Validate punch out time (should be after punch in)

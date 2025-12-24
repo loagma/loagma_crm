@@ -120,6 +120,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     );
     print('🕘 isPunchedIn: $isPunchedIn');
     print('🕘 currentAttendance: ${currentAttendance?.id}');
+    print(
+      '🕘 isAfterCutoff: $isAfterCutoff (should show approval widget if true and not punched in)',
+    );
 
     // Always update state to ensure UI reflects current time
     setState(() {
@@ -749,9 +752,14 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               _buildStatusCard(),
 
               // Punch Button or Late Approval Widget
-              if (isPunchedIn)
-                _buildPunchedInCard()
-              else if (isAfterCutoff)
+              if (isPunchedIn) ...[
+                // Debug: User is punched in
+                _buildPunchedInCard(),
+              ] else if (isAfterCutoff) ...[
+                // Debug: After cutoff, should show approval widget
+                // print(
+                //   '🔍 BUILD: Showing approval widget (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
+                // ),
                 Column(
                   children: [
                     Padding(
@@ -863,9 +871,14 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                       ),
                     ],
                   ],
-                )
-              else
+                ),
+              ] else ...[
+                // Debug: Before cutoff, showing normal punch button
+                // print(
+                //   '🔍 BUILD: Showing normal punch button (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
+                // ),
                 _buildPunchButton(),
+              ],
 
               // Location Info
               _buildLocationInfo(),
@@ -1012,7 +1025,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                   const Icon(Icons.warning, color: Colors.white, size: 16),
                   const SizedBox(width: 6),
                   const Text(
-                    'After 9:45 AM - Approval Required',
+                    'After 8:00 AM - Approval Required',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.white,
@@ -1140,7 +1153,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Punch-in available until 9:45 AM (${LatePunchApprovalService.getTimeUntilCutoff()})',
+                      'Punch-in available until 8:00 AM (${LatePunchApprovalService.getTimeUntilCutoff()})',
                       style: TextStyle(
                         color: Colors.green[700],
                         fontSize: 12,
@@ -1394,9 +1407,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           width: double.infinity,
           height: 50,
           child: ElevatedButton(
-            onPressed: canPunchOut
-                ? () => _handlePunchOut()
-                : null,
+            onPressed: canPunchOut ? () => _handlePunchOut() : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
@@ -1492,16 +1503,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           CustomToast.showError(context, response['message']);
         } else {
           CustomToast.showError(
-            context,
-            response['message'] ?? 'Failed to punch out',
-          );
-        }
-      }
-    } catch (e) {
-      Navigator.pop(context);
-      CustomToast.showError(context, 'Error: $e');
-    }
-  }
             context,
             response['message'] ?? 'Failed to punch out',
           );

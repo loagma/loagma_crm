@@ -70,15 +70,30 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
       );
 
       if (result['success'] == true && mounted) {
-        final newStatus = result['data'];
+        final responseData = result['data'];
+        final hasApproval = responseData?['hasApproval'] ?? false;
+        final approvalData = responseData?['approval'];
+
+        // Extract the actual approval status
+        final newStatus = hasApproval ? approvalData : null;
         final oldStatus = _approvalStatus?['status'];
         final newStatusValue = newStatus?['status'];
 
-        print('🔍 Approval status loaded: $newStatus');
+        print(
+          '🔍 Approval status loaded: hasApproval=$hasApproval, approval=$approvalData',
+        );
 
         setState(() {
           _approvalStatus = newStatus;
         });
+
+        // If status is already APPROVED on initial load, notify parent
+        if (newStatus != null && newStatus['status'] == 'APPROVED') {
+          print('🎉 Found existing APPROVED status on load!');
+          // Call the callback to enable punch-in (no OTP needed)
+          widget.onApprovalCodeValidated?.call('APPROVED');
+          widget.onApprovalReceived?.call();
+        }
 
         // Show notification if status changed from PENDING to APPROVED
         if (oldStatus == 'PENDING' && newStatusValue == 'APPROVED') {
