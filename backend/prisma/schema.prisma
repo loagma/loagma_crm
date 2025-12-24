@@ -115,6 +115,13 @@ model User {
   panCard            String?
   password           String?
   notes              String?
+  
+  // Working Hours Configuration
+  workStartTime              String?   @default("09:00:00") // Work start time (HH:MM:SS format)
+  workEndTime                String?   @default("18:00:00") // Work end time (HH:MM:SS format)
+  latePunchInGraceMinutes    Int?      @default(45)         // Minutes after work start time before requiring approval
+  earlyPunchOutGraceMinutes  Int?      @default(30)         // Minutes before work end time that require approval
+  
   assignedAccounts   Account[]           @relation("AccountAssignedTo")
   createdAccounts    Account[]           @relation("AccountCreatedBy")
   approvedAccounts   Account[]           @relation("AccountApprovedBy")

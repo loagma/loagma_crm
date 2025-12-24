@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/early_punch_out_approval_service.dart';
+import '../services/employee_working_hours_service.dart';
 import '../services/user_service.dart';
 import '../utils/custom_toast.dart';
 
 class EarlyPunchOutApprovalWidget extends StatefulWidget {
   final String attendanceId;
+  final Map<String, dynamic>? employeeWorkingHours;
   final VoidCallback? onApprovalRequested;
   final Function(String approvalCode)? onApprovalCodeValidated;
 
   const EarlyPunchOutApprovalWidget({
     super.key,
     required this.attendanceId,
+    this.employeeWorkingHours,
     this.onApprovalRequested,
     this.onApprovalCodeValidated,
   });
@@ -64,13 +67,17 @@ class _EarlyPunchOutApprovalWidgetState
       if (employeeId == null) return;
 
       final result = await EarlyPunchOutApprovalService.getApprovalStatus(
-        int.parse(widget.attendanceId),
+        widget.attendanceId,
       );
+
+      print('🔍 Early punch-out approval status result: $result');
 
       if (result['success'] == true && mounted) {
         final newStatus = result['data'];
         final oldStatus = _approvalStatus?['status'];
         final newStatusValue = newStatus?['status'];
+
+        print('🔍 Old status: $oldStatus, New status: $newStatusValue');
 
         setState(() {
           _approvalStatus = newStatus;
@@ -254,12 +261,16 @@ class _EarlyPunchOutApprovalWidgetState
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Normal punch-out time is 6:30 PM. To punch out early, you need admin approval.',
+                    'Normal punch-out time is ${widget.employeeWorkingHours?['workEndTime']?.substring(0, 5) ?? '18:00'}. To punch out early, you need admin approval.',
                     style: TextStyle(fontSize: 12, color: Colors.orange[600]),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    EarlyPunchOutApprovalService.getTimeUntilEarlyPunchOutCutoff(),
+                    widget.employeeWorkingHours != null
+                        ? EmployeeWorkingHoursService.getTimeUntilEarlyPunchOutCutoff(
+                            widget.employeeWorkingHours!,
+                          )
+                        : 'Loading working hours...',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -492,6 +503,30 @@ class _EarlyPunchOutApprovalWidgetState
                   ),
                 ],
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Punch Out Button
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                // Call the callback to trigger punch out in parent
+                widget.onApprovalCodeValidated?.call('APPROVED');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.logout, size: 24),
+              label: const Text(
+                'PUNCH OUT NOW',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],

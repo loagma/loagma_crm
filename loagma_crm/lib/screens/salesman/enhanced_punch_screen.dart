@@ -11,7 +11,7 @@ import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
 import '../../services/live_location_socket.dart';
 import '../../services/late_punch_approval_service.dart';
-import '../../services/early_punch_out_approval_service.dart';
+import '../../services/employee_working_hours_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/late_punch_approval_widget.dart';
 import '../../widgets/early_punch_out_approval_widget.dart';
@@ -47,6 +47,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   bool isAfterCutoff = false;
   bool hasLatePunchApproval = false;
 
+  // Working hours configuration
+  Map<String, dynamic>? employeeWorkingHours;
+  bool isLoadingWorkingHours = false;
+
   // Early punch-out approval
   bool isBeforeEarlyPunchOutCutoff = false;
   bool hasEarlyPunchOutApproval = false;
@@ -59,9 +63,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     super.initState();
     _updateCurrentTime();
     _startTimeTimer();
+    _loadEmployeeWorkingHours();
     _loadTodayPunchData();
     _initializeLocationService();
-    _checkCutoffTime();
   }
 
   @override
@@ -105,24 +109,87 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     });
   }
 
-  void _checkCutoffTime() {
-    final newIsAfterCutoff = LatePunchApprovalService.isAfterCutoffTime();
-    final newIsBeforeEarlyPunchOutCutoff =
-        EarlyPunchOutApprovalService.isBeforeEarlyPunchOutCutoff();
+  Future<void> _loadEmployeeWorkingHours() async {
+    setState(() => isLoadingWorkingHours = true);
 
+    try {
+      final employeeId = UserService.currentUserId;
+      if (employeeId == null || employeeId.isEmpty) {
+        print('❌ Employee ID not found');
+        return;
+      }
+
+      final result = await EmployeeWorkingHoursService.getWorkingHours(
+        employeeId,
+      );
+
+      if (result['success'] == true) {
+        setState(() {
+          employeeWorkingHours = result['data'];
+        });
+        print('✅ Employee working hours loaded: $employeeWorkingHours');
+        _checkCutoffTime(); // Check cutoff times after loading working hours
+      } else {
+        print('❌ Failed to load working hours: ${result['message']}');
+        // Use default working hours if API fails
+        setState(() {
+          employeeWorkingHours = {
+            'workStartTime': '09:00:00',
+            'workEndTime': '18:00:00',
+            'latePunchInGraceMinutes': 45,
+            'earlyPunchOutGraceMinutes': 30,
+            'latePunchInCutoffTime': '09:45:00',
+            'earlyPunchOutCutoffTime': '17:30:00',
+          };
+        });
+        _checkCutoffTime();
+      }
+    } catch (e) {
+      print('❌ Error loading working hours: $e');
+      // Use default working hours on error
+      setState(() {
+        employeeWorkingHours = {
+          'workStartTime': '09:00:00',
+          'workEndTime': '18:00:00',
+          'latePunchInGraceMinutes': 45,
+          'earlyPunchOutGraceMinutes': 30,
+          'latePunchInCutoffTime': '09:45:00',
+          'earlyPunchOutCutoffTime': '17:30:00',
+        };
+      });
+      _checkCutoffTime();
+    } finally {
+      setState(() => isLoadingWorkingHours = false);
+    }
+  }
+
+  void _checkCutoffTime() {
+    if (employeeWorkingHours == null) {
+      // Working hours not loaded yet, skip cutoff check
+      return;
+    }
+
+    final newIsAfterCutoff =
+        EmployeeWorkingHoursService.isAfterLatePunchInCutoff(
+          employeeWorkingHours!,
+        );
+    final newIsBeforeEarlyPunchOutCutoff =
+        EmployeeWorkingHoursService.isBeforeEarlyPunchOutCutoff(
+          employeeWorkingHours!,
+        );
+
+    print('🕘 Dynamic cutoff check:');
     print(
-      '🕘 Cutoff check: isAfterCutoff=$newIsAfterCutoff, isBeforeEarlyPunchOutCutoff=$newIsBeforeEarlyPunchOutCutoff',
+      '  - Working hours: ${employeeWorkingHours!['workStartTime']} - ${employeeWorkingHours!['workEndTime']}',
     );
-    print('🕘 Current DateTime.now(): ${DateTime.now()}');
-    print('🕘 Current DateTime.now().toUtc(): ${DateTime.now().toUtc()}');
     print(
-      '🕘 Current IST calculated: ${DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30))}',
+      '  - Late punch-in cutoff: ${employeeWorkingHours!['latePunchInCutoffTime']}',
     );
-    print('🕘 isPunchedIn: $isPunchedIn');
-    print('🕘 currentAttendance: ${currentAttendance?.id}');
     print(
-      '🕘 isAfterCutoff: $isAfterCutoff (should show approval widget if true and not punched in)',
+      '  - Early punch-out cutoff: ${employeeWorkingHours!['earlyPunchOutCutoffTime']}',
     );
+    print('  - isAfterCutoff: $newIsAfterCutoff');
+    print('  - isBeforeEarlyPunchOutCutoff: $newIsBeforeEarlyPunchOutCutoff');
 
     // Always update state to ensure UI reflects current time
     setState(() {
@@ -736,6 +803,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          await _loadEmployeeWorkingHours();
           await _loadTodayPunchData();
           await _initializeLocationService();
           // Force refresh of approval status by rebuilding the widget
@@ -1284,16 +1352,18 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               !hasEarlyPunchOutApproval)
             EarlyPunchOutApprovalWidget(
               attendanceId: currentAttendance!.id,
+              employeeWorkingHours: employeeWorkingHours,
               onApprovalRequested: () {
                 // Refresh status after approval request
                 setState(() {});
               },
               onApprovalCodeValidated: (String approvalCode) {
-                // Store the approval status
+                // Store the approval status and trigger punch out
                 setState(() {
                   hasEarlyPunchOutApproval = true;
                 });
-                // Don't automatically trigger punch out - let user click the button
+                // Trigger punch out dialog directly
+                _handlePunchOut();
               },
             )
           else if (hasEarlyPunchOutApproval)
