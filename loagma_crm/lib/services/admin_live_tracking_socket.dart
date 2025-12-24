@@ -96,7 +96,7 @@ class AdminLiveTrackingSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    // Use same port as HTTP server for WebSocket
+    // WebSocket runs on the same server as HTTP, no port change needed
     return '$wsUrl/ws?token=$token';
   }
 

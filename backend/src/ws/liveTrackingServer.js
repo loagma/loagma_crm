@@ -1,5 +1,8 @@
 import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 /**
  * Production WebSocket Server for Real-time Live Location Tracking
@@ -199,7 +202,7 @@ class LiveTrackingServer {
     /**
      * Handle location update from salesman
      */
-    handleLocationUpdate(ws, message) {
+    async handleLocationUpdate(ws, message) {
         const { salesmanId, lat, lng, timestamp } = message;
         
         // Validate message format
@@ -238,6 +241,9 @@ class LiveTrackingServer {
         // Append to route (with distance filtering to avoid spam)
         if (this.shouldAddToRoute(locationData.route, newLocation)) {
             locationData.route.push(newLocation);
+            
+            // Store location in database immediately for route visualization
+            await this.storeLocationInDatabase(salesmanId, newLocation);
         }
         
         // Broadcast to all connected admins
@@ -250,6 +256,45 @@ class LiveTrackingServer {
         });
         
         console.log(`📍 Location updated for ${salesmanId}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    }
+
+    /**
+     * Store location update in database for route visualization
+     */
+    async storeLocationInDatabase(salesmanId, location) {
+        try {
+            // Find the current active attendance session for this salesman
+            const activeAttendance = await prisma.attendance.findFirst({
+                where: {
+                    employeeId: salesmanId,
+                    status: 'active'
+                },
+                orderBy: {
+                    punchInTime: 'desc'
+                }
+            });
+
+            if (!activeAttendance) {
+                console.log(`⚠️ No active attendance found for salesman ${salesmanId}`);
+                return;
+            }
+
+            // Store the location point in the database
+            await prisma.salesmanRouteLog.create({
+                data: {
+                    employeeId: salesmanId,
+                    attendanceId: activeAttendance.id,
+                    latitude: location.lat,
+                    longitude: location.lng,
+                    recordedAt: new Date(location.timestamp),
+                    isHomeLocation: false // WebSocket updates are not home locations
+                }
+            });
+
+            console.log(`💾 Stored location in database for ${salesmanId}`);
+        } catch (error) {
+            console.error(`❌ Error storing location in database for ${salesmanId}:`, error);
+        }
     }
 
     /**
@@ -333,6 +378,7 @@ class LiveTrackingServer {
 
     /**
      * Persist salesman route to database on disconnect
+     * Since we now store locations in real-time, this just clears the in-memory route
      */
     async persistSalesmanRoute(salesmanId) {
         try {
@@ -341,15 +387,13 @@ class LiveTrackingServer {
                 return;
             }
             
-            // TODO: Implement database persistence
-            // This would call your existing REST API to store the route
-            console.log(`💾 Persisting route for ${salesmanId}: ${locationData.route.length} points`);
+            console.log(`💾 Clearing in-memory route for ${salesmanId}: ${locationData.route.length} points (already stored in database)`);
             
-            // Clear route after persistence
+            // Clear route after disconnect since points are already stored in database
             locationData.route = [];
             
         } catch (error) {
-            console.error(`❌ Error persisting route for ${salesmanId}:`, error);
+            console.error(`❌ Error clearing route for ${salesmanId}:`, error);
         }
     }
 

@@ -167,19 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
           );
 
           if (userWithRole.isNotEmpty) {
-            // Generate a proper JWT token for development
-            const jwt = require('jsonwebtoken');
-            const devToken = jwt.sign(
-              {
-                id: userWithRole['id'],
-                roles: [selectedDevRole],
-                name: userWithRole['name'] ?? 'Dev User',
-                contactNumber: userWithRole['contactNumber'] ?? '9999999999',
-              },
-              process.env.JWT_SECRET || 'your-secret-key',
-              {expiresIn: '24h'},
-            );
-
             // Save real user data
             await UserService.loginFromApi({
               'success': true,
@@ -189,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 'contactNumber': userWithRole['contactNumber'] ?? '9999999999',
                 'name': userWithRole['name'] ?? 'Dev User',
               },
-              'token': devToken,
+              'token': 'dev_mode_token',
             });
 
             if (mounted) {
