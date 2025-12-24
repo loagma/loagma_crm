@@ -22,6 +22,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import latePunchApprovalRoutes from './routes/latePunchApprovalRoutes.js';
 import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js';
 import testRoutes from './routes/testRoutes.js';
+import migrationRoutes from './routes/migrationRoutes.js';
 
 const app = express();
 
@@ -77,6 +78,7 @@ app.use('/notifications', notificationRoutes);
 app.use('/late-punch-approval', latePunchApprovalRoutes);
 app.use('/early-punch-out-approval', earlyPunchOutApprovalRoutes);
 app.use('/test', testRoutes);
+app.use('/api/migration', migrationRoutes);
 
 // 404 Handler
 app.use((req, res) => {
