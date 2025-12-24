@@ -113,28 +113,41 @@ class LiveTrackingServer {
                 select: {
                     id: true,
                     name: true,
-                    roles: true,
+                    roleId: true,
                     isActive: true
                 }
             });
 
             if (!user || !user.isActive) {
+                console.log(`❌ User not found or inactive: ${jwtPayload.id}`);
                 return null;
             }
 
-            // Map role IDs to role names
+            // Map role IDs to role names - this matches your database structure
             const roleMapping = {
                 'R001': 'admin',
                 'R002': 'salesman',
                 'R003': 'telecaller'
             };
 
-            const roleNames = user.roles.map(roleId => roleMapping[roleId]).filter(Boolean);
+            // Get role from roleId field (primary source based on your DB)
+            let roleName = 'unknown';
+            
+            // 1. First check user's roleId from database
+            if (user.roleId && roleMapping[user.roleId]) {
+                roleName = roleMapping[user.roleId];
+            }
+            // 2. Fallback to JWT roleId if database roleId is null
+            else if (jwtPayload.roleId && roleMapping[jwtPayload.roleId]) {
+                roleName = roleMapping[jwtPayload.roleId];
+            }
+
+            console.log(`🔍 User ${user.id} (${user.name}) role: ${user.roleId} -> ${roleName}`);
 
             return {
                 id: user.id,
                 name: user.name,
-                roles: roleNames
+                roles: [roleName]
             };
         } catch (error) {
             console.error('Error fetching user from database:', error);

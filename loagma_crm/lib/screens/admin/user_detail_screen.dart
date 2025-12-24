@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../../services/api_config.dart';
 import 'edit_user_screen.dart';
 
 class UserDetailScreen extends StatefulWidget {
@@ -19,6 +22,68 @@ class UserDetailScreen extends StatefulWidget {
 }
 
 class _UserDetailScreenState extends State<UserDetailScreen> {
+  Map<String, dynamic>? workingHours;
+  bool isLoadingWorkingHours = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWorkingHours();
+  }
+
+  Future<void> _loadWorkingHours() async {
+    setState(() => isLoadingWorkingHours = true);
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/employee-working-hours/${widget.user['id']}',
+      );
+      print('🔄 Loading working hours from: $url');
+      final response = await http.get(url).timeout(const Duration(seconds: 30));
+      final data = jsonDecode(response.body);
+
+      print('📡 Working hours API response: ${response.statusCode}');
+      print('📦 Working hours data: $data');
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        setState(() {
+          workingHours = data['data'];
+        });
+        print('✅ Working hours loaded successfully: $workingHours');
+      } else {
+        print(
+          '❌ Working hours API failed: ${data['message'] ?? 'Unknown error'}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error loading working hours: $e');
+      // Silently fail - working hours are optional to display
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingWorkingHours = false);
+      }
+    }
+  }
+
+  String _formatTime(String? timeStr) {
+    if (timeStr == null) return 'Not set';
+    try {
+      final parts = timeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      final timeOfDay = TimeOfDay(hour: hour, minute: minute);
+
+      final displayHour = timeOfDay.hourOfPeriod == 0
+          ? 12
+          : timeOfDay.hourOfPeriod;
+      final displayMinute = timeOfDay.minute.toString().padLeft(2, '0');
+      final period = timeOfDay.period == DayPeriod.am ? 'AM' : 'PM';
+
+      return '$displayHour:$displayMinute $period';
+    } catch (e) {
+      return timeStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // 🔥 FIXED SALARY HANDLING HERE (NOT INSIDE UI)
@@ -46,6 +111,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 ),
               );
               if (result == true) {
+                // Reload working hours after edit
+                _loadWorkingHours();
                 widget.onUpdate();
                 if (context.mounted) {
                   Navigator.pop(context, true);
@@ -205,6 +272,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   widget.user['department'],
                 ),
             ]),
+
+            const SizedBox(height: 20),
+
+            // WORKING HOURS
+            _buildSectionTitle("Working Hours"),
+            _buildWorkingHoursCard(),
 
             const SizedBox(height: 20),
 
@@ -412,6 +485,192 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   // ============================================================
   // SMALL WIDGET BUILDERS
   // ============================================================
+
+  Widget _buildWorkingHoursCard() {
+    print(
+      '🔍 Building working hours card - Loading: $isLoadingWorkingHours, Data: $workingHours',
+    );
+
+    if (isLoadingWorkingHours) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(
+            child: Column(
+              children: [
+                CircularProgressIndicator(color: Color(0xFFD7BE69)),
+                SizedBox(height: 12),
+                Text('Loading working hours...'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (workingHours == null) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(Icons.schedule_outlined, size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 12),
+              Text(
+                "Working hours not configured",
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Default schedule applies (9:00 AM - 6:00 PM)",
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Tap edit to configure working hours",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Work Schedule
+            _buildWorkingHoursRow(
+              Icons.login,
+              "Work Start Time",
+              _formatTime(workingHours!['workStartTime']),
+              Colors.green,
+            ),
+            const SizedBox(height: 12),
+            _buildWorkingHoursRow(
+              Icons.logout,
+              "Work End Time",
+              _formatTime(workingHours!['workEndTime']),
+              Colors.red,
+            ),
+
+            const Divider(height: 24),
+
+            // Grace Periods
+            _buildWorkingHoursRow(
+              Icons.timer,
+              "Late Punch-In Grace",
+              "${workingHours!['latePunchInGraceMinutes'] ?? 45} minutes",
+              Colors.orange,
+            ),
+            const SizedBox(height: 12),
+            _buildWorkingHoursRow(
+              Icons.timer_off,
+              "Early Punch-Out Grace",
+              "${workingHours!['earlyPunchOutGraceMinutes'] ?? 30} minutes",
+              Colors.purple,
+            ),
+
+            const Divider(height: 24),
+
+            // Calculated Cutoffs
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.blue[700],
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        "Approval Required",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "• Late punch-in after ${_formatTime(workingHours!['latePunchInCutoffTime'])}",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "• Early punch-out before ${_formatTime(workingHours!['earlyPunchOutCutoffTime'])}",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkingHoursRow(
+    IconData icon,
+    String label,
+    String value,
+    Color iconColor,
+  ) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 20, color: iconColor),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
