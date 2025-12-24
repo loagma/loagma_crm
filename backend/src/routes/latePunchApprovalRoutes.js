@@ -143,7 +143,7 @@ router.get('/pending', async (req, res) => {
     }
 });
 
-// Admin: Approve/Reject request
+// Admin: Approve/Reject request (legacy endpoint)
 router.post('/admin/action', async (req, res) => {
     try {
         const { requestId, action, adminId, adminName } = req.body;
@@ -176,6 +176,120 @@ router.post('/admin/action', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to update approval request'
+        });
+    }
+});
+
+// Admin: Approve late punch-in request
+router.post('/approve/:requestId', async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { adminId, adminRemarks } = req.body;
+
+        if (!requestId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Request ID is required'
+            });
+        }
+
+        // Check if request exists
+        const existingRequest = await prisma.latePunchApproval.findUnique({
+            where: { id: requestId }
+        });
+
+        if (!existingRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Approval request not found'
+            });
+        }
+
+        if (existingRequest.status !== 'PENDING') {
+            return res.status(400).json({
+                success: false,
+                message: `Request is already ${existingRequest.status.toLowerCase()}`
+            });
+        }
+
+        const updatedRequest = await prisma.latePunchApproval.update({
+            where: { id: requestId },
+            data: {
+                status: 'APPROVED',
+                approvedBy: adminId,
+                adminRemarks: adminRemarks || 'Approved',
+                approvedAt: new Date()
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'Late punch-in request approved successfully',
+            data: updatedRequest
+        });
+
+    } catch (error) {
+        console.error('Error approving late punch request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to approve request'
+        });
+    }
+});
+
+// Admin: Reject late punch-in request
+router.post('/reject/:requestId', async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { adminId, adminRemarks } = req.body;
+
+        if (!requestId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Request ID is required'
+            });
+        }
+
+        // Check if request exists
+        const existingRequest = await prisma.latePunchApproval.findUnique({
+            where: { id: requestId }
+        });
+
+        if (!existingRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Approval request not found'
+            });
+        }
+
+        if (existingRequest.status !== 'PENDING') {
+            return res.status(400).json({
+                success: false,
+                message: `Request is already ${existingRequest.status.toLowerCase()}`
+            });
+        }
+
+        const updatedRequest = await prisma.latePunchApproval.update({
+            where: { id: requestId },
+            data: {
+                status: 'REJECTED',
+                approvedBy: adminId,
+                adminRemarks: adminRemarks || 'Rejected',
+                approvedAt: new Date()
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'Late punch-in request rejected',
+            data: updatedRequest
+        });
+
+    } catch (error) {
+        console.error('Error rejecting late punch request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reject request'
         });
     }
 });
