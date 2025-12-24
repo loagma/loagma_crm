@@ -81,8 +81,15 @@ class AdminLiveTrackingSocket {
       // Wait for connection to establish
       await Future.delayed(const Duration(milliseconds: 500));
 
+      // Check if connection is still open after delay
+      // (server might have closed it due to auth failure)
+      if (_channel == null) {
+        print('❌ Connection was closed during handshake');
+        return false;
+      }
+
       _isConnected = true;
-      _reconnectAttempts = 0;
+      _reconnectAttempts = 0; // Only reset on successful stable connection
       _startHeartbeat();
       _connectionController.add(true);
 
@@ -265,16 +272,20 @@ class AdminLiveTrackingSocket {
 
   /// Schedule reconnection attempt
   void _scheduleReconnect() {
+    // Cancel any existing reconnect timer
+    _reconnectTimer?.cancel();
+
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       print('❌ Max reconnection attempts reached');
       return;
     }
 
     _reconnectAttempts++;
+    // Use exponential backoff with minimum 5 seconds
     final delay = _reconnectDelaySeconds * _reconnectAttempts;
 
     print(
-      '🔄 Scheduling admin reconnect attempt ${_reconnectAttempts}/${_maxReconnectAttempts} in ${delay}s',
+      '🔄 Scheduling admin reconnect attempt $_reconnectAttempts/$_maxReconnectAttempts in ${delay}s',
     );
 
     _reconnectTimer = Timer(Duration(seconds: delay), () async {
