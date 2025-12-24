@@ -1,14 +1,16 @@
-import express from 'express';
+// This script can be run via Render's shell or as a one-time job
+// to migrate the production database with working hours columns
+
 import { PrismaClient } from '@prisma/client';
 
-const router = express.Router();
 const prisma = new PrismaClient();
 
-// Migration endpoint for working hours (admin only)
-router.post('/working-hours', async (req, res) => {
-    try {
-        console.log('🚀 Starting working hours migration via API...');
+async function runProductionMigration() {
+    console.log('🚀 Starting production migration for working hours...');
+    console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+    console.log('🗄️ Database connected:', !!process.env.DATABASE_URL);
 
+    try {
         // Add columns one by one with error handling
         const migrations = [
             {
@@ -29,21 +31,16 @@ router.post('/working-hours', async (req, res) => {
             }
         ];
 
-        const results = [];
-
         for (const migration of migrations) {
             try {
                 console.log(`📝 Adding column: ${migration.name}`);
                 await prisma.$executeRawUnsafe(migration.sql);
                 console.log(`✅ Successfully added: ${migration.name}`);
-                results.push({ column: migration.name, status: 'added' });
             } catch (error) {
                 if (error.code === '42701' || error.message.includes('already exists')) {
                     console.log(`ℹ️ Column ${migration.name} already exists, skipping`);
-                    results.push({ column: migration.name, status: 'exists' });
                 } else {
                     console.error(`❌ Failed to add ${migration.name}:`, error.message);
-                    results.push({ column: migration.name, status: 'failed', error: error.message });
                 }
             }
         }
@@ -57,77 +54,24 @@ router.post('/working-hours', async (req, res) => {
             `UPDATE "User" SET "earlyPunchOutGraceMinutes" = 30 WHERE "earlyPunchOutGraceMinutes" IS NULL`
         ];
 
-        const updateResults = [];
         for (const update of updates) {
             try {
                 const result = await prisma.$executeRawUnsafe(update);
                 console.log(`✅ Updated ${result} users`);
-                updateResults.push({ query: update.substring(0, 50) + '...', updated: result });
             } catch (error) {
                 console.log(`⚠️ Update failed:`, error.message);
-                updateResults.push({ query: update.substring(0, 50) + '...', error: error.message });
             }
         }
 
-        console.log('🎉 Working hours migration completed!');
-
-        res.json({
-            success: true,
-            message: 'Working hours migration completed successfully',
-            results: {
-                columns: results,
-                updates: updateResults
-            }
-        });
+        console.log('🎉 Production migration completed successfully!');
+        console.log('📝 Please restart the server to refresh Prisma client cache');
 
     } catch (error) {
         console.error('💥 Migration failed:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Migration failed',
-            error: error.message
-        });
+        process.exit(1);
+    } finally {
+        await prisma.$disconnect();
     }
-});
+}
 
-// Check migration status
-router.get('/working-hours/status', async (req, res) => {
-    try {
-        // Try to query working hours columns to see if they exist
-        const testUser = await prisma.user.findFirst({
-            select: {
-                id: true,
-                name: true,
-                workStartTime: true,
-                workEndTime: true,
-                latePunchInGraceMinutes: true,
-                earlyPunchOutGraceMinutes: true
-            }
-        });
-
-        res.json({
-            success: true,
-            message: 'Working hours columns exist',
-            migrated: true,
-            sampleUser: testUser
-        });
-
-    } catch (error) {
-        if (error.code === 'P2022' || error.message.includes('does not exist')) {
-            res.json({
-                success: true,
-                message: 'Working hours columns do not exist',
-                migrated: false,
-                error: error.message
-            });
-        } else {
-            res.status(500).json({
-                success: false,
-                message: 'Error checking migration status',
-                error: error.message
-            });
-        }
-    }
-});
-
-export default router;
+runProductionMigration();

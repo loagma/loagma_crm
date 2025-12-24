@@ -22,7 +22,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import latePunchApprovalRoutes from './routes/latePunchApprovalRoutes.js';
 import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js';
 import employeeWorkingHoursRoutes from './routes/employeeWorkingHoursRoutes.js';
-import testRoutes from './routes/testRoutes.js';
+import migrationRoutes from './routes/migrationRoutes.js';
 import migrationRoutes from './routes/migrationRoutes.js';
 
 const app = express();
