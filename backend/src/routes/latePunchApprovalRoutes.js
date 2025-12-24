@@ -78,12 +78,12 @@ router.post('/request', async (req, res) => {
     }
 });
 
-// Check approval status
+// Check approval status - returns any existing request for today (PENDING, APPROVED, or REJECTED)
 router.get('/status/:employeeId', async (req, res) => {
     try {
         const { employeeId } = req.params;
 
-        // Check for today's approval
+        // Check for today's approval request
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
@@ -95,18 +95,33 @@ router.get('/status/:employeeId', async (req, res) => {
                 requestDate: {
                     gte: today,
                     lt: tomorrow
-                },
-                status: 'APPROVED'
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
             }
         });
 
-        res.json({
-            success: true,
-            data: {
-                hasApproval: !!approval,
-                approval: approval
-            }
-        });
+        if (approval) {
+            res.json({
+                success: true,
+                data: {
+                    hasApproval: approval.status === 'APPROVED',
+                    status: approval.status,
+                    reason: approval.reason,
+                    requestTime: approval.requestDate,
+                    approvedBy: approval.approvedBy,
+                    approvedAt: approval.approvedAt,
+                    adminRemarks: approval.adminRemarks,
+                    approval: approval
+                }
+            });
+        } else {
+            res.json({
+                success: true,
+                data: null
+            });
+        }
 
     } catch (error) {
         console.error('Error checking approval status:', error);

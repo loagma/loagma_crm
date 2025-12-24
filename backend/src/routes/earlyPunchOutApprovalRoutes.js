@@ -70,25 +70,41 @@ router.post('/request', async (req, res) => {
     }
 });
 
-// Check approval status
+// Check approval status - returns any existing request (PENDING, APPROVED, or REJECTED)
 router.get('/status/:attendanceId', async (req, res) => {
     try {
         const { attendanceId } = req.params;
 
+        // Find the most recent approval request for this attendance
         const approval = await prisma.earlyPunchOutApproval.findFirst({
             where: {
-                attendanceId: attendanceId, // Remove parseInt - attendanceId is a string
-                status: 'APPROVED'
+                attendanceId: attendanceId
+            },
+            orderBy: {
+                createdAt: 'desc'
             }
         });
 
-        res.json({
-            success: true,
-            data: {
-                hasApproval: !!approval,
-                approval: approval
-            }
-        });
+        if (approval) {
+            res.json({
+                success: true,
+                data: {
+                    hasApproval: approval.status === 'APPROVED',
+                    status: approval.status,
+                    reason: approval.reason,
+                    requestTime: approval.requestDate,
+                    approvedBy: approval.approvedBy,
+                    approvedAt: approval.approvedAt,
+                    adminRemarks: approval.adminRemarks,
+                    approval: approval
+                }
+            });
+        } else {
+            res.json({
+                success: true,
+                data: null
+            });
+        }
 
     } catch (error) {
         console.error('Error checking approval status:', error);
