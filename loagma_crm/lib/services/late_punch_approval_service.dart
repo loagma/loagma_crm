@@ -208,13 +208,14 @@ class LatePunchApprovalService {
     final now = DateTime.now().toUtc().add(
       const Duration(hours: 5, minutes: 30),
     );
-    final cutoffTime = DateTime(now.year, now.month, now.day, 9, 45);
+    // For testing: set cutoff to 8:00 AM so approval widget shows more often
+    final cutoffTime = DateTime(now.year, now.month, now.day, 8, 0);
     final isAfter = now.isAfter(cutoffTime);
 
     print(
       '🕘 Current IST time: ${now.hour}:${now.minute.toString().padLeft(2, '0')}',
     );
-    print('🕘 Cutoff time: 9:45');
+    print('🕘 Cutoff time: 8:00 (testing)');
     print('🕘 Is after cutoff: $isAfter');
 
     return isAfter;
@@ -226,7 +227,8 @@ class LatePunchApprovalService {
     final now = DateTime.now().toUtc().add(
       const Duration(hours: 5, minutes: 30),
     );
-    final cutoffTime = DateTime(now.year, now.month, now.day, 9, 45);
+    // For testing: set cutoff to 8:00 AM
+    final cutoffTime = DateTime(now.year, now.month, now.day, 8, 0);
 
     if (now.isAfter(cutoffTime)) {
       return 'Cutoff time passed';
