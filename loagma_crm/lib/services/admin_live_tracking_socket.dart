@@ -58,6 +58,12 @@ class AdminLiveTrackingSocket {
         return false;
       }
 
+      // Verify we have valid authentication
+      if (!UserService.hasValidAuth) {
+        print('❌ Invalid authentication - missing user ID or token');
+        return false;
+      }
+
       // Build WebSocket URL
       final wsUrl = _buildWebSocketUrl(token);
       print('🔗 Admin connecting to WebSocket: $wsUrl');
@@ -96,9 +102,8 @@ class AdminLiveTrackingSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    // WebSocket runs on the same server as HTTP, no port change needed
-    // Add userType parameter for proper authentication
-    return '$wsUrl/ws?token=$token&userType=admin';
+    // Use real JWT token for authentication
+    return '$wsUrl/ws?token=$token';
   }
 
   /// Disconnect from WebSocket

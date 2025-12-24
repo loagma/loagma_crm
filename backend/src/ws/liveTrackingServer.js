@@ -58,20 +58,19 @@ class LiveTrackingServer {
         try {
             const url = new URL(info.req.url, 'ws://localhost');
             const token = url.searchParams.get('token');
-            const userType = url.searchParams.get('userType'); // admin or salesman
-            const employeeId = url.searchParams.get('employeeId'); // for salesman connections
             
             if (!token) {
                 console.log('❌ WebSocket connection rejected: No token provided');
                 return false;
             }
 
-            // Handle development mode token
+            // Handle development mode token (for testing only)
             if (token === 'dev_mode_token') {
                 console.log('✅ WebSocket connection verified for development mode');
+                const userType = url.searchParams.get('userType');
+                const employeeId = url.searchParams.get('employeeId');
                 
                 if (userType === 'salesman' && employeeId) {
-                    // Development mode salesman connection
                     info.req.user = {
                         id: employeeId,
                         roles: ['salesman'],
@@ -79,7 +78,6 @@ class LiveTrackingServer {
                     };
                     console.log(`🔧 Dev mode salesman connection: ${employeeId}`);
                 } else {
-                    // Development mode admin connection (default)
                     info.req.user = {
                         id: 'dev_admin',
                         roles: ['admin'],
@@ -93,10 +91,10 @@ class LiveTrackingServer {
             // Verify JWT token for production
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
             
-            // Store user info for later use
-            info.req.user = decoded;
+            // Store JWT payload temporarily, we'll fetch user details in handleConnection
+            info.req.jwtPayload = decoded;
             
-            console.log(`✅ WebSocket connection verified for user: ${decoded.id} (${decoded.roles?.[0] || 'unknown'})`);
+            console.log(`✅ WebSocket JWT verified for user: ${decoded.id}`);
             return true;
             
         } catch (error) {
@@ -106,10 +104,60 @@ class LiveTrackingServer {
     }
 
     /**
+     * Get user details from JWT payload
+     */
+    async getUserFromJWT(jwtPayload) {
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id: jwtPayload.id },
+                select: {
+                    id: true,
+                    name: true,
+                    roles: true,
+                    isActive: true
+                }
+            });
+
+            if (!user || !user.isActive) {
+                return null;
+            }
+
+            // Map role IDs to role names
+            const roleMapping = {
+                'R001': 'admin',
+                'R002': 'salesman',
+                'R003': 'telecaller'
+            };
+
+            const roleNames = user.roles.map(roleId => roleMapping[roleId]).filter(Boolean);
+
+            return {
+                id: user.id,
+                name: user.name,
+                roles: roleNames
+            };
+        } catch (error) {
+            console.error('Error fetching user from database:', error);
+            return null;
+        }
+    }
+
+    /**
      * Handle new WebSocket connection
      */
-    handleConnection(ws, req) {
-        const user = req.user;
+    async handleConnection(ws, req) {
+        let user = req.user;
+        
+        // If we have a JWT payload instead of user object, fetch user details
+        if (!user && req.jwtPayload) {
+            user = await this.getUserFromJWT(req.jwtPayload);
+            if (!user) {
+                console.log('❌ User not found in database, closing connection');
+                ws.close(1008, 'User not found');
+                return;
+            }
+        }
+        
         const userId = user.id;
         const userRole = user.roles?.[0] || 'unknown';
         
@@ -139,7 +187,7 @@ class LiveTrackingServer {
             ws.lastPong = Date.now();
         });
 
-        console.log(`🔗 ${userRole} connected: ${userId}`);
+        console.log(`🔗 ${userRole} connected: ${userId} (${user.name})`);
     }
 
     /**

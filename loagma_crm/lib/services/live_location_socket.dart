@@ -92,6 +92,12 @@ class LiveLocationSocket {
         return false;
       }
 
+      // Verify we have valid authentication
+      if (!UserService.hasValidAuth) {
+        print('❌ Invalid authentication - missing user ID or token');
+        return false;
+      }
+
       // Build WebSocket URL
       final wsUrl = _buildWebSocketUrl(token);
       print('🔗 Connecting to WebSocket: $wsUrl');
@@ -131,12 +137,8 @@ class LiveLocationSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    // Get current user ID for salesman authentication
-    final salesmanId = UserService.currentUserId ?? 'unknown';
-
-    // Always use the same server and port for WebSocket
-    final finalUrl =
-        '$wsUrl/ws?token=$token&userType=salesman&employeeId=$salesmanId';
+    // Use real JWT token for authentication
+    final finalUrl = '$wsUrl/ws?token=$token';
     print('🔗 Using WebSocket URL: $finalUrl');
 
     return finalUrl;
