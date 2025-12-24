@@ -56,6 +56,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
   List<String> selectedLanguages = [];
   String? selectedArea;
 
+  // Working Hours Configuration
+  TimeOfDay? _workStartTime;
+  TimeOfDay? _workEndTime;
+  int _latePunchInGraceMinutes = 45;
+  int _earlyPunchOutGraceMinutes = 30;
+  bool isLoadingWorkingHours = false;
+
   // Geolocation
   double? _latitude;
   double? _longitude;
@@ -169,6 +176,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
         fetchLocationFromPincode();
       });
     }
+
+    // Load working hours for this employee
+    _loadWorkingHours();
   }
 
   @override
@@ -205,6 +215,102 @@ class _EditUserScreenState extends State<EditUserScreen> {
     } catch (e) {
       if (kDebugMode) print('❌ Error loading roles: $e');
     }
+  }
+
+  Future<void> _loadWorkingHours() async {
+    setState(() => isLoadingWorkingHours = true);
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/employee-working-hours/${widget.user['id']}',
+      );
+      final response = await http.get(url).timeout(const Duration(seconds: 30));
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final workingHours = data['data'];
+
+        // Parse work start time (HH:MM:SS format)
+        if (workingHours['workStartTime'] != null) {
+          final parts = workingHours['workStartTime'].split(':');
+          _workStartTime = TimeOfDay(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          );
+        }
+
+        // Parse work end time (HH:MM:SS format)
+        if (workingHours['workEndTime'] != null) {
+          final parts = workingHours['workEndTime'].split(':');
+          _workEndTime = TimeOfDay(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          );
+        }
+
+        _latePunchInGraceMinutes =
+            workingHours['latePunchInGraceMinutes'] ?? 45;
+        _earlyPunchOutGraceMinutes =
+            workingHours['earlyPunchOutGraceMinutes'] ?? 30;
+
+        if (kDebugMode) {
+          print('✅ Working hours loaded: $_workStartTime - $_workEndTime');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Error loading working hours: $e');
+      // Use defaults if API fails
+      _workStartTime = const TimeOfDay(hour: 9, minute: 0);
+      _workEndTime = const TimeOfDay(hour: 18, minute: 0);
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingWorkingHours = false);
+      }
+    }
+  }
+
+  Future<void> _saveWorkingHours() async {
+    try {
+      final workStartTimeStr = _workStartTime != null
+          ? '${_workStartTime!.hour.toString().padLeft(2, '0')}:${_workStartTime!.minute.toString().padLeft(2, '0')}:00'
+          : '09:00:00';
+      final workEndTimeStr = _workEndTime != null
+          ? '${_workEndTime!.hour.toString().padLeft(2, '0')}:${_workEndTime!.minute.toString().padLeft(2, '0')}:00'
+          : '18:00:00';
+
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/employee-working-hours/${widget.user['id']}',
+      );
+      final response = await http
+          .put(
+            url,
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              'workStartTime': workStartTimeStr,
+              'workEndTime': workEndTimeStr,
+              'latePunchInGraceMinutes': _latePunchInGraceMinutes,
+              'earlyPunchOutGraceMinutes': _earlyPunchOutGraceMinutes,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        if (kDebugMode) print('✅ Working hours saved successfully');
+      } else {
+        if (kDebugMode)
+          print('❌ Failed to save working hours: ${data['message']}');
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Error saving working hours: $e');
+    }
+  }
+
+  String _formatTimeOfDay(TimeOfDay? time) {
+    if (time == null) return 'Not set';
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
   }
 
   Future<void> fetchDepartments() async {
@@ -973,6 +1079,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
             body: jsonEncode(salaryBody),
           );
         }
+
+        // Save working hours
+        await _saveWorkingHours();
 
         // Show success toast
         if (mounted) {
@@ -1874,6 +1983,248 @@ class _EditUserScreenState extends State<EditUserScreen> {
                         },
                       );
                     },
+                  ),
+                  const SizedBox(height: 25),
+
+                  // Working Hours Section
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.schedule,
+                                color: Color(0xFFD7BE69),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                "Working Hours",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (isLoadingWorkingHours)
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Set employee's work schedule for late punch-in and early punch-out rules",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Work Start Time
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.login,
+                              color: Colors.green,
+                            ),
+                            title: const Text("Work Start Time"),
+                            subtitle: Text(_formatTimeOfDay(_workStartTime)),
+                            trailing: const Icon(Icons.edit),
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime:
+                                    _workStartTime ??
+                                    const TimeOfDay(hour: 9, minute: 0),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: const ColorScheme.light(
+                                        primary: Color(0xFFD7BE69),
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() => _workStartTime = picked);
+                              }
+                            },
+                          ),
+                          const Divider(),
+
+                          // Work End Time
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.logout,
+                              color: Colors.red,
+                            ),
+                            title: const Text("Work End Time"),
+                            subtitle: Text(_formatTimeOfDay(_workEndTime)),
+                            trailing: const Icon(Icons.edit),
+                            onTap: () async {
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime:
+                                    _workEndTime ??
+                                    const TimeOfDay(hour: 18, minute: 0),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: Theme.of(context).copyWith(
+                                      colorScheme: const ColorScheme.light(
+                                        primary: Color(0xFFD7BE69),
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() => _workEndTime = picked);
+                              }
+                            },
+                          ),
+                          const Divider(),
+
+                          // Late Punch-In Grace Minutes
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.timer,
+                              color: Colors.orange,
+                            ),
+                            title: const Text("Late Punch-In Grace"),
+                            subtitle: Text(
+                              "$_latePunchInGraceMinutes minutes after start time",
+                            ),
+                            trailing: SizedBox(
+                              width: 120,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                    onPressed: _latePunchInGraceMinutes > 0
+                                        ? () => setState(
+                                            () => _latePunchInGraceMinutes -= 5,
+                                          )
+                                        : null,
+                                  ),
+                                  Text(
+                                    '$_latePunchInGraceMinutes',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    onPressed: _latePunchInGraceMinutes < 120
+                                        ? () => setState(
+                                            () => _latePunchInGraceMinutes += 5,
+                                          )
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(),
+
+                          // Early Punch-Out Grace Minutes
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.timer_off,
+                              color: Colors.purple,
+                            ),
+                            title: const Text("Early Punch-Out Grace"),
+                            subtitle: Text(
+                              "$_earlyPunchOutGraceMinutes minutes before end time",
+                            ),
+                            trailing: SizedBox(
+                              width: 120,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                    onPressed: _earlyPunchOutGraceMinutes > 0
+                                        ? () => setState(
+                                            () =>
+                                                _earlyPunchOutGraceMinutes -= 5,
+                                          )
+                                        : null,
+                                  ),
+                                  Text(
+                                    '$_earlyPunchOutGraceMinutes',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    onPressed: _earlyPunchOutGraceMinutes < 120
+                                        ? () => setState(
+                                            () =>
+                                                _earlyPunchOutGraceMinutes += 5,
+                                          )
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Summary
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Summary",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  "• Late punch-in requires approval after ${_workStartTime != null ? _formatTimeOfDay(TimeOfDay(hour: _workStartTime!.hour + (_workStartTime!.minute + _latePunchInGraceMinutes) ~/ 60, minute: (_workStartTime!.minute + _latePunchInGraceMinutes) % 60)) : 'N/A'}",
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "• Early punch-out requires approval before ${_workEndTime != null ? _formatTimeOfDay(TimeOfDay(hour: _workEndTime!.hour - (_earlyPunchOutGraceMinutes ~/ 60) - ((_workEndTime!.minute - _earlyPunchOutGraceMinutes % 60) < 0 ? 1 : 0), minute: (_workEndTime!.minute - _earlyPunchOutGraceMinutes % 60 + 60) % 60)) : 'N/A'}",
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 15),
 
