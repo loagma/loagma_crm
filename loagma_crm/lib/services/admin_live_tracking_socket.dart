@@ -97,7 +97,8 @@ class AdminLiveTrackingSocket {
         .replaceFirst('https://', 'wss://');
 
     // WebSocket runs on the same server as HTTP, no port change needed
-    return '$wsUrl/ws?token=$token';
+    // Add userType parameter for proper authentication
+    return '$wsUrl/ws?token=$token&userType=admin';
   }
 
   /// Disconnect from WebSocket
