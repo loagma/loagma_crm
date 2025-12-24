@@ -45,11 +45,11 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
 
   // Late punch approval
   bool isAfterCutoff = false;
-  String? validApprovalCode;
+  bool hasLatePunchApproval = false;
 
   // Early punch-out approval
   bool isBeforeEarlyPunchOutCutoff = false;
-  String? validEarlyPunchOutCode;
+  bool hasEarlyPunchOutApproval = false;
 
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
@@ -118,6 +118,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     print(
       '🕘 Current IST calculated: ${DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30))}',
     );
+    print('🕘 isPunchedIn: $isPunchedIn');
+    print('🕘 currentAttendance: ${currentAttendance?.id}');
 
     // Always update state to ensure UI reflects current time
     setState(() {
@@ -255,7 +257,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     }
   }
 
-  Future<void> _handlePunchIn({String? approvalCode}) async {
+  Future<void> _handlePunchIn() async {
     HapticFeedback.mediumImpact();
 
     // Check location
@@ -285,9 +287,11 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         return;
       }
 
-      // Use the stored validApprovalCode if no specific code is passed
-      // This ensures the validated code from the widget is used correctly
-      final codeToUse = approvalCode ?? validApprovalCode;
+      // For late punch-in, pass approval flag if user has approval
+      String? approvalFlag;
+      if (isAfterCutoff && hasLatePunchApproval) {
+        approvalFlag = 'APPROVED';
+      }
 
       final response = await AttendanceService.punchIn(
         employeeId: employeeId,
@@ -296,10 +300,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         longitude: _currentPosition!.longitude,
         photo: result['photoBase64'],
         bikeKmStart: result['bikeKm'],
-        approvalCode: codeToUse,
+        approvalCode: approvalFlag,
       );
 
-      print('🔍 Punch-in with approval code: $codeToUse');
       print('🔍 Punch-in response: $response');
 
       Navigator.pop(context); // Close loading
@@ -310,7 +313,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           currentAttendance = attendance;
           isPunchedIn = true;
           punchInTime = attendance?.punchInTime;
-          validApprovalCode = null; // Clear used code only on success
+          hasLatePunchApproval = false; // Clear approval after use
         });
 
         // Start WebSocket live location tracking
@@ -318,17 +321,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
 
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
-        // On failure, retain the approval code so user can retry without re-validation
-        // Only clear the code if it's specifically an invalid/expired code error
         final errorMessage = response['message'] ?? '';
-        if (errorMessage.contains('invalid') ||
-            errorMessage.contains('expired') ||
-            errorMessage.contains('used')) {
-          setState(() {
-            validApprovalCode = null; // Clear invalid/expired code
-          });
-        }
-        // For other errors (network, location, etc.), keep the code for retry
 
         // Check if it's a late punch-in error that requires approval
         if (errorMessage.contains('9:45 AM')) {
@@ -342,7 +335,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       }
     } catch (e) {
       Navigator.pop(context);
-      // On exception, retain the approval code for retry
       CustomToast.showError(context, 'Error: $e');
     }
   }
@@ -705,11 +697,19 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       print('⏰ Duration calculation: punchInTime is null');
       return Duration.zero;
     }
+
     final now = DateTime.now();
-    final diff = now.difference(punchInTime!);
+    final punchIn = punchInTime!;
+
+    // Ensure both times are in the same timezone (local)
+    final localPunchIn = punchIn.isUtc ? punchIn.toLocal() : punchIn;
+    final diff = now.difference(localPunchIn);
+
     print(
-      '⏰ Duration calculation: punchInTime=$punchInTime, now=$now, diff=${diff.inSeconds}s',
+      '⏰ Duration calculation: punchInTime=$localPunchIn, now=$now, diff=${diff.inSeconds}s',
     );
+
+    // Return zero if negative (shouldn't happen but safety check)
     return diff.isNegative ? Duration.zero : diff;
   }
 
@@ -762,15 +762,16 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                           setState(() {});
                         },
                         onApprovalCodeValidated: (String approvalCode) {
-                          // Store the actual validated approval code
+                          // Store the approval status (no actual code needed for simplified flow)
                           setState(() {
-                            validApprovalCode = approvalCode;
+                            hasLatePunchApproval =
+                                true; // Simple flag instead of actual code
                           });
 
                           // Show success message
                           CustomToast.showSuccess(
                             context,
-                            'Approval code validated! You can now punch in.',
+                            'Approval received! You can now punch in.',
                           );
                         },
                         onApprovalReceived: () {
@@ -779,8 +780,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                         },
                       ),
                     ),
-                    // Show punch-in button when approval code is validated
-                    if (validApprovalCode != null) ...[
+                    // Show punch-in button when approval is received
+                    if (hasLatePunchApproval) ...[
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
@@ -802,7 +803,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'Approval code validated! You can now punch in.',
+                                      'Approval received! You can now punch in directly.',
                                       style: TextStyle(
                                         color: Colors.green[700],
                                         fontSize: 12,
@@ -844,7 +845,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                                           Text(
                                             (_currentPosition != null &&
                                                     !isLoadingLocation)
-                                                ? 'PUNCH IN WITH APPROVAL'
+                                                ? 'PUNCH IN (APPROVED)'
                                                 : 'Getting Location...',
                                             style: const TextStyle(
                                               fontSize: 18,
@@ -868,6 +869,60 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
 
               // Location Info
               _buildLocationInfo(),
+
+              // Debug info for troubleshooting
+              if (isPunchedIn)
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.yellow[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.yellow[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DEBUG INFO:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[800],
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'isPunchedIn: $isPunchedIn',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      Text(
+                        'isBeforeEarlyPunchOutCutoff: $isBeforeEarlyPunchOutCutoff',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      Text(
+                        'currentAttendance: ${currentAttendance?.id}',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      Text(
+                        'Current time: ${DateTime.now()}',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      Text(
+                        'Should show approval: ${isBeforeEarlyPunchOutCutoff && currentAttendance != null}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              (isBeforeEarlyPunchOutCutoff &&
+                                  currentAttendance != null)
+                              ? Colors.green
+                              : Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               const SizedBox(height: 20),
             ],
@@ -1211,7 +1266,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           const SizedBox(height: 20),
 
           // Early Punch-Out Approval Widget or Punch-Out Button
-          if (isBeforeEarlyPunchOutCutoff && currentAttendance != null)
+          if (isBeforeEarlyPunchOutCutoff &&
+              currentAttendance != null &&
+              !hasEarlyPunchOutApproval)
             EarlyPunchOutApprovalWidget(
               attendanceId: currentAttendance!.id,
               onApprovalRequested: () {
@@ -1219,33 +1276,18 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 setState(() {});
               },
               onApprovalCodeValidated: (String approvalCode) {
-                // Store the validated approval code and trigger punch out
+                // Store the approval status
                 setState(() {
-                  validEarlyPunchOutCode = approvalCode;
+                  hasEarlyPunchOutApproval = true;
                 });
-                // Automatically trigger punch out with the validated code
-                _handlePunchOut(earlyPunchOutCode: approvalCode);
+                // Don't automatically trigger punch out - let user click the button
               },
             )
+          else if (hasEarlyPunchOutApproval)
+            // Show punch-out button when early approval is received
+            _buildEarlyPunchOutButton()
           else
-            Column(
-              children: [
-                // Debug info
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.yellow[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'DEBUG: isBeforeEarlyPunchOutCutoff=$isBeforeEarlyPunchOutCutoff, currentAttendance=${currentAttendance != null}',
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                ),
-                _buildPunchOutButton(),
-              ],
-            ),
+            _buildPunchOutButton(),
         ],
       ),
     );
@@ -1317,7 +1359,77 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     );
   }
 
-  Future<void> _handlePunchOut({String? earlyPunchOutCode}) async {
+  Widget _buildEarlyPunchOutButton() {
+    final canPunchOut = _currentPosition != null && !isLoadingLocation;
+
+    return Column(
+      children: [
+        // Show early approval success message
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Early punch-out approved! You can now punch out.',
+                  style: TextStyle(
+                    color: Colors.green[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: canPunchOut
+                ? () => _handlePunchOut()
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 3,
+            ),
+            child: isLoadingAttendance
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.logout, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        canPunchOut
+                            ? 'PUNCH OUT (APPROVED)'
+                            : 'Getting Location...',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handlePunchOut() async {
     HapticFeedback.mediumImpact();
 
     // Check location
@@ -1344,13 +1456,19 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     );
 
     try {
+      // For early punch-out, pass approval flag if user has approval
+      String? approvalFlag;
+      if (isBeforeEarlyPunchOutCutoff && hasEarlyPunchOutApproval) {
+        approvalFlag = 'APPROVED';
+      }
+
       final response = await AttendanceService.punchOut(
         attendanceId: currentAttendance!.id,
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
         photo: result['photoBase64'],
         bikeKmEnd: result['bikeKm'],
-        earlyPunchOutCode: earlyPunchOutCode ?? validEarlyPunchOutCode,
+        earlyPunchOutCode: approvalFlag,
       );
 
       Navigator.pop(context); // Close loading
@@ -1361,7 +1479,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           currentAttendance = attendance;
           isPunchedIn = false;
           punchInTime = null;
-          validEarlyPunchOutCode = null; // Clear used code
+          hasEarlyPunchOutApproval = false; // Clear approval after use
         });
 
         // Stop WebSocket live location tracking
@@ -1374,6 +1492,16 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           CustomToast.showError(context, response['message']);
         } else {
           CustomToast.showError(
+            context,
+            response['message'] ?? 'Failed to punch out',
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      CustomToast.showError(context, 'Error: $e');
+    }
+  }
             context,
             response['message'] ?? 'Failed to punch out',
           );

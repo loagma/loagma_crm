@@ -96,11 +96,8 @@ class AdminLiveTrackingSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    // Use separate WebSocket port (8081) or same server
-    final wsPort = '8081'; // Configure based on your setup
-    final wsHost = Uri.parse(wsUrl).host;
-
-    return 'ws://$wsHost:$wsPort?token=$token';
+    // Use same port as HTTP server for WebSocket
+    return '$wsUrl/ws?token=$token';
   }
 
   /// Disconnect from WebSocket

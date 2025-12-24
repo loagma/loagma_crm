@@ -76,8 +76,8 @@ class LatePunchApprovalService {
     }
   }
 
-  // Get Employee's Approval Request Status
-  static Future<Map<String, dynamic>> getEmployeeApprovalStatus(
+  // Check approval status for employee
+  static Future<Map<String, dynamic>> getApprovalStatus(
     String employeeId,
   ) async {
     try {
@@ -90,7 +90,7 @@ class LatePunchApprovalService {
       print('🔍 Fetching approval status for: $employeeId');
 
       final response = await http.get(
-        Uri.parse('$baseUrl/employee/$employeeId/status'),
+        Uri.parse('$baseUrl/status/$employeeId'),
         headers: headers,
       );
 
@@ -122,79 +122,8 @@ class LatePunchApprovalService {
     }
   }
 
-  // Validate Approval Code
-  static Future<Map<String, dynamic>> validateApprovalCode({
-    required String employeeId,
-    required String approvalCode,
-  }) async {
-    try {
-      final token = UserService.token;
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
-
-      print('🔍 Validating approval code for: $employeeId');
-
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/validate-code'),
-            headers: headers,
-            body: jsonEncode({
-              'employeeId': employeeId,
-              'approvalCode': approvalCode,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Request timeout. Please try again.');
-            },
-          );
-
-      final data = jsonDecode(response.body);
-
-      print('📊 Code validation response: ${response.statusCode}');
-
-      if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'message': 'Authentication failed. Please login again.',
-          'statusCode': response.statusCode,
-        };
-      } else if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': data['message'] ?? 'Approval code is valid',
-          'data': data['data'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Invalid approval code',
-          'statusCode': response.statusCode,
-        };
-      }
-    } catch (e) {
-      String errorMessage = 'Network error. Please try again.';
-
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'Request timeout. Please check your connection.';
-      } else if (e.toString().contains('SocketException')) {
-        errorMessage = 'No internet connection. Please check your network.';
-      }
-
-      return {'success': false, 'message': errorMessage};
-    }
-  }
-
   // Admin: Get Pending Approval Requests
-  static Future<Map<String, dynamic>> getPendingApprovalRequests({
-    int page = 1,
-    int limit = 20,
-    String? date,
-  }) async {
+  static Future<Map<String, dynamic>> getPendingApprovalRequests() async {
     try {
       final token = UserService.token;
       final headers = {
@@ -202,25 +131,14 @@ class LatePunchApprovalService {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      final queryParams = {
-        'page': page.toString(),
-        'limit': limit.toString(),
-        if (date != null) 'date': date,
-      };
-
-      final uri = Uri.parse(
-        '$baseUrl/pending',
-      ).replace(queryParameters: queryParams);
-
-      final response = await http.get(uri, headers: headers);
+      final response = await http.get(
+        Uri.parse('$baseUrl/pending'),
+        headers: headers,
+      );
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'data': data['data'],
-          'pagination': data['pagination'],
-        };
+        return {'success': true, 'data': data['data']};
       } else {
         return {
           'success': false,
@@ -232,11 +150,12 @@ class LatePunchApprovalService {
     }
   }
 
-  // Admin: Approve Late Punch Request
-  static Future<Map<String, dynamic>> approveLatePunchRequest({
-    required String requestId,
+  // Admin: Approve/Reject Late Punch Request
+  static Future<Map<String, dynamic>> adminAction({
+    required int requestId,
+    required String action, // 'APPROVED' or 'REJECTED'
     required String adminId,
-    String? adminRemarks,
+    required String adminName,
   }) async {
     try {
       final token = UserService.token;
@@ -248,11 +167,13 @@ class LatePunchApprovalService {
 
       final response = await http
           .post(
-            Uri.parse('$baseUrl/approve/$requestId'),
+            Uri.parse('$baseUrl/admin/action'),
             headers: headers,
             body: jsonEncode({
+              'requestId': requestId,
+              'action': action,
               'adminId': adminId,
-              'adminRemarks': adminRemarks,
+              'adminName': adminName,
             }),
           )
           .timeout(
@@ -267,112 +188,13 @@ class LatePunchApprovalService {
       if (response.statusCode == 200) {
         return {
           'success': true,
-          'message': data['message'] ?? 'Request approved successfully',
+          'message': data['message'] ?? 'Action completed successfully',
           'data': data['data'],
         };
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Failed to approve request',
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
-    }
-  }
-
-  // Admin: Reject Late Punch Request
-  static Future<Map<String, dynamic>> rejectLatePunchRequest({
-    required String requestId,
-    required String adminId,
-    required String adminRemarks,
-  }) async {
-    try {
-      final token = UserService.token;
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
-
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/reject/$requestId'),
-            headers: headers,
-            body: jsonEncode({
-              'adminId': adminId,
-              'adminRemarks': adminRemarks,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Request timeout. Please try again.');
-            },
-          );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': data['message'] ?? 'Request rejected successfully',
-          'data': data['data'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to reject request',
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
-    }
-  }
-
-  // Admin: Get All Approval Requests (with filters)
-  static Future<Map<String, dynamic>> getAllApprovalRequests({
-    int page = 1,
-    int limit = 20,
-    String? status,
-    String? employeeId,
-    String? startDate,
-    String? endDate,
-  }) async {
-    try {
-      final token = UserService.token;
-      final headers = {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
-
-      final queryParams = {
-        'page': page.toString(),
-        'limit': limit.toString(),
-        if (status != null) 'status': status,
-        if (employeeId != null) 'employeeId': employeeId,
-        if (startDate != null) 'startDate': startDate,
-        if (endDate != null) 'endDate': endDate,
-      };
-
-      final uri = Uri.parse(
-        '$baseUrl/all',
-      ).replace(queryParameters: queryParams);
-
-      final response = await http.get(uri, headers: headers);
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'data': data['data'],
-          'pagination': data['pagination'],
-          'filters': data['filters'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch approval requests',
+          'message': data['message'] ?? 'Failed to complete action',
         };
       }
     } catch (e) {

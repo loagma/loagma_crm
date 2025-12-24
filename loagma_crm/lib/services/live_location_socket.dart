@@ -131,23 +131,9 @@ class LiveLocationSocket {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
-    String finalUrl;
-    // For production (hosted services), use the same port as HTTP server
-    // For local development, use separate WebSocket port (8081)
-    if (baseUrl.contains('onrender.com') ||
-        baseUrl.contains('herokuapp.com') ||
-        baseUrl.contains('https://')) {
-      // Production: Use same server and port
-      finalUrl = '$wsUrl?token=$token';
-      print('🔗 Using production WebSocket URL: $finalUrl');
-    } else {
-      // Local development: Use separate WebSocket port
-      final uri = Uri.parse(wsUrl);
-      final wsHost = uri.host;
-      final wsPort = '8081';
-      finalUrl = 'ws://$wsHost:$wsPort?token=$token';
-      print('🔗 Using local WebSocket URL: $finalUrl');
-    }
+    // Always use the same server and port for WebSocket
+    final finalUrl = '$wsUrl/ws?token=$token';
+    print('🔗 Using WebSocket URL: $finalUrl');
 
     return finalUrl;
   }

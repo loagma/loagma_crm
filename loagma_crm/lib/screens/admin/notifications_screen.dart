@@ -390,6 +390,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           );
         }
 
+        // Safety check to prevent RangeError
+        if (index >= notifications.length) {
+          return const SizedBox.shrink();
+        }
+
         final notification = notifications[index];
         return NotificationItem(
           notification: notification,
