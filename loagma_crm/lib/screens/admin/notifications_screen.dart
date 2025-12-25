@@ -18,7 +18,8 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen>
     with TickerProviderStateMixin {
-  List<NotificationModel> notifications = [];
+  List<NotificationModel> _allNotifications = [];
+  List<NotificationModel> _filteredNotifications = [];
   NotificationCounts? counts;
   Map<String, dynamic>? approvalCounts;
   bool isLoading = true;
@@ -29,12 +30,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   bool hasMoreData = true;
   final ScrollController _scrollController = ScrollController();
 
-  // Date filter variables
-  DateTime? _startDate;
-  DateTime? _endDate;
-  bool _isDateFilterActive = false;
+  // Date filter
+  DateTime? _selectedDate;
 
-  // Pagination info
+  // Pagination
   int _totalCount = 0;
   int _currentPage = 1;
 
@@ -46,6 +45,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _scrollController.addListener(_onScroll);
     _loadNotifications();
     _loadCounts();
@@ -54,9 +54,29 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+
+    if (_tabController.index == 2) {
+      // Navigate to approval requests screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()),
+      ).then((_) {
+        _loadApprovalCounts();
+        // Reset to first tab after returning
+        _tabController.animateTo(0);
+      });
+    } else {
+      final filters = ['all', 'punch_management'];
+      _onFilterChanged(filters[_tabController.index]);
+    }
   }
 
   void _onScroll() {
@@ -71,7 +91,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   Future<void> _loadNotifications({bool refresh = false}) async {
     if (refresh) {
       setState(() {
-        notifications.clear();
+        _allNotifications.clear();
+        _filteredNotifications.clear();
         currentOffset = 0;
         _currentPage = 1;
         hasMoreData = true;
@@ -80,17 +101,29 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
 
     try {
-      bool unreadOnly = false;
-
       final result = await NotificationService.getNotifications(
         userId: widget.userId,
         role: widget.role ?? 'admin',
-        type: selectedFilter == 'punch_management' ? null : null,
-        unreadOnly: unreadOnly,
+        unreadOnly: false,
         limit: limit,
         offset: currentOffset,
-        startDate: _isDateFilterActive ? _startDate : null,
-        endDate: _isDateFilterActive ? _endDate : null,
+        startDate: _selectedDate != null
+            ? DateTime(
+                _selectedDate!.year,
+                _selectedDate!.month,
+                _selectedDate!.day,
+              )
+            : null,
+        endDate: _selectedDate != null
+            ? DateTime(
+                _selectedDate!.year,
+                _selectedDate!.month,
+                _selectedDate!.day,
+                23,
+                59,
+                59,
+              )
+            : null,
       );
 
       if (result['success'] == true && mounted) {
@@ -98,7 +131,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             .map((json) => NotificationModel.fromJson(json))
             .toList();
 
-        // Get pagination info if available
         final pagination = result['pagination'] as Map<String, dynamic>?;
         if (pagination != null) {
           _totalCount = pagination['total'] ?? 0;
@@ -106,10 +138,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
         setState(() {
           if (refresh) {
-            notifications = newNotifications;
+            _allNotifications = newNotifications;
           } else {
-            notifications.addAll(newNotifications);
+            _allNotifications.addAll(newNotifications);
           }
+          _applyFilter();
           hasMoreData = newNotifications.length == limit;
           isLoading = false;
           isLoadingMore = false;
@@ -123,6 +156,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           isLoadingMore = false;
         });
       }
+    }
+  }
+
+  void _applyFilter() {
+    if (selectedFilter == 'punch_management') {
+      _filteredNotifications = _allNotifications
+          .where((n) => n.type == 'punch_in' || n.type == 'punch_out')
+          .toList();
+    } else {
+      _filteredNotifications = List.from(_allNotifications);
     }
   }
 
@@ -171,13 +214,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     final success = await NotificationService.markAsRead(notificationId);
     if (success && mounted) {
       setState(() {
-        final index = notifications.indexWhere((n) => n.id == notificationId);
+        final index = _allNotifications.indexWhere(
+          (n) => n.id == notificationId,
+        );
         if (index != -1) {
-          notifications[index] = NotificationModel.fromJson({
-            ...notifications[index].toJson(),
+          _allNotifications[index] = NotificationModel.fromJson({
+            ..._allNotifications[index].toJson(),
             'isRead': true,
             'readAt': DateTime.now().toIso8601String(),
           });
+          _applyFilter();
         }
       });
       _loadCounts();
@@ -192,7 +238,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
     if (success && mounted) {
       setState(() {
-        notifications = notifications
+        _allNotifications = _allNotifications
             .map(
               (n) => NotificationModel.fromJson({
                 ...n.toJson(),
@@ -201,6 +247,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               }),
             )
             .toList();
+        _applyFilter();
       });
       _loadCounts();
 
@@ -217,8 +264,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (selectedFilter != filter) {
       setState(() {
         selectedFilter = filter;
+        _applyFilter();
       });
-      _loadNotifications(refresh: true);
     }
   }
 
@@ -238,18 +285,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  // Date filter methods
-  Future<void> _selectDateRange() async {
-    final DateTimeRange? picked = await showDateRangePicker(
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
       context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : DateTimeRange(
-              start: DateTime.now().subtract(const Duration(days: 7)),
-              end: DateTime.now(),
-            ),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -267,16 +308,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
     if (picked != null) {
       setState(() {
-        _startDate = picked.start;
-        _endDate = DateTime(
-          picked.end.year,
-          picked.end.month,
-          picked.end.day,
-          23,
-          59,
-          59,
-        );
-        _isDateFilterActive = true;
+        _selectedDate = picked;
       });
       _loadNotifications(refresh: true);
     }
@@ -284,24 +316,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   void _clearDateFilter() {
     setState(() {
-      _startDate = null;
-      _endDate = null;
-      _isDateFilterActive = false;
+      _selectedDate = null;
     });
     _loadNotifications(refresh: true);
-  }
-
-  String _getDateFilterText() {
-    if (!_isDateFilterActive || _startDate == null || _endDate == null) {
-      return 'Select Date';
-    }
-    final formatter = DateFormat('dd/MM/yyyy');
-    if (_startDate!.day == _endDate!.day &&
-        _startDate!.month == _endDate!.month &&
-        _startDate!.year == _endDate!.year) {
-      return formatter.format(_startDate!);
-    }
-    return '${formatter.format(_startDate!)} - ${formatter.format(_endDate!)}';
   }
 
   @override
@@ -314,32 +331,17 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          if (notifications.any((n) => !n.isRead))
+          if (_filteredNotifications.any((n) => !n.isRead))
             TextButton(
               onPressed: _markAllAsRead,
               child: const Text(
                 'Mark All Read',
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          onTap: (index) {
-            if (index == 2) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ApprovalRequestsScreen(),
-                ),
-              ).then((_) {
-                _loadApprovalCounts();
-              });
-            } else {
-              final filters = ['all', 'punch_management'];
-              _onFilterChanged(filters[index]);
-            }
-          },
           labelColor: Colors.black,
           unselectedLabelColor: Colors.black54,
           indicatorColor: Colors.black,
@@ -376,31 +378,33 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           await _loadNotifications(refresh: true);
           await _loadApprovalCounts();
         },
-        child: TabBarView(
-          controller: _tabController,
+        child: Column(
           children: [
-            _buildNotificationsTab(),
-            _buildNotificationsTab(),
-            _buildApprovalsPlaceholder(),
+            // Date Filter Bar
+            _buildDateFilterBar(),
+            // Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildNotificationsList(),
+                  _buildNotificationsList(),
+                  _buildApprovalsPlaceholder(),
+                ],
+              ),
+            ),
+            // Pagination Info
+            if (_filteredNotifications.isNotEmpty) _buildPaginationBar(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNotificationsTab() {
-    return Column(
-      children: [
-        _buildDateFilterBar(),
-        Expanded(child: _buildNotificationsList()),
-        if (notifications.isNotEmpty) _buildPaginationInfo(),
-      ],
-    );
-  }
-
   Widget _buildDateFilterBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -413,9 +417,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       ),
       child: Row(
         children: [
+          // Date Filter Button
           Expanded(
             child: InkWell(
-              onTap: _selectDateRange,
+              onTap: _selectDate,
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -424,13 +429,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 ),
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: _isDateFilterActive
+                    color: _selectedDate != null
                         ? primaryColor
                         : Colors.grey[300]!,
-                    width: _isDateFilterActive ? 2 : 1,
+                    width: _selectedDate != null ? 2 : 1,
                   ),
                   borderRadius: BorderRadius.circular(8),
-                  color: _isDateFilterActive
+                  color: _selectedDate != null
                       ? primaryColor.withValues(alpha: 0.1)
                       : Colors.white,
                 ),
@@ -439,20 +444,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     Icon(
                       Icons.calendar_today,
                       size: 18,
-                      color: _isDateFilterActive
+                      color: _selectedDate != null
                           ? primaryColor
                           : Colors.grey[600],
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _getDateFilterText(),
+                        _selectedDate != null
+                            ? DateFormat('dd MMM yyyy').format(_selectedDate!)
+                            : 'Filter by Date',
                         style: TextStyle(
                           fontSize: 14,
-                          color: _isDateFilterActive
+                          color: _selectedDate != null
                               ? Colors.black87
                               : Colors.grey[600],
-                          fontWeight: _isDateFilterActive
+                          fontWeight: _selectedDate != null
                               ? FontWeight.w500
                               : FontWeight.normal,
                         ),
@@ -460,7 +467,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     ),
                     Icon(
                       Icons.arrow_drop_down,
-                      color: _isDateFilterActive
+                      color: _selectedDate != null
                           ? primaryColor
                           : Colors.grey[600],
                     ),
@@ -469,7 +476,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               ),
             ),
           ),
-          if (_isDateFilterActive) ...[
+          // Clear Button
+          if (_selectedDate != null) ...[
             const SizedBox(width: 8),
             IconButton(
               onPressed: _clearDateFilter,
@@ -486,12 +494,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  Widget _buildPaginationInfo() {
-    final int displayedCount = notifications.length;
+  Widget _buildPaginationBar() {
     final int totalPages = (_totalCount / limit).ceil();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey[200]!)),
@@ -500,14 +507,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Showing $displayedCount${_totalCount > 0 ? ' of $_totalCount' : ''} notifications',
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            'Showing ${_filteredNotifications.length}${_totalCount > 0 ? ' of $_totalCount' : ''}',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
           if (totalPages > 1)
             Text(
-              'Page $_currentPage${totalPages > 0 ? ' of $totalPages' : ''}',
+              'Page $_currentPage of $totalPages',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
@@ -539,51 +546,59 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   Widget _buildEmptyState() {
     String message;
+    String subMessage;
     IconData icon;
 
-    if (_isDateFilterActive) {
-      message = 'No notifications found for selected date range';
+    if (_selectedDate != null) {
+      message =
+          'No notifications for ${DateFormat('dd MMM yyyy').format(_selectedDate!)}';
+      subMessage = 'Try selecting a different date';
       icon = Icons.search_off;
     } else {
       switch (selectedFilter) {
         case 'punch_management':
           message = 'No punch notifications';
+          subMessage = 'Punch in/out notifications will appear here';
           icon = Icons.access_time;
           break;
         default:
           message = 'No notifications yet';
+          subMessage =
+              'Notifications will appear here when salesmen punch in or out';
           icon = Icons.notifications_none;
       }
     }
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _isDateFilterActive
-                ? 'Try selecting a different date range'
-                : 'Notifications will appear here when salesmen punch in or out',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-          if (_isDateFilterActive) ...[
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: _clearDateFilter,
-              icon: const Icon(Icons.clear),
-              label: const Text('Clear Date Filter'),
-              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            Text(
+              message,
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 8),
+            Text(
+              subMessage,
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+            if (_selectedDate != null) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _clearDateFilter,
+                icon: const Icon(Icons.clear),
+                label: const Text('Clear Date Filter'),
+                style: TextButton.styleFrom(foregroundColor: primaryColor),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -595,7 +610,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       );
     }
 
-    if (notifications.isEmpty) {
+    if (_filteredNotifications.isEmpty) {
       return _buildEmptyState();
     }
 
@@ -604,7 +619,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
       itemCount: groupedNotifications.length + (isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == groupedNotifications.length) {
@@ -642,11 +657,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   Map<String, List<NotificationModel>> _groupNotificationsByDate() {
     final Map<String, List<NotificationModel>> grouped = {};
 
-    for (final notification in notifications) {
+    for (final notification in _filteredNotifications) {
       final dateKey = _getDateKey(notification.createdAt);
-      if (!grouped.containsKey(dateKey)) {
-        grouped[dateKey] = [];
-      }
+      grouped.putIfAbsent(dateKey, () => []);
       grouped[dateKey]!.add(notification);
     }
 
@@ -711,10 +724,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'This tab will automatically navigate to the approval requests screen',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'View and manage late punch-in and early punch-out approval requests',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
@@ -733,6 +749,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -754,51 +771,87 @@ class NotificationDetailsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
-              Text(notification.typeIcon, style: const TextStyle(fontSize: 24)),
+              _buildTypeIcon(),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   notification.title,
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          Text(notification.message, style: const TextStyle(fontSize: 16)),
+
+          // Message
+          Text(
+            notification.message,
+            style: const TextStyle(fontSize: 15, color: Colors.black87),
+          ),
           const SizedBox(height: 16),
+
+          // Details Section
           if (notification.data != null) ...[
-            const Text(
-              'Details:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Details',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDataSection(notification.data!),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            _buildDataSection(notification.data!),
             const SizedBox(height: 16),
           ],
+
+          // Timestamp
           Row(
             children: [
               Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(
                 notification.createdAtIST ?? notification.formattedTime,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),
             ],
           ),
           const SizedBox(height: 20),
+
+          // Close Button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD7BE69),
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: const Text('Close'),
             ),
@@ -808,51 +861,103 @@ class NotificationDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildDataSection(Map<String, dynamic> data) {
+  Widget _buildTypeIcon() {
+    Color bgColor;
+    Color iconColor;
+    IconData icon;
+
+    switch (notification.type) {
+      case 'punch_in':
+        bgColor = Colors.green[100]!;
+        iconColor = Colors.green[700]!;
+        icon = Icons.login;
+        break;
+      case 'punch_out':
+        bgColor = Colors.red[100]!;
+        iconColor = Colors.red[700]!;
+        icon = Icons.logout;
+        break;
+      case 'late_punch_approval':
+        bgColor = Colors.orange[100]!;
+        iconColor = Colors.orange[700]!;
+        icon = Icons.access_time;
+        break;
+      case 'early_punch_out_approval':
+        bgColor = Colors.blue[100]!;
+        iconColor = Colors.blue[700]!;
+        icon = Icons.timer_off;
+        break;
+      default:
+        bgColor = Colors.grey[200]!;
+        iconColor = Colors.grey[700]!;
+        icon = Icons.notifications;
+    }
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey[600],
-        borderRadius: BorderRadius.circular(8),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (data['employeeName'] != null)
-            _buildDataRow('Employee', data['employeeName']),
-          if (data['punchInTimeFormatted'] != null)
-            _buildDataRow('Punch In Time', data['punchInTimeFormatted'])
-          else if (data['punchInTimeIST'] != null)
-            _buildDataRow('Punch In Time', data['punchInTimeIST']),
-          if (data['punchOutTimeFormatted'] != null)
-            _buildDataRow('Punch Out Time', data['punchOutTimeFormatted'])
-          else if (data['punchOutTimeIST'] != null)
-            _buildDataRow('Punch Out Time', data['punchOutTimeIST']),
-          if (data['workDurationFormatted'] != null)
-            _buildDataRow('Work Duration', data['workDurationFormatted']),
-          if (data['totalDistanceKm'] != null)
-            _buildDataRow('Distance', '${data['totalDistanceKm']} km'),
-          if (data['location'] != null && data['location']['address'] != null)
-            _buildDataRow('Location', data['location']['address']),
-        ],
-      ),
+      child: Icon(icon, color: iconColor, size: 24),
     );
+  }
+
+  Widget _buildDataSection(Map<String, dynamic> data) {
+    final List<Widget> rows = [];
+
+    if (data['employeeName'] != null) {
+      rows.add(_buildDataRow('Employee', data['employeeName']));
+    }
+    if (data['punchInTimeFormatted'] != null) {
+      rows.add(_buildDataRow('Punch In', data['punchInTimeFormatted']));
+    } else if (data['punchInTimeIST'] != null) {
+      rows.add(_buildDataRow('Punch In', data['punchInTimeIST']));
+    }
+    if (data['punchOutTimeFormatted'] != null) {
+      rows.add(_buildDataRow('Punch Out', data['punchOutTimeFormatted']));
+    } else if (data['punchOutTimeIST'] != null) {
+      rows.add(_buildDataRow('Punch Out', data['punchOutTimeIST']));
+    }
+    if (data['workDurationFormatted'] != null) {
+      rows.add(_buildDataRow('Duration', data['workDurationFormatted']));
+    }
+    if (data['totalDistanceKm'] != null) {
+      rows.add(_buildDataRow('Distance', '${data['totalDistanceKm']} km'));
+    }
+    if (data['reason'] != null) {
+      rows.add(_buildDataRow('Reason', data['reason']));
+    }
+    if (data['location'] != null && data['location']['address'] != null) {
+      rows.add(_buildDataRow('Location', data['location']['address']));
+    }
+
+    return Column(children: rows);
   }
 
   Widget _buildDataRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 80,
             child: Text(
               '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
             ),
           ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+          ),
         ],
       ),
     );
