@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../services/notification_service.dart';
 import '../../services/admin_approval_service.dart';
 import '../../models/notification_model.dart';
@@ -27,6 +28,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   final int limit = 20;
   bool hasMoreData = true;
   final ScrollController _scrollController = ScrollController();
+
+  // Date filter variables
+  DateTime? _startDate;
+  DateTime? _endDate;
+  bool _isDateFilterActive = false;
+
+  // Pagination info
+  int _totalCount = 0;
+  int _currentPage = 1;
 
   late TabController _tabController;
 
@@ -63,6 +73,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       setState(() {
         notifications.clear();
         currentOffset = 0;
+        _currentPage = 1;
         hasMoreData = true;
         isLoading = true;
       });
@@ -71,12 +82,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     try {
       bool unreadOnly = false;
 
-      switch (selectedFilter) {
-        case 'punch_management':
-          // Filter will be applied client-side for punch_in and punch_out
-          break;
-      }
-
       final result = await NotificationService.getNotifications(
         userId: widget.userId,
         role: widget.role ?? 'admin',
@@ -84,12 +89,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         unreadOnly: unreadOnly,
         limit: limit,
         offset: currentOffset,
+        startDate: _isDateFilterActive ? _startDate : null,
+        endDate: _isDateFilterActive ? _endDate : null,
       );
 
       if (result['success'] == true && mounted) {
         final newNotifications = (result['notifications'] as List)
             .map((json) => NotificationModel.fromJson(json))
             .toList();
+
+        // Get pagination info if available
+        final pagination = result['pagination'] as Map<String, dynamic>?;
+        if (pagination != null) {
+          _totalCount = pagination['total'] ?? 0;
+        }
 
         setState(() {
           if (refresh) {
@@ -103,7 +116,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         });
       }
     } catch (e) {
-      print('Error loading notifications: $e');
+      debugPrint('Error loading notifications: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -119,6 +132,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     setState(() {
       isLoadingMore = true;
       currentOffset += limit;
+      _currentPage++;
     });
 
     await _loadNotifications();
@@ -127,7 +141,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   Future<void> _loadCounts() async {
     try {
       final result = await NotificationService.getAdminDashboardNotifications(
-        limit: 1, // Just to get counts
+        limit: 1,
       );
 
       if (result['success'] == true && mounted) {
@@ -136,7 +150,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         });
       }
     } catch (e) {
-      print('Error loading notification counts: $e');
+      debugPrint('Error loading notification counts: $e');
     }
   }
 
@@ -149,7 +163,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         });
       }
     } catch (e) {
-      print('Error loading approval counts: $e');
+      debugPrint('Error loading approval counts: $e');
     }
   }
 
@@ -224,6 +238,72 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
+  // Date filter methods
+  Future<void> _selectDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : DateTimeRange(
+              start: DateTime.now().subtract(const Duration(days: 7)),
+              end: DateTime.now(),
+            ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = DateTime(
+          picked.end.year,
+          picked.end.month,
+          picked.end.day,
+          23,
+          59,
+          59,
+        );
+        _isDateFilterActive = true;
+      });
+      _loadNotifications(refresh: true);
+    }
+  }
+
+  void _clearDateFilter() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+      _isDateFilterActive = false;
+    });
+    _loadNotifications(refresh: true);
+  }
+
+  String _getDateFilterText() {
+    if (!_isDateFilterActive || _startDate == null || _endDate == null) {
+      return 'Select Date';
+    }
+    final formatter = DateFormat('dd/MM/yyyy');
+    if (_startDate!.day == _endDate!.day &&
+        _startDate!.month == _endDate!.month &&
+        _startDate!.year == _endDate!.year) {
+      return formatter.format(_startDate!);
+    }
+    return '${formatter.format(_startDate!)} - ${formatter.format(_endDate!)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,14 +327,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           controller: _tabController,
           onTap: (index) {
             if (index == 2) {
-              // Navigate to approval requests screen
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => const ApprovalRequestsScreen(),
                 ),
               ).then((_) {
-                // Refresh counts when returning
                 _loadApprovalCounts();
               });
             } else {
@@ -301,11 +379,140 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         child: TabBarView(
           controller: _tabController,
           children: [
-            _buildNotificationsList(), // All
-            _buildNotificationsList(), // Punch Management
-            _buildApprovalsPlaceholder(), // Approvals (placeholder)
+            _buildNotificationsTab(),
+            _buildNotificationsTab(),
+            _buildApprovalsPlaceholder(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationsTab() {
+    return Column(
+      children: [
+        _buildDateFilterBar(),
+        Expanded(child: _buildNotificationsList()),
+        if (notifications.isNotEmpty) _buildPaginationInfo(),
+      ],
+    );
+  }
+
+  Widget _buildDateFilterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: _selectDateRange,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _isDateFilterActive
+                        ? primaryColor
+                        : Colors.grey[300]!,
+                    width: _isDateFilterActive ? 2 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  color: _isDateFilterActive
+                      ? primaryColor.withValues(alpha: 0.1)
+                      : Colors.white,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 18,
+                      color: _isDateFilterActive
+                          ? primaryColor
+                          : Colors.grey[600],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getDateFilterText(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _isDateFilterActive
+                              ? Colors.black87
+                              : Colors.grey[600],
+                          fontWeight: _isDateFilterActive
+                              ? FontWeight.w500
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      color: _isDateFilterActive
+                          ? primaryColor
+                          : Colors.grey[600],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_isDateFilterActive) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _clearDateFilter,
+              icon: const Icon(Icons.clear, size: 20),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.red[50],
+                foregroundColor: Colors.red,
+              ),
+              tooltip: 'Clear filter',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationInfo() {
+    final int displayedCount = notifications.length;
+    final int totalPages = (_totalCount / limit).ceil();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Showing $displayedCount${_totalCount > 0 ? ' of $_totalCount' : ''} notifications',
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+          if (totalPages > 1)
+            Text(
+              'Page $_currentPage${totalPages > 0 ? ' of $totalPages' : ''}',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -334,14 +541,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     String message;
     IconData icon;
 
-    switch (selectedFilter) {
-      case 'punch_management':
-        message = 'No punch notifications';
-        icon = Icons.access_time;
-        break;
-      default:
-        message = 'No notifications yet';
-        icon = Icons.notifications_none;
+    if (_isDateFilterActive) {
+      message = 'No notifications found for selected date range';
+      icon = Icons.search_off;
+    } else {
+      switch (selectedFilter) {
+        case 'punch_management':
+          message = 'No punch notifications';
+          icon = Icons.access_time;
+          break;
+        default:
+          message = 'No notifications yet';
+          icon = Icons.notifications_none;
+      }
     }
 
     return Center(
@@ -356,10 +568,21 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Notifications will appear here when salesmen punch in or out',
+            _isDateFilterActive
+                ? 'Try selecting a different date range'
+                : 'Notifications will appear here when salesmen punch in or out',
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
+          if (_isDateFilterActive) ...[
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _clearDateFilter,
+              icon: const Icon(Icons.clear),
+              label: const Text('Clear Date Filter'),
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
+          ],
         ],
       ),
     );
@@ -376,12 +599,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       return _buildEmptyState();
     }
 
+    // Group notifications by date
+    final groupedNotifications = _groupNotificationsByDate();
+
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: notifications.length + (isLoadingMore ? 1 : 0),
+      itemCount: groupedNotifications.length + (isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == notifications.length) {
+        if (index == groupedNotifications.length) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -390,20 +616,82 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           );
         }
 
-        // Safety check to prevent RangeError
-        if (index >= notifications.length) {
-          return const SizedBox.shrink();
-        }
+        final entry = groupedNotifications.entries.elementAt(index);
+        final dateKey = entry.key;
+        final dateNotifications = entry.value;
 
-        final notification = notifications[index];
-        return NotificationItem(
-          notification: notification,
-          onTap: () => _showNotificationDetails(notification),
-          onMarkAsRead: notification.isRead
-              ? null
-              : () => _markAsRead(notification.id),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDateHeader(dateKey),
+            ...dateNotifications.map(
+              (notification) => NotificationItem(
+                notification: notification,
+                onTap: () => _showNotificationDetails(notification),
+                onMarkAsRead: notification.isRead
+                    ? null
+                    : () => _markAsRead(notification.id),
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Map<String, List<NotificationModel>> _groupNotificationsByDate() {
+    final Map<String, List<NotificationModel>> grouped = {};
+
+    for (final notification in notifications) {
+      final dateKey = _getDateKey(notification.createdAt);
+      if (!grouped.containsKey(dateKey)) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey]!.add(notification);
+    }
+
+    return grouped;
+  }
+
+  String _getDateKey(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final notificationDate = DateTime(date.year, date.month, date.day);
+
+    if (notificationDate == today) {
+      return 'Today';
+    } else if (notificationDate == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('dd MMM yyyy').format(date);
+    }
+  }
+
+  Widget _buildDateHeader(String dateKey) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              dateKey,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF8B7355),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Container(height: 1, color: Colors.grey[300])),
+        ],
+      ),
     );
   }
 
