@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/late_punch_approval_service.dart';
+import '../services/employee_working_hours_service.dart';
 import '../services/user_service.dart';
 import '../utils/custom_toast.dart';
 
@@ -23,15 +24,18 @@ class LatePunchApprovalWidget extends StatefulWidget {
 
 class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   final _reasonController = TextEditingController();
+  final _otpController = TextEditingController();
   bool _isSubmitting = false;
   Map<String, dynamic>? _approvalStatus;
+  Map<String, dynamic>? _workingHours;
   bool _isLoadingStatus = false;
+  bool _isLoadingWorkingHours = false;
   Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    // Load status immediately to check for existing requests
+    _loadWorkingHours();
     _loadApprovalStatus();
     _startAutoRefresh();
   }
@@ -40,6 +44,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   void dispose() {
     _refreshTimer?.cancel();
     _reasonController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -54,6 +59,33 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
         }
       }
     });
+  }
+
+  Future<void> _loadWorkingHours() async {
+    if (!mounted) return;
+
+    setState(() => _isLoadingWorkingHours = true);
+
+    try {
+      final employeeId = UserService.currentUserId;
+      if (employeeId == null) return;
+
+      final result = await EmployeeWorkingHoursService.getWorkingHours(
+        employeeId,
+      );
+
+      if (result['success'] == true && mounted) {
+        setState(() {
+          _workingHours = result['data'];
+        });
+      }
+    } catch (e) {
+      print('Error loading working hours: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingWorkingHours = false);
+      }
+    }
   }
 
   Future<void> _loadApprovalStatus() async {
@@ -71,17 +103,11 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
 
       if (result['success'] == true && mounted) {
         final responseData = result['data'];
-        final hasApproval = responseData?['hasApproval'] ?? false;
-        final approvalData = responseData?['approval'];
-
-        // Extract the actual approval status
-        final newStatus = hasApproval ? approvalData : null;
         final oldStatus = _approvalStatus?['status'];
+        final newStatus = responseData;
         final newStatusValue = newStatus?['status'];
 
-        print(
-          '🔍 Approval status loaded: hasApproval=$hasApproval, approval=$approvalData',
-        );
+        print('🔍 Approval status loaded: $responseData');
 
         setState(() {
           _approvalStatus = newStatus;
@@ -90,7 +116,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
         // If status is already APPROVED on initial load, notify parent
         if (newStatus != null && newStatus['status'] == 'APPROVED') {
           print('🎉 Found existing APPROVED status on load!');
-          // Call the callback to enable punch-in (no OTP needed)
+          // Call the callback to enable punch-in (no OTP needed for simplified system)
           widget.onApprovalCodeValidated?.call('APPROVED');
           widget.onApprovalReceived?.call();
         }
@@ -100,11 +126,8 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           print('🎉 Status changed from PENDING to APPROVED!');
           CustomToast.showSuccess(
             context,
-            'Your late punch-in request has been approved! You can now punch in.',
+            'Your late punch-in request has been approved! Enter the OTP to punch in.',
           );
-
-          // Call the callback to enable punch-in (no OTP needed)
-          widget.onApprovalCodeValidated?.call('APPROVED');
           widget.onApprovalReceived?.call();
         } else if (oldStatus == 'PENDING' && newStatusValue == 'REJECTED') {
           print('❌ Status changed from PENDING to REJECTED!');
@@ -114,11 +137,9 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           );
         }
       } else if (result['success'] == false && mounted) {
-        // Handle API errors
         final errorMessage = result['message'] ?? 'Unknown error';
         print('❌ Error loading approval status: $errorMessage');
 
-        // Only show error toast for non-404 errors to avoid spam
         if (result['statusCode'] != 404) {
           CustomToast.showError(context, 'Failed to load approval status');
         }
@@ -420,6 +441,10 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   }
 
   Widget _buildApprovedStatus() {
+    final hasApprovalCode = _approvalStatus!['hasApprovalCode'] ?? false;
+    final codeExpired = _approvalStatus!['codeExpired'] ?? false;
+    final codeUsed = _approvalStatus!['codeUsed'] ?? false;
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -450,7 +475,9 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Your late punch-in request has been approved by admin. You can now punch in directly.',
+            hasApprovalCode
+                ? 'Your late punch-in request has been approved. Enter the OTP sent by admin to punch in.'
+                : 'Your late punch-in request has been approved. You can now punch in directly.',
             style: TextStyle(
               fontSize: 14,
               color: Colors.green[700],
@@ -490,12 +517,173 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
+                if (hasApprovalCode) ...[
+                  Text(
+                    'Code expires at: ${_approvalStatus!['codeExpiresAt'] ?? 'N/A'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
+
+          // Show OTP input if approval code is required
+          if (hasApprovalCode && !codeUsed) ...[
+            const SizedBox(height: 16),
+            if (codeExpired) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red[700], size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'OTP has expired. Please request a new approval.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Text(
+                'Enter OTP Code:',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  hintText: 'Enter 6-digit OTP',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _validateOTP,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Validate OTP & Enable Punch-In',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ],
+
+          // Show success message if code is already used
+          if (hasApprovalCode && codeUsed) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.blue[700],
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'OTP validated successfully. You can now punch in.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _validateOTP() async {
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      if (mounted) {
+        CustomToast.showError(context, 'Please enter a valid 6-digit OTP');
+      }
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      // Call the parent callback with the OTP for validation
+      widget.onApprovalCodeValidated?.call(otp);
+
+      if (mounted) {
+        CustomToast.showSuccess(context, 'OTP validated successfully!');
+      }
+
+      // Clear the OTP field
+      _otpController.clear();
+
+      // Refresh status to update UI
+      await _loadApprovalStatus();
+    } catch (e) {
+      if (mounted) {
+        CustomToast.showError(context, 'Failed to validate OTP: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   Widget _buildRejectedStatus() {

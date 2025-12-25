@@ -107,6 +107,15 @@ export const requestLatePunchApproval = async (req, res) => {
                 punchInDate: currentIST,
                 reason: reason.trim(),
                 status: 'PENDING'
+            },
+            include: {
+                employee: {
+                    select: {
+                        name: true,
+                        contactNumber: true,
+                        employeeCode: true
+                    }
+                }
             }
         });
 
