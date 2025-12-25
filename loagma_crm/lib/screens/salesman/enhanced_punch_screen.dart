@@ -1173,7 +1173,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               ),
             ),
           ),
-          if (isAfterCutoff && !isPunchedIn) ...[
+          if (isAfterCutoff && !isPunchedIn && !hasLatePunchApproval) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1189,6 +1189,32 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                   Text(
                     'After ${_getFormattedLatePunchInCutoff()} - Approval Required',
                     style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Show approved badge when user has approval
+          if (isAfterCutoff && !isPunchedIn && hasLatePunchApproval) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Approved - Ready to Punch In',
+                    style: TextStyle(
                       fontSize: 12,
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
