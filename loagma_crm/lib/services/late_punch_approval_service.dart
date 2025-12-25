@@ -202,7 +202,74 @@ class LatePunchApprovalService {
     }
   }
 
-  // Helper method to check if current time is after 9:45 AM IST
+  // Validate OTP code
+  static Future<Map<String, dynamic>> validateOTPCode({
+    required String employeeId,
+    required String otpCode,
+  }) async {
+    try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      print('🔍 Validating OTP for employee: $employeeId');
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/validate-code'),
+            headers: headers,
+            body: jsonEncode({
+              'employeeId': employeeId,
+              'approvalCode': otpCode,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Request timeout. Please try again.');
+            },
+          );
+
+      final data = jsonDecode(response.body);
+
+      print('📊 OTP validation response: ${response.statusCode}');
+
+      if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Authentication failed. Please login again.',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'OTP validated successfully',
+          'data': data['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Invalid OTP code',
+          'statusCode': response.statusCode,
+        };
+      }
+    } catch (e) {
+      String errorMessage = 'Network error. Please try again.';
+
+      if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timeout. Please check your connection.';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      return {'success': false, 'message': errorMessage};
+    }
+  }
+
+  // Helper method to check if current time is after late punch-in cutoff
   static bool isAfterCutoffTime() {
     // Get current time in IST (UTC+5:30)
     final now = DateTime.now().toUtc().add(

@@ -309,4 +309,76 @@ router.post('/reject/:requestId', async (req, res) => {
     }
 });
 
+// Validate Approval Code for Punch-In
+router.post('/validate-code', async (req, res) => {
+    try {
+        const { employeeId, approvalCode } = req.body;
+
+        if (!employeeId || !approvalCode) {
+            return res.status(400).json({
+                success: false,
+                message: 'Employee ID and approval code are required'
+            });
+        }
+
+        // Get today's date range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Find the approval request
+        const approvalRequest = await prisma.latePunchApproval.findFirst({
+            where: {
+                employeeId,
+                approvalCode: approvalCode.trim(),
+                status: 'APPROVED',
+                requestDate: {
+                    gte: today,
+                    lt: tomorrow
+                }
+            }
+        });
+
+        if (!approvalRequest) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid approval code or no approved request found for today'
+            });
+        }
+
+        // Check if code is already used
+        if (approvalRequest.codeUsed) {
+            return res.status(400).json({
+                success: false,
+                message: 'Approval code has already been used'
+            });
+        }
+
+        // Check if code is expired
+        if (approvalRequest.codeExpiresAt && new Date() > approvalRequest.codeExpiresAt) {
+            return res.status(400).json({
+                success: false,
+                message: 'Approval code has expired. Please request a new approval.'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Approval code is valid. You can now punch in.',
+            data: {
+                requestId: approvalRequest.id,
+                approvalCode: approvalRequest.approvalCode,
+                expiresAt: approvalRequest.codeExpiresAt
+            }
+        });
+    } catch (error) {
+        console.error('Error validating approval code:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to validate approval code'
+        });
+    }
+});
+
 export default router;

@@ -126,7 +126,9 @@ export const punchIn = async (req, res) => {
                     success: false,
                     message: `Punch-in is blocked after ${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}. Please request approval from admin first.`,
                     requiresApproval: true,
-                    cutoffTime: `${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}`
+                    cutoffTime: `${cutoffTime.getHours()}:${cutoffTime.getMinutes().toString().padStart(2, '0')}`,
+                    workStartTime: workStartTime,
+                    graceMinutes: graceMinutes
                 });
             }
 
@@ -160,7 +162,7 @@ export const punchIn = async (req, res) => {
                     approvalRequestId: lateApprovalId
                 });
             } else {
-                // Legacy OTP code validation (for backward compatibility)
+                // OTP/Approval code validation
                 const approvalRequest = await prisma.latePunchApproval.findFirst({
                     where: {
                         employeeId,
@@ -201,180 +203,189 @@ export const punchIn = async (req, res) => {
                 lateApprovalId = approvalRequest.id;
                 usedApprovalCode = approvalCode.trim();
 
-                console.log('✅ Late punch-in approval code validated (legacy system):', {
+                console.log('✅ Late punch-in approval code validated:', {
                     employeeId,
                     approvalCode: usedApprovalCode,
                     approvalRequestId: lateApprovalId
                 });
             }
+            lateApprovalId = approvalRequest.id;
+            usedApprovalCode = approvalCode.trim();
+
+            console.log('✅ Late punch-in approval code validated (legacy system):', {
+                employeeId,
+                approvalCode: usedApprovalCode,
+                approvalRequestId: lateApprovalId
+            });
         }
+    }
 
         // Check for any active attendance (not just today)
         const activeAttendance = await prisma.attendance.findFirst({
-            where: {
-                employeeId,
-                status: 'active'
-            },
-            orderBy: {
-                punchInTime: 'desc'
-            }
-        });
-
-        console.log('🔍 Checking active attendance for:', employeeId);
-        console.log('📅 IST Date range:', {
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString(),
-            currentIST: currentISTTime.toISOString(),
-            isAfterCutoff,
-            isLatePunchIn
-        });
-
-        if (activeAttendance) {
-            console.log('❌ Active attendance found:', {
-                id: activeAttendance.id,
-                punchInTime: activeAttendance.punchInTime.toISOString(),
-                status: activeAttendance.status
-            });
-
-            return res.status(400).json({
-                success: false,
-                message: 'You have an active session. Please punch out first before starting a new session.',
-                data: {
-                    ...activeAttendance,
-                    punchInTimeIST: formatISTTime(activeAttendance.punchInTime, 'datetime'),
-                    currentWorkHours: getCurrentWorkDurationIST(activeAttendance.punchInTime)
-                }
-            });
+        where: {
+            employeeId,
+            status: 'active'
+        },
+        orderBy: {
+            punchInTime: 'desc'
         }
+    });
 
-        // Check for multiple sessions today (optional limit)
-        const todaySessionsCount = await prisma.attendance.count({
-            where: {
-                employeeId,
-                punchInTime: {
-                    gte: startOfDay,
-                    lt: endOfDay
-                }
-            }
+    console.log('🔍 Checking active attendance for:', employeeId);
+    console.log('📅 IST Date range:', {
+        startOfDay: startOfDay.toISOString(),
+        endOfDay: endOfDay.toISOString(),
+        currentIST: currentISTTime.toISOString(),
+        isAfterCutoff,
+        isLatePunchIn
+    });
+
+    if (activeAttendance) {
+        console.log('❌ Active attendance found:', {
+            id: activeAttendance.id,
+            punchInTime: activeAttendance.punchInTime.toISOString(),
+            status: activeAttendance.status
         });
 
-        console.log('📊 Today sessions count:', todaySessionsCount);
-
-        // Optional: Limit sessions per day (uncomment if needed)
-        // if (todaySessionsCount >= 3) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: 'Maximum 3 sessions allowed per day. Contact admin if needed.'
-        //     });
-        // }
-
-        // Validate photo size if provided (prevent crashes)
-        if (punchInPhoto && punchInPhoto.length > 5 * 1024 * 1024) { // 5MB limit
-            return res.status(400).json({
-                success: false,
-                message: 'Photo size too large. Please use a smaller image.'
-            });
-        }
-
-        // Create attendance record with proper UTC handling
-        // Convert IST time to UTC for database storage
-        const punchInTimeUTC = convertISTToUTC(currentISTTime);
-
-        // Get IST date for the date field (date only, no time) but store as UTC
-        const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
-        const dateUTC = convertISTToUTC(istDateOnly);
-
-        const attendance = await prisma.attendance.create({
-            data: {
-                employeeId,
-                employeeName,
-                date: dateUTC,
-                punchInTime: punchInTimeUTC, // Store UTC time in database
-                punchInLatitude: lat,
-                punchInLongitude: lng,
-                punchInPhoto: punchInPhoto || null,
-                punchInAddress: punchInAddress || null,
-                bikeKmStart: bikeKmStart || null,
-                status: 'active',
-                totalWorkHours: 0,
-                totalDistanceKm: 0,
-                // Late punch-in fields
-                isLatePunchIn,
-                lateApprovalId,
-                approvalCode: usedApprovalCode
-            }
-        });
-
-        console.log('✅ Attendance created successfully:', {
-            id: attendance.id,
-            employeeId: attendance.employeeId,
-            punchInTimeUTC: attendance.punchInTime.toISOString(),
-            punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
-            status: attendance.status,
-            sessionNumber: todaySessionsCount + 1,
-            isLatePunchIn: attendance.isLatePunchIn,
-            lateApprovalId: attendance.lateApprovalId
-        });
-
-        // Mark approval code as used AFTER attendance is created successfully
-        if (isLatePunchIn && lateApprovalId) {
-            try {
-                await prisma.latePunchApproval.update({
-                    where: { id: lateApprovalId },
-                    data: {
-                        codeUsed: true,
-                        codeUsedAt: currentISTTime
-                    }
-                });
-                console.log('✅ Late punch-in approval code marked as used:', {
-                    approvalRequestId: lateApprovalId,
-                    approvalCode: usedApprovalCode
-                });
-            } catch (updateError) {
-                console.error('⚠️ Failed to mark approval code as used:', updateError);
-                // Don't fail the punch-in if this update fails
-            }
-        }
-
-        // Enhance response with IST information and session details
-        const responseData = {
-            ...attendance,
-            punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
-            punchInTimeISTFormatted: formatISTTime(convertUTCToIST(attendance.punchInTime), 'time'),
-            sessionNumber: todaySessionsCount + 1,
-            timezone: getISTTimezoneInfo(),
-            serverTime: {
-                utc: new Date().toISOString(),
-                ist: formatISTTime(getCurrentISTTime(), 'datetime')
-            }
-        };
-
-        // Create punch-in notification for admin
-        try {
-            await NotificationService.createPunchInNotification(attendance);
-            console.log('✅ Punch-in notification sent to admin');
-        } catch (notificationError) {
-            console.error('⚠️ Failed to send punch-in notification:', notificationError);
-            // Don't fail the punch-in if notification fails
-        }
-
-        const successMessage = isLatePunchIn
-            ? `Late punch-in approved and completed! Session ${todaySessionsCount + 1} started.`
-            : `Punched in successfully! Session ${todaySessionsCount + 1} started.`;
-
-        res.status(201).json({
-            success: true,
-            message: successMessage,
-            data: responseData
-        });
-    } catch (error) {
-        console.error('❌ Punch in error:', error);
-        res.status(500).json({
+        return res.status(400).json({
             success: false,
-            message: 'Failed to punch in. Please try again.',
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            message: 'You have an active session. Please punch out first before starting a new session.',
+            data: {
+                ...activeAttendance,
+                punchInTimeIST: formatISTTime(activeAttendance.punchInTime, 'datetime'),
+                currentWorkHours: getCurrentWorkDurationIST(activeAttendance.punchInTime)
+            }
         });
     }
+
+    // Check for multiple sessions today (optional limit)
+    const todaySessionsCount = await prisma.attendance.count({
+        where: {
+            employeeId,
+            punchInTime: {
+                gte: startOfDay,
+                lt: endOfDay
+            }
+        }
+    });
+
+    console.log('📊 Today sessions count:', todaySessionsCount);
+
+    // Optional: Limit sessions per day (uncomment if needed)
+    // if (todaySessionsCount >= 3) {
+    //     return res.status(400).json({
+    //         success: false,
+    //         message: 'Maximum 3 sessions allowed per day. Contact admin if needed.'
+    //     });
+    // }
+
+    // Validate photo size if provided (prevent crashes)
+    if (punchInPhoto && punchInPhoto.length > 5 * 1024 * 1024) { // 5MB limit
+        return res.status(400).json({
+            success: false,
+            message: 'Photo size too large. Please use a smaller image.'
+        });
+    }
+
+    // Create attendance record with proper UTC handling
+    // Convert IST time to UTC for database storage
+    const punchInTimeUTC = convertISTToUTC(currentISTTime);
+
+    // Get IST date for the date field (date only, no time) but store as UTC
+    const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
+    const dateUTC = convertISTToUTC(istDateOnly);
+
+    const attendance = await prisma.attendance.create({
+        data: {
+            employeeId,
+            employeeName,
+            date: dateUTC,
+            punchInTime: punchInTimeUTC, // Store UTC time in database
+            punchInLatitude: lat,
+            punchInLongitude: lng,
+            punchInPhoto: punchInPhoto || null,
+            punchInAddress: punchInAddress || null,
+            bikeKmStart: bikeKmStart || null,
+            status: 'active',
+            totalWorkHours: 0,
+            totalDistanceKm: 0,
+            // Late punch-in fields
+            isLatePunchIn,
+            lateApprovalId,
+            approvalCode: usedApprovalCode
+        }
+    });
+
+    console.log('✅ Attendance created successfully:', {
+        id: attendance.id,
+        employeeId: attendance.employeeId,
+        punchInTimeUTC: attendance.punchInTime.toISOString(),
+        punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
+        status: attendance.status,
+        sessionNumber: todaySessionsCount + 1,
+        isLatePunchIn: attendance.isLatePunchIn,
+        lateApprovalId: attendance.lateApprovalId
+    });
+
+    // Mark approval code as used AFTER attendance is created successfully
+    if (isLatePunchIn && lateApprovalId) {
+        try {
+            await prisma.latePunchApproval.update({
+                where: { id: lateApprovalId },
+                data: {
+                    codeUsed: true,
+                    codeUsedAt: currentISTTime
+                }
+            });
+            console.log('✅ Late punch-in approval code marked as used:', {
+                approvalRequestId: lateApprovalId,
+                approvalCode: usedApprovalCode
+            });
+        } catch (updateError) {
+            console.error('⚠️ Failed to mark approval code as used:', updateError);
+            // Don't fail the punch-in if this update fails
+        }
+    }
+
+    // Enhance response with IST information and session details
+    const responseData = {
+        ...attendance,
+        punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
+        punchInTimeISTFormatted: formatISTTime(convertUTCToIST(attendance.punchInTime), 'time'),
+        sessionNumber: todaySessionsCount + 1,
+        timezone: getISTTimezoneInfo(),
+        serverTime: {
+            utc: new Date().toISOString(),
+            ist: formatISTTime(getCurrentISTTime(), 'datetime')
+        }
+    };
+
+    // Create punch-in notification for admin
+    try {
+        await NotificationService.createPunchInNotification(attendance);
+        console.log('✅ Punch-in notification sent to admin');
+    } catch (notificationError) {
+        console.error('⚠️ Failed to send punch-in notification:', notificationError);
+        // Don't fail the punch-in if notification fails
+    }
+
+    const successMessage = isLatePunchIn
+        ? `Late punch-in approved and completed! Session ${todaySessionsCount + 1} started.`
+        : `Punched in successfully! Session ${todaySessionsCount + 1} started.`;
+
+    res.status(201).json({
+        success: true,
+        message: successMessage,
+        data: responseData
+    });
+} catch (error) {
+    console.error('❌ Punch in error:', error);
+    res.status(500).json({
+        success: false,
+        message: 'Failed to punch in. Please try again.',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+}
 };
 
 // Punch Out
