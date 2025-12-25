@@ -268,7 +268,6 @@ router.post('/approve/:requestId', async (req, res) => {
                 approvalCode: approvalCode
             }
         });
-        });
 
     } catch (error) {
         console.error('Error approving early punch-out request:', error);

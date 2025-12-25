@@ -23,6 +23,14 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
 
   Map<String, dynamic>? approvalCounts;
 
+  // Date filter
+  DateTime? _selectedDate;
+
+  // Pagination
+  int _latePunchPage = 1;
+  int _earlyPunchOutPage = 1;
+  final int _limit = 20;
+
   static const Color primaryColor = Color(0xFFD7BE69);
 
   @override
@@ -48,21 +56,23 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
     // Load late punch-in requests
     try {
       final latePunchResult =
-          await AdminApprovalService.getPendingLatePunchRequests();
+          await AdminApprovalService.getPendingLatePunchRequests(
+            page: _latePunchPage,
+            limit: _limit,
+            date: _selectedDate != null
+                ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+                : null,
+          );
       if (latePunchResult['success'] == true && mounted) {
         final data = List<Map<String, dynamic>>.from(
           latePunchResult['data'] ?? [],
         );
-        // Debug: Print the first request to see the data structure
-        if (data.isNotEmpty) {
-          print('Late punch request data structure: ${data.first}');
-        }
         setState(() {
           latePunchRequests = data;
         });
       }
     } catch (e) {
-      print('Error loading late punch requests: $e');
+      debugPrint('Error loading late punch requests: $e');
     } finally {
       if (mounted) {
         setState(() => isLoadingLatePunch = false);
@@ -72,21 +82,23 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
     // Load early punch-out requests
     try {
       final earlyPunchOutResult =
-          await AdminApprovalService.getPendingEarlyPunchOutRequests();
-      print('Early punch-out result: $earlyPunchOutResult');
+          await AdminApprovalService.getPendingEarlyPunchOutRequests(
+            page: _earlyPunchOutPage,
+            limit: _limit,
+            date: _selectedDate != null
+                ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+                : null,
+          );
       if (earlyPunchOutResult['success'] == true && mounted) {
         final data = List<Map<String, dynamic>>.from(
           earlyPunchOutResult['data'] ?? [],
         );
-        if (data.isNotEmpty) {
-          print('Early punch-out request data structure: ${data.first}');
-        }
         setState(() {
           earlyPunchOutRequests = data;
         });
       }
     } catch (e) {
-      print('Error loading early punch-out requests: $e');
+      debugPrint('Error loading early punch-out requests: $e');
     } finally {
       if (mounted) {
         setState(() => isLoadingEarlyPunchOut = false);
@@ -103,19 +115,21 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         });
       }
     } catch (e) {
-      print('Error loading approval counts: $e');
+      debugPrint('Error loading approval counts: $e');
     }
   }
 
   Future<void> _handleApproval({
     required String requestId,
-    required String type, // 'late_punch_in' or 'early_punch_out'
+    required String type,
     required bool isApproval,
     String? remarks,
   }) async {
     final adminId = UserService.currentUserId;
     if (adminId == null) {
-      CustomToast.showError(context, 'Admin ID not found');
+      if (mounted) {
+        CustomToast.showError(context, 'Admin ID not found');
+      }
       return;
     }
 
@@ -152,6 +166,8 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         }
       }
 
+      if (!mounted) return;
+
       if (result['success'] == true) {
         CustomToast.showSuccess(
           context,
@@ -159,7 +175,6 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
               (isApproval ? 'Request approved' : 'Request rejected'),
         );
 
-        // Refresh the lists
         await _loadApprovalRequests();
         await _loadApprovalCounts();
       } else {
@@ -169,7 +184,9 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         );
       }
     } catch (e) {
-      CustomToast.showError(context, 'Error: $e');
+      if (mounted) {
+        CustomToast.showError(context, 'Error: $e');
+      }
     }
   }
 
@@ -184,7 +201,7 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -220,9 +237,9 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                       'Type: ${type == 'late_punch_in' ? 'Late Punch-In' : 'Early Punch-Out'}',
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    const Text(
                       'Reason:',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(reason),
                   ],
@@ -279,20 +296,20 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
               if (!isApproval && remarksController.text.trim().isEmpty) {
                 CustomToast.showError(
-                  context,
+                  dialogContext,
                   'Please provide a rejection reason',
                 );
                 return;
               }
 
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               _handleApproval(
                 requestId: requestId,
                 type: type,
@@ -311,6 +328,46 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+        _latePunchPage = 1;
+        _earlyPunchOutPage = 1;
+      });
+      _loadApprovalRequests();
+    }
+  }
+
+  void _clearDateFilter() {
+    setState(() {
+      _selectedDate = null;
+      _latePunchPage = 1;
+      _earlyPunchOutPage = 1;
+    });
+    _loadApprovalRequests();
   }
 
   @override
@@ -349,19 +406,118 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
           ],
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadApprovalRequests();
-          await _loadApprovalCounts();
-        },
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildAllRequestsTab(),
-            _buildLatePunchTab(),
-            _buildEarlyPunchOutTab(),
+      body: Column(
+        children: [
+          // Date Filter Bar
+          _buildDateFilterBar(),
+          // Content
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await _loadApprovalRequests();
+                await _loadApprovalCounts();
+              },
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildAllRequestsTab(),
+                  _buildLatePunchTab(),
+                  _buildEarlyPunchOutTab(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateFilterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: _selectDate,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _selectedDate != null
+                        ? primaryColor
+                        : Colors.grey[300]!,
+                    width: _selectedDate != null ? 2 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  color: _selectedDate != null
+                      ? primaryColor.withValues(alpha: 0.1)
+                      : Colors.white,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 18,
+                      color: _selectedDate != null
+                          ? primaryColor
+                          : Colors.grey[600],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _selectedDate != null
+                            ? DateFormat('dd MMM yyyy').format(_selectedDate!)
+                            : 'Filter by Date',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _selectedDate != null
+                              ? Colors.black87
+                              : Colors.grey[600],
+                          fontWeight: _selectedDate != null
+                              ? FontWeight.w500
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      color: _selectedDate != null
+                          ? primaryColor
+                          : Colors.grey[600],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_selectedDate != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _clearDateFilter,
+              icon: const Icon(Icons.clear, size: 20),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.red[50],
+                foregroundColor: Colors.red,
+              ),
+              tooltip: 'Clear filter',
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -411,12 +567,26 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
       return _buildEmptyState('No pending approval requests');
     }
 
+    // Group by date
+    final groupedRequests = _groupRequestsByDate(allRequests);
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: allRequests.length,
+      itemCount: groupedRequests.length,
       itemBuilder: (context, index) {
-        final request = allRequests[index];
-        return _buildRequestCard(request, request['type']);
+        final entry = groupedRequests.entries.elementAt(index);
+        final dateKey = entry.key;
+        final requests = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDateHeader(dateKey),
+            ...requests.map(
+              (request) => _buildRequestCard(request, request['type']),
+            ),
+          ],
+        );
       },
     );
   }
@@ -432,11 +602,29 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
       return _buildEmptyState('No pending late punch-in requests');
     }
 
+    final groupedRequests = _groupRequestsByDate(
+      latePunchRequests
+          .map((req) => {...req, 'type': 'late_punch_in'})
+          .toList(),
+    );
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: latePunchRequests.length,
+      itemCount: groupedRequests.length,
       itemBuilder: (context, index) {
-        return _buildRequestCard(latePunchRequests[index], 'late_punch_in');
+        final entry = groupedRequests.entries.elementAt(index);
+        final dateKey = entry.key;
+        final requests = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDateHeader(dateKey),
+            ...requests.map(
+              (request) => _buildRequestCard(request, 'late_punch_in'),
+            ),
+          ],
+        );
       },
     );
   }
@@ -452,27 +640,97 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
       return _buildEmptyState('No pending early punch-out requests');
     }
 
+    final groupedRequests = _groupRequestsByDate(
+      earlyPunchOutRequests
+          .map((req) => {...req, 'type': 'early_punch_out'})
+          .toList(),
+    );
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: earlyPunchOutRequests.length,
+      itemCount: groupedRequests.length,
       itemBuilder: (context, index) {
-        return _buildRequestCard(
-          earlyPunchOutRequests[index],
-          'early_punch_out',
+        final entry = groupedRequests.entries.elementAt(index);
+        final dateKey = entry.key;
+        final requests = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDateHeader(dateKey),
+            ...requests.map(
+              (request) => _buildRequestCard(request, 'early_punch_out'),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Map<String, List<Map<String, dynamic>>> _groupRequestsByDate(
+    List<Map<String, dynamic>> requests,
+  ) {
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+
+    for (final request in requests) {
+      final createdAt = DateTime.parse(request['createdAt']);
+      final dateKey = _getDateKey(createdAt);
+      grouped.putIfAbsent(dateKey, () => []);
+      grouped[dateKey]!.add(request);
+    }
+
+    return grouped;
+  }
+
+  String _getDateKey(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final requestDate = DateTime(date.year, date.month, date.day);
+
+    if (requestDate == today) {
+      return 'Today';
+    } else if (requestDate == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('dd MMM yyyy').format(date);
+    }
+  }
+
+  Widget _buildDateHeader(String dateKey) {
+    return Container(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              dateKey,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF8B7355),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Container(height: 1, color: Colors.grey[300])),
+        ],
+      ),
     );
   }
 
   Widget _buildRequestCard(Map<String, dynamic> request, String type) {
     final isLatePunch = type == 'late_punch_in';
     final createdAt = DateTime.parse(request['createdAt']);
-    final formattedDate = DateFormat(
-      'MMM dd, yyyy - hh:mm a',
-    ).format(createdAt);
+    final formattedTime = DateFormat('hh:mm a').format(createdAt);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -500,16 +758,16 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isLatePunch
-                            ? 'Late Punch-In Request'
-                            : 'Early Punch-Out Request',
+                        request['employee']?['name'] ??
+                            request['employeeName'] ??
+                            'Unknown',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        formattedDate,
+                        '${isLatePunch ? 'Late Punch-In' : 'Early Punch-Out'} • $formattedTime',
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
@@ -535,7 +793,7 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -545,37 +803,23 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInfoRow(
-                    'Employee',
-                    request['employee']?['name'] ??
-                        request['employeeName'] ??
-                        'Unknown',
-                  ),
-                  const SizedBox(height: 8),
                   _buildInfoRow('Employee Code', _getEmployeeCode(request)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _buildInfoRow('Contact', _getContactNumber(request)),
-                  if (request['employee']?['department']?['name'] != null) ...[
-                    const SizedBox(height: 8),
-                    _buildInfoRow(
-                      'Department',
-                      request['employee']['department']['name'],
-                    ),
-                  ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   const Text(
                     'Reason:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     request['reason'] ?? 'No reason provided',
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -583,16 +827,19 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                     onPressed: () => _showApprovalDialog(
                       requestId: request['id'],
                       type: type,
-                      employeeName: request['employeeName'] ?? 'Unknown',
+                      employeeName:
+                          request['employee']?['name'] ??
+                          request['employeeName'] ??
+                          'Unknown',
                       reason: request['reason'] ?? 'No reason provided',
                       isApproval: false,
                     ),
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: const Icon(Icons.close, size: 16),
                     label: const Text('Reject'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
                 ),
@@ -602,16 +849,19 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                     onPressed: () => _showApprovalDialog(
                       requestId: request['id'],
                       type: type,
-                      employeeName: request['employeeName'] ?? 'Unknown',
+                      employeeName:
+                          request['employee']?['name'] ??
+                          request['employeeName'] ??
+                          'Unknown',
                       reason: request['reason'] ?? 'No reason provided',
                       isApproval: true,
                     ),
-                    icon: const Icon(Icons.check, size: 18),
+                    icon: const Icon(Icons.check, size: 16),
                     label: const Text('Approve'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
                 ),
@@ -640,12 +890,10 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
   }
 
   String _getEmployeeCode(Map<String, dynamic> request) {
-    // Try to get from employee object first
     final employeeCode = request['employee']?['employeeCode'];
     if (employeeCode != null && employeeCode.toString().isNotEmpty) {
       return employeeCode.toString();
     }
-    // Try direct field
     final directCode = request['employeeCode'];
     if (directCode != null && directCode.toString().isNotEmpty) {
       return directCode.toString();
@@ -654,12 +902,10 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
   }
 
   String _getContactNumber(Map<String, dynamic> request) {
-    // Try to get from employee object first
     final contactNumber = request['employee']?['contactNumber'];
     if (contactNumber != null && contactNumber.toString().isNotEmpty) {
       return contactNumber.toString();
     }
-    // Try direct field
     final directContact = request['contactNumber'];
     if (directContact != null && directContact.toString().isNotEmpty) {
       return directContact.toString();
@@ -669,22 +915,37 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
 
   Widget _buildEmptyState(String message) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.approval, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Approval requests will appear here when employees need permission for late punch-in or early punch-out',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.approval, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedDate != null
+                  ? 'No requests found for ${DateFormat('dd MMM yyyy').format(_selectedDate!)}'
+                  : 'Approval requests will appear here when employees need permission',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+            if (_selectedDate != null) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _clearDateFilter,
+                icon: const Icon(Icons.clear),
+                label: const Text('Clear Date Filter'),
+                style: TextButton.styleFrom(foregroundColor: primaryColor),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
