@@ -13,13 +13,13 @@ const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 export function getCurrentISTTime() {
     const nowUTC = Date.now();
     const istTime = new Date(nowUTC + IST_OFFSET);
-    
+
     console.log('🕐 getCurrentISTTime called:', {
         utcTime: new Date(nowUTC).toISOString(),
         istTime: istTime.toISOString(),
         offset: '+05:30'
     });
-    
+
     return istTime;
 }
 
@@ -59,16 +59,22 @@ export function getISTDateRange(date = null) {
     const endIST = new Date(baseIST);
     endIST.setHours(23, 59, 59, 999);
 
+    // Convert IST times to UTC for database queries
+    const startUTC = convertISTToUTC(startIST);
+    const endUTC = convertISTToUTC(endIST);
+
     console.log('📅 IST Date range calculated:', {
         baseIST: baseIST.toISOString(),
-        startOfDay: startIST.toISOString(),
-        endOfDay: endIST.toISOString()
+        startOfDayIST: startIST.toISOString(),
+        endOfDayIST: endIST.toISOString(),
+        startOfDayUTC: startUTC.toISOString(),
+        endOfDayUTC: endUTC.toISOString()
     });
 
-    // Return IST times directly since we're storing IST in database
+    // Return UTC times for database queries
     return {
-        startOfDay: startIST,
-        endOfDay: endIST
+        startOfDay: startUTC,
+        endOfDay: endUTC
     };
 }
 
@@ -169,21 +175,24 @@ export function calculateWorkHoursIST(startTime, endTime) {
 
 /**
  * Calculate current active work duration for attendance
- * @param {Date|string|number} punchInTime - UTC instant
+ * @param {Date|string|number} punchInTime - UTC instant from database
  * @returns {number}
  */
 export function getCurrentWorkDurationIST(punchInTime) {
     if (!punchInTime) return 0;
-    
+
+    // Convert UTC punch-in time to IST for calculation
+    const punchInIST = convertUTCToIST(punchInTime);
     // Get current IST time for accurate calculation
-    const now = getCurrentISTTime();
-    
+    const nowIST = getCurrentISTTime();
+
     console.log('📊 Current work duration calculation:', {
-        punchInTime: new Date(punchInTime).toISOString(),
-        currentTime: now.toISOString()
+        punchInTimeUTC: new Date(punchInTime).toISOString(),
+        punchInTimeIST: punchInIST.toISOString(),
+        currentTimeIST: nowIST.toISOString()
     });
-    
-    return calculateWorkHoursIST(punchInTime, now);
+
+    return calculateWorkHoursIST(punchInIST, nowIST);
 }
 
 /**
