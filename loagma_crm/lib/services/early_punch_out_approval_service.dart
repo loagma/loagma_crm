@@ -211,8 +211,10 @@ class EarlyPunchOutApprovalService {
     }
   }
 
-  // Helper method to check if current time is before 6:30 PM IST
-  static bool isBeforeEarlyPunchOutCutoff() {
+  // Helper method to check if current time is before early punch-out cutoff
+  static bool isBeforeEarlyPunchOutCutoff([
+    Map<String, dynamic>? workingHours,
+  ]) {
     // Get current local time
     final now = DateTime.now();
 
@@ -231,13 +233,25 @@ class EarlyPunchOutApprovalService {
       istTime = utcNow.add(const Duration(hours: 5, minutes: 30));
     }
 
+    // Get cutoff time from working hours or use default
+    String cutoffTimeStr = '18:30';
+    if (workingHours != null &&
+        workingHours['earlyPunchOutCutoffTime'] != null) {
+      cutoffTimeStr = workingHours['earlyPunchOutCutoffTime'];
+    }
+
+    // Parse cutoff time
+    final cutoffParts = cutoffTimeStr.split(':');
+    final cutoffHour = int.tryParse(cutoffParts[0]) ?? 18;
+    final cutoffMinute = int.tryParse(cutoffParts[1]) ?? 30;
+
     // Create cutoff time for the same day in IST
     final cutoffTime = DateTime(
       istTime.year,
       istTime.month,
       istTime.day,
-      18,
-      30,
+      cutoffHour,
+      cutoffMinute,
     );
     final isBefore = istTime.isBefore(cutoffTime);
 
@@ -249,7 +263,9 @@ class EarlyPunchOutApprovalService {
     print(
       '🕘 IST time used: ${istTime.toString()} (${istTime.hour}:${istTime.minute.toString().padLeft(2, '0')})',
     );
-    print('🕘 Early punch-out cutoff: ${cutoffTime.toString()} (18:30 IST)');
+    print(
+      '🕘 Early punch-out cutoff: ${cutoffTime.toString()} ($cutoffTimeStr IST)',
+    );
     print('🕘 Is before cutoff: $isBefore');
     print(
       '🕘 Time difference: ${cutoffTime.difference(istTime).inMinutes} minutes',
@@ -259,7 +275,9 @@ class EarlyPunchOutApprovalService {
   }
 
   // Helper method to format time remaining until early punch-out cutoff
-  static String getTimeUntilEarlyPunchOutCutoff() {
+  static String getTimeUntilEarlyPunchOutCutoff([
+    Map<String, dynamic>? workingHours,
+  ]) {
     // Get current local time
     final now = DateTime.now();
 
@@ -278,12 +296,24 @@ class EarlyPunchOutApprovalService {
       istTime = utcNow.add(const Duration(hours: 5, minutes: 30));
     }
 
+    // Get cutoff time from working hours or use default
+    String cutoffTimeStr = '18:30';
+    if (workingHours != null &&
+        workingHours['earlyPunchOutCutoffTime'] != null) {
+      cutoffTimeStr = workingHours['earlyPunchOutCutoffTime'];
+    }
+
+    // Parse cutoff time
+    final cutoffParts = cutoffTimeStr.split(':');
+    final cutoffHour = int.tryParse(cutoffParts[0]) ?? 18;
+    final cutoffMinute = int.tryParse(cutoffParts[1]) ?? 30;
+
     final cutoffTime = DateTime(
       istTime.year,
       istTime.month,
       istTime.day,
-      18,
-      30,
+      cutoffHour,
+      cutoffMinute,
     );
 
     if (istTime.isAfter(cutoffTime)) {
