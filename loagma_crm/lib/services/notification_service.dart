@@ -14,6 +14,8 @@ class NotificationService {
     String? type,
     String? userId,
     String? role,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     try {
       final token = UserService.token;
@@ -30,6 +32,9 @@ class NotificationService {
       if (type != null) queryParams['type'] = type;
       if (userId != null) queryParams['userId'] = userId;
       if (role != null) queryParams['role'] = role;
+      if (startDate != null)
+        queryParams['startDate'] = startDate.toIso8601String();
+      if (endDate != null) queryParams['endDate'] = endDate.toIso8601String();
 
       final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParams);
 

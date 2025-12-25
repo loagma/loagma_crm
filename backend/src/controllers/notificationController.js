@@ -8,7 +8,9 @@ export const getNotifications = async (req, res) => {
             unreadOnly = false,
             limit = 50,
             offset = 0,
-            type
+            type,
+            startDate,
+            endDate
         } = req.query;
 
         // If no user info, try to get from query params (for admin)
@@ -20,7 +22,9 @@ export const getNotifications = async (req, res) => {
             role: targetRole,
             unreadOnly: unreadOnly === 'true',
             limit: parseInt(limit),
-            offset: parseInt(offset)
+            offset: parseInt(offset),
+            startDate: startDate ? new Date(startDate) : null,
+            endDate: endDate ? new Date(endDate) : null
         });
 
         // Filter by type if specified
@@ -28,13 +32,22 @@ export const getNotifications = async (req, res) => {
             ? notifications.filter(n => n.type === type)
             : notifications;
 
+        // Get total count for pagination
+        const totalCount = await NotificationService.getNotificationCountWithFilters({
+            userId: targetUserId,
+            role: targetRole,
+            startDate: startDate ? new Date(startDate) : null,
+            endDate: endDate ? new Date(endDate) : null
+        });
+
         res.status(200).json({
             success: true,
             data: filteredNotifications,
             pagination: {
                 limit: parseInt(limit),
                 offset: parseInt(offset),
-                total: filteredNotifications.length
+                total: totalCount,
+                hasMore: parseInt(offset) + filteredNotifications.length < totalCount
             }
         });
     } catch (error) {

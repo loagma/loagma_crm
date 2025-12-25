@@ -207,6 +207,46 @@ class _EarlyPunchOutApprovalWidgetState
   }
 
   Widget _buildRequestForm() {
+    // Format the work end time for display
+    String formattedWorkEndTime = '6:00 PM';
+    String formattedCutoffTime = '5:30 PM';
+
+    if (widget.employeeWorkingHours != null) {
+      // Format work end time
+      final workEndTimeStr =
+          widget.employeeWorkingHours!['workEndTime'] as String?;
+      if (workEndTimeStr != null) {
+        try {
+          final parts = workEndTimeStr.split(':');
+          final hour = int.parse(parts[0]);
+          final minute = int.parse(parts[1]);
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          formattedWorkEndTime =
+              '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+        } catch (e) {
+          // Use default
+        }
+      }
+
+      // Format early punch-out cutoff time
+      final cutoffTimeStr =
+          widget.employeeWorkingHours!['earlyPunchOutCutoffTime'] as String?;
+      if (cutoffTimeStr != null) {
+        try {
+          final parts = cutoffTimeStr.split(':');
+          final hour = int.parse(parts[0]);
+          final minute = int.parse(parts[1]);
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          formattedCutoffTime =
+              '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+        } catch (e) {
+          // Use default
+        }
+      }
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -261,7 +301,7 @@ class _EarlyPunchOutApprovalWidgetState
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Normal punch-out time is ${widget.employeeWorkingHours?['workEndTime']?.substring(0, 5) ?? '18:00'}. To punch out early, you need admin approval.',
+                    'Normal punch-out time is $formattedWorkEndTime. To punch out before $formattedCutoffTime, you need admin approval.',
                     style: TextStyle(fontSize: 12, color: Colors.orange[600]),
                   ),
                   const SizedBox(height: 4),
@@ -535,6 +575,26 @@ class _EarlyPunchOutApprovalWidgetState
   }
 
   Widget _buildRejectedStatus() {
+    // Format the cutoff time for display
+    String formattedCutoffTime = '5:30 PM';
+    if (widget.employeeWorkingHours != null) {
+      final cutoffTimeStr =
+          widget.employeeWorkingHours!['earlyPunchOutCutoffTime'] as String?;
+      if (cutoffTimeStr != null) {
+        try {
+          final parts = cutoffTimeStr.split(':');
+          final hour = int.parse(parts[0]);
+          final minute = int.parse(parts[1]);
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          formattedCutoffTime =
+              '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+        } catch (e) {
+          // Use default
+        }
+      }
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -617,9 +677,7 @@ class _EarlyPunchOutApprovalWidgetState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.employeeWorkingHours != null
-                          ? 'You must work until ${widget.employeeWorkingHours!['earlyPunchOutCutoffTime'] ?? '6:30 PM'} or contact your supervisor.'
-                          : 'You must work until cutoff time or contact your supervisor.',
+                      'You must work until $formattedCutoffTime or contact your supervisor.',
                       style: TextStyle(fontSize: 12, color: Colors.orange[700]),
                     ),
                   ),

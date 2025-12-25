@@ -91,9 +91,20 @@ class EmployeeWorkingHoursService {
       final cutoffHour = int.parse(cutoffParts[0]);
       final cutoffMinute = int.parse(cutoffParts[1]);
 
-      // Get current IST time
+      // Get current local time (assuming device is in IST)
       final now = DateTime.now();
-      final istTime = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+
+      // Check if device is already in IST timezone
+      final timeZoneOffset = now.timeZoneOffset;
+      final isAlreadyIST =
+          timeZoneOffset.inMinutes == 330; // 5:30 = 330 minutes
+
+      DateTime istTime;
+      if (isAlreadyIST) {
+        istTime = now;
+      } else {
+        istTime = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+      }
 
       // Create cutoff time for today
       final cutoffTime = DateTime(
@@ -122,9 +133,20 @@ class EmployeeWorkingHoursService {
       final cutoffHour = int.parse(cutoffParts[0]);
       final cutoffMinute = int.parse(cutoffParts[1]);
 
-      // Get current IST time
+      // Get current local time (assuming device is in IST)
       final now = DateTime.now();
-      final istTime = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+
+      // Check if device is already in IST timezone
+      final timeZoneOffset = now.timeZoneOffset;
+      final isAlreadyIST =
+          timeZoneOffset.inMinutes == 330; // 5:30 = 330 minutes
+
+      DateTime istTime;
+      if (isAlreadyIST) {
+        istTime = now;
+      } else {
+        istTime = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+      }
 
       // Create cutoff time for today
       final cutoffTime = DateTime(
@@ -135,7 +157,20 @@ class EmployeeWorkingHoursService {
         cutoffMinute,
       );
 
-      return istTime.isBefore(cutoffTime);
+      final isBefore = istTime.isBefore(cutoffTime);
+
+      print('🕘 Early punch-out cutoff check:');
+      print('  - Device timezone offset: ${timeZoneOffset.inMinutes} minutes');
+      print('  - Is already IST: $isAlreadyIST');
+      print(
+        '  - Current IST time: ${istTime.hour}:${istTime.minute.toString().padLeft(2, '0')}',
+      );
+      print(
+        '  - Cutoff time: $cutoffHour:${cutoffMinute.toString().padLeft(2, '0')}',
+      );
+      print('  - Is before cutoff: $isBefore');
+
+      return isBefore;
     } catch (e) {
       print('Error checking early punch-out cutoff: $e');
       return false;
