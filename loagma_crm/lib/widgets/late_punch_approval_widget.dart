@@ -286,7 +286,9 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Punch-in is blocked after 9:45 AM. Please request approval from admin.',
+              _workingHours != null
+                  ? 'Punch-in is blocked after ${_workingHours!['latePunchInCutoffTime'] ?? '9:45 AM'}. Please request approval from admin.'
+                  : 'Punch-in is blocked after cutoff time. Please request approval from admin.',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),

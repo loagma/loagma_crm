@@ -617,7 +617,9 @@ class _EarlyPunchOutApprovalWidgetState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'You must work until 6:30 PM or contact your supervisor.',
+                      widget.employeeWorkingHours != null
+                          ? 'You must work until ${widget.employeeWorkingHours!['earlyPunchOutCutoffTime'] ?? '6:30 PM'} or contact your supervisor.'
+                          : 'You must work until cutoff time or contact your supervisor.',
                       style: TextStyle(fontSize: 12, color: Colors.orange[700]),
                     ),
                   ),
