@@ -1,48 +1,54 @@
 /**
  * Timezone utility for Indian Standard Time (IST) handling
  * IST = UTC +05:30 (no DST)
+ * 
+ * IMPORTANT: All times in the database are stored in UTC.
+ * IST conversion is only for display purposes.
  */
 
 // IST offset in milliseconds
-const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 /**
- * Get current IST time (as Date object of the IST instant)
+ * Get current time as a Date object (in UTC, as JavaScript Date always is)
+ * This is the actual current moment, suitable for storing in database
  * @returns {Date}
  */
 export function getCurrentISTTime() {
-    const nowUTC = Date.now();
-    const istTime = new Date(nowUTC + IST_OFFSET);
-
+    // Return current UTC time - JavaScript Date is always UTC internally
+    const now = new Date();
+    
     console.log('🕐 getCurrentISTTime called:', {
-        utcTime: new Date(nowUTC).toISOString(),
-        istTime: istTime.toISOString(),
+        utcTime: now.toISOString(),
+        istFormatted: formatISTTime(now, 'datetime'),
         offset: '+05:30'
     });
 
-    return istTime;
+    return now;
 }
 
 /**
- * Convert a UTC date to IST (using fixed offset)
+ * Convert a UTC date to IST for display purposes
+ * Note: This returns a Date object shifted by IST offset for display
  * @param {Date|string|number} utcDate
  * @returns {Date|null}
  */
 export function convertUTCToIST(utcDate) {
     if (!utcDate) return null;
     const d = new Date(utcDate);
-    return new Date(d.getTime() + IST_OFFSET);
+    // For display purposes, shift the time by IST offset
+    return new Date(d.getTime() + IST_OFFSET_MS);
 }
 
 /**
- * Convert an IST date to UTC
+ * Convert an IST-shifted date back to UTC
  * @param {Date|string|number} istDate
  * @returns {Date|null}
  */
 export function convertISTToUTC(istDate) {
     if (!istDate) return null;
     const d = new Date(istDate);
-    return new Date(d.getTime() - IST_OFFSET);
+    return new Date(d.getTime() - IST_OFFSET_MS);
 }
 
 /**
@@ -51,27 +57,43 @@ export function convertISTToUTC(istDate) {
  * @returns {{ startOfDay: Date, endOfDay: Date }}
  */
 export function getISTDateRange(date = null) {
-    const baseIST = date ? new Date(date) : getCurrentISTTime();
-
-    const startIST = new Date(baseIST);
-    startIST.setHours(0, 0, 0, 0);
-
-    const endIST = new Date(baseIST);
-    endIST.setHours(23, 59, 59, 999);
-
+    // Get current time or provided date
+    const baseDate = date ? new Date(date) : new Date();
+    
+    // Get IST date components using Intl
+    const istParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(baseDate);
+    
+    const getPart = (type) => parseInt(istParts.find(p => p.type === type)?.value || '0', 10);
+    
+    const year = getPart('year');
+    const month = getPart('month') - 1; // JS months are 0-indexed
+    const day = getPart('day');
+    
+    // Create IST midnight (00:00:00) and end of day (23:59:59.999)
+    // Then convert to UTC by subtracting IST offset
+    const startIST = new Date(year, month, day, 0, 0, 0, 0);
+    const endIST = new Date(year, month, day, 23, 59, 59, 999);
+    
     // Convert IST times to UTC for database queries
-    const startUTC = convertISTToUTC(startIST);
-    const endUTC = convertISTToUTC(endIST);
+    const startUTC = new Date(startIST.getTime() - IST_OFFSET_MS);
+    const endUTC = new Date(endIST.getTime() - IST_OFFSET_MS);
 
     console.log('📅 IST Date range calculated:', {
-        baseIST: baseIST.toISOString(),
-        startOfDayIST: startIST.toISOString(),
-        endOfDayIST: endIST.toISOString(),
+        baseDate: baseDate.toISOString(),
+        istDate: `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
         startOfDayUTC: startUTC.toISOString(),
         endOfDayUTC: endUTC.toISOString()
     });
 
-    // Return UTC times for database queries
     return {
         startOfDay: startUTC,
         endOfDay: endUTC
@@ -176,23 +198,22 @@ export function calculateWorkHoursIST(startTime, endTime) {
 /**
  * Calculate current active work duration for attendance
  * @param {Date|string|number} punchInTime - UTC instant from database
- * @returns {number}
+ * @returns {number} - hours worked
  */
 export function getCurrentWorkDurationIST(punchInTime) {
     if (!punchInTime) return 0;
 
-    // Convert UTC punch-in time to IST for calculation
-    const punchInIST = convertUTCToIST(punchInTime);
-    // Get current IST time for accurate calculation
-    const nowIST = getCurrentISTTime();
+    const punchIn = new Date(punchInTime);
+    const now = new Date();
 
     console.log('📊 Current work duration calculation:', {
-        punchInTimeUTC: new Date(punchInTime).toISOString(),
-        punchInTimeIST: punchInIST.toISOString(),
-        currentTimeIST: nowIST.toISOString()
+        punchInTimeUTC: punchIn.toISOString(),
+        currentTimeUTC: now.toISOString(),
+        punchInIST: formatISTTime(punchIn, 'datetime'),
+        currentIST: formatISTTime(now, 'datetime')
     });
 
-    return calculateWorkHoursIST(punchInIST, nowIST);
+    return calculateWorkHoursIST(punchIn, now);
 }
 
 /**
@@ -225,7 +246,7 @@ export function getISTTimezoneInfo() {
         abbreviation: "IST",
         offset: "+05:30",
         offsetMinutes: 330,
-        offsetMs: IST_OFFSET
+        offsetMs: IST_OFFSET_MS
     };
 }
 
