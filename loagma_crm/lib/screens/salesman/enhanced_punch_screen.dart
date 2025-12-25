@@ -10,7 +10,6 @@ import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
 import '../../services/live_location_socket.dart';
-import '../../services/late_punch_approval_service.dart';
 import '../../services/employee_working_hours_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/late_punch_approval_widget.dart';
@@ -792,6 +791,100 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     return '$hours:$minutes:$seconds';
   }
 
+  /// Get formatted late punch-in cutoff time (e.g., "9:45 AM")
+  String _getFormattedLatePunchInCutoff() {
+    if (employeeWorkingHours == null) return '9:45 AM';
+
+    final cutoffTimeStr =
+        employeeWorkingHours!['latePunchInCutoffTime'] as String?;
+    if (cutoffTimeStr == null) return '9:45 AM';
+
+    try {
+      final parts = cutoffTimeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } catch (e) {
+      return '9:45 AM';
+    }
+  }
+
+  /// Get formatted early punch-out cutoff time (e.g., "5:30 PM")
+  String _getFormattedEarlyPunchOutCutoff() {
+    if (employeeWorkingHours == null) return '5:30 PM';
+
+    final cutoffTimeStr =
+        employeeWorkingHours!['earlyPunchOutCutoffTime'] as String?;
+    if (cutoffTimeStr == null) return '5:30 PM';
+
+    try {
+      final parts = cutoffTimeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } catch (e) {
+      return '5:30 PM';
+    }
+  }
+
+  /// Get time remaining until late punch-in cutoff
+  String _getTimeUntilLatePunchInCutoff() {
+    if (employeeWorkingHours == null) return 'Loading...';
+    return EmployeeWorkingHoursService.getTimeUntilLatePunchInCutoff(
+      employeeWorkingHours!,
+    );
+  }
+
+  /// Get formatted work start time (e.g., "9:00 AM")
+  String _getFormattedWorkStartTime() {
+    if (employeeWorkingHours == null) return '9:00 AM';
+
+    final workStartTimeStr = employeeWorkingHours!['workStartTime'] as String?;
+    if (workStartTimeStr == null) return '9:00 AM';
+
+    try {
+      final parts = workStartTimeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } catch (e) {
+      return '9:00 AM';
+    }
+  }
+
+  /// Get formatted work end time (e.g., "6:00 PM")
+  String _getFormattedWorkEndTime() {
+    if (employeeWorkingHours == null) return '6:00 PM';
+
+    final workEndTimeStr = employeeWorkingHours!['workEndTime'] as String?;
+    if (workEndTimeStr == null) return '6:00 PM';
+
+    try {
+      final parts = workEndTimeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+    } catch (e) {
+      return '6:00 PM';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -833,6 +926,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: LatePunchApprovalWidget(
+                        employeeWorkingHours: employeeWorkingHours,
                         onApprovalRequested: () {
                           // Refresh status after approval request
                           setState(() {});
@@ -1079,7 +1173,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               ),
             ),
           ),
-          if (isAfterCutoff && !isPunchedIn) ...[
+          if (isAfterCutoff && !isPunchedIn && !hasLatePunchApproval) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1092,8 +1186,34 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 children: [
                   const Icon(Icons.warning, color: Colors.white, size: 16),
                   const SizedBox(width: 6),
-                  const Text(
-                    'After 8:00 AM - Approval Required',
+                  Text(
+                    'After ${_getFormattedLatePunchInCutoff()} - Approval Required',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Show approved badge when user has approval
+          if (isAfterCutoff && !isPunchedIn && hasLatePunchApproval) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Approved - Ready to Punch In',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.white,
@@ -1221,7 +1341,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Punch-in available until 8:00 AM (${LatePunchApprovalService.getTimeUntilCutoff()})',
+                      'Punch-in available until ${_getFormattedLatePunchInCutoff()} (${_getTimeUntilLatePunchInCutoff()})',
                       style: TextStyle(
                         color: Colors.green[700],
                         fontSize: 12,
@@ -1395,7 +1515,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Normal punch-out available after 6:30 PM',
+                  'Normal punch-out available after ${_getFormattedEarlyPunchOutCutoff()}',
                   style: TextStyle(
                     color: Colors.blue[700],
                     fontSize: 12,
