@@ -165,13 +165,21 @@ class AdminLiveTrackingSocket {
       final lat = (message['lat'] as num).toDouble();
       final lng = (message['lng'] as num).toDouble();
       final timestamp = message['timestamp'] as int;
+      final totalDistanceKm =
+          (message['totalDistanceKm'] as num?)?.toDouble() ?? 0.0;
+      final distanceFromLastKm =
+          (message['distanceFromLastKm'] as num?)?.toDouble() ?? 0.0;
+      final totalPoints = (message['totalPoints'] as int?) ?? 0;
 
-      // Update salesman location
+      // Update salesman location with distance info
       final location = SalesmanLocation(
         salesmanId: salesmanId,
         latitude: lat,
         longitude: lng,
         timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp),
+        totalDistanceKm: totalDistanceKm,
+        distanceFromLastKm: distanceFromLastKm,
+        totalPoints: totalPoints,
       );
 
       _salesmanLocations[salesmanId] = location;
@@ -194,7 +202,7 @@ class AdminLiveTrackingSocket {
       );
 
       print(
-        '📍 Location update for $salesmanId: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+        '📍 Location update for $salesmanId: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} | ${totalDistanceKm.toStringAsFixed(2)} km',
       );
     } catch (e) {
       print('❌ Error processing location update: $e');
@@ -345,12 +353,18 @@ class SalesmanLocation {
   final double latitude;
   final double longitude;
   final DateTime timestamp;
+  final double totalDistanceKm;
+  final double distanceFromLastKm;
+  final int totalPoints;
 
   SalesmanLocation({
     required this.salesmanId,
     required this.latitude,
     required this.longitude,
     required this.timestamp,
+    this.totalDistanceKm = 0.0,
+    this.distanceFromLastKm = 0.0,
+    this.totalPoints = 0,
   });
 
   LatLng get latLng => LatLng(latitude, longitude);

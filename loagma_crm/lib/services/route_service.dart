@@ -16,6 +16,7 @@ class RouteService {
   /// - longitude: GPS longitude coordinate
   /// - speed: Optional speed in km/h
   /// - accuracy: Optional GPS accuracy in meters
+  /// - isHomeLocation: Optional flag to mark as home location
   static Future<Map<String, dynamic>> storeRoutePoint({
     required String employeeId,
     required String attendanceId,
@@ -23,6 +24,7 @@ class RouteService {
     required double longitude,
     double? speed,
     double? accuracy,
+    bool? isHomeLocation,
   }) async {
     try {
       // Validate GPS coordinates before sending
@@ -45,6 +47,7 @@ class RouteService {
       // Add optional parameters if available
       if (speed != null) body['speed'] = speed;
       if (accuracy != null) body['accuracy'] = accuracy;
+      if (isHomeLocation != null) body['isHomeLocation'] = isHomeLocation;
 
       final response = await http.post(
         url,
@@ -54,7 +57,7 @@ class RouteService {
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         return {
           'success': true,
           'message': data['message'],
@@ -309,5 +312,45 @@ class RouteService {
     final distance =
         calculateDistance(lat1, lon1, lat2, lon2) * 1000; // Convert to meters
     return distance >= threshold;
+  }
+
+  /// Get real-time distance for a salesman's current active session
+  /// Returns total distance traveled in the current attendance session
+  ///
+  /// Parameters:
+  /// - employeeId: ID of the salesman
+  ///
+  /// Returns:
+  /// - Current distance data including total km, points, and locations
+  static Future<Map<String, dynamic>> getCurrentDistance(
+    String employeeId,
+  ) async {
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/routes/distance/$employeeId',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data['data']};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch current distance',
+        };
+      }
+    } catch (e) {
+      print('❌ RouteService.getCurrentDistance error: $e');
+      return {
+        'success': false,
+        'message': 'Network error while fetching current distance',
+      };
+    }
   }
 }

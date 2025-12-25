@@ -3,7 +3,8 @@ import {
     storeRoutePoint,
     getAttendanceRoute,
     getRouteSummary,
-    getHistoricalRoutes
+    getHistoricalRoutes,
+    getCurrentDistance
 } from '../controllers/routeController.js';
 
 const router = express.Router();
@@ -28,5 +29,9 @@ router.get('/summary', getRouteSummary);
 // GET /api/routes/historical - Get historical routes with date-wise filtering
 // Used by Admin to view past routes with home location marking
 router.get('/historical', getHistoricalRoutes);
+
+// GET /api/routes/distance/:employeeId - Get real-time distance for active session
+// Used by Admin to view current distance traveled by a salesman
+router.get('/distance/:employeeId', getCurrentDistance);
 
 export default router;
