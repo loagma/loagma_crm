@@ -97,12 +97,12 @@ export const punchIn = async (req, res) => {
         // Use employee's working hours or defaults
         const workStartTime = employee.workStartTime || '09:00:00';
         const graceMinutes = employee.latePunchInGraceMinutes || 45;
-        
+
         // Create cutoff time based on employee's schedule
         const [startHour, startMinute] = workStartTime.split(':').map(Number);
         const cutoffTime = new Date(currentISTTime);
         cutoffTime.setHours(startHour, startMinute + graceMinutes, 0, 0);
-        
+
         const isAfterCutoff = currentISTTime > cutoffTime;
 
         console.log('⏰ Employee working hours check:', {
@@ -276,21 +276,20 @@ export const punchIn = async (req, res) => {
             });
         }
 
-        // Create attendance record with proper IST handling
-        // Use the currentISTTime already declared above
+        // Create attendance record with proper UTC handling
+        // Convert IST time to UTC for database storage
+        const punchInTimeUTC = convertISTToUTC(currentISTTime);
 
-        // Store IST time directly in database for correct display
-        const punchInTimeIST = currentISTTime;
-
-        // Get IST date for the date field (date only, no time)
+        // Get IST date for the date field (date only, no time) but store as UTC
         const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
+        const dateUTC = convertISTToUTC(istDateOnly);
 
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
                 employeeName,
-                date: istDateOnly,
-                punchInTime: punchInTimeIST, // Store IST time directly
+                date: dateUTC,
+                punchInTime: punchInTimeUTC, // Store UTC time in database
                 punchInLatitude: lat,
                 punchInLongitude: lng,
                 punchInPhoto: punchInPhoto || null,
@@ -310,7 +309,7 @@ export const punchIn = async (req, res) => {
             id: attendance.id,
             employeeId: attendance.employeeId,
             punchInTimeUTC: attendance.punchInTime.toISOString(),
-            punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
+            punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
             status: attendance.status,
             sessionNumber: todaySessionsCount + 1,
             isLatePunchIn: attendance.isLatePunchIn,
@@ -340,13 +339,13 @@ export const punchIn = async (req, res) => {
         // Enhance response with IST information and session details
         const responseData = {
             ...attendance,
-            punchInTimeIST: formatISTTime(attendance.punchInTime, 'datetime'),
-            punchInTimeISTFormatted: formatISTTime(attendance.punchInTime, 'time'),
+            punchInTimeIST: formatISTTime(convertUTCToIST(attendance.punchInTime), 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(convertUTCToIST(attendance.punchInTime), 'time'),
             sessionNumber: todaySessionsCount + 1,
             timezone: getISTTimezoneInfo(),
             serverTime: {
                 utc: new Date().toISOString(),
-                ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
+                ist: formatISTTime(getCurrentISTTime(), 'datetime')
             }
         };
 
@@ -442,7 +441,7 @@ export const punchOut = async (req, res) => {
 
         // Get current IST time
         const currentISTTime = getCurrentISTTime();
-        const punchOutTimeIST = currentISTTime;
+        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
 
         // Get employee's working hours configuration from database
         let employee;
@@ -475,12 +474,12 @@ export const punchOut = async (req, res) => {
         // Use employee's working hours or defaults
         const workEndTime = employee.workEndTime || '18:00:00';
         const graceMinutes = employee.earlyPunchOutGraceMinutes || 30;
-        
+
         // Create early punch-out cutoff time based on employee's schedule
         const [endHour, endMinute] = workEndTime.split(':').map(Number);
         const earlyPunchOutCutoff = new Date(currentISTTime);
         earlyPunchOutCutoff.setHours(endHour, endMinute - graceMinutes, 0, 0);
-        
+
         const isEarlyPunchOut = currentISTTime < earlyPunchOutCutoff;
 
         console.log('⏰ Employee early punch-out check:', {
@@ -602,162 +601,162 @@ export const punchOut = async (req, res) => {
         }
 
         // Validate punch out time (should be after punch in)
-if (punchOutTimeIST <= attendance.punchInTime) {
-    return res.status(400).json({
-        success: false,
-        message: 'Invalid punch out time. Please check your device time.'
-    });
-}
-
-// Calculate work hours with proper IST handling
-const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeIST);
-
-// Validate minimum work duration (prevent accidental immediate punch out)
-if (workHours < 0.017) { // Less than 1 minute
-    return res.status(400).json({
-        success: false,
-        message: 'Minimum work duration is 1 minute. Please wait before punching out.'
-    });
-}
-
-// Calculate actual travel distance from route points
-let distance = 0;
-
-try {
-    // Get route points for this attendance session
-    const routePoints = await prisma.salesmanRouteLog.findMany({
-        where: {
-            attendanceId: attendanceId
-        },
-        orderBy: {
-            recordedAt: 'asc'
+        if (punchOutTimeUTC <= attendance.punchInTime) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid punch out time. Please check your device time.'
+            });
         }
-    });
 
-    if (routePoints.length > 1) {
-        // Calculate cumulative distance from route points
-        for (let i = 1; i < routePoints.length; i++) {
-            const segmentDistance = calculateDistance(
-                routePoints[i - 1].latitude,
-                routePoints[i - 1].longitude,
-                routePoints[i].latitude,
-                routePoints[i].longitude
+        // Calculate work hours with proper UTC handling
+        const workHours = calculateWorkHoursIST(convertUTCToIST(attendance.punchInTime), currentISTTime);
+
+        // Validate minimum work duration (prevent accidental immediate punch out)
+        if (workHours < 0.017) { // Less than 1 minute
+            return res.status(400).json({
+                success: false,
+                message: 'Minimum work duration is 1 minute. Please wait before punching out.'
+            });
+        }
+
+        // Calculate actual travel distance from route points
+        let distance = 0;
+
+        try {
+            // Get route points for this attendance session
+            const routePoints = await prisma.salesmanRouteLog.findMany({
+                where: {
+                    attendanceId: attendanceId
+                },
+                orderBy: {
+                    recordedAt: 'asc'
+                }
+            });
+
+            if (routePoints.length > 1) {
+                // Calculate cumulative distance from route points
+                for (let i = 1; i < routePoints.length; i++) {
+                    const segmentDistance = calculateDistance(
+                        routePoints[i - 1].latitude,
+                        routePoints[i - 1].longitude,
+                        routePoints[i].latitude,
+                        routePoints[i].longitude
+                    );
+                    distance += segmentDistance;
+                }
+
+                // Add final segment from last route point to punch out location
+                const lastPoint = routePoints[routePoints.length - 1];
+                const finalSegment = calculateDistance(
+                    lastPoint.latitude,
+                    lastPoint.longitude,
+                    lat,
+                    lng
+                );
+                distance += finalSegment;
+
+                console.log(`📍 Calculated route distance: ${distance.toFixed(3)} km from ${routePoints.length} points`);
+            } else {
+                // Fallback to straight-line distance if no route points
+                distance = calculateDistance(
+                    attendance.punchInLatitude,
+                    attendance.punchInLongitude,
+                    lat,
+                    lng
+                );
+                console.log(`📍 Using straight-line distance: ${distance.toFixed(3)} km (no route data)`);
+            }
+        } catch (routeError) {
+            console.error('❌ Error calculating route distance:', routeError);
+            // Fallback to straight-line distance
+            distance = calculateDistance(
+                attendance.punchInLatitude,
+                attendance.punchInLongitude,
+                lat,
+                lng
             );
-            distance += segmentDistance;
         }
 
-        // Add final segment from last route point to punch out location
-        const lastPoint = routePoints[routePoints.length - 1];
-        const finalSegment = calculateDistance(
-            lastPoint.latitude,
-            lastPoint.longitude,
-            lat,
-            lng
-        );
-        distance += finalSegment;
+        // Validate reasonable distance (optional check)
+        if (distance > 1000) { // More than 1000 km seems unrealistic
+            console.log('⚠️ Warning: Large distance calculated:', distance, 'km');
+        }
 
-        console.log(`📍 Calculated route distance: ${distance.toFixed(3)} km from ${routePoints.length} points`);
-    } else {
-        // Fallback to straight-line distance if no route points
-        distance = calculateDistance(
-            attendance.punchInLatitude,
-            attendance.punchInLongitude,
-            lat,
-            lng
-        );
-        console.log(`📍 Using straight-line distance: ${distance.toFixed(3)} km (no route data)`);
-    }
-} catch (routeError) {
-    console.error('❌ Error calculating route distance:', routeError);
-    // Fallback to straight-line distance
-    distance = calculateDistance(
-        attendance.punchInLatitude,
-        attendance.punchInLongitude,
-        lat,
-        lng
-    );
-}
+        // Update attendance record with proper calculations
+        const updatedAttendance = await prisma.attendance.update({
+            where: { id: attendanceId },
+            data: {
+                punchOutTime: punchOutTimeUTC, // Store UTC time in database
+                punchOutLatitude: lat,
+                punchOutLongitude: lng,
+                punchOutPhoto: punchOutPhoto || null,
+                punchOutAddress: punchOutAddress || null,
+                bikeKmEnd: bikeKmEnd || null,
+                totalDistanceKm: Math.round(distance * 1000) / 1000, // Round to 3 decimal places
+                totalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
+                status: 'completed',
+                // Early punch-out fields
+                isEarlyPunchOut,
+                earlyPunchOutApprovalId,
+                earlyPunchOutCode: usedEarlyPunchOutCode
+            }
+        });
 
-// Validate reasonable distance (optional check)
-if (distance > 1000) { // More than 1000 km seems unrealistic
-    console.log('⚠️ Warning: Large distance calculated:', distance, 'km');
-}
+        console.log('✅ Attendance completed successfully:', {
+            id: updatedAttendance.id,
+            employeeId: updatedAttendance.employeeId,
+            punchInTimeUTC: updatedAttendance.punchInTime.toISOString(),
+            punchInTimeIST: formatISTTime(convertUTCToIST(updatedAttendance.punchInTime), 'datetime'),
+            punchOutTimeUTC: updatedAttendance.punchOutTime.toISOString(),
+            punchOutTimeIST: formatISTTime(convertUTCToIST(updatedAttendance.punchOutTime), 'datetime'),
+            totalWorkHours: updatedAttendance.totalWorkHours,
+            totalDistanceKm: updatedAttendance.totalDistanceKm,
+            status: updatedAttendance.status
+        });
 
-// Update attendance record with proper calculations
-const updatedAttendance = await prisma.attendance.update({
-    where: { id: attendanceId },
-    data: {
-        punchOutTime: punchOutTimeIST, // Store IST time directly
-        punchOutLatitude: lat,
-        punchOutLongitude: lng,
-        punchOutPhoto: punchOutPhoto || null,
-        punchOutAddress: punchOutAddress || null,
-        bikeKmEnd: bikeKmEnd || null,
-        totalDistanceKm: Math.round(distance * 1000) / 1000, // Round to 3 decimal places
-        totalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
-        status: 'completed',
-        // Early punch-out fields
-        isEarlyPunchOut,
-        earlyPunchOutApprovalId,
-        earlyPunchOutCode: usedEarlyPunchOutCode
-    }
-});
+        // Calculate additional metrics
+        const workDurationMinutes = Math.round(workHours * 60);
+        const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
 
-console.log('✅ Attendance completed successfully:', {
-    id: updatedAttendance.id,
-    employeeId: updatedAttendance.employeeId,
-    punchInTimeUTC: updatedAttendance.punchInTime.toISOString(),
-    punchInTimeIST: formatISTTime(updatedAttendance.punchInTime, 'datetime'),
-    punchOutTimeUTC: updatedAttendance.punchOutTime.toISOString(),
-    punchOutTimeIST: formatISTTime(updatedAttendance.punchOutTime, 'datetime'),
-    totalWorkHours: updatedAttendance.totalWorkHours,
-    totalDistanceKm: updatedAttendance.totalDistanceKm,
-    status: updatedAttendance.status
-});
+        // Enhance response with IST information and detailed metrics
+        const responseData = {
+            ...updatedAttendance,
+            punchInTimeIST: formatISTTime(convertUTCToIST(updatedAttendance.punchInTime), 'datetime'),
+            punchOutTimeIST: formatISTTime(convertUTCToIST(updatedAttendance.punchOutTime), 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(convertUTCToIST(updatedAttendance.punchInTime), 'time'),
+            punchOutTimeISTFormatted: formatISTTime(convertUTCToIST(updatedAttendance.punchOutTime), 'time'),
+            workDurationFormatted,
+            workDurationMinutes,
+            distanceFormatted: `${updatedAttendance.totalDistanceKm.toFixed(2)} km`,
+            timezone: getISTTimezoneInfo(),
+            serverTime: {
+                utc: new Date().toISOString(),
+                ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
+            }
+        };
 
-// Calculate additional metrics
-const workDurationMinutes = Math.round(workHours * 60);
-const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
+        // Create punch-out notification for admin
+        try {
+            await NotificationService.createPunchOutNotification(updatedAttendance);
+            console.log('✅ Punch-out notification sent to admin');
+        } catch (notificationError) {
+            console.error('⚠️ Failed to send punch-out notification:', notificationError);
+            // Don't fail the punch-out if notification fails
+        }
 
-// Enhance response with IST information and detailed metrics
-const responseData = {
-    ...updatedAttendance,
-    punchInTimeIST: formatISTTime(updatedAttendance.punchInTime, 'datetime'),
-    punchOutTimeIST: formatISTTime(updatedAttendance.punchOutTime, 'datetime'),
-    punchInTimeISTFormatted: formatISTTime(updatedAttendance.punchInTime, 'time'),
-    punchOutTimeISTFormatted: formatISTTime(updatedAttendance.punchOutTime, 'time'),
-    workDurationFormatted,
-    workDurationMinutes,
-    distanceFormatted: `${updatedAttendance.totalDistanceKm.toFixed(2)} km`,
-    timezone: getISTTimezoneInfo(),
-    serverTime: {
-        utc: new Date().toISOString(),
-        ist: formatISTTime(convertISTToUTC(getCurrentISTTime()), 'datetime')
-    }
-};
-
-// Create punch-out notification for admin
-try {
-    await NotificationService.createPunchOutNotification(updatedAttendance);
-    console.log('✅ Punch-out notification sent to admin');
-} catch (notificationError) {
-    console.error('⚠️ Failed to send punch-out notification:', notificationError);
-    // Don't fail the punch-out if notification fails
-}
-
-res.status(200).json({
-    success: true,
-    message: `Punched out successfully! Worked for ${workDurationFormatted}, traveled ${updatedAttendance.totalDistanceKm.toFixed(2)} km.`,
-    data: responseData
-});
+        res.status(200).json({
+            success: true,
+            message: `Punched out successfully! Worked for ${workDurationFormatted}, traveled ${updatedAttendance.totalDistanceKm.toFixed(2)} km.`,
+            data: responseData
+        });
     } catch (error) {
-    console.error('❌ Punch out error:', error);
-    res.status(500).json({
-        success: false,
-        message: 'Failed to punch out. Please try again.',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
-}
+        console.error('❌ Punch out error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to punch out. Please try again.',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
 };
 
 // Get Today's Attendance (Latest Active or All Today's Sessions)
@@ -811,10 +810,10 @@ export const getTodayAttendance = async (req, res) => {
                 ...responseData,
                 currentWorkHours,
                 isActive: responseData.status === 'active',
-                punchInTimeIST: formatISTTime(responseData.punchInTime, 'datetime'),
-                punchInTimeISTFormatted: formatISTTime(responseData.punchInTime, 'time'),
-                punchOutTimeIST: responseData.punchOutTime ? formatISTTime(responseData.punchOutTime, 'datetime') : null,
-                punchOutTimeISTFormatted: responseData.punchOutTime ? formatISTTime(responseData.punchOutTime, 'time') : null,
+                punchInTimeIST: formatISTTime(convertUTCToIST(responseData.punchInTime), 'datetime'),
+                punchInTimeISTFormatted: formatISTTime(convertUTCToIST(responseData.punchInTime), 'time'),
+                punchOutTimeIST: responseData.punchOutTime ? formatISTTime(convertUTCToIST(responseData.punchOutTime), 'datetime') : null,
+                punchOutTimeISTFormatted: responseData.punchOutTime ? formatISTTime(convertUTCToIST(responseData.punchOutTime), 'time') : null,
                 workDurationFormatted: currentWorkHours > 0 ? `${Math.floor(currentWorkHours)}h ${Math.round((currentWorkHours % 1) * 60)}m` : null
             };
 
@@ -824,10 +823,10 @@ export const getTodayAttendance = async (req, res) => {
         // Enhance all sessions with IST formatting
         const enhancedSessions = todayAttendances.map(session => ({
             ...session,
-            punchInTimeIST: formatISTTime(session.punchInTime, 'datetime'),
-            punchInTimeISTFormatted: formatISTTime(session.punchInTime, 'time'),
-            punchOutTimeIST: session.punchOutTime ? formatISTTime(session.punchOutTime, 'datetime') : null,
-            punchOutTimeISTFormatted: session.punchOutTime ? formatISTTime(session.punchOutTime, 'time') : null,
+            punchInTimeIST: formatISTTime(convertUTCToIST(session.punchInTime), 'datetime'),
+            punchInTimeISTFormatted: formatISTTime(convertUTCToIST(session.punchInTime), 'time'),
+            punchOutTimeIST: session.punchOutTime ? formatISTTime(convertUTCToIST(session.punchOutTime), 'datetime') : null,
+            punchOutTimeISTFormatted: session.punchOutTime ? formatISTTime(convertUTCToIST(session.punchOutTime), 'time') : null,
             currentWorkHours: session.status === 'active' ? getCurrentWorkDurationIST(session.punchInTime) : session.totalWorkHours
         }));
 

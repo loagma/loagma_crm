@@ -69,31 +69,8 @@ class _SalesmanPunchScreenState extends State<SalesmanPunchScreen> {
     });
   }
 
-  /// Returns punch-in time adjusted for server UTC timestamps being treated
-  /// as local (prevents negative durations when server stores IST as UTC).
-  DateTime? get _effectivePunchInTime {
-    if (punchInTime == null) return null;
-    final t = punchInTime!;
-
-    // If the backend sent a UTC timestamp (e.g., ends with Z) but it actually
-    // represents local time, drop the UTC flag so math uses local clock.
-    if (t.isUtc) {
-      return DateTime(
-        t.year,
-        t.month,
-        t.day,
-        t.hour,
-        t.minute,
-        t.second,
-        t.millisecond,
-        t.microsecond,
-      );
-    }
-    return t;
-  }
-
   Duration get liveWorkDuration {
-    final start = _effectivePunchInTime;
+    final start = punchInTime;
     if (start == null) return Duration.zero;
 
     final now = DateTime.now();
