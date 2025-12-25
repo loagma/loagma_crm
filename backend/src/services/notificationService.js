@@ -350,13 +350,17 @@ class NotificationService {
      * @param {boolean} [filters.unreadOnly] - Get only unread notifications
      * @param {number} [filters.limit] - Limit number of results
      * @param {number} [filters.offset] - Offset for pagination
+     * @param {Date} [filters.startDate] - Start date for filtering
+     * @param {Date} [filters.endDate] - End date for filtering
      */
     static async getNotifications({
         userId = null,
         role = null,
         unreadOnly = false,
         limit = 50,
-        offset = 0
+        offset = 0,
+        startDate = null,
+        endDate = null
     }) {
         try {
             const where = {
@@ -383,6 +387,17 @@ class NotificationService {
             // Filter for unread only
             if (unreadOnly) {
                 where.isRead = false;
+            }
+
+            // Date range filtering
+            if (startDate || endDate) {
+                where.createdAt = {};
+                if (startDate) {
+                    where.createdAt.gte = startDate;
+                }
+                if (endDate) {
+                    where.createdAt.lte = endDate;
+                }
             }
 
             const notifications = await prisma.notification.findMany({
@@ -412,6 +427,60 @@ class NotificationService {
             return enhancedNotifications;
         } catch (error) {
             console.error('❌ Error fetching notifications:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get notification count with filters (for pagination)
+     * @param {Object} filters - Filter options
+     * @param {string} [filters.userId] - User ID
+     * @param {string} [filters.role] - User role
+     * @param {Date} [filters.startDate] - Start date for filtering
+     * @param {Date} [filters.endDate] - End date for filtering
+     */
+    static async getNotificationCountWithFilters({
+        userId = null,
+        role = null,
+        startDate = null,
+        endDate = null
+    }) {
+        try {
+            const where = {
+                OR: []
+            };
+
+            if (userId) {
+                where.OR.push({ targetUserId: userId });
+            }
+
+            if (role) {
+                where.OR.push({ targetRole: role });
+            }
+
+            // Include global notifications
+            where.OR.push({
+                AND: [
+                    { targetUserId: null },
+                    { targetRole: null }
+                ]
+            });
+
+            // Date range filtering
+            if (startDate || endDate) {
+                where.createdAt = {};
+                if (startDate) {
+                    where.createdAt.gte = startDate;
+                }
+                if (endDate) {
+                    where.createdAt.lte = endDate;
+                }
+            }
+
+            const count = await prisma.notification.count({ where });
+            return count;
+        } catch (error) {
+            console.error('❌ Error getting notification count:', error);
             throw error;
         }
     }
