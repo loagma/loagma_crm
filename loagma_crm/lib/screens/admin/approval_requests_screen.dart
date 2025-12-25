@@ -73,11 +73,16 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
     try {
       final earlyPunchOutResult =
           await AdminApprovalService.getPendingEarlyPunchOutRequests();
+      print('Early punch-out result: $earlyPunchOutResult');
       if (earlyPunchOutResult['success'] == true && mounted) {
+        final data = List<Map<String, dynamic>>.from(
+          earlyPunchOutResult['data'] ?? [],
+        );
+        if (data.isNotEmpty) {
+          print('Early punch-out request data structure: ${data.first}');
+        }
         setState(() {
-          earlyPunchOutRequests = List<Map<String, dynamic>>.from(
-            earlyPunchOutResult['data'] ?? [],
-          );
+          earlyPunchOutRequests = data;
         });
       }
     } catch (e) {

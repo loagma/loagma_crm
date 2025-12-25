@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // Request early punch-out approval
 router.post('/request', async (req, res) => {
     try {
-        const { employeeId, employeeName, attendanceId, requestTime } = req.body;
+        const { employeeId, employeeName, attendanceId, reason, requestTime } = req.body;
 
         if (!employeeId || !employeeName || !attendanceId) {
             return res.status(400).json({
@@ -49,13 +49,15 @@ router.post('/request', async (req, res) => {
                 employeeName,
                 attendanceId,
                 requestDate: new Date(),
-                punchOutDate: new Date(), // Add the missing required field
-                reason: 'Early punch-out request',
+                punchOutDate: new Date(),
+                reason: reason || 'Early punch-out request',
                 status: 'PENDING'
             }
         });
 
-        res.json({
+        console.log(`✅ Early punch-out approval request created for: ${employeeName}`);
+
+        res.status(201).json({
             success: true,
             message: 'Early punch-out approval request submitted successfully',
             data: approvalRequest
