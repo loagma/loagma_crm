@@ -9,12 +9,14 @@ class LatePunchApprovalWidget extends StatefulWidget {
   final VoidCallback? onApprovalRequested;
   final VoidCallback? onApprovalReceived;
   final Function(String)? onApprovalCodeValidated;
+  final Map<String, dynamic>? employeeWorkingHours;
 
   const LatePunchApprovalWidget({
     super.key,
     this.onApprovalRequested,
     this.onApprovalReceived,
     this.onApprovalCodeValidated,
+    this.employeeWorkingHours,
   });
 
   @override
@@ -63,6 +65,14 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
 
   Future<void> _loadWorkingHours() async {
     if (!mounted) return;
+
+    // Use passed working hours if available
+    if (widget.employeeWorkingHours != null) {
+      setState(() {
+        _workingHours = widget.employeeWorkingHours;
+      });
+      return;
+    }
 
     setState(() => _isLoadingWorkingHours = true);
 
@@ -261,6 +271,25 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
   }
 
   Widget _buildRequestForm() {
+    // Format the cutoff time for display
+    String formattedCutoffTime = '9:45 AM';
+    if (_workingHours != null) {
+      final cutoffTimeStr = _workingHours!['latePunchInCutoffTime'] as String?;
+      if (cutoffTimeStr != null) {
+        try {
+          final parts = cutoffTimeStr.split(':');
+          final hour = int.parse(parts[0]);
+          final minute = int.parse(parts[1]);
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          formattedCutoffTime =
+              '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+        } catch (e) {
+          // Use default
+        }
+      }
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -286,9 +315,7 @@ class _LatePunchApprovalWidgetState extends State<LatePunchApprovalWidget> {
             ),
             const SizedBox(height: 12),
             Text(
-              _workingHours != null
-                  ? 'Punch-in is blocked after ${_workingHours!['latePunchInCutoffTime'] ?? '9:45 AM'}. Please request approval from admin.'
-                  : 'Punch-in is blocked after cutoff time. Please request approval from admin.',
+              'Punch-in is blocked after $formattedCutoffTime. Please request approval from admin.',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),

@@ -50,10 +50,15 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
       final latePunchResult =
           await AdminApprovalService.getPendingLatePunchRequests();
       if (latePunchResult['success'] == true && mounted) {
+        final data = List<Map<String, dynamic>>.from(
+          latePunchResult['data'] ?? [],
+        );
+        // Debug: Print the first request to see the data structure
+        if (data.isNotEmpty) {
+          print('Late punch request data structure: ${data.first}');
+        }
         setState(() {
-          latePunchRequests = List<Map<String, dynamic>>.from(
-            latePunchResult['data'] ?? [],
-          );
+          latePunchRequests = data;
         });
       }
     } catch (e) {
@@ -537,18 +542,21 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                 children: [
                   _buildInfoRow(
                     'Employee',
-                    request['employeeName'] ?? 'Unknown',
+                    request['employee']?['name'] ??
+                        request['employeeName'] ??
+                        'Unknown',
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoRow(
-                    'Employee Code',
-                    request['employee']?['employeeCode'] ?? 'N/A',
-                  ),
+                  _buildInfoRow('Employee Code', _getEmployeeCode(request)),
                   const SizedBox(height: 8),
-                  _buildInfoRow(
-                    'Contact',
-                    request['employee']?['contactNumber'] ?? 'N/A',
-                  ),
+                  _buildInfoRow('Contact', _getContactNumber(request)),
+                  if (request['employee']?['department']?['name'] != null) ...[
+                    const SizedBox(height: 8),
+                    _buildInfoRow(
+                      'Department',
+                      request['employee']['department']['name'],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   const Text(
                     'Reason:',
@@ -624,6 +632,34 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
         Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
       ],
     );
+  }
+
+  String _getEmployeeCode(Map<String, dynamic> request) {
+    // Try to get from employee object first
+    final employeeCode = request['employee']?['employeeCode'];
+    if (employeeCode != null && employeeCode.toString().isNotEmpty) {
+      return employeeCode.toString();
+    }
+    // Try direct field
+    final directCode = request['employeeCode'];
+    if (directCode != null && directCode.toString().isNotEmpty) {
+      return directCode.toString();
+    }
+    return 'Not assigned';
+  }
+
+  String _getContactNumber(Map<String, dynamic> request) {
+    // Try to get from employee object first
+    final contactNumber = request['employee']?['contactNumber'];
+    if (contactNumber != null && contactNumber.toString().isNotEmpty) {
+      return contactNumber.toString();
+    }
+    // Try direct field
+    final directContact = request['contactNumber'];
+    if (directContact != null && directContact.toString().isNotEmpty) {
+      return directContact.toString();
+    }
+    return 'Not available';
   }
 
   Widget _buildEmptyState(String message) {
