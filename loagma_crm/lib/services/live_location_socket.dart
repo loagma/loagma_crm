@@ -23,6 +23,7 @@ class LiveLocationSocket {
   Position? _lastSentPosition;
   bool _isConnected = false;
   bool _isTracking = false;
+  bool _isFirstLocation = true; // Track if this is the first location (home)
 
   // Configuration
   static const int _sendIntervalSeconds = 3; // Send every 3 seconds
@@ -46,6 +47,9 @@ class LiveLocationSocket {
         print('📍 Live location tracking already active');
         return true;
       }
+
+      // Reset first location flag when starting new tracking session
+      _isFirstLocation = true;
 
       // Ensure location service is running
       if (!LocationService.instance.isTracking) {
@@ -78,6 +82,7 @@ class LiveLocationSocket {
   /// Stop live location tracking
   void stopTracking() {
     _isTracking = false;
+    _isFirstLocation = true; // Reset for next session
     _stopLocationUpdates();
     _disconnect();
     print('🛑 Live location tracking stopped');
@@ -181,8 +186,8 @@ class LiveLocationSocket {
         return;
       }
 
-      // Check if movement is significant
-      if (!_shouldSendLocation(currentPosition)) {
+      // Check if movement is significant (skip for first location - always send home)
+      if (!_isFirstLocation && !_shouldSendLocation(currentPosition)) {
         return;
       }
 
@@ -192,22 +197,29 @@ class LiveLocationSocket {
         return;
       }
 
-      // Prepare location message
+      // Prepare location message with home location flag
       final locationMessage = {
         'type': 'LOCATION',
         'salesmanId': salesmanId,
         'lat': currentPosition.latitude,
         'lng': currentPosition.longitude,
         'timestamp': currentPosition.timestamp.millisecondsSinceEpoch,
+        'isHomeLocation': _isFirstLocation, // Mark first location as home
       };
 
       // Send to WebSocket
       _sendMessage(locationMessage);
       _lastSentPosition = currentPosition;
 
+      final homeTag = _isFirstLocation ? ' (HOME)' : '';
       print(
-        '📍 Location sent: ${currentPosition.latitude.toStringAsFixed(6)}, ${currentPosition.longitude.toStringAsFixed(6)}',
+        '📍 Location sent$homeTag: ${currentPosition.latitude.toStringAsFixed(6)}, ${currentPosition.longitude.toStringAsFixed(6)}',
       );
+
+      // After sending first location, mark as not first anymore
+      if (_isFirstLocation) {
+        _isFirstLocation = false;
+      }
     } catch (e) {
       print('❌ Error sending location update: $e');
     }
