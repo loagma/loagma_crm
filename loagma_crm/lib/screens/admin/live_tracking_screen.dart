@@ -169,12 +169,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       );
 
       if (employeeIndex != -1) {
-        // Update employee's current position
+        // Update employee's current position and distance
         final employee = activeEmployees[employeeIndex];
         employee.currentLatitude = location.latitude;
         employee.currentLongitude = location.longitude;
         employee.lastPositionUpdate = location.timestamp;
         employee.isMoving = true; // Assume moving if sending updates
+        employee.currentDistanceKm =
+            location.totalDistanceKm; // Update distance from WebSocket
 
         // Update marker smoothly without rebuilding map
         _updateSalesmanMarker(employee, location);
@@ -182,7 +184,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         // Update route polyline
         _updateSalesmanRoute(salesmanId, location.latLng);
 
-        print('📍 Real-time update for ${employee.employeeName}');
+        print(
+          '📍 Real-time update for ${employee.employeeName} | ${location.totalDistanceKm.toStringAsFixed(2)} km',
+        );
       }
     } catch (e) {
       print('❌ Error handling real-time location update: $e');
@@ -202,13 +206,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       orElse: () => Marker(markerId: markerId),
     );
 
-    // Create updated marker
+    // Create updated marker with distance info
+    final distanceText = location.totalDistanceKm > 0
+        ? ' | ${location.totalDistanceKm.toStringAsFixed(2)} km'
+        : '';
     final updatedMarker = existingMarker.copyWith(
       positionParam: location.latLng,
       infoWindowParam: InfoWindow(
         title: employee.employeeName,
         snippet:
-            'Live Location - Moving (${DateFormat('HH:mm:ss').format(location.timestamp)})',
+            'Live Location - Moving$distanceText (${DateFormat('HH:mm:ss').format(location.timestamp)})',
       ),
     );
 
@@ -643,7 +650,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       final homeLocation = route['homeLocation'] as Map<String, dynamic>?;
       final startLocation = route['startLocation'] as Map<String, dynamic>?;
       final endLocation = route['endLocation'] as Map<String, dynamic>?;
-      final routePreview = route['routePreview'] as List?;
 
       // Add home location marker (purple marker for where salesman started working)
       if (homeLocation != null) {
@@ -710,13 +716,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         );
       }
 
-      // Add route polyline from preview points
-      if (routePreview != null && routePreview.length > 1) {
-        final points = routePreview
+      // Add route polyline from full route points
+      final routePoints = route['routePoints'] as List?;
+      if (routePoints != null && routePoints.length > 1) {
+        final points = routePoints
             .map(
               (point) => LatLng(
-                point['latitude'] as double,
-                point['longitude'] as double,
+                (point['latitude'] as num).toDouble(),
+                (point['longitude'] as num).toDouble(),
               ),
             )
             .toList();
@@ -726,8 +733,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             polylineId: PolylineId('historical_route_$employeeId'),
             points: points,
             color: Colors.blue,
-            width: 3,
-            patterns: [PatternItem.dash(10), PatternItem.gap(5)],
+            width: 4,
           ),
         );
       }
@@ -1332,7 +1338,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 80,
+            height: 100,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: historicalRoutes.length,
@@ -1344,6 +1350,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     route['startLocation'] as Map<String, dynamic>?;
                 final endLocation =
                     route['endLocation'] as Map<String, dynamic>?;
+                final totalDistanceKm = routeSummary?['totalDistanceKm'] ?? 0.0;
 
                 return Container(
                   width: 180,
@@ -1366,6 +1373,22 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
+                      // Distance traveled
+                      Row(
+                        children: [
+                          const Icon(Icons.route, size: 12, color: Colors.blue),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${totalDistanceKm.toStringAsFixed(2)} km',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
                       if (startLocation != null)
                         Text(
                           'Start: ${DateFormat('hh:mm a').format(DateTime.parse(startLocation['time']))}',

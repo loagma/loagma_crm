@@ -2,10 +2,50 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
+ * Calculate distance between two GPS points using Haversine formula
+ * @param {number} lat1 - Latitude of first point
+ * @param {number} lng1 - Longitude of first point
+ * @param {number} lat2 - Latitude of second point
+ * @param {number} lng2 - Longitude of second point
+ * @returns {number} Distance in kilometers
+ */
+const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+/**
+ * Calculate total distance for a route from GPS points
+ * @param {Array} routePoints - Array of route points with latitude/longitude
+ * @returns {number} Total distance in kilometers
+ */
+const calculateTotalRouteDistance = (routePoints) => {
+    if (!routePoints || routePoints.length < 2) return 0;
+
+    let totalDistance = 0;
+    for (let i = 1; i < routePoints.length; i++) {
+        const prev = routePoints[i - 1];
+        const curr = routePoints[i];
+        totalDistance += calculateDistance(
+            prev.latitude, prev.longitude,
+            curr.latitude, curr.longitude
+        );
+    }
+    return totalDistance;
+};
+
+/**
  * Store GPS route point for active attendance session
  * Only accepts points when attendance status is 'active'
  * Lightweight endpoint optimized for frequent GPS updates
  * Automatically marks first point as home location
+ * Calculates and stores cumulative distance traveled
  */
 const storeRoutePoint = async (req, res) => {
     try {
@@ -56,13 +96,34 @@ const storeRoutePoint = async (req, res) => {
             });
         }
 
-        // Check if this is the first route point (home location)
-        const existingPointsCount = await prisma.salesmanRouteLog.count({
-            where: { attendanceId }
+        // Get existing route points to calculate distance and check for home location
+        const existingPoints = await prisma.salesmanRouteLog.findMany({
+            where: { attendanceId },
+            orderBy: { recordedAt: 'asc' },
+            select: { latitude: true, longitude: true }
         });
 
-        const isFirstPoint = existingPointsCount === 0;
+        const isFirstPoint = existingPoints.length === 0;
         const shouldMarkAsHome = isFirstPoint || isHomeLocation === true;
+
+        // Calculate distance from last point (if exists)
+        let distanceFromLast = 0;
+        if (existingPoints.length > 0) {
+            const lastPoint = existingPoints[existingPoints.length - 1];
+            distanceFromLast = calculateDistance(
+                lastPoint.latitude, lastPoint.longitude,
+                parseFloat(latitude), parseFloat(longitude)
+            );
+
+            // Skip storing if movement is less than 5 meters (GPS noise filter)
+            if (distanceFromLast < 0.005 && !shouldMarkAsHome) {
+                return res.status(200).json({
+                    success: true,
+                    message: 'Point skipped - insufficient movement',
+                    data: { skipped: true, distanceFromLast: distanceFromLast * 1000 }
+                });
+            }
+        }
 
         // Store the GPS route point
         const routePoint = await prisma.salesmanRouteLog.create({
@@ -74,10 +135,13 @@ const storeRoutePoint = async (req, res) => {
                 speed: speed ? parseFloat(speed) : null,
                 accuracy: accuracy ? parseFloat(accuracy) : null,
                 recordedAt: new Date(),
-                // Add metadata to identify home location
                 isHomeLocation: shouldMarkAsHome
             }
         });
+
+        // Calculate total distance traveled so far
+        const allPoints = [...existingPoints, { latitude: parseFloat(latitude), longitude: parseFloat(longitude) }];
+        const totalDistanceKm = calculateTotalRouteDistance(allPoints);
 
         res.status(201).json({
             success: true,
@@ -85,7 +149,10 @@ const storeRoutePoint = async (req, res) => {
             data: {
                 id: routePoint.id,
                 recordedAt: routePoint.recordedAt,
-                isHomeLocation: shouldMarkAsHome
+                isHomeLocation: shouldMarkAsHome,
+                totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
+                distanceFromLastKm: Math.round(distanceFromLast * 100) / 100,
+                totalPoints: allPoints.length
             }
         });
 
@@ -142,8 +209,11 @@ const getAttendanceRoute = async (req, res) => {
         }
 
         // Find home location (first point or explicitly marked)
-        const homeLocation = attendance.routeLogs.find(point => point.isHomeLocation) || 
-                            (attendance.routeLogs.length > 0 ? attendance.routeLogs[0] : null);
+        const homeLocation = attendance.routeLogs.find(point => point.isHomeLocation) ||
+            (attendance.routeLogs.length > 0 ? attendance.routeLogs[0] : null);
+
+        // Calculate total distance traveled
+        const totalDistanceKm = calculateTotalRouteDistance(attendance.routeLogs);
 
         // Prepare response optimized for map rendering
         const response = {
@@ -190,9 +260,10 @@ const getAttendanceRoute = async (req, res) => {
                     isHomeLocation: point.isHomeLocation || false
                 })),
 
-                // Summary statistics
+                // Summary statistics with distance
                 summary: {
                     totalPoints: attendance.routeLogs.length,
+                    totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
                     duration: attendance.punchOutTime ?
                         Math.round((new Date(attendance.punchOutTime) - new Date(attendance.punchInTime)) / (1000 * 60)) : // minutes
                         null,
@@ -319,10 +390,13 @@ const getHistoricalRoutes = async (req, res) => {
             orderBy: { date: 'desc' }
         });
 
-        // Group and format the data
+        // Group and format the data with distance calculation
         const historicalRoutes = attendanceSessions.map(session => {
-            const homeLocation = session.routeLogs.find(point => point.isHomeLocation) || 
-                               (session.routeLogs.length > 0 ? session.routeLogs[0] : null);
+            const homeLocation = session.routeLogs.find(point => point.isHomeLocation) ||
+                (session.routeLogs.length > 0 ? session.routeLogs[0] : null);
+
+            // Calculate total distance for this route
+            const totalDistanceKm = calculateTotalRouteDistance(session.routeLogs);
 
             return {
                 attendanceId: session.id,
@@ -330,7 +404,7 @@ const getHistoricalRoutes = async (req, res) => {
                 employeeName: session.employeeName,
                 date: session.date,
                 status: session.status,
-                
+
                 // Home location where salesman started
                 homeLocation: homeLocation ? {
                     latitude: homeLocation.latitude,
@@ -354,9 +428,10 @@ const getHistoricalRoutes = async (req, res) => {
                     address: session.punchOutAddress
                 } : null,
 
-                // Route summary
+                // Route summary with distance
                 routeSummary: {
                     totalPoints: session.routeLogs.length,
+                    totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
                     hasRoute: session.routeLogs.length > 0,
                     hasHomeLocation: homeLocation !== null,
                     duration: session.punchOutTime ?
@@ -365,11 +440,12 @@ const getHistoricalRoutes = async (req, res) => {
                     totalWorkHours: session.totalWorkHours
                 },
 
-                // First few route points for preview
-                routePreview: session.routeLogs.slice(0, 10).map(point => ({
+                // All route points for full visualization
+                routePoints: session.routeLogs.map(point => ({
                     latitude: point.latitude,
                     longitude: point.longitude,
                     timestamp: point.recordedAt,
+                    speed: point.speed,
                     isHomeLocation: point.isHomeLocation || false
                 }))
             };
@@ -396,9 +472,97 @@ const getHistoricalRoutes = async (req, res) => {
     }
 };
 
+/**
+ * Get real-time distance for a salesman's current active session
+ * Returns total distance traveled in the current attendance session
+ */
+const getCurrentDistance = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Employee ID is required'
+            });
+        }
+
+        // Find active attendance session
+        const activeAttendance = await prisma.attendance.findFirst({
+            where: {
+                employeeId,
+                status: 'active'
+            },
+            orderBy: {
+                punchInTime: 'desc'
+            }
+        });
+
+        if (!activeAttendance) {
+            return res.status(404).json({
+                success: false,
+                message: 'No active attendance session found'
+            });
+        }
+
+        // Get all route points for this session
+        const routePoints = await prisma.salesmanRouteLog.findMany({
+            where: { attendanceId: activeAttendance.id },
+            orderBy: { recordedAt: 'asc' },
+            select: {
+                latitude: true,
+                longitude: true,
+                recordedAt: true,
+                isHomeLocation: true
+            }
+        });
+
+        // Calculate total distance
+        const totalDistanceKm = calculateTotalRouteDistance(routePoints);
+
+        // Find home location
+        const homeLocation = routePoints.find(p => p.isHomeLocation) || routePoints[0];
+
+        // Get last location
+        const lastLocation = routePoints.length > 0 ? routePoints[routePoints.length - 1] : null;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                employeeId,
+                attendanceId: activeAttendance.id,
+                totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
+                totalPoints: routePoints.length,
+                homeLocation: homeLocation ? {
+                    latitude: homeLocation.latitude,
+                    longitude: homeLocation.longitude,
+                    time: homeLocation.recordedAt
+                } : null,
+                lastLocation: lastLocation ? {
+                    latitude: lastLocation.latitude,
+                    longitude: lastLocation.longitude,
+                    time: lastLocation.recordedAt
+                } : null,
+                punchInTime: activeAttendance.punchInTime,
+                workingDurationMinutes: Math.round(
+                    (new Date() - new Date(activeAttendance.punchInTime)) / (1000 * 60)
+                )
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching current distance:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching current distance'
+        });
+    }
+};
+
 export {
     storeRoutePoint,
     getAttendanceRoute,
     getRouteSummary,
-    getHistoricalRoutes
+    getHistoricalRoutes,
+    getCurrentDistance
 };
