@@ -279,18 +279,18 @@ export const punchIn = async (req, res) => {
         }
 
         // Create attendance record with proper UTC handling
-        // Convert IST time to UTC for database storage
-        const punchInTimeUTC = convertISTToUTC(currentISTTime);
+        // getCurrentISTTime() now returns current UTC time directly
+        const punchInTimeUTC = getCurrentISTTime();
 
-        // Get IST date for the date field (date only, no time) but store as UTC
-        const istDateOnly = new Date(currentISTTime.getFullYear(), currentISTTime.getMonth(), currentISTTime.getDate());
-        const dateUTC = convertISTToUTC(istDateOnly);
+        // Get today's date in IST for the date field
+        const todayIST = new Date();
+        const istDateOnly = new Date(todayIST.getFullYear(), todayIST.getMonth(), todayIST.getDate());
 
         const attendance = await prisma.attendance.create({
             data: {
                 employeeId,
                 employeeName,
-                date: dateUTC,
+                date: istDateOnly,
                 punchInTime: punchInTimeUTC, // Store UTC time in database
                 punchInLatitude: lat,
                 punchInLongitude: lng,
@@ -443,7 +443,7 @@ export const punchOut = async (req, res) => {
 
         // Get current IST time
         const currentISTTime = getCurrentISTTime();
-        const punchOutTimeUTC = convertISTToUTC(currentISTTime);
+        const punchOutTimeUTC = currentISTTime; // getCurrentISTTime now returns UTC directly
 
         // Get employee's working hours configuration from database
         let employee;

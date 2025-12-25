@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class AttendanceModel {
   final String id;
   final String employeeId;
@@ -70,20 +72,50 @@ class AttendanceModel {
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
     try {
+      // Parse punch-in time - use the raw punchInTime from database (UTC)
+      // and convert to local time for display
+      DateTime? parsePunchInTime() {
+        final rawTime = json['punchInTime'];
+        if (rawTime == null) return null;
+
+        try {
+          // Parse the UTC time from database
+          final utcTime = DateTime.parse(rawTime.toString());
+          // Convert to local time for display
+          return utcTime.toLocal();
+        } catch (e) {
+          debugPrint('Error parsing punchInTime: $e');
+          return null;
+        }
+      }
+
+      DateTime? parsePunchOutTime() {
+        final rawTime = json['punchOutTime'];
+        if (rawTime == null) return null;
+
+        try {
+          // Parse the UTC time from database
+          final utcTime = DateTime.parse(rawTime.toString());
+          // Convert to local time for display
+          return utcTime.toLocal();
+        } catch (e) {
+          debugPrint('Error parsing punchOutTime: $e');
+          return null;
+        }
+      }
+
       return AttendanceModel(
         id: json['id']?.toString() ?? '',
         employeeId: json['employeeId']?.toString() ?? '',
         employeeName: json['employeeName']?.toString() ?? '',
         date: _parseDateTime(json['date']) ?? DateTime.now(),
-        punchInTime: _parseDateTime(json['punchInTime']) ?? DateTime.now(),
+        punchInTime: parsePunchInTime() ?? DateTime.now(),
         punchInLatitude: _parseDouble(json['punchInLatitude']) ?? 0.0,
         punchInLongitude: _parseDouble(json['punchInLongitude']) ?? 0.0,
         punchInPhoto: json['punchInPhoto']?.toString(),
         punchInAddress: json['punchInAddress']?.toString(),
         bikeKmStart: json['bikeKmStart']?.toString(),
-        punchOutTime: json['punchOutTime'] != null
-            ? _parseDateTime(json['punchOutTime'])
-            : null,
+        punchOutTime: parsePunchOutTime(),
         punchOutLatitude: json['punchOutLatitude'] != null
             ? _parseDouble(json['punchOutLatitude'])
             : null,
@@ -104,8 +136,8 @@ class AttendanceModel {
         updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
       );
     } catch (e) {
-      print('Error parsing AttendanceModel from JSON: $e');
-      print('JSON data: $json');
+      debugPrint('Error parsing AttendanceModel from JSON: $e');
+      debugPrint('JSON data: $json');
       rethrow;
     }
   }
@@ -145,32 +177,21 @@ class AttendanceModel {
 
     try {
       if (dateValue is String) {
-        // Handle different date formats
         if (dateValue.isEmpty) return null;
-
-        // Try parsing ISO format first
-        try {
-          return DateTime.parse(dateValue);
-        } catch (e) {
-          // Try parsing with timezone info
-          if (dateValue.contains('T') && !dateValue.endsWith('Z')) {
-            return DateTime.parse('${dateValue}Z');
-          }
-          throw e;
-        }
+        // Parse ISO format and convert to local time
+        return DateTime.parse(dateValue).toLocal();
       } else if (dateValue is DateTime) {
-        return dateValue;
+        return dateValue.toLocal();
       } else if (dateValue is int) {
-        // Handle timestamp in milliseconds
-        return DateTime.fromMillisecondsSinceEpoch(dateValue);
+        return DateTime.fromMillisecondsSinceEpoch(dateValue).toLocal();
       } else {
-        print(
+        debugPrint(
           'Warning: Unexpected date format: $dateValue (${dateValue.runtimeType})',
         );
         return null;
       }
     } catch (e) {
-      print('Error parsing date: $dateValue, error: $e');
+      debugPrint('Error parsing date: $dateValue, error: $e');
       return null;
     }
   }
@@ -187,13 +208,13 @@ class AttendanceModel {
       } else if (value is String) {
         return double.parse(value);
       } else {
-        print(
+        debugPrint(
           'Warning: Unexpected number format: $value (${value.runtimeType})',
         );
         return null;
       }
     } catch (e) {
-      print('Error parsing double: $value, error: $e');
+      debugPrint('Error parsing double: $value, error: $e');
       return null;
     }
   }
