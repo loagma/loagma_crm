@@ -148,6 +148,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     final Map<String, dynamic>? homeLocation = routeData['homeLocation'];
     final Map<String, dynamic>? startLocation = routeData['startLocation'];
     final Map<String, dynamic>? endLocation = routeData['endLocation'];
+    final Map<String, dynamic>? summary = routeData['summary'];
 
     if (routePoints.isEmpty && homeLocation == null && startLocation == null) {
       setState(() {
@@ -176,15 +177,20 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           .toList();
     }
 
-    // Calculate total distance
+    // Use distance from API response if available, otherwise calculate locally
     double distance = 0.0;
-    for (int i = 1; i < points.length; i++) {
-      distance += RouteService.calculateDistance(
-        points[i - 1].latitude,
-        points[i - 1].longitude,
-        points[i].latitude,
-        points[i].longitude,
-      );
+    if (summary != null && summary['totalDistanceKm'] != null) {
+      distance = (summary['totalDistanceKm'] as num).toDouble();
+    } else {
+      // Fallback to local calculation
+      for (int i = 1; i < points.length; i++) {
+        distance += RouteService.calculateDistance(
+          points[i - 1].latitude,
+          points[i - 1].longitude,
+          points[i].latitude,
+          points[i].longitude,
+        );
+      }
     }
 
     setState(() {
