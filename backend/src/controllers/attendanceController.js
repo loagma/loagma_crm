@@ -503,13 +503,17 @@ export const punchOut = async (req, res) => {
         let distance = 0;
 
         try {
-            // Get route points for this attendance session
+            // Get route points for this attendance session - explicitly select only needed fields
             const routePoints = await prisma.salesmanRouteLog.findMany({
                 where: {
                     attendanceId: attendanceId
                 },
                 orderBy: {
                     recordedAt: 'asc'
+                },
+                select: {
+                    latitude: true,
+                    longitude: true
                 }
             });
 
@@ -1269,17 +1273,23 @@ export const getCurrentPositions = async (req, res) => {
         const employeePositions = await Promise.all(
             activeAttendances.map(async (attendance) => {
                 try {
-                    // Get the most recent route point
+                    // Get the most recent route point - explicitly select only needed fields
                     const latestRoutePoint = await prisma.salesmanRouteLog.findFirst({
                         where: {
                             attendanceId: attendance.id
                         },
                         orderBy: {
                             recordedAt: 'desc'
+                        },
+                        select: {
+                            latitude: true,
+                            longitude: true,
+                            speed: true,
+                            recordedAt: true
                         }
                     });
 
-                    // Calculate current travel distance
+                    // Calculate current travel distance - explicitly select only needed fields
                     let currentDistance = 0;
                     const routePoints = await prisma.salesmanRouteLog.findMany({
                         where: {
@@ -1287,6 +1297,10 @@ export const getCurrentPositions = async (req, res) => {
                         },
                         orderBy: {
                             recordedAt: 'asc'
+                        },
+                        select: {
+                            latitude: true,
+                            longitude: true
                         }
                     });
 

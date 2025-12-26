@@ -398,7 +398,12 @@ class LiveTrackingServer {
                         gte: new Date(Date.now() - 5000) // Within last 5 seconds
                     }
                 },
-                orderBy: { recordedAt: 'desc' }
+                orderBy: { recordedAt: 'desc' },
+                select: {
+                    latitude: true,
+                    longitude: true,
+                    recordedAt: true
+                }
             });
 
             if (recentPoint) {
@@ -421,16 +426,34 @@ class LiveTrackingServer {
             const shouldMarkAsHome = isFirstPoint || location.isHomeLocation === true;
 
             // Store the location point in the database
-            await prisma.salesmanRouteLog.create({
-                data: {
-                    employeeId: salesmanId,
-                    attendanceId: activeAttendance.id,
-                    latitude: location.lat,
-                    longitude: location.lng,
-                    recordedAt: new Date(location.timestamp),
-                    isHomeLocation: shouldMarkAsHome
+            // Try with isHomeLocation first, fallback without it if column doesn't exist
+            try {
+                await prisma.salesmanRouteLog.create({
+                    data: {
+                        employeeId: salesmanId,
+                        attendanceId: activeAttendance.id,
+                        latitude: location.lat,
+                        longitude: location.lng,
+                        recordedAt: new Date(location.timestamp),
+                        isHomeLocation: shouldMarkAsHome
+                    }
+                });
+            } catch (createError) {
+                if (createError.code === 'P2022' || createError.message?.includes('isHomeLocation')) {
+                    console.log('isHomeLocation column not found, storing without it');
+                    await prisma.salesmanRouteLog.create({
+                        data: {
+                            employeeId: salesmanId,
+                            attendanceId: activeAttendance.id,
+                            latitude: location.lat,
+                            longitude: location.lng,
+                            recordedAt: new Date(location.timestamp)
+                        }
+                    });
+                } else {
+                    throw createError;
                 }
-            });
+            }
 
             console.log(`💾 Stored location in database for ${salesmanId}${shouldMarkAsHome ? ' (HOME)' : ''}`);
         } catch (error) {
