@@ -264,15 +264,16 @@ export const punchIn = async (req, res) => {
                 await prisma.latePunchApproval.update({
                     where: { id: lateApprovalId },
                     data: {
+                        status: 'USED',  // Mark as USED to prevent reuse
                         codeUsed: true,
                         codeUsedAt: currentISTTime
                     }
                 });
-                console.log('✅ Late punch-in approval code marked as used:', {
+                console.log('✅ Late punch-in approval marked as USED:', {
                     approvalRequestId: lateApprovalId
                 });
             } catch (updateError) {
-                console.error('⚠️ Failed to mark approval code as used:', updateError);
+                console.error('⚠️ Failed to mark approval as used:', updateError);
                 // Don't fail the punch-in if this update fails
             }
         }
@@ -479,8 +480,16 @@ export const punchOut = async (req, res) => {
             });
         }
 
-        // Calculate work hours with proper UTC handling
-        const workHours = calculateWorkHoursIST(convertUTCToIST(attendance.punchInTime), currentISTTime);
+        // Calculate work hours - both times should be in UTC for correct calculation
+        // attendance.punchInTime is UTC from database, punchOutTimeUTC is also UTC
+        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
+
+        console.log('⏱️ Work hours validation:', {
+            punchInTimeUTC: attendance.punchInTime.toISOString(),
+            punchOutTimeUTC: punchOutTimeUTC.toISOString(),
+            workHours,
+            workMinutes: workHours * 60
+        });
 
         // Validate minimum work duration (prevent accidental immediate punch out)
         if (workHours < 0.017) { // Less than 1 minute
@@ -494,13 +503,17 @@ export const punchOut = async (req, res) => {
         let distance = 0;
 
         try {
-            // Get route points for this attendance session
+            // Get route points for this attendance session - explicitly select only needed fields
             const routePoints = await prisma.salesmanRouteLog.findMany({
                 where: {
                     attendanceId: attendanceId
                 },
                 orderBy: {
                     recordedAt: 'asc'
+                },
+                select: {
+                    latitude: true,
+                    longitude: true
                 }
             });
 
@@ -583,6 +596,26 @@ export const punchOut = async (req, res) => {
             totalDistanceKm: updatedAttendance.totalDistanceKm,
             status: updatedAttendance.status
         });
+
+        // Mark early punch-out approval as USED after successful punch-out
+        if (isEarlyPunchOut && earlyPunchOutApprovalId) {
+            try {
+                await prisma.earlyPunchOutApproval.update({
+                    where: { id: earlyPunchOutApprovalId },
+                    data: {
+                        status: 'USED',  // Mark as USED to prevent reuse
+                        codeUsed: true,
+                        codeUsedAt: currentISTTime
+                    }
+                });
+                console.log('✅ Early punch-out approval marked as USED:', {
+                    approvalRequestId: earlyPunchOutApprovalId
+                });
+            } catch (updateError) {
+                console.error('⚠️ Failed to mark early punch-out approval as used:', updateError);
+                // Don't fail the punch-out if this update fails
+            }
+        }
 
         // Calculate additional metrics
         const workDurationMinutes = Math.round(workHours * 60);
@@ -1240,17 +1273,23 @@ export const getCurrentPositions = async (req, res) => {
         const employeePositions = await Promise.all(
             activeAttendances.map(async (attendance) => {
                 try {
-                    // Get the most recent route point
+                    // Get the most recent route point - explicitly select only needed fields
                     const latestRoutePoint = await prisma.salesmanRouteLog.findFirst({
                         where: {
                             attendanceId: attendance.id
                         },
                         orderBy: {
                             recordedAt: 'desc'
+                        },
+                        select: {
+                            latitude: true,
+                            longitude: true,
+                            speed: true,
+                            recordedAt: true
                         }
                     });
 
-                    // Calculate current travel distance
+                    // Calculate current travel distance - explicitly select only needed fields
                     let currentDistance = 0;
                     const routePoints = await prisma.salesmanRouteLog.findMany({
                         where: {
@@ -1258,6 +1297,10 @@ export const getCurrentPositions = async (req, res) => {
                         },
                         orderBy: {
                             recordedAt: 'asc'
+                        },
+                        select: {
+                            latitude: true,
+                            longitude: true
                         }
                     });
 

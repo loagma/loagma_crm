@@ -502,7 +502,7 @@ class _EarlyPunchOutApprovalWidgetState
           ),
           const SizedBox(height: 8),
           Text(
-            'Your early punch-out request has been approved by admin. You can now punch out directly.',
+            'Your early punch-out request has been approved by admin. You can now punch out using the button below.',
             style: TextStyle(
               fontSize: 14,
               color: Colors.green[700],
@@ -545,30 +545,7 @@ class _EarlyPunchOutApprovalWidgetState
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Punch Out Button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                // Call the callback to trigger punch out in parent
-                widget.onApprovalCodeValidated?.call('APPROVED');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(Icons.logout, size: 24),
-              label: const Text(
-                'PUNCH OUT NOW',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
+          // Removed the duplicate punch-out button - parent widget will show it
         ],
       ),
     );
