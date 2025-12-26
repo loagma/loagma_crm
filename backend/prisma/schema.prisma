@@ -138,6 +138,9 @@ model User {
   approvedLateRequests LatePunchApproval[] @relation("AdminLateApprovals") // Late punch-in requests approved by this admin
   earlyPunchOutRequests EarlyPunchOutApproval[] @relation("EmployeeEarlyPunchOutApprovals") // Early punch-out requests by this employee
   approvedEarlyPunchOutRequests EarlyPunchOutApproval[] @relation("AdminEarlyPunchOutApprovals") // Early punch-out requests approved by this admin
+  leaveRequests Leave[] @relation("EmployeeLeaves") // Leave requests by this employee
+  approvedLeaves Leave[] @relation("ApprovedLeaves") // Leave requests approved by this admin
+  leaveBalance LeaveBalance? // Leave balance for this employee
 }
 
 model EmployeeArea {
@@ -516,4 +519,66 @@ model EarlyPunchOutApproval {
   @@index([status])
   @@index([requestDate])
   @@index([approvalCode])
+}
+
+// NEW MODEL: Leave Management
+model Leave {
+  id              String    @id @default(cuid())
+  employeeId      String    // Employee requesting leave
+  employeeName    String    // Employee name for easy reference
+  leaveType       String    // Sick, Casual, Earned, Unpaid, Emergency, Maternity, Paternity
+  startDate       DateTime  // Leave start date
+  endDate         DateTime  // Leave end date
+  numberOfDays    Int       // Total number of leave days
+  reason          String?   // Reason for leave
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  
+  // Approval workflow
+  requestedAt     DateTime  @default(now()) // When leave was requested
+  approvedBy      String?   // Admin who approved/rejected
+  approvedAt      DateTime? // When the decision was made
+  rejectionReason String?   // Admin's reason for rejection
+  adminRemarks    String?   // Additional admin comments
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  employee        User      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?     @relation("ApprovedLeaves", fields: [approvedBy], references: [id])
+  
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([leaveType])
+  @@index([requestedAt])
+}
+
+// NEW MODEL: Leave Balance Management
+model LeaveBalance {
+  id              String    @id @default(cuid())
+  employeeId      String    @unique // One balance record per employee
+  year            Int       // Leave balance year (e.g., 2024)
+  
+  // Leave allocations (annual)
+  sickLeaves      Int       @default(12)    // Sick leave allocation
+  casualLeaves    Int       @default(10)    // Casual leave allocation
+  earnedLeaves    Int       @default(20)    // Earned leave allocation
+  
+  // Used leaves (current year)
+  usedSickLeaves  Int       @default(0)     // Used sick leaves
+  usedCasualLeaves Int      @default(0)     // Used casual leaves
+  usedEarnedLeaves Int      @default(0)     // Used earned leaves
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  employee        User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@index([employeeId])
+  @@index([year])
 }

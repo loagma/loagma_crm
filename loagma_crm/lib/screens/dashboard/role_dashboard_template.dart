@@ -109,6 +109,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.add_chart_sharp, // great for analytics
             "/dashboard/admin/attendance",
           ),
+          SidebarItem(
+            "Leave Requests",
+            Icons.event_available,
+            "/dashboard/admin/leaves",
+          ),
         ];
 
       case "employee":
@@ -151,6 +156,11 @@ class RoleDashboardTemplate extends StatelessWidget {
           // ),
           SidebarItem("Maps", Icons.map_outlined, "/dashboard/salesman/map"),
           SidebarItem("Punch", Icons.map_outlined, "/dashboard/salesman/punch"),
+          SidebarItem(
+            "Leave Management",
+            Icons.event_available,
+            "/dashboard/salesman/leaves",
+          ),
         ];
 
       case "telecaller":

@@ -327,6 +327,128 @@ class NotificationService {
     }
 
     /**
+     * Create leave request notification (to admin)
+     * @param {Object} leaveData - Leave request data
+     */
+    static async createLeaveRequestNotification(leaveData) {
+        const requestTime = new Date(leaveData.requestedAt);
+        const startDate = new Date(leaveData.startDate);
+        const endDate = new Date(leaveData.endDate);
+
+        const requestTimeString = formatISTTime(requestTime, 'time');
+        const startDateString = startDate.toLocaleDateString('en-IN');
+        const endDateString = endDate.toLocaleDateString('en-IN');
+
+        const title = 'New Leave Request';
+        const message = `${leaveData.employeeName} requested ${leaveData.numberOfDays} days of ${leaveData.leaveType} leave from ${startDateString} to ${endDateString}`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'leave_request',
+            priority: 'high',
+            targetRole: 'admin',
+            data: {
+                leaveId: leaveData.id,
+                employeeId: leaveData.employeeId,
+                employeeName: leaveData.employeeName,
+                leaveType: leaveData.leaveType,
+                startDate: leaveData.startDate,
+                endDate: leaveData.endDate,
+                numberOfDays: leaveData.numberOfDays,
+                reason: leaveData.reason,
+                status: leaveData.status,
+                requestedAt: leaveData.requestedAt,
+                requestTimeFormatted: requestTimeString,
+                startDateFormatted: startDateString,
+                endDateFormatted: endDateString,
+                actionRequired: true
+            }
+        });
+    }
+
+    /**
+     * Create leave approved notification (to employee)
+     * @param {Object} leaveData - Leave request data
+     */
+    static async createLeaveApprovedNotification(leaveData) {
+        const approvedTime = new Date(leaveData.approvedAt);
+        const startDate = new Date(leaveData.startDate);
+        const endDate = new Date(leaveData.endDate);
+
+        const approvedTimeString = formatISTTime(approvedTime, 'time');
+        const startDateString = startDate.toLocaleDateString('en-IN');
+        const endDateString = endDate.toLocaleDateString('en-IN');
+
+        const title = 'Leave Request Approved';
+        const message = `Your ${leaveData.leaveType} leave from ${startDateString} to ${endDateString} has been approved`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'leave_approved',
+            priority: 'normal',
+            targetUserId: leaveData.employeeId,
+            data: {
+                leaveId: leaveData.id,
+                leaveType: leaveData.leaveType,
+                startDate: leaveData.startDate,
+                endDate: leaveData.endDate,
+                numberOfDays: leaveData.numberOfDays,
+                status: 'APPROVED',
+                approvedBy: leaveData.approver?.name,
+                approvedAt: leaveData.approvedAt,
+                approvedTimeFormatted: approvedTimeString,
+                startDateFormatted: startDateString,
+                endDateFormatted: endDateString,
+                adminRemarks: leaveData.adminRemarks,
+                actionRequired: false
+            }
+        });
+    }
+
+    /**
+     * Create leave rejected notification (to employee)
+     * @param {Object} leaveData - Leave request data
+     */
+    static async createLeaveRejectedNotification(leaveData) {
+        const rejectedTime = new Date(leaveData.approvedAt);
+        const startDate = new Date(leaveData.startDate);
+        const endDate = new Date(leaveData.endDate);
+
+        const rejectedTimeString = formatISTTime(rejectedTime, 'time');
+        const startDateString = startDate.toLocaleDateString('en-IN');
+        const endDateString = endDate.toLocaleDateString('en-IN');
+
+        const title = 'Leave Request Rejected';
+        const message = `Your ${leaveData.leaveType} leave from ${startDateString} to ${endDateString} has been rejected`;
+
+        return await this.createNotification({
+            title,
+            message,
+            type: 'leave_rejected',
+            priority: 'normal',
+            targetUserId: leaveData.employeeId,
+            data: {
+                leaveId: leaveData.id,
+                leaveType: leaveData.leaveType,
+                startDate: leaveData.startDate,
+                endDate: leaveData.endDate,
+                numberOfDays: leaveData.numberOfDays,
+                status: 'REJECTED',
+                rejectedBy: leaveData.approver?.name,
+                rejectedAt: leaveData.approvedAt,
+                rejectedTimeFormatted: rejectedTimeString,
+                startDateFormatted: startDateString,
+                endDateFormatted: endDateString,
+                rejectionReason: leaveData.rejectionReason,
+                adminRemarks: leaveData.adminRemarks,
+                actionRequired: false
+            }
+        });
+    }
+
+    /**
      * Get notifications for a specific user or role
      * @param {Object} filters - Filter options
      * @param {string} [filters.userId] - User ID

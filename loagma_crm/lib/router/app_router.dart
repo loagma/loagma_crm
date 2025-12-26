@@ -34,6 +34,11 @@ import '../screens/salesman/salesman_accounts_screen.dart';
 import '../screens/salesman/salesman_assignments_screen.dart';
 import '../screens/salesman/salesman_map_screen.dart';
 import '../screens/salesman/enhanced_punch_screen.dart';
+import '../screens/salesman/leave_management_screen.dart';
+import '../screens/salesman/apply_leave_screen.dart';
+
+// Admin screens - Leave Management
+import '../screens/admin/leave_requests_screen.dart';
 
 // Telecaller screens
 import '../screens/telecaller/verify_account_master_screen.dart';
@@ -146,6 +151,10 @@ final GoRouter appRouter = GoRouter(
           path: 'approvals',
           builder: (_, __) => const ApprovalRequestsScreen(),
         ),
+        GoRoute(
+          path: 'leaves',
+          builder: (_, __) => const LeaveRequestsScreen(),
+        ),
 
         // Shared routes (Admin, Salesman, etc.)
         GoRoute(
@@ -183,6 +192,14 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(path: 'map', builder: (_, __) => const SalesmanMapScreen()),
         GoRoute(path: 'punch', builder: (_, __) => const EnhancedPunchScreen()),
+        GoRoute(
+          path: 'leaves',
+          builder: (_, __) => const LeaveManagementScreen(),
+        ),
+        GoRoute(
+          path: 'leaves/apply',
+          builder: (_, __) => const ApplyLeaveScreen(),
+        ),
 
         // Telecaller-specific routes
         GoRoute(
