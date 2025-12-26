@@ -34,7 +34,7 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
   @override
   void initState() {
     super.initState();
-    GooglePlacesService.instance.initialize();
+    // GooglePlacesService uses static methods, no initialization needed
     fetchAllAssignments();
   }
 
@@ -173,7 +173,7 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
     setState(() => isLoadingPlaces = true);
 
     try {
-      final places = await GooglePlacesService.instance.fetchNearbyPlaces(
+      final places = await GooglePlacesService.fetchNearbyPlaces(
         lat: lat,
         lng: lng,
         radius: 1500,
@@ -184,12 +184,13 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
 
       for (var place in places.take(10)) {
         // Limit to 10 places
-        if (place.placeId != null) {
+        if (place['place_id'] != null) {
           try {
-            final details = await GooglePlacesService.instance
-                .fetchPlaceDetails(place.placeId!);
+            final details = await GooglePlacesService.fetchPlaceDetails(
+              place['place_id']!,
+            );
             if (details != null) {
-              final placeInfo = PlaceInfo.fromPlaceDetails(details);
+              final placeInfo = PlaceInfo.fromRawPlaceDetails(details);
               placeInfoList.add(placeInfo);
             }
           } catch (e) {
@@ -415,14 +416,19 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    child: PlaceDetailsWidget(
-                      place: selectedPlace!,
-                      onClose: () => setState(() => selectedPlace = null),
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.7,
+                      ),
+                      child: PlaceDetailsWidget(
+                        place: selectedPlace!,
+                        onClose: () {
+                          setState(() => selectedPlace = null);
+                        },
+                      ),
                     ),
                   ),
-                if (nearbyPlaces.isNotEmpty &&
-                    selectedPlace == null &&
-                    selectedAssignmentId == null)
+                if (nearbyPlaces.isNotEmpty && selectedAssignmentId == null)
                   Positioned(bottom: 16, right: 16, child: _buildPlacesList()),
               ],
             ),

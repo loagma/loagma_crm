@@ -97,6 +97,81 @@ class PlaceInfo {
     );
   }
 
+  /// Create PlaceInfo from raw place details data
+  factory PlaceInfo.fromRawPlaceDetails(Map<String, dynamic> details) {
+    final geometry = details['geometry'] as Map<String, dynamic>?;
+    final location = geometry?['location'] as Map<String, dynamic>?;
+    final photos = details['photos'] as List<dynamic>?;
+    final reviews = details['reviews'] as List<dynamic>?;
+    final openingHours = details['opening_hours'] as Map<String, dynamic>?;
+
+    return PlaceInfo(
+      placeId: details['place_id'] ?? '',
+      name: details['name'] ?? 'Unknown Place',
+      rating: (details['rating'] as num?)?.toDouble() ?? 0.0,
+      address: details['formatted_address'] ?? 'Address not available',
+      isOpenNow: openingHours?['open_now'] ?? false,
+      photoUrls:
+          photos
+              ?.map(
+                (photo) =>
+                    'https://maps.googleapis.com/maps/api/place/photo'
+                    '?maxwidth=${GooglePlacesConfig.defaultPhotoMaxWidth}'
+                    '&photo_reference=${photo['photo_reference']}'
+                    '&key=${GooglePlacesConfig.apiKey}',
+              )
+              .toList()
+              .cast<String>() ??
+          [],
+      reviews:
+          reviews
+              ?.map((review) => PlaceReview.fromRawGoogleReview(review))
+              .toList() ??
+          [],
+      phoneNumber: details['formatted_phone_number'],
+      website: details['website'],
+      priceLevel: details['price_level'] ?? 0,
+      types: (details['types'] as List<dynamic>?)?.cast<String>() ?? [],
+      latitude: location?['lat'],
+      longitude: location?['lng'],
+      businessStatus: details['business_status'],
+    );
+  }
+
+  /// Create PlaceInfo from raw nearby search result
+  factory PlaceInfo.fromRawNearbyResult(Map<String, dynamic> result) {
+    final geometry = result['geometry'] as Map<String, dynamic>?;
+    final location = geometry?['location'] as Map<String, dynamic>?;
+    final photos = result['photos'] as List<dynamic>?;
+    final openingHours = result['opening_hours'] as Map<String, dynamic>?;
+
+    return PlaceInfo(
+      placeId: result['place_id'] ?? '',
+      name: result['name'] ?? 'Unknown Place',
+      rating: (result['rating'] as num?)?.toDouble() ?? 0.0,
+      address: result['vicinity'] ?? 'Address not available',
+      isOpenNow: openingHours?['open_now'] ?? false,
+      photoUrls:
+          photos
+              ?.map(
+                (photo) =>
+                    'https://maps.googleapis.com/maps/api/place/photo'
+                    '?maxwidth=${GooglePlacesConfig.defaultPhotoMaxWidth}'
+                    '&photo_reference=${photo['photo_reference']}'
+                    '&key=${GooglePlacesConfig.apiKey}',
+              )
+              .toList()
+              .cast<String>() ??
+          [],
+      reviews: [], // Reviews not available in nearby search
+      priceLevel: result['price_level'] ?? 0,
+      types: (result['types'] as List<dynamic>?)?.cast<String>() ?? [],
+      latitude: location?['lat'],
+      longitude: location?['lng'],
+      businessStatus: result['business_status'],
+    );
+  }
+
   /// Get formatted rating string
   String get formattedRating {
     if (rating > 0) {
@@ -192,6 +267,20 @@ class PlaceReview {
       authorPhotoUrl: review.profilePhotoUrl,
       timestamp: review.time != null
           ? DateTime.fromMillisecondsSinceEpoch(review.time! * 1000)
+          : null,
+    );
+  }
+
+  /// Create PlaceReview from raw Google Places API review data
+  factory PlaceReview.fromRawGoogleReview(Map<String, dynamic> review) {
+    return PlaceReview(
+      author: review['author_name'] ?? 'Anonymous',
+      rating: (review['rating'] as num?)?.toDouble() ?? 0.0,
+      text: review['text'] ?? '',
+      relativeTime: review['relative_time_description'] ?? '',
+      authorPhotoUrl: review['profile_photo_url'],
+      timestamp: review['time'] != null
+          ? DateTime.fromMillisecondsSinceEpoch((review['time'] as int) * 1000)
           : null,
     );
   }
