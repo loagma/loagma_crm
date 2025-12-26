@@ -5,14 +5,8 @@ import {
     getISTDateRange
 } from '../utils/timezone.js';
 import NotificationService from '../services/notificationService.js';
-import crypto from 'crypto';
 
 const prisma = new PrismaClient();
-
-// Helper function to generate approval code
-function generateApprovalCode() {
-    return crypto.randomInt(100000, 999999).toString(); // 6-digit code
-}
 
 // Helper function to check if current time is after 9:45 AM
 function isAfterCutoffTime() {
@@ -270,11 +264,6 @@ export const approveLatePunchRequest = async (req, res) => {
             });
         }
 
-        // Generate approval code and set expiry (valid for 2 hours)
-        const approvalCode = generateApprovalCode();
-        const currentIST = getCurrentISTTime();
-        const codeExpiresAt = new Date(currentIST.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
-
         // Update approval request
         const updatedRequest = await prisma.latePunchApproval.update({
             where: { id: requestId },
@@ -282,9 +271,7 @@ export const approveLatePunchRequest = async (req, res) => {
                 status: 'APPROVED',
                 approvedBy: adminId,
                 approvedAt: currentIST,
-                adminRemarks: adminRemarks?.trim() || null,
-                approvalCode,
-                codeExpiresAt
+                adminRemarks: adminRemarks?.trim() || null
             },
             include: {
                 employee: {
@@ -306,13 +293,12 @@ export const approveLatePunchRequest = async (req, res) => {
         console.log('✅ Late punch approval request approved:', {
             requestId: updatedRequest.id,
             employeeName: updatedRequest.employeeName,
-            approvalCode: approvalCode,
             approvedBy: updatedRequest.approver?.name
         });
 
         // Send approval notification to employee
         try {
-            await NotificationService.createLatePunchApprovedNotification(updatedRequest, approvalCode);
+            await NotificationService.createLatePunchApprovedNotification(updatedRequest);
             console.log('✅ Late punch approval notification sent to employee');
         } catch (notificationError) {
             console.error('⚠️ Failed to send approval notification:', notificationError);
@@ -321,12 +307,10 @@ export const approveLatePunchRequest = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: `Late punch-in request approved. Approval code sent to ${updatedRequest.employeeName}.`,
+            message: `Late punch-in request approved. ${updatedRequest.employeeName} can now punch in.`,
             data: {
                 requestId: updatedRequest.id,
                 status: updatedRequest.status,
-                approvalCode: approvalCode, // Include in response for admin reference
-                codeExpiresAt: formatISTTime(updatedRequest.codeExpiresAt, 'datetime'),
                 approvedBy: updatedRequest.approver?.name,
                 approvedAt: formatISTTime(updatedRequest.approvedAt, 'datetime'),
                 adminRemarks: updatedRequest.adminRemarks

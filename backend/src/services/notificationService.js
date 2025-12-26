@@ -57,10 +57,10 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchInNotification(attendanceData) {
-        // Since punchInTime is already stored in IST, use formatISTTime for consistent formatting
-        const punchInTime = new Date(attendanceData.punchInTime);
-        const timeString = formatISTTime(punchInTime, 'time');
-        const dateTimeString = formatISTTime(punchInTime, 'datetime');
+        // Use current time (created time) instead of punch time for notification
+        const currentTime = new Date();
+        const timeString = formatISTTime(currentTime, 'time');
+        const dateTimeString = formatISTTime(currentTime, 'datetime');
 
         const title = 'Salesman Punched In';
         const message = `${attendanceData.employeeName} punched in at ${timeString}`;
@@ -78,6 +78,7 @@ class NotificationService {
                 punchInTime: attendanceData.punchInTime,
                 punchInTimeIST: dateTimeString,
                 punchInTimeFormatted: timeString,
+                notificationCreatedAt: currentTime.toISOString(),
                 location: {
                     latitude: attendanceData.punchInLatitude,
                     longitude: attendanceData.punchInLongitude,
@@ -92,7 +93,8 @@ class NotificationService {
      * @param {Object} attendanceData - Attendance data
      */
     static async createPunchOutNotification(attendanceData) {
-        // Since both times are already stored in IST, use formatISTTime for consistent formatting
+        // Use current time (created time) instead of punch time for notification
+        const currentTime = new Date();
         const punchInTime = new Date(attendanceData.punchInTime);
         const punchOutTime = new Date(attendanceData.punchOutTime);
 
@@ -100,6 +102,7 @@ class NotificationService {
         const punchOutTimeString = formatISTTime(punchOutTime, 'time');
         const punchInDateTimeString = formatISTTime(punchInTime, 'datetime');
         const punchOutDateTimeString = formatISTTime(punchOutTime, 'datetime');
+        const notificationTimeString = formatISTTime(currentTime, 'time');
 
         const workHours = attendanceData.totalWorkHours || 0;
         const workDurationFormatted = `${Math.floor(workHours)}h ${Math.round((workHours % 1) * 60)}m`;
@@ -123,6 +126,8 @@ class NotificationService {
                 punchOutTimeIST: punchOutDateTimeString,
                 punchInTimeFormatted: punchInTimeString,
                 punchOutTimeFormatted: punchOutTimeString,
+                notificationCreatedAt: currentTime.toISOString(),
+                notificationTimeFormatted: notificationTimeString,
                 totalWorkHours: attendanceData.totalWorkHours,
                 workDurationFormatted,
                 totalDistanceKm: attendanceData.totalDistanceKm,
@@ -180,9 +185,8 @@ class NotificationService {
     /**
      * Create late punch-in approval granted notification (to employee)
      * @param {Object} approvalData - Approval request data
-     * @param {string} approvalCode - Generated approval code
      */
-    static async createLatePunchApprovedNotification(approvalData, approvalCode) {
+    static async createLatePunchApprovedNotification(approvalData) {
         const approvedTime = new Date(approvalData.approvedAt);
         const timeString = approvedTime.toLocaleTimeString('en-IN', {
             hour: '2-digit',
@@ -190,15 +194,8 @@ class NotificationService {
             hour12: true
         });
 
-        const expiryTime = new Date(approvalData.codeExpiresAt);
-        const expiryTimeString = expiryTime.toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-
         const title = 'Late Punch-In Approved';
-        const message = `Your late punch-in request has been approved. Use code: ${approvalCode} (expires at ${expiryTimeString})`;
+        const message = `Your late punch-in request has been approved at ${timeString}. You can now punch in.`;
 
         return await this.createNotification({
             title,
@@ -208,15 +205,12 @@ class NotificationService {
             targetUserId: approvalData.employeeId,
             data: {
                 requestId: approvalData.id,
-                approvalCode: approvalCode,
                 approvedBy: approvalData.approver?.name,
                 approvedAt: approvalData.approvedAt,
                 approvedTimeFormatted: timeString,
-                codeExpiresAt: approvalData.codeExpiresAt,
-                codeExpiresAtFormatted: expiryTimeString,
                 adminRemarks: approvalData.adminRemarks,
                 status: 'APPROVED',
-                actionRequired: true
+                actionRequired: false
             }
         });
     }
@@ -305,15 +299,8 @@ class NotificationService {
 
         let title, message;
         if (isApproved) {
-            const expiryTime = new Date(approvalData.codeExpiresAt);
-            const expiryTimeString = expiryTime.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-
             title = 'Early Punch-Out Approved';
-            message = `Your early punch-out request has been approved. Code: ${approvalData.approvalCode} (expires at ${expiryTimeString})`;
+            message = `Your early punch-out request has been approved at ${timeString}. You can now punch out.`;
         } else {
             title = 'Early Punch-Out Request Rejected';
             message = `Your early punch-out request has been rejected at ${timeString}`;
@@ -329,15 +316,12 @@ class NotificationService {
                 requestId: approvalData.id,
                 attendanceId: approvalData.attendanceId,
                 status: decision,
-                approvalCode: isApproved ? approvalData.approvalCode : null,
                 approvedBy: approvalData.approver?.name,
                 approvedAt: approvalData.approvedAt,
                 approvedTimeFormatted: timeString,
-                codeExpiresAt: isApproved ? approvalData.codeExpiresAt : null,
-                codeExpiresAtFormatted: isApproved ? expiryTimeString : null,
                 adminRemarks: approvalData.adminRemarks,
                 reason: approvalData.reason,
-                actionRequired: isApproved
+                actionRequired: false
             }
         });
     }

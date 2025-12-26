@@ -88,9 +88,6 @@ router.get('/status/:attendanceId', async (req, res) => {
         });
 
         if (approval) {
-            // Check if code is expired
-            const isCodeExpired = approval.codeExpiresAt ? new Date() > approval.codeExpiresAt : false;
-            
             res.json({
                 success: true,
                 data: {
@@ -101,13 +98,6 @@ router.get('/status/:attendanceId', async (req, res) => {
                     approvedBy: approval.approvedBy,
                     approvedAt: approval.approvedAt,
                     adminRemarks: approval.adminRemarks,
-                    // OTP related fields
-                    hasApprovalCode: !!approval.approvalCode,
-                    approvalCode: approval.approvalCode,
-                    codeExpired: isCodeExpired,
-                    codeExpiresAt: approval.codeExpiresAt,
-                    codeUsed: approval.codeUsed || false,
-                    codeUsedAt: approval.codeUsedAt,
                     approval: approval
                 }
             });
@@ -238,35 +228,22 @@ router.post('/approve/:requestId', async (req, res) => {
             });
         }
 
-        // Generate 6-digit approval code
-        const approvalCode = Math.floor(100000 + Math.random() * 900000).toString();
-        
-        // Code expires in 2 hours
-        const codeExpiresAt = new Date();
-        codeExpiresAt.setHours(codeExpiresAt.getHours() + 2);
-
         const updatedRequest = await prisma.earlyPunchOutApproval.update({
             where: { id: requestId },
             data: {
                 status: 'APPROVED',
                 approvedBy: adminId,
                 adminRemarks: adminRemarks || 'Approved',
-                approvedAt: new Date(),
-                approvalCode: approvalCode,
-                codeExpiresAt: codeExpiresAt,
-                codeUsed: false
+                approvedAt: new Date()
             }
         });
 
-        console.log(`✅ Early punch-out approval approved. Code: ${approvalCode} for employee: ${existingRequest.employeeName}`);
+        console.log(`✅ Early punch-out approval approved for employee: ${existingRequest.employeeName}`);
 
         res.json({
             success: true,
-            message: `Early punch-out request approved. Approval code: ${approvalCode}`,
-            data: {
-                ...updatedRequest,
-                approvalCode: approvalCode
-            }
+            message: 'Early punch-out request approved successfully',
+            data: updatedRequest
         });
 
     } catch (error) {

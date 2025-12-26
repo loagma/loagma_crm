@@ -8,11 +8,6 @@ import NotificationService from '../services/notificationService.js';
 
 const prisma = new PrismaClient();
 
-// Generate random 6-digit approval code
-function generateApprovalCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 // Request Early Punch-Out Approval
 export const requestEarlyPunchOutApproval = async (req, res) => {
     try {
@@ -198,10 +193,7 @@ export const getEmployeeEarlyPunchOutStatus = async (req, res) => {
             requestDate: approvalRequest.requestDate,
             approvedBy: approvalRequest.approver?.name,
             approvedAt: approvalRequest.approvedAt,
-            adminRemarks: approvalRequest.adminRemarks,
-            approvalCode: approvalRequest.status === 'APPROVED' ? approvalRequest.approvalCode : null,
-            codeExpiresAt: approvalRequest.codeExpiresAt,
-            codeUsed: approvalRequest.codeUsed
+            adminRemarks: approvalRequest.adminRemarks
         };
 
         res.status(200).json({
@@ -215,78 +207,6 @@ export const getEmployeeEarlyPunchOutStatus = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch approval status'
-        });
-    }
-};
-
-// Validate Early Punch-Out Approval Code
-export const validateEarlyPunchOutCode = async (req, res) => {
-    try {
-        const { employeeId, attendanceId, approvalCode } = req.body;
-
-        if (!employeeId || !attendanceId || !approvalCode) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required fields: employeeId, attendanceId, approvalCode'
-            });
-        }
-
-        // Get current IST time and date range
-        const currentIST = getCurrentISTTime();
-        const { startOfDay, endOfDay } = getISTDateRange();
-
-        // Find the approval request
-        const approvalRequest = await prisma.earlyPunchOutApproval.findFirst({
-            where: {
-                employeeId,
-                attendanceId,
-                approvalCode: approvalCode.trim(),
-                status: 'APPROVED',
-                requestDate: {
-                    gte: startOfDay,
-                    lt: endOfDay
-                }
-            }
-        });
-
-        if (!approvalRequest) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid approval code or no approved request found'
-            });
-        }
-
-        // Check if code is already used
-        if (approvalRequest.codeUsed) {
-            return res.status(400).json({
-                success: false,
-                message: 'Approval code has already been used'
-            });
-        }
-
-        // Check if code is expired
-        if (approvalRequest.codeExpiresAt && currentIST > approvalRequest.codeExpiresAt) {
-            return res.status(400).json({
-                success: false,
-                message: 'Approval code has expired. Please request a new approval.'
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Approval code is valid',
-            data: {
-                id: approvalRequest.id,
-                approvalCode: approvalRequest.approvalCode,
-                expiresAt: approvalRequest.codeExpiresAt
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ Error validating early punch-out approval code:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to validate approval code'
         });
     }
 };
@@ -394,21 +314,15 @@ export const approveEarlyPunchOutRequest = async (req, res) => {
             });
         }
 
-        // Generate approval code and set expiration (2 hours from now)
-        const approvalCode = generateApprovalCode();
-        const currentIST = getCurrentISTTime();
-        const codeExpiresAt = new Date(currentIST.getTime() + 2 * 60 * 60 * 1000); // 2 hours
-
         // Update approval request
+        const currentIST = getCurrentISTTime();
         const updatedRequest = await prisma.earlyPunchOutApproval.update({
             where: { id: requestId },
             data: {
                 status: 'APPROVED',
                 approvedBy: adminId,
                 approvedAt: currentIST,
-                adminRemarks: adminRemarks?.trim() || null,
-                approvalCode,
-                codeExpiresAt
+                adminRemarks: adminRemarks?.trim() || null
             },
             include: {
                 employee: {
@@ -438,9 +352,7 @@ export const approveEarlyPunchOutRequest = async (req, res) => {
 
         console.log('✅ Early punch-out request approved:', {
             requestId,
-            employeeId: updatedRequest.employeeId,
-            approvalCode,
-            expiresAt: codeExpiresAt
+            employeeId: updatedRequest.employeeId
         });
 
         res.status(200).json({
@@ -449,8 +361,6 @@ export const approveEarlyPunchOutRequest = async (req, res) => {
             data: {
                 id: updatedRequest.id,
                 status: updatedRequest.status,
-                approvalCode: updatedRequest.approvalCode,
-                codeExpiresAt: updatedRequest.codeExpiresAt,
                 adminRemarks: updatedRequest.adminRemarks,
                 approvedBy: updatedRequest.approver?.name,
                 approvedAt: updatedRequest.approvedAt
