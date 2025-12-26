@@ -301,3 +301,35 @@ cron.schedule('*/5 * * * *', async () => {
   await expireStaleApprovals();
 });
 ```
+
+
+## 9. BUG FIXES APPLIED
+
+### Issue 1: Salesman Seeing Admin Notifications
+**Problem:** Salesman was seeing admin notifications (punch-in/punch-out notifications meant for admin)
+
+**Root Cause:** The notification query was including "global notifications" (where both targetUserId and targetRole are null) for all users, which meant everyone could see notifications that weren't targeted to anyone specific.
+
+**Fix:** Updated `NotificationService.getNotifications()` to only include global notifications when no userId or role filter is provided. Now:
+- If userId is provided → only show notifications targeted to that user
+- If role is provided → only show notifications targeted to that role
+- If neither is provided → show global notifications
+
+### Issue 2: Early Punch-Out UI Showing Punch-In After Approval
+**Problem:** After admin approved early punch-out request, the salesman UI was showing punch-in button instead of punch-out button.
+
+**Root Cause:** 
+1. The `EarlyPunchOutApprovalWidget` was calling `onApprovalCodeValidated` which triggered `_handlePunchOut()` automatically
+2. If the user cancelled the dialog or there was an error, the state was inconsistent
+3. The `hasEarlyPunchOutApproval` state was not persisted across refreshes
+
+**Fix:**
+1. Removed auto-trigger of `_handlePunchOut()` when approval is received
+2. Now just sets `hasEarlyPunchOutApproval = true` and lets user click the punch-out button
+3. Added logic in `_loadTodayPunchData()` to check for existing approved early punch-out requests
+4. Removed duplicate punch-out button from `EarlyPunchOutApprovalWidget._buildApprovedStatus()`
+
+### Issue 3: Approval State Not Persisted
+**Problem:** When user refreshed the app, the `hasEarlyPunchOutApproval` state was lost.
+
+**Fix:** Added API call in `_loadTodayPunchData()` to check for existing approved early punch-out requests and restore the state.
