@@ -7,7 +7,9 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/task_assignment_service.dart';
+import '../../services/leave_service.dart';
 import '../../models/attendance_model.dart';
+import '../../models/leave_model.dart';
 import '../../widgets/attendance_status_widget.dart';
 import '../../widgets/notification_bell.dart';
 import '../../utils/time_formatting_utils.dart';
@@ -44,6 +46,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   AttendanceModel? todayAttendance;
   bool isLoadingAttendance = false;
 
+  // Leave statistics
+  LeaveStatistics? leaveStatistics;
+  bool isLoadingLeaveStats = false;
+
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
 
@@ -63,6 +69,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     );
     fetchDashboardData();
     _loadTodayAttendance();
+    _loadLeaveStatistics();
     _startNotificationRefresh();
   }
 
@@ -109,6 +116,32 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     } finally {
       if (mounted) {
         setState(() => isLoadingAttendance = false);
+      }
+    }
+  }
+
+  Future<void> _loadLeaveStatistics() async {
+    setState(() => isLoadingLeaveStats = true);
+
+    try {
+      if (!UserService.hasValidAuth) {
+        print('❌ User authentication invalid - skipping leave stats load');
+        return;
+      }
+
+      final stats = await LeaveService.getLeaveBalance();
+
+      if (mounted) {
+        setState(() {
+          leaveStatistics = stats;
+        });
+      }
+    } catch (e) {
+      print('Error loading leave statistics: $e');
+      // Don't show error for leave stats as it's not critical
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingLeaveStats = false);
       }
     }
   }
@@ -374,6 +407,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
               onRefresh: () async {
                 await fetchDashboardData();
                 await _loadTodayAttendance();
+                await _loadLeaveStatistics();
               },
               color: primaryColor,
               child: SingleChildScrollView(
@@ -542,6 +576,36 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                                 ),
                               ],
                             ),
+
+                            const SizedBox(height: 12),
+
+                            // Leave Statistics Row
+                            if (leaveStatistics != null)
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Available Leaves',
+                                      leaveStatistics!
+                                          .balance
+                                          .totalAvailableLeaves
+                                          .toString(),
+                                      Icons.event_available,
+                                      Colors.teal,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Pending Requests',
+                                      leaveStatistics!.pendingRequests
+                                          .toString(),
+                                      Icons.schedule,
+                                      Colors.amber,
+                                    ),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
@@ -993,6 +1057,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                     builder: (context) => const EnhancedSalesmanMapScreen(),
                   ),
                 ),
+              ),
+              _buildActionCard(
+                'Leave Management',
+                Icons.event_available,
+                Colors.teal,
+                () => context.go('/dashboard/salesman/leaves'),
               ),
               _buildActionCard(
                 'Punch',
