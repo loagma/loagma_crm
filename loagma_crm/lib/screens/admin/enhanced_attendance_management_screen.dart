@@ -48,7 +48,7 @@ class _EnhancedAttendanceManagementScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _dateController.text = DateFormat('yyyy-MM-dd').format(selectedDate);
+    _dateController.text = DateFormat('dd-MM-yyyy').format(selectedDate);
     _loadInitialData();
     _loadEmployees();
     _loadDetailedAttendance();
@@ -96,30 +96,123 @@ class _EnhancedAttendanceManagementScreenState
 
   Future<void> _loadEmployees() async {
     try {
+      print('🔄 Loading employees...');
       final result = await UserService.getAllUsers();
-      if (result['success'] && mounted) {
-        setState(() {
-          allEmployees = result['data'] ?? [];
-        });
+      if (mounted) {
+        if (result['success'] == true) {
+          final List<dynamic> users = result['data'] ?? [];
+          print('✅ Loaded ${users.length} employees');
+          setState(() {
+            allEmployees = users;
+          });
+        } else {
+          print('❌ Failed to load employees: ${result['message']}');
+          setState(() {
+            allEmployees = [];
+          });
+          // Show error to user
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to load employees: ${result['message']}'),
+                backgroundColor: Colors.red,
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: _loadEmployees,
+                ),
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
-      print('Error loading employees: $e');
+      print('❌ Error loading employees: $e');
+      if (mounted) {
+        setState(() {
+          allEmployees = [];
+        });
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading employees: $e'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: _loadEmployees,
+              ),
+            ),
+          );
+        }
+      }
     }
   }
 
   Future<void> _loadDetailedAttendance() async {
+    if (mounted) setState(() => isLoading = true);
+
     try {
+      print(
+        '🔄 Loading detailed attendance for date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}',
+      );
+      // API expects yyyy-MM-dd format
       final result = await AttendanceService.getDetailedAttendance(
         date: DateFormat('yyyy-MM-dd').format(selectedDate),
         employeeId: selectedEmployeeId,
       );
-      if (result['success'] && mounted) {
-        setState(() {
-          detailedAttendanceRecords = result['data'] ?? [];
-        });
+      if (mounted) {
+        if (result['success'] == true) {
+          final List<AttendanceModel> records = result['data'] ?? [];
+          print('✅ Loaded ${records.length} detailed attendance records');
+          setState(() {
+            detailedAttendanceRecords = records;
+            isLoading = false;
+          });
+        } else {
+          print('❌ Failed to load detailed attendance: ${result['message']}');
+          setState(() {
+            detailedAttendanceRecords = [];
+            isLoading = false;
+          });
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Failed to load attendance: ${result['message']}',
+                ),
+                backgroundColor: Colors.orange,
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: _loadDetailedAttendance,
+                ),
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
-      print('Error loading detailed attendance: $e');
+      print('❌ Error loading detailed attendance: $e');
+      if (mounted) {
+        setState(() {
+          detailedAttendanceRecords = [];
+          isLoading = false;
+        });
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading attendance: $e'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: _loadDetailedAttendance,
+              ),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -705,166 +798,366 @@ class _EnhancedAttendanceManagementScreenState
   }
 
   Widget _buildDetailedViewTab() {
-    return Column(
-      children: [
-        // Filters
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.white,
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  // Date Filter
-                  Expanded(
-                    flex: 2,
-                    child: TextFormField(
-                      controller: _dateController,
-                      decoration: const InputDecoration(
-                        labelText: 'Date',
-                        prefixIcon: Icon(Icons.calendar_today),
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                      readOnly: true,
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (date != null) {
-                          setState(() {
-                            selectedDate = date;
-                            _dateController.text = DateFormat(
-                              'yyyy-MM-dd',
-                            ).format(date);
-                          });
-                          _loadDetailedAttendance();
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmallScreen = constraints.maxWidth < 600;
 
-                  // Employee Filter
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: selectedEmployeeId,
-                      decoration: const InputDecoration(
-                        labelText: 'Employee',
-                        prefixIcon: Icon(Icons.person),
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+        return Column(
+          children: [
+            // Filters
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.white,
+              child: Column(
+                children: [
+                  if (isSmallScreen)
+                    // Stack filters vertically on small screens
+                    Column(
+                      children: [
+                        // Date Filter
+                        TextFormField(
+                          controller: _dateController,
+                          decoration: const InputDecoration(
+                            labelText: 'Date',
+                            prefixIcon: Icon(Icons.calendar_today),
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          readOnly: true,
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now(),
+                            );
+                            if (date != null) {
+                              setState(() {
+                                selectedDate = date;
+                                _dateController.text = DateFormat(
+                                  'dd-MM-yyyy',
+                                ).format(date);
+                              });
+                              _loadDetailedAttendance();
+                            }
+                          },
                         ),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: null,
-                          child: Text('All Employees'),
+                        const SizedBox(height: 12),
+
+                        // Employee Filter
+                        DropdownButtonFormField<String>(
+                          value: selectedEmployeeId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: allEmployees.isEmpty
+                                ? 'Loading employees...'
+                                : 'Select Employee',
+                            prefixIcon: const Icon(Icons.person),
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            suffixIcon: allEmployees.isEmpty
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.refresh),
+                                    onPressed: _loadEmployees,
+                                    tooltip: 'Refresh employees',
+                                  ),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('All Employees'),
+                            ),
+                            ...allEmployees.map(
+                              (employee) => DropdownMenuItem<String>(
+                                value:
+                                    employee['id']?.toString() ??
+                                    employee['_id']?.toString(),
+                                child: Text(
+                                  employee['name']?.toString() ??
+                                      'Unknown Employee',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: allEmployees.isEmpty
+                              ? null
+                              : (value) {
+                                  setState(() => selectedEmployeeId = value);
+                                  _loadDetailedAttendance();
+                                },
                         ),
-                        ...allEmployees.map(
-                          (employee) => DropdownMenuItem<String>(
-                            value: employee['id'],
-                            child: Text(employee['name'] ?? 'Unknown'),
+                        const SizedBox(height: 12),
+
+                        // Refresh Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: isLoading
+                                ? null
+                                : () {
+                                    _loadDetailedAttendance();
+                                    _loadEmployees();
+                                  },
+                            icon: isLoading
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.refresh),
+                            label: Text(
+                              isLoading ? 'Loading...' : 'Refresh Data',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.withValues(
+                                alpha: 0.1,
+                              ),
+                              foregroundColor: Colors.blue,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
                           ),
                         ),
                       ],
-                      onChanged: (value) {
-                        setState(() => selectedEmployeeId = value);
-                        _loadDetailedAttendance();
-                      },
+                    )
+                  else
+                    // Horizontal layout for larger screens
+                    Row(
+                      children: [
+                        // Date Filter
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _dateController,
+                            decoration: const InputDecoration(
+                              labelText: 'Date',
+                              prefixIcon: Icon(Icons.calendar_today),
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            readOnly: true,
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: selectedDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now(),
+                              );
+                              if (date != null) {
+                                setState(() {
+                                  selectedDate = date;
+                                  _dateController.text = DateFormat(
+                                    'dd-MM-yyyy',
+                                  ).format(date);
+                                });
+                                _loadDetailedAttendance();
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Employee Filter
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: selectedEmployeeId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: allEmployees.isEmpty
+                                  ? 'Loading employees...'
+                                  : 'Select Employee',
+                              prefixIcon: const Icon(Icons.person),
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            items: [
+                              const DropdownMenuItem<String>(
+                                value: null,
+                                child: Text('All Employees'),
+                              ),
+                              ...allEmployees.map(
+                                (employee) => DropdownMenuItem<String>(
+                                  value:
+                                      employee['id']?.toString() ??
+                                      employee['_id']?.toString(),
+                                  child: Text(
+                                    employee['name']?.toString() ??
+                                        'Unknown Employee',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            onChanged: allEmployees.isEmpty
+                                ? null
+                                : (value) {
+                                    setState(() => selectedEmployeeId = value);
+                                    _loadDetailedAttendance();
+                                  },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Refresh Button
+                        IconButton(
+                          onPressed: isLoading
+                              ? null
+                              : () {
+                                  _loadDetailedAttendance();
+                                  _loadEmployees();
+                                },
+                          icon: isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                          ),
+                          tooltip: isLoading ? 'Loading...' : 'Refresh Data',
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+
+            // Summary Stats
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.grey[50],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Expanded(
+                    child: _buildQuickStat(
+                      'Total Records',
+                      detailedAttendanceRecords.length.toString(),
+                      Icons.list_alt,
+                      Colors.blue,
                     ),
                   ),
-                  const SizedBox(width: 12),
-
-                  // Refresh Button
-                  IconButton(
-                    onPressed: _loadDetailedAttendance,
-                    icon: const Icon(Icons.refresh),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                  Expanded(
+                    child: _buildQuickStat(
+                      'Active Sessions',
+                      detailedAttendanceRecords
+                          .where((a) => a.status == 'active')
+                          .length
+                          .toString(),
+                      Icons.play_circle,
+                      Colors.orange,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildQuickStat(
+                      'Completed',
+                      detailedAttendanceRecords
+                          .where((a) => a.status == 'completed')
+                          .length
+                          .toString(),
+                      Icons.check_circle,
+                      Colors.green,
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
 
-        // Summary Stats
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.grey[50],
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildQuickStat(
-                'Total Records',
-                detailedAttendanceRecords.length.toString(),
-                Icons.list_alt,
-                Colors.blue,
-              ),
-              _buildQuickStat(
-                'Active Sessions',
-                detailedAttendanceRecords
-                    .where((a) => a.status == 'active')
-                    .length
-                    .toString(),
-                Icons.play_circle,
-                Colors.orange,
-              ),
-              _buildQuickStat(
-                'Completed',
-                detailedAttendanceRecords
-                    .where((a) => a.status == 'completed')
-                    .length
-                    .toString(),
-                Icons.check_circle,
-                Colors.green,
-              ),
-            ],
-          ),
-        ),
-
-        // Attendance List
-        Expanded(
-          child: detailedAttendanceRecords.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.event_busy, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'No attendance records found',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
+            // Attendance List
+            Expanded(
+              child: isLoading
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text('Loading attendance records...'),
+                        ],
                       ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Try selecting a different date or employee',
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                    )
+                  : detailedAttendanceRecords.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.event_busy,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No attendance records found',
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Selected date: ${DateFormat('dd-MM-yyyy').format(selectedDate)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                selectedDate = DateTime.now();
+                                _dateController.text = DateFormat(
+                                  'dd-MM-yyyy',
+                                ).format(selectedDate);
+                                selectedEmployeeId = null;
+                              });
+                              _loadDetailedAttendance();
+                            },
+                            icon: const Icon(Icons.today),
+                            label: const Text('View Today\'s Records'),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: detailedAttendanceRecords.length,
-                  itemBuilder: (context, index) {
-                    final attendance = detailedAttendanceRecords[index];
-                    return _buildComprehensiveAttendanceCard(attendance);
-                  },
-                ),
-        ),
-      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: detailedAttendanceRecords.length,
+                      itemBuilder: (context, index) {
+                        final attendance = detailedAttendanceRecords[index];
+                        return _buildComprehensiveAttendanceCard(attendance);
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 
