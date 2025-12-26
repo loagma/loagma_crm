@@ -264,15 +264,16 @@ export const punchIn = async (req, res) => {
                 await prisma.latePunchApproval.update({
                     where: { id: lateApprovalId },
                     data: {
+                        status: 'USED',  // Mark as USED to prevent reuse
                         codeUsed: true,
                         codeUsedAt: currentISTTime
                     }
                 });
-                console.log('✅ Late punch-in approval code marked as used:', {
+                console.log('✅ Late punch-in approval marked as USED:', {
                     approvalRequestId: lateApprovalId
                 });
             } catch (updateError) {
-                console.error('⚠️ Failed to mark approval code as used:', updateError);
+                console.error('⚠️ Failed to mark approval as used:', updateError);
                 // Don't fail the punch-in if this update fails
             }
         }
@@ -583,6 +584,26 @@ export const punchOut = async (req, res) => {
             totalDistanceKm: updatedAttendance.totalDistanceKm,
             status: updatedAttendance.status
         });
+
+        // Mark early punch-out approval as USED after successful punch-out
+        if (isEarlyPunchOut && earlyPunchOutApprovalId) {
+            try {
+                await prisma.earlyPunchOutApproval.update({
+                    where: { id: earlyPunchOutApprovalId },
+                    data: {
+                        status: 'USED',  // Mark as USED to prevent reuse
+                        codeUsed: true,
+                        codeUsedAt: currentISTTime
+                    }
+                });
+                console.log('✅ Early punch-out approval marked as USED:', {
+                    approvalRequestId: earlyPunchOutApprovalId
+                });
+            } catch (updateError) {
+                console.error('⚠️ Failed to mark early punch-out approval as used:', updateError);
+                // Don't fail the punch-out if this update fails
+            }
+        }
 
         // Calculate additional metrics
         const workDurationMinutes = Math.round(workHours * 60);

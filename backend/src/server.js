@@ -1,6 +1,7 @@
 import './config/env.js';
 import express from 'express';
 import cors from 'cors';
+import { startExpiryJob, stopExpiryJob } from './jobs/approvalExpiryJob.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
@@ -22,6 +23,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import latePunchApprovalRoutes from './routes/latePunchApprovalRoutes.js';
 import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js';
 import employeeWorkingHoursRoutes from './routes/employeeWorkingHoursRoutes.js';
+import punchStatusRoutes from './routes/punchStatusRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import migrationRoutes from './routes/migrationRoutes.js';
 
@@ -79,6 +81,7 @@ app.use('/notifications', notificationRoutes);
 app.use('/late-punch-approval', latePunchApprovalRoutes);
 app.use('/early-punch-out-approval', earlyPunchOutApprovalRoutes);
 app.use('/employee-working-hours', employeeWorkingHoursRoutes);
+app.use('/punch', punchStatusRoutes);
 app.use('/test', testRoutes);
 app.use('/api/migration', migrationRoutes);
 
@@ -120,9 +123,13 @@ const liveTrackingServer = new LiveTrackingServer();
 liveTrackingServer.initialize(PORT, server);
 console.log(`🔗 WebSocket server attached to HTTP server on port ${PORT}`);
 
+// Start background jobs
+startExpiryJob();
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully');
+    stopExpiryJob();
     liveTrackingServer.shutdown();
     server.close(() => {
         console.log('✅ Server closed');
@@ -132,6 +139,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
+    stopExpiryJob();
     liveTrackingServer.shutdown();
     server.close(() => {
         console.log('✅ Server closed');
