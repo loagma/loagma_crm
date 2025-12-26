@@ -8,7 +8,9 @@ import '../../models/shop_model.dart';
 import 'assignment_map_detail_screen.dart';
 
 class ModernTaskAssignmentScreen extends StatefulWidget {
-  const ModernTaskAssignmentScreen({super.key});
+  final int? initialStep;
+
+  const ModernTaskAssignmentScreen({super.key, this.initialStep});
 
   @override
   State<ModernTaskAssignmentScreen> createState() =>
@@ -58,6 +60,16 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+
+    // Set initial step if provided
+    if (widget.initialStep != null) {
+      _currentStep = widget.initialStep!;
+      // Navigate to the correct page
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _pageController.jumpToPage(_currentStep);
+      });
+    }
+
     _loadSalesmen();
   }
 

@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../services/api_config.dart';
+import '../../services/task_assignment_service.dart';
 import '../../services/google_places_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
+import 'modern_task_assignment_screen.dart';
 
 class AdminAssignmentsMapScreen extends StatefulWidget {
   const AdminAssignmentsMapScreen({super.key});
@@ -41,20 +42,39 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/task-assignments');
-      final response = await http.get(url);
-      final data = jsonDecode(response.body);
+      print('📡 Loading all task assignments...');
 
-      if (data['success'] == true) {
-        setState(() {
-          allAssignments = List<Map<String, dynamic>>.from(data['data'] ?? []);
-        });
+      // Use TaskAssignmentService to get all assignments
+      final assignments = await TaskAssignmentService.getAllTaskAssignments();
 
+      print('✅ Loaded ${assignments.length} assignments from service');
+
+      // Convert TaskAssignment objects to Map for compatibility with existing code
+      final assignmentMaps = assignments
+          .map((assignment) => assignment.toJson())
+          .toList();
+
+      setState(() {
+        allAssignments = assignmentMaps;
+      });
+
+      if (allAssignments.isNotEmpty) {
         await _createMarkers();
         _fitMapToMarkers();
       }
     } catch (e) {
-      print('Error fetching assignments: $e');
+      print('❌ Error fetching assignments: $e');
+
+      // Show error message to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading assignments: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } finally {
       setState(() => isLoading = false);
     }
@@ -276,7 +296,7 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Area Allotments - Map View'),
+        title: const Text('Allotments Management'),
         backgroundColor: primaryColor,
         actions: [
           PopupMenuButton<String>(
@@ -312,6 +332,21 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                   Text(
                     'No assignments found',
                     style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Check your internet connection and try refreshing',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: fetchAllAssignments,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                    ),
                   ),
                 ],
               ),
@@ -391,6 +426,18 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
                   Positioned(bottom: 16, right: 16, child: _buildPlacesList()),
               ],
             ),
+      floatingActionButton: !isLoading && allAssignments.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _navigateToStep4,
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text(
+                'Continue to Review',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
     );
   }
 
@@ -508,6 +555,17 @@ class _AdminAssignmentsMapScreenState extends State<AdminAssignmentsMapScreen> {
       default:
         return Colors.orange;
     }
+  }
+
+  void _navigateToStep4() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ModernTaskAssignmentScreen(
+          initialStep: 3, // Step 4 (0-indexed)
+        ),
+      ),
+    );
   }
 
   Widget _buildPlacesList() {
