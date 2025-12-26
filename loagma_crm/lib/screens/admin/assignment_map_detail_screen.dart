@@ -44,7 +44,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   @override
   void initState() {
     super.initState();
-    GooglePlacesService.instance.initialize();
+    // GooglePlacesService uses static methods, no initialization needed
     _loadAssignmentBusinesses();
   }
 
@@ -455,42 +455,22 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       // Try to get Google Places details if we have a placeId
       if (shop.placeId != null && shop.placeId!.isNotEmpty) {
         try {
-          final details = await GooglePlacesService.instance.fetchPlaceDetails(
+          final details = await GooglePlacesService.fetchPlaceDetails(
             shop.placeId!,
           );
           if (details != null) {
-            placeInfo = PlaceInfo.fromPlaceDetails(details);
+            placeInfo = PlaceInfo.fromRawPlaceDetails(details);
           }
         } catch (e) {
           print('Error fetching place details: $e');
         }
       }
 
-      // If no place details found, try searching by name and location
-      if (placeInfo == null &&
-          shop.latitude != null &&
-          shop.longitude != null) {
-        try {
-          final searchResults = await GooglePlacesService.instance
-              .searchPlacesByText(
-                query: shop.name,
-                lat: shop.latitude,
-                lng: shop.longitude,
-              );
-
-          if (searchResults.isNotEmpty) {
-            final firstResult = searchResults.first;
-            if (firstResult.placeId != null) {
-              final details = await GooglePlacesService.instance
-                  .fetchPlaceDetails(firstResult.placeId!);
-              if (details != null) {
-                placeInfo = PlaceInfo.fromPlaceDetails(details);
-              }
-            }
-          }
-        } catch (e) {
-          print('Error searching for place: $e');
-        }
+      // If no place details found, we could try searching by name and location
+      // but this functionality is not implemented in GooglePlacesService yet
+      // For now, we'll skip this and show basic details
+      if (placeInfo == null) {
+        print('No place details found for ${shop.name}');
       }
 
       // Close loading dialog
@@ -1337,36 +1317,6 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatItem(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      ],
     );
   }
 

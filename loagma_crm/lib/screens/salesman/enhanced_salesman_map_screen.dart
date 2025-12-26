@@ -155,7 +155,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     // Initialize temporary filters
     _resetTempFilters();
 
-    GooglePlacesService.instance.initialize();
     _initializeMap();
   }
 
@@ -377,16 +376,15 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         String placeType = _selectedPlaceTypes[i];
 
         try {
-          final nearbyResults = await GooglePlacesService.instance
-              .fetchNearbyPlaces(
-                lat: _currentPosition!.latitude,
-                lng: _currentPosition!.longitude,
-                radius: _searchRadius,
-                type: placeType,
-              );
+          final nearbyResults = await GooglePlacesService.fetchNearbyPlaces(
+            lat: _currentPosition!.latitude,
+            lng: _currentPosition!.longitude,
+            radius: _searchRadius,
+            type: placeType,
+          );
 
           final places = nearbyResults
-              .map((result) => PlaceInfo.fromNearbyResult(result))
+              .map((result) => PlaceInfo.fromRawNearbyResult(result))
               .toList();
 
           allPlaces.addAll(places);
@@ -583,12 +581,12 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
   Future<void> _showPlaceDetails(PlaceInfo place) async {
     try {
-      final details = await GooglePlacesService.instance.fetchPlaceDetails(
+      final details = await GooglePlacesService.fetchPlaceDetails(
         place.placeId,
       );
 
       if (details != null) {
-        final detailedPlace = PlaceInfo.fromPlaceDetails(details);
+        final detailedPlace = PlaceInfo.fromRawPlaceDetails(details);
         setState(() {
           _selectedPlace = detailedPlace;
           _showPlaceDetailsOverlay = true;
