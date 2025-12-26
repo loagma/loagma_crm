@@ -6,6 +6,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
+import '../../models/place_model.dart';
+import '../../widgets/place_details_widget.dart';
 import 'assignment_map_detail_screen.dart';
 
 class ModernTaskAssignmentScreen extends StatefulWidget {
@@ -51,6 +53,10 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   bool _mapHelpShown = false;
   bool _isFilterExpanded = true; // Add filter collapse state
   Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
+
+  // Place details overlay state (for Google Maps-like interface)
+  PlaceInfo? _selectedPlace;
+  bool _showPlaceDetailsOverlay = false;
 
   // Colors
   static const primaryColor = Color(0xFFD7BE69);
@@ -396,12 +402,83 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     }
   }
 
-  // Show shop details
-  void _showShopDetails(Shop shop) {
-    showDialog(
-      context: context,
-      builder: (context) => EnhancedShopDetailsDialog(shop: shop),
-    );
+  // Show shop details as Google Maps-like bottom sheet
+  void _showShopDetails(Shop shop) async {
+    // Show loading state
+    setState(() => _isLoading = true);
+
+    try {
+      PlaceInfo? placeInfo;
+
+      // Try to get Google Places details if we have a placeId
+      if (shop.placeId != null && shop.placeId!.isNotEmpty) {
+        try {
+          final details = await GooglePlacesService.fetchPlaceDetails(
+            shop.placeId!,
+          );
+          if (details != null) {
+            placeInfo = PlaceInfo.fromRawPlaceDetails(details);
+          }
+        } catch (e) {
+          print('Error fetching place details: $e');
+        }
+      }
+
+      // If no Google Places data, create a PlaceInfo from Shop data
+      if (placeInfo == null) {
+        placeInfo = PlaceInfo(
+          placeId: shop.placeId ?? shop.id,
+          name: shop.name,
+          address: shop.address ?? 'Address not available',
+          latitude: shop.latitude,
+          longitude: shop.longitude,
+          rating: shop.rating ?? 0.0,
+          isOpenNow: true,
+          priceLevel: 0,
+          types: [shop.businessType],
+          phoneNumber: shop.phoneNumber,
+          website: shop.website,
+          photoUrls: shop.photos ?? [],
+          reviews: [],
+        );
+      }
+
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        // Always show place details as bottom sheet overlay (like Google Maps)
+        setState(() {
+          _selectedPlace = placeInfo;
+          _showPlaceDetailsOverlay = true;
+        });
+      }
+    } catch (e) {
+      print('Error loading place details: $e');
+      setState(() => _isLoading = false);
+
+      // Create basic PlaceInfo from shop data as fallback
+      if (mounted) {
+        final fallbackPlaceInfo = PlaceInfo(
+          placeId: shop.placeId ?? shop.id,
+          name: shop.name,
+          address: shop.address ?? 'Address not available',
+          latitude: shop.latitude,
+          longitude: shop.longitude,
+          rating: shop.rating ?? 0.0,
+          isOpenNow: true,
+          priceLevel: 0,
+          types: [shop.businessType],
+          phoneNumber: shop.phoneNumber,
+          website: shop.website,
+          photoUrls: shop.photos ?? [],
+          reviews: [],
+        );
+        setState(() {
+          _selectedPlace = fallbackPlaceInfo;
+          _showPlaceDetailsOverlay = true;
+        });
+      }
+    }
   }
 
   // Assign areas
@@ -1741,6 +1818,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           tiltGesturesEnabled: true,
           rotateGesturesEnabled: true,
           zoomControlsEnabled: false,
+          onTap: (_) {
+            // Close place details overlay when tapping on map
+            if (_showPlaceDetailsOverlay) {
+              setState(() {
+                _showPlaceDetailsOverlay = false;
+                _selectedPlace = null;
+              });
+            }
+          },
         ),
         // Filters
         Positioned(
@@ -2022,40 +2108,84 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
             ),
           ),
         ),
-        // Floating button to jump to Step 4
-        Positioned(
-          bottom: 20,
-          right: 20,
-          child: FloatingActionButton.extended(
-            onPressed: () {
-              // Jump directly to step 4 (review and assign) - same logic as _nextStep()
-              setState(() {
-                _currentStep = 3; // Step 4 (0-indexed)
-              });
-              // Switch back to Assign tab first
-              _tabController.animateTo(0);
-              // Then animate to the correct page
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted) {
-                  _pageController.animateToPage(
-                    3,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              });
-            },
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text(
-              'Next',
-              style: TextStyle(fontWeight: FontWeight.bold),
+        // Place Details Overlay (Google Maps-like bottom sheet)
+        if (_showPlaceDetailsOverlay && _selectedPlace != null)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: PlaceDetailsWidget(
+                place: _selectedPlace!,
+                onClose: () {
+                  setState(() {
+                    _showPlaceDetailsOverlay = false;
+                    _selectedPlace = null;
+                  });
+                },
+              ),
             ),
-            elevation: 2,
-            heroTag: "mapToStep4", // Unique hero tag to avoid conflicts
           ),
-        ),
+        // Loading overlay
+        if (_isLoading)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black26,
+              child: const Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: primaryColor),
+                        SizedBox(height: 16),
+                        Text('Loading place details...'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // Floating button to jump to Step 4 (only show when place details not visible)
+        if (!_showPlaceDetailsOverlay)
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton.extended(
+              onPressed: () {
+                // Jump directly to step 4 (review and assign) - same logic as _nextStep()
+                setState(() {
+                  _currentStep = 3; // Step 4 (0-indexed)
+                });
+                // Switch back to Assign tab first
+                _tabController.animateTo(0);
+                // Then animate to the correct page
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  if (mounted) {
+                    _pageController.animateToPage(
+                      3,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                });
+              },
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text(
+                'Next',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              elevation: 2,
+              heroTag: "mapToStep4", // Unique hero tag to avoid conflicts
+            ),
+          ),
       ],
     );
   }

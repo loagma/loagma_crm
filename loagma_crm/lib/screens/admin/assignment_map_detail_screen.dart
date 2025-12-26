@@ -41,6 +41,10 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   bool _showGooglePlaces = true; // Show Google Places businesses
   bool _showSalesmanCreated = true; // Show salesman-created accounts
 
+  // Place details overlay state
+  PlaceInfo? _selectedPlace;
+  bool _showPlaceDetailsOverlay = false;
+
   @override
   void initState() {
     super.initState();
@@ -428,26 +432,8 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   void _showGooglePlacesDetails(Shop shop) async {
-    // Show loading dialog first
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Color(0xFFD7BE69)),
-                SizedBox(height: 16),
-                Text('Loading place details...'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    // Show loading indicator
+    setState(() => _isLoading = true);
 
     try {
       PlaceInfo? placeInfo;
@@ -466,52 +452,22 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         }
       }
 
-      // If no place details found, we could try searching by name and location
-      // but this functionality is not implemented in GooglePlacesService yet
-      // For now, we'll skip this and show basic details
-      if (placeInfo == null) {
-        print('No place details found for ${shop.name}');
-      }
+      setState(() => _isLoading = false);
 
-      // Close loading dialog
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      if (placeInfo != null) {
-        // Show enhanced place details
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              insetPadding: const EdgeInsets.all(16),
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                  maxWidth: MediaQuery.of(context).size.width * 0.95,
-                ),
-                child: PlaceDetailsWidget(
-                  place: placeInfo!,
-                  onClose: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          );
-        }
-      } else {
-        // Fallback to basic shop details
-        if (mounted) {
-          _showBasicShopDetails(shop);
-        }
+      if (placeInfo != null && mounted) {
+        // Show place details as bottom sheet overlay (like salesman map)
+        setState(() {
+          _selectedPlace = placeInfo;
+          _showPlaceDetailsOverlay = true;
+        });
+      } else if (mounted) {
+        // Fallback to basic shop details dialog
+        _showBasicShopDetails(shop);
       }
     } catch (e) {
       print('Error loading place details: $e');
-      // Close loading dialog and show basic details
+      setState(() => _isLoading = false);
       if (mounted) {
-        Navigator.pop(context);
         _showBasicShopDetails(shop);
       }
     }
@@ -1291,6 +1247,28 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                         ),
                       ),
                   ],
+                ),
+              ),
+            ),
+
+          // Place Details Overlay (like salesman map view)
+          if (_showPlaceDetailsOverlay && _selectedPlace != null)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                ),
+                child: PlaceDetailsWidget(
+                  place: _selectedPlace!,
+                  onClose: () {
+                    setState(() {
+                      _showPlaceDetailsOverlay = false;
+                      _selectedPlace = null;
+                    });
+                  },
                 ),
               ),
             ),
