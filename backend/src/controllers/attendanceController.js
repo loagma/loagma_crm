@@ -150,18 +150,6 @@ export const punchIn = async (req, res) => {
                 employeeId,
                 approvalRequestId: lateApprovalId
             });
-
-                // Set approval details for attendance record
-                isLatePunchIn = true;
-                lateApprovalId = approvalRequest.id;
-                usedApprovalCode = approvalCode.trim();
-
-                console.log('✅ Late punch-in approval code validated:', {
-                    employeeId,
-                    approvalCode: usedApprovalCode,
-                    approvalRequestId: lateApprovalId
-                });
-            }
         }
 
         // Check for any active attendance (not just today)
@@ -481,22 +469,6 @@ export const punchOut = async (req, res) => {
                 attendanceId,
                 approvalRequestId: earlyPunchOutApprovalId
             });
-                        employeeId: attendance.employeeId,
-                        attendanceId: attendanceId,
-                        approvalCode: earlyPunchOutCode.trim(),
-                        status: 'APPROVED',
-                        requestDate: {
-                            gte: startOfDay,
-                            lt: endOfDay
-                        }
-                    }
-                });
-
-                if (!approvalRequest) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Invalid approval code or no approved request found for this session'
-                    });
         }
 
         // Validate punch out time (should be after punch in)

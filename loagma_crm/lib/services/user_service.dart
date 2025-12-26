@@ -97,14 +97,35 @@ class UserService {
   // Get All Users (Admin)
   static Future<Map<String, dynamic>> getAllUsers() async {
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/users'),
-        headers: {'Content-Type': 'application/json'},
-      );
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      print('🔍 Fetching all users');
+      print('🔑 Token available: ${token != null && token.isNotEmpty}');
+
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/users'), headers: headers)
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Request timeout. Please check your connection.');
+            },
+          );
+
+      print('📊 Users response status: ${response.statusCode}');
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && data['success'] == true) {
+      if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Authentication failed. Please login again.',
+          'data': [],
+        };
+      } else if (response.statusCode == 200 && data['success'] == true) {
         return {'success': true, 'data': data['data'] ?? []};
       } else {
         return {
@@ -114,7 +135,16 @@ class UserService {
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Error: $e', 'data': []};
+      print('❌ Error fetching users: $e');
+      String errorMessage = 'Network error. Please try again.';
+
+      if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timeout. Please check your connection.';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      return {'success': false, 'message': errorMessage, 'data': []};
     }
   }
 }
