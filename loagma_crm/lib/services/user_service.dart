@@ -107,7 +107,10 @@ class UserService {
       print('🔑 Token available: ${token != null && token.isNotEmpty}');
 
       final response = await http
-          .get(Uri.parse('${ApiConfig.baseUrl}/users'), headers: headers)
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/users/get-all'),
+            headers: headers,
+          )
           .timeout(
             const Duration(seconds: 30),
             onTimeout: () {

@@ -394,6 +394,7 @@ class _EnhancedSalesmanReportsScreenState
                     ButtonSegment(value: 'custom', label: Text('Custom')),
                   ],
                   selected: {selectedPeriod},
+                  style: ButtonStyle(iconSize: WidgetStateProperty.all(0)),
                   onSelectionChanged: (Set<String> newSelection) {
                     setState(() {
                       selectedPeriod = newSelection.first;

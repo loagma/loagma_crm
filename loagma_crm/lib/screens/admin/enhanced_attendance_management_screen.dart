@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../services/user_service.dart';
+import '../../services/api_config.dart';
 import 'live_tracking_screen.dart';
 
 class EnhancedAttendanceManagementScreen extends StatefulWidget {
@@ -30,6 +31,7 @@ class _EnhancedAttendanceManagementScreenState
   List<AttendanceModel> detailedAttendanceRecords = [];
   List<dynamic> absentEmployees = [];
   List<dynamic> allEmployees = [];
+  bool isLoadingEmployees = false;
 
   // Filters
   DateTime selectedDate = DateTime.now();
@@ -95,20 +97,31 @@ class _EnhancedAttendanceManagementScreenState
   }
 
   Future<void> _loadEmployees() async {
+    if (mounted) setState(() => isLoadingEmployees = true);
+
     try {
-      print('🔄 Loading employees...');
+      print('� TLoading employees...');
+      print('🌐 API URL: ${ApiConfig.baseUrl}/users/get-all');
+      print('🔑 Token: ${UserService.token?.substring(0, 20)}...');
+
       final result = await UserService.getAllUsers();
       if (mounted) {
+        print('📊 Employee load result: $result');
         if (result['success'] == true) {
           final List<dynamic> users = result['data'] ?? [];
           print('✅ Loaded ${users.length} employees');
+          print(
+            '👥 Employee names: ${users.map((u) => u['name']).take(3).toList()}',
+          );
           setState(() {
             allEmployees = users;
+            isLoadingEmployees = false;
           });
         } else {
           print('❌ Failed to load employees: ${result['message']}');
           setState(() {
             allEmployees = [];
+            isLoadingEmployees = false;
           });
           // Show error to user
           if (context.mounted) {
@@ -131,6 +144,7 @@ class _EnhancedAttendanceManagementScreenState
       if (mounted) {
         setState(() {
           allEmployees = [];
+          isLoadingEmployees = false;
         });
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -852,8 +866,10 @@ class _EnhancedAttendanceManagementScreenState
                           value: selectedEmployeeId,
                           isExpanded: true,
                           decoration: InputDecoration(
-                            labelText: allEmployees.isEmpty
+                            labelText: isLoadingEmployees
                                 ? 'Loading employees...'
+                                : allEmployees.isEmpty
+                                ? 'No employees found'
                                 : 'Select Employee',
                             prefixIcon: const Icon(Icons.person),
                             border: const OutlineInputBorder(),
@@ -985,8 +1001,10 @@ class _EnhancedAttendanceManagementScreenState
                             value: selectedEmployeeId,
                             isExpanded: true,
                             decoration: InputDecoration(
-                              labelText: allEmployees.isEmpty
+                              labelText: isLoadingEmployees
                                   ? 'Loading employees...'
+                                  : allEmployees.isEmpty
+                                  ? 'No employees found'
                                   : 'Select Employee',
                               prefixIcon: const Icon(Icons.person),
                               border: const OutlineInputBorder(),
