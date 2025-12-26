@@ -20,6 +20,14 @@ class Shop {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // Google Places data
+  final List<Map<String, dynamic>>? reviews;
+  final List<String>? photos;
+  final String? website;
+  final List<String>? openingHours;
+  final int? priceLevel;
+  final String? formattedPhoneNumber;
+
   Shop({
     required this.id,
     this.placeId,
@@ -41,6 +49,12 @@ class Shop {
     this.lastContactDate,
     required this.createdAt,
     required this.updatedAt,
+    this.reviews,
+    this.photos,
+    this.website,
+    this.openingHours,
+    this.priceLevel,
+    this.formattedPhoneNumber,
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
@@ -71,6 +85,16 @@ class Shop {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
+      reviews: json['reviews'] != null
+          ? List<Map<String, dynamic>>.from(json['reviews'])
+          : null,
+      photos: json['photos'] != null ? List<String>.from(json['photos']) : null,
+      website: json['website'],
+      openingHours: json['openingHours'] != null
+          ? List<String>.from(json['openingHours'])
+          : null,
+      priceLevel: json['priceLevel'],
+      formattedPhoneNumber: json['formattedPhoneNumber'],
     );
   }
 
@@ -96,6 +120,12 @@ class Shop {
       'lastContactDate': lastContactDate?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'reviews': reviews,
+      'photos': photos,
+      'website': website,
+      'openingHours': openingHours,
+      'priceLevel': priceLevel,
+      'formattedPhoneNumber': formattedPhoneNumber,
     };
   }
 
@@ -120,6 +150,51 @@ class Shop {
       assignedTo: null,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      reviews: null, // Will be loaded separately
+      photos: null, // Will be loaded separately
+      website: null, // Will be loaded separately
+      openingHours: null, // Will be loaded separately
+      priceLevel: null, // Will be loaded separately
+      formattedPhoneNumber: null, // Will be loaded separately
+    );
+  }
+
+  // Create a copy of the shop with Google Places data
+  Shop copyWithGooglePlacesData({
+    List<Map<String, dynamic>>? reviews,
+    List<String>? photos,
+    String? website,
+    List<String>? openingHours,
+    int? priceLevel,
+    String? formattedPhoneNumber,
+  }) {
+    return Shop(
+      id: id,
+      placeId: placeId,
+      name: name,
+      businessType: businessType,
+      address: address,
+      pincode: pincode,
+      area: area,
+      city: city,
+      state: state,
+      country: country,
+      latitude: latitude,
+      longitude: longitude,
+      phoneNumber: phoneNumber,
+      rating: rating,
+      stage: stage,
+      assignedTo: assignedTo,
+      notes: notes,
+      lastContactDate: lastContactDate,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      reviews: reviews ?? this.reviews,
+      photos: photos ?? this.photos,
+      website: website ?? this.website,
+      openingHours: openingHours ?? this.openingHours,
+      priceLevel: priceLevel ?? this.priceLevel,
+      formattedPhoneNumber: formattedPhoneNumber ?? this.formattedPhoneNumber,
     );
   }
 }

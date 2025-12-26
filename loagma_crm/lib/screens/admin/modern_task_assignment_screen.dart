@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
+import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
 import 'assignment_map_detail_screen.dart';
 
@@ -399,61 +400,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   void _showShopDetails(Shop shop) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.store, color: primaryColor),
-            const SizedBox(width: 8),
-            Expanded(child: Text(shop.name)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow(Icons.category, 'Type', shop.businessType),
-            _buildDetailRow(Icons.flag, 'Stage', shop.stage),
-            if (shop.address != null)
-              _buildDetailRow(Icons.location_on, 'Address', shop.address!),
-            if (shop.rating != null)
-              _buildDetailRow(Icons.star, 'Rating', '${shop.rating} ⭐'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: Colors.grey),
-          const SizedBox(width: 8),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Colors.black87),
-                children: [
-                  TextSpan(
-                    text: '$label: ',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  TextSpan(text: value),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      builder: (context) => EnhancedShopDetailsDialog(shop: shop),
     );
   }
 
@@ -2075,6 +2022,40 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
             ),
           ),
         ),
+        // Floating button to jump to Step 4
+        Positioned(
+          bottom: 20,
+          right: 20,
+          child: FloatingActionButton.extended(
+            onPressed: () {
+              // Jump directly to step 4 (review and assign) - same logic as _nextStep()
+              setState(() {
+                _currentStep = 3; // Step 4 (0-indexed)
+              });
+              // Switch back to Assign tab first
+              _tabController.animateTo(0);
+              // Then animate to the correct page
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  _pageController.animateToPage(
+                    3,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              });
+            },
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text(
+              'Next',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            elevation: 2,
+            heroTag: "mapToStep4", // Unique hero tag to avoid conflicts
+          ),
+        ),
       ],
     );
   }
@@ -2649,6 +2630,440 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           ),
         ),
       ],
+    );
+  }
+}
+
+// Enhanced Shop Details Dialog Widget
+class EnhancedShopDetailsDialog extends StatefulWidget {
+  final Shop shop;
+
+  const EnhancedShopDetailsDialog({super.key, required this.shop});
+
+  @override
+  State<EnhancedShopDetailsDialog> createState() =>
+      _EnhancedShopDetailsDialogState();
+}
+
+class _EnhancedShopDetailsDialogState extends State<EnhancedShopDetailsDialog>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isLoading = false;
+  Shop? _enhancedShop;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _enhancedShop = widget.shop;
+    _loadGooglePlacesData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadGooglePlacesData() async {
+    if (widget.shop.placeId == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final placeDetails = await GooglePlacesService.getPlaceDetails(
+        widget.shop.placeId!,
+      );
+
+      if (placeDetails != null && mounted) {
+        final reviews = GooglePlacesService.formatReviews(
+          placeDetails['reviews'],
+        );
+        final photos = GooglePlacesService.formatPhotos(placeDetails['photos']);
+        final openingHours = GooglePlacesService.getOpeningHours(
+          placeDetails['opening_hours'],
+        );
+
+        setState(() {
+          _enhancedShop = widget.shop.copyWithGooglePlacesData(
+            reviews: reviews,
+            photos: photos,
+            website: placeDetails['website'],
+            openingHours: openingHours,
+            priceLevel: placeDetails['price_level'],
+            formattedPhoneNumber: placeDetails['formatted_phone_number'],
+          );
+        });
+      }
+    } catch (e) {
+      print('Error loading Google Places data: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Color(0xFFD7BE69),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.store, color: Colors.white, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _enhancedShop?.name ?? 'Shop Details',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${_enhancedShop?.businessType ?? ''} • ${_enhancedShop?.stage ?? ''}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_enhancedShop?.rating != null) ...[
+                    const Icon(Icons.star, color: Colors.amber, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      _enhancedShop!.rating!.toStringAsFixed(1),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            // Tab Bar
+            Container(
+              color: Colors.white,
+              child: TabBar(
+                controller: _tabController,
+                labelColor: const Color(0xFFD7BE69),
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: const Color(0xFFD7BE69),
+                tabs: const [
+                  Tab(text: 'Details'),
+                  Tab(text: 'Reviews'),
+                  Tab(text: 'Photos'),
+                ],
+              ),
+            ),
+            // Content
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFFD7BE69),
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          Text('Loading shop details...'),
+                        ],
+                      ),
+                    )
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildDetailsTab(),
+                        _buildReviewsTab(),
+                        _buildPhotosTab(),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_enhancedShop?.address != null)
+            _buildShopDetailRow(
+              Icons.location_on,
+              'Address',
+              _enhancedShop!.address!,
+            ),
+
+          if (_enhancedShop?.formattedPhoneNumber != null)
+            _buildShopDetailRow(
+              Icons.phone,
+              'Phone',
+              _enhancedShop!.formattedPhoneNumber!,
+            ),
+
+          if (_enhancedShop?.website != null)
+            _buildShopDetailRow(Icons.web, 'Website', _enhancedShop!.website!),
+
+          _buildShopDetailRow(
+            Icons.pin_drop,
+            'Pincode',
+            _enhancedShop?.pincode ?? 'N/A',
+          ),
+
+          if (_enhancedShop?.priceLevel != null)
+            _buildShopDetailRow(
+              Icons.attach_money,
+              'Price Level',
+              GooglePlacesService.formatPriceLevel(_enhancedShop!.priceLevel),
+            ),
+
+          if (_enhancedShop?.openingHours != null &&
+              _enhancedShop!.openingHours!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.grey),
+                SizedBox(width: 8),
+                Text(
+                  'Opening Hours:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _enhancedShop!.openingHours!
+                    .map(
+                      (hours) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          hours,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewsTab() {
+    if (_enhancedShop?.reviews == null || _enhancedShop!.reviews!.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.rate_review_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No reviews available'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _enhancedShop!.reviews!.length,
+      itemBuilder: (context, index) {
+        final review = _enhancedShop!.reviews![index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: review['profile_photo_url'] != null
+                          ? NetworkImage(review['profile_photo_url'])
+                          : null,
+                      child: review['profile_photo_url'] == null
+                          ? Text(
+                              (review['author_name'] as String? ?? 'A')[0]
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            review['author_name'] ?? 'Anonymous',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Row(
+                            children: [
+                              ...List.generate(
+                                5,
+                                (i) => Icon(
+                                  Icons.star,
+                                  size: 16,
+                                  color: i < (review['rating'] ?? 0)
+                                      ? Colors.amber
+                                      : Colors.grey[300],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                review['relative_time_description'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (review['text'] != null &&
+                    review['text'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(review['text']),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPhotosTab() {
+    if (_enhancedShop?.photos == null || _enhancedShop!.photos!.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_library_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No photos available'),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(20),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1,
+      ),
+      itemCount: _enhancedShop!.photos!.length,
+      itemBuilder: (context, index) {
+        final photoUrl = _enhancedShop!.photos![index];
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            photoUrl,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                color: Colors.grey[200],
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFFD7BE69),
+                    ),
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[200],
+                child: const Center(
+                  child: Icon(Icons.broken_image, color: Colors.grey),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShopDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black87),
+                children: [
+                  TextSpan(
+                    text: '$label: ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: value),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

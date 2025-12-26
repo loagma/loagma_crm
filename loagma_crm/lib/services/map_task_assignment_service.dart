@@ -11,7 +11,7 @@ class MapTaskAssignmentService {
   // Constructor to initialize Google Places service
   MapTaskAssignmentService() {
     try {
-      GooglePlacesService.instance.initialize();
+      // GooglePlacesService is now static, no initialization needed
     } catch (e) {
       print('⚠️ Google Places service initialization failed: $e');
     }
