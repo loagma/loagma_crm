@@ -357,11 +357,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
       }
 
       // For late punch-in, pass approval flag if user has approval
-      String? approvalFlag;
-      if (isAfterCutoff && hasLatePunchApproval) {
-        approvalFlag = 'APPROVED';
-      }
-
       final response = await AttendanceService.punchIn(
         employeeId: employeeId,
         employeeName: employeeName,
@@ -369,7 +364,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         longitude: _currentPosition!.longitude,
         photo: result['photoBase64'],
         bikeKmStart: result['bikeKm'],
-        approvalCode: approvalFlag,
       );
 
       print('🔍 Punch-in response: $response');
@@ -931,11 +925,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                           // Refresh status after approval request
                           setState(() {});
                         },
-                        onApprovalCodeValidated: (String approvalCode) {
-                          // Store the approval status (no actual code needed for simplified flow)
+                        onApprovalCodeValidated: (String status) {
+                          // Store the approval status (no OTP needed)
                           setState(() {
-                            hasLatePunchApproval =
-                                true; // Simple flag instead of actual code
+                            hasLatePunchApproval = true;
                           });
 
                           // Show success message
@@ -1477,7 +1470,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 // Refresh status after approval request
                 setState(() {});
               },
-              onApprovalCodeValidated: (String approvalCode) {
+              onApprovalCodeValidated: (String status) {
                 // Store the approval status and trigger punch out
                 setState(() {
                   hasEarlyPunchOutApproval = true;
@@ -1657,19 +1650,12 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     );
 
     try {
-      // For early punch-out, pass approval flag if user has approval
-      String? approvalFlag;
-      if (isBeforeEarlyPunchOutCutoff && hasEarlyPunchOutApproval) {
-        approvalFlag = 'APPROVED';
-      }
-
       final response = await AttendanceService.punchOut(
         attendanceId: currentAttendance!.id,
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
         photo: result['photoBase64'],
         bikeKmEnd: result['bikeKm'],
-        earlyPunchOutCode: approvalFlag,
       );
 
       Navigator.pop(context); // Close loading

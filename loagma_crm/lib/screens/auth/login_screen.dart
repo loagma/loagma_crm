@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../../services/api_service.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
+import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -273,7 +274,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Phone Input
                 TextField(
                   controller: _phoneController,
-                  keyboardType: TextInputType.phone,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
                   decoration: InputDecoration(
                     hintText: "Enter Phone Number",
                     prefixIcon: const Icon(

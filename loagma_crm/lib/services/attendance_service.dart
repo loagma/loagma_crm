@@ -28,7 +28,6 @@ class AttendanceService {
     String? photo,
     String? address,
     String? bikeKmStart,
-    String? approvalCode, // New parameter for late punch-in approval
   }) async {
     try {
       // Validate photo size before sending
@@ -71,7 +70,6 @@ class AttendanceService {
               'punchInPhoto': photo,
               'punchInAddress': address,
               'bikeKmStart': bikeKmStart,
-              if (approvalCode != null) 'approvalCode': approvalCode,
             }),
           )
           .timeout(
@@ -153,7 +151,6 @@ class AttendanceService {
     String? photo,
     String? address,
     String? bikeKmEnd,
-    String? earlyPunchOutCode, // New parameter for early punch-out approval
   }) async {
     try {
       // Validate photo size before sending
@@ -185,8 +182,6 @@ class AttendanceService {
               'punchOutPhoto': photo,
               'punchOutAddress': address,
               'bikeKmEnd': bikeKmEnd,
-              if (earlyPunchOutCode != null)
-                'earlyPunchOutCode': earlyPunchOutCode,
             }),
           )
           .timeout(
