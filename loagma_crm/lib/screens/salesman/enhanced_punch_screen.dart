@@ -11,6 +11,7 @@ import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
 import '../../services/live_location_socket.dart';
 import '../../services/employee_working_hours_service.dart';
+import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
 import '../../widgets/late_punch_approval_widget.dart';
 import '../../widgets/early_punch_out_approval_widget.dart';
@@ -305,10 +306,27 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
         print(
           '📊 Loaded attendance: isPunchedIn=${attendance.isPunchedIn}, punchInTime=${attendance.punchInTime}',
         );
+
+        // Check if there's an approved early punch-out request for this attendance
+        bool hasApprovedEarlyPunchOut = false;
+        if (attendance.isPunchedIn) {
+          final approvalResult =
+              await EarlyPunchOutApprovalService.getApprovalStatus(
+                attendance.id,
+              );
+          if (approvalResult['success'] == true &&
+              approvalResult['data'] != null &&
+              approvalResult['data']['status'] == 'APPROVED') {
+            hasApprovedEarlyPunchOut = true;
+            print('📊 Found approved early punch-out request');
+          }
+        }
+
         setState(() {
           currentAttendance = attendance;
           isPunchedIn = attendance.isPunchedIn;
           punchInTime = attendance.punchInTime;
+          hasEarlyPunchOutApproval = hasApprovedEarlyPunchOut;
         });
       } else {
         print('📊 No attendance found for today');
@@ -316,6 +334,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           currentAttendance = null;
           isPunchedIn = false;
           punchInTime = null;
+          hasEarlyPunchOutApproval = false;
         });
       }
     } catch (e) {
@@ -1471,12 +1490,12 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
                 setState(() {});
               },
               onApprovalCodeValidated: (String status) {
-                // Store the approval status and trigger punch out
+                // Store the approval status - user will click punch out button
                 setState(() {
                   hasEarlyPunchOutApproval = true;
                 });
-                // Trigger punch out dialog directly
-                _handlePunchOut();
+                // Don't auto-trigger punch out - let user click the button
+                // This prevents race conditions and UI state issues
               },
             )
           else if (hasEarlyPunchOutApproval)

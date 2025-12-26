@@ -126,18 +126,41 @@ const storeRoutePoint = async (req, res) => {
         }
 
         // Store the GPS route point
-        const routePoint = await prisma.salesmanRouteLog.create({
-            data: {
-                employeeId,
-                attendanceId,
-                latitude: parseFloat(latitude),
-                longitude: parseFloat(longitude),
-                speed: speed ? parseFloat(speed) : null,
-                accuracy: accuracy ? parseFloat(accuracy) : null,
-                recordedAt: new Date(),
-                isHomeLocation: shouldMarkAsHome
+        // Try with isHomeLocation first, fallback without it if column doesn't exist
+        let routePoint;
+        try {
+            routePoint = await prisma.salesmanRouteLog.create({
+                data: {
+                    employeeId,
+                    attendanceId,
+                    latitude: parseFloat(latitude),
+                    longitude: parseFloat(longitude),
+                    speed: speed ? parseFloat(speed) : null,
+                    accuracy: accuracy ? parseFloat(accuracy) : null,
+                    recordedAt: new Date(),
+                    isHomeLocation: shouldMarkAsHome
+                }
+            });
+        } catch (columnError) {
+            // Fallback: If isHomeLocation column doesn't exist, create without it
+            if (columnError.code === 'P2022' || columnError.message?.includes('isHomeLocation')) {
+                console.log('isHomeLocation column not found, storing route point without it');
+                routePoint = await prisma.salesmanRouteLog.create({
+                    data: {
+                        employeeId,
+                        attendanceId,
+                        latitude: parseFloat(latitude),
+                        longitude: parseFloat(longitude),
+                        speed: speed ? parseFloat(speed) : null,
+                        accuracy: accuracy ? parseFloat(accuracy) : null,
+                        recordedAt: new Date()
+                    }
+                });
+                routePoint.isHomeLocation = shouldMarkAsHome; // Add for response
+            } else {
+                throw columnError;
             }
-        });
+        }
 
         // Calculate total distance traveled so far
         const allPoints = [...existingPoints, { latitude: parseFloat(latitude), longitude: parseFloat(longitude) }];
@@ -183,23 +206,57 @@ const getAttendanceRoute = async (req, res) => {
         }
 
         // Fetch attendance details with route points
-        const attendance = await prisma.attendance.findUnique({
-            where: { id: attendanceId },
-            include: {
-                routeLogs: {
-                    orderBy: { recordedAt: 'asc' }, // Chronological order for route playback
-                    select: {
-                        id: true,
-                        latitude: true,
-                        longitude: true,
-                        speed: true,
-                        accuracy: true,
-                        recordedAt: true,
-                        isHomeLocation: true
+        // Note: Using try-catch for backward compatibility if isHomeLocation column doesn't exist
+        let attendance;
+        try {
+            attendance = await prisma.attendance.findUnique({
+                where: { id: attendanceId },
+                include: {
+                    routeLogs: {
+                        orderBy: { recordedAt: 'asc' }, // Chronological order for route playback
+                        select: {
+                            id: true,
+                            latitude: true,
+                            longitude: true,
+                            speed: true,
+                            accuracy: true,
+                            recordedAt: true,
+                            isHomeLocation: true
+                        }
                     }
                 }
+            });
+        } catch (columnError) {
+            // Fallback: If isHomeLocation column doesn't exist, query without it
+            if (columnError.code === 'P2022') {
+                console.log('isHomeLocation column not found, using fallback query');
+                attendance = await prisma.attendance.findUnique({
+                    where: { id: attendanceId },
+                    include: {
+                        routeLogs: {
+                            orderBy: { recordedAt: 'asc' },
+                            select: {
+                                id: true,
+                                latitude: true,
+                                longitude: true,
+                                speed: true,
+                                accuracy: true,
+                                recordedAt: true
+                            }
+                        }
+                    }
+                });
+                // Add isHomeLocation: false to all points, mark first as home
+                if (attendance && attendance.routeLogs) {
+                    attendance.routeLogs = attendance.routeLogs.map((point, index) => ({
+                        ...point,
+                        isHomeLocation: index === 0
+                    }));
+                }
+            } else {
+                throw columnError;
             }
-        });
+        }
 
         if (!attendance) {
             return res.status(404).json({
@@ -371,24 +428,59 @@ const getHistoricalRoutes = async (req, res) => {
         }
 
         // Fetch attendance sessions with route data
-        const attendanceSessions = await prisma.attendance.findMany({
-            where: whereClause,
-            include: {
-                routeLogs: {
-                    orderBy: { recordedAt: 'asc' },
-                    select: {
-                        id: true,
-                        latitude: true,
-                        longitude: true,
-                        speed: true,
-                        accuracy: true,
-                        recordedAt: true,
-                        isHomeLocation: true
+        // Try with isHomeLocation first, fallback without it
+        let attendanceSessions;
+        try {
+            attendanceSessions = await prisma.attendance.findMany({
+                where: whereClause,
+                include: {
+                    routeLogs: {
+                        orderBy: { recordedAt: 'asc' },
+                        select: {
+                            id: true,
+                            latitude: true,
+                            longitude: true,
+                            speed: true,
+                            accuracy: true,
+                            recordedAt: true,
+                            isHomeLocation: true
+                        }
                     }
-                }
-            },
-            orderBy: { date: 'desc' }
-        });
+                },
+                orderBy: { date: 'desc' }
+            });
+        } catch (columnError) {
+            if (columnError.code === 'P2022') {
+                console.log('isHomeLocation column not found in getHistoricalRoutes, using fallback');
+                attendanceSessions = await prisma.attendance.findMany({
+                    where: whereClause,
+                    include: {
+                        routeLogs: {
+                            orderBy: { recordedAt: 'asc' },
+                            select: {
+                                id: true,
+                                latitude: true,
+                                longitude: true,
+                                speed: true,
+                                accuracy: true,
+                                recordedAt: true
+                            }
+                        }
+                    },
+                    orderBy: { date: 'desc' }
+                });
+                // Add isHomeLocation to first point of each session
+                attendanceSessions = attendanceSessions.map(session => ({
+                    ...session,
+                    routeLogs: session.routeLogs.map((point, index) => ({
+                        ...point,
+                        isHomeLocation: index === 0
+                    }))
+                }));
+            } else {
+                throw columnError;
+            }
+        }
 
         // Group and format the data with distance calculation
         const historicalRoutes = attendanceSessions.map(session => {
@@ -506,16 +598,40 @@ const getCurrentDistance = async (req, res) => {
         }
 
         // Get all route points for this session
-        const routePoints = await prisma.salesmanRouteLog.findMany({
-            where: { attendanceId: activeAttendance.id },
-            orderBy: { recordedAt: 'asc' },
-            select: {
-                latitude: true,
-                longitude: true,
-                recordedAt: true,
-                isHomeLocation: true
+        // Try with isHomeLocation first, fallback without it
+        let routePoints;
+        try {
+            routePoints = await prisma.salesmanRouteLog.findMany({
+                where: { attendanceId: activeAttendance.id },
+                orderBy: { recordedAt: 'asc' },
+                select: {
+                    latitude: true,
+                    longitude: true,
+                    recordedAt: true,
+                    isHomeLocation: true
+                }
+            });
+        } catch (columnError) {
+            if (columnError.code === 'P2022') {
+                console.log('isHomeLocation column not found in getCurrentDistance, using fallback');
+                routePoints = await prisma.salesmanRouteLog.findMany({
+                    where: { attendanceId: activeAttendance.id },
+                    orderBy: { recordedAt: 'asc' },
+                    select: {
+                        latitude: true,
+                        longitude: true,
+                        recordedAt: true
+                    }
+                });
+                // Mark first point as home
+                routePoints = routePoints.map((point, index) => ({
+                    ...point,
+                    isHomeLocation: index === 0
+                }));
+            } else {
+                throw columnError;
             }
-        });
+        }
 
         // Calculate total distance
         const totalDistanceKm = calculateTotalRouteDistance(routePoints);
