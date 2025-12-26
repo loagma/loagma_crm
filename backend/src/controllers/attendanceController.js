@@ -480,8 +480,16 @@ export const punchOut = async (req, res) => {
             });
         }
 
-        // Calculate work hours with proper UTC handling
-        const workHours = calculateWorkHoursIST(convertUTCToIST(attendance.punchInTime), currentISTTime);
+        // Calculate work hours - both times should be in UTC for correct calculation
+        // attendance.punchInTime is UTC from database, punchOutTimeUTC is also UTC
+        const workHours = calculateWorkHoursIST(attendance.punchInTime, punchOutTimeUTC);
+
+        console.log('⏱️ Work hours validation:', {
+            punchInTimeUTC: attendance.punchInTime.toISOString(),
+            punchOutTimeUTC: punchOutTimeUTC.toISOString(),
+            workHours,
+            workMinutes: workHours * 60
+        });
 
         // Validate minimum work duration (prevent accidental immediate punch out)
         if (workHours < 0.017) { // Less than 1 minute
