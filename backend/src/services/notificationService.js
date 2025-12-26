@@ -154,7 +154,7 @@ class NotificationService {
     static async createLatePunchApprovalNotification(approvalData) {
         // Use the punchInDate which is the actual time the user wants to punch in
         const requestTime = new Date(approvalData.createdAt);
-        
+
         // Format time in IST using formatISTTime utility
         const timeString = formatISTTime(requestTime, 'time');
         const dateTimeString = formatISTTime(requestTime, 'datetime');
@@ -254,7 +254,7 @@ class NotificationService {
      */
     static async createEarlyPunchOutApprovalNotification(approvalData) {
         const requestTime = new Date(approvalData.createdAt);
-        
+
         // Format time in IST using formatISTTime utility
         const timeString = formatISTTime(requestTime, 'time');
         const dateTimeString = formatISTTime(requestTime, 'datetime');
@@ -347,26 +347,38 @@ class NotificationService {
         endDate = null
     }) {
         try {
+
             const where = {
                 OR: []
             };
 
-            // Add conditions for user-specific or role-based notifications
+            // Add conditions for user-specific notifications
             if (userId) {
                 where.OR.push({ targetUserId: userId });
             }
 
+            // Add conditions for role-based notifications
+            // IMPORTANT: Only include role-based notifications if the role matches
+            // This prevents salesman from seeing admin notifications
             if (role) {
                 where.OR.push({ targetRole: role });
             }
 
-            // Add condition for global notifications (no specific target)
-            where.OR.push({
-                AND: [
-                    { targetUserId: null },
-                    { targetRole: null }
-                ]
-            });
+            // REMOVED: Global notifications (no specific target) - this was causing salesman to see admin notifications
+            // Only include global notifications if explicitly requested or if no filters provided
+            if (!userId && !role) {
+                where.OR.push({
+                    AND: [
+                        { targetUserId: null },
+                        { targetRole: null }
+                    ]
+                });
+            }
+
+            // If no conditions were added, return empty
+            if (where.OR.length === 0) {
+                return [];
+            }
 
             // Filter for unread only
             if (unreadOnly) {
@@ -442,13 +454,20 @@ class NotificationService {
                 where.OR.push({ targetRole: role });
             }
 
-            // Include global notifications
-            where.OR.push({
-                AND: [
-                    { targetUserId: null },
-                    { targetRole: null }
-                ]
-            });
+            // Only include global notifications if no filters provided
+            if (!userId && !role) {
+                where.OR.push({
+                    AND: [
+                        { targetUserId: null },
+                        { targetRole: null }
+                    ]
+                });
+            }
+
+            // If no conditions were added, return 0
+            if (where.OR.length === 0) {
+                return 0;
+            }
 
             // Date range filtering
             if (startDate || endDate) {
@@ -565,13 +584,20 @@ class NotificationService {
                 where.OR.push({ targetRole: role });
             }
 
-            // Include global notifications
-            where.OR.push({
-                AND: [
-                    { targetUserId: null },
-                    { targetRole: null }
-                ]
-            });
+            // Only include global notifications if no filters provided
+            if (!userId && !role) {
+                where.OR.push({
+                    AND: [
+                        { targetUserId: null },
+                        { targetRole: null }
+                    ]
+                });
+            }
+
+            // If no conditions were added, return zeros
+            if (where.OR.length === 0) {
+                return { total: 0, unread: 0, read: 0 };
+            }
 
             const [total, unread] = await Promise.all([
                 prisma.notification.count({ where }),
