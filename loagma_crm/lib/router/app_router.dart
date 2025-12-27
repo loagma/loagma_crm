@@ -36,6 +36,8 @@ import '../screens/salesman/salesman_map_screen.dart';
 import '../screens/salesman/enhanced_punch_screen.dart';
 import '../screens/salesman/leave_management_screen.dart';
 import '../screens/salesman/apply_leave_screen.dart';
+import '../screens/salesman/apply_leave_screen_test.dart';
+import '../screens/salesman/my_leave_status_screen.dart';
 
 // Admin screens - Leave Management
 import '../screens/admin/leave_requests_screen.dart';
@@ -199,6 +201,10 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'leaves/apply',
           builder: (_, __) => const ApplyLeaveScreen(),
+        ),
+        GoRoute(
+          path: 'leaves/status',
+          builder: (_, __) => const MyLeaveStatusScreen(),
         ),
 
         // Telecaller-specific routes

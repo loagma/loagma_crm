@@ -700,15 +700,23 @@ class _ComprehensiveAttendanceDashboardState
   Widget _buildStatItem(String label, int value) {
     return Column(
       children: [
-        Text(
-          value.toString(),
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: textPrimary,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value.toString(),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: textPrimary,
+            ),
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 12, color: textSecondary)),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: textSecondary),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }

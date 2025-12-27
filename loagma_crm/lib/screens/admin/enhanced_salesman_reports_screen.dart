@@ -539,7 +539,7 @@ class _EnhancedSalesmanReportsScreenState
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.8,
+            childAspectRatio: 1.4, // Increased from 1.8 to give more height
             children: [
               _buildStatCard(
                 'Accounts Created',
@@ -726,7 +726,7 @@ class _EnhancedSalesmanReportsScreenState
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 1.6,
+              childAspectRatio: 1.3, // Improved from 1.6 for better visibility
               children: [
                 _buildStatCard(
                   'Accounts Created',
@@ -1381,33 +1381,46 @@ class _EnhancedSalesmanReportsScreenState
   ) {
     return Card(
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, size: 28, color: color),
-            const SizedBox(height: 6),
+            // Icon with responsive sizing
+            Icon(icon, size: 32, color: color),
+            const SizedBox(height: 8),
+
+            // Value with responsive text and proper constraints
             Flexible(
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 2),
+
+            const SizedBox(height: 4),
+
+            // Title with better spacing and readability
             Flexible(
               child: Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

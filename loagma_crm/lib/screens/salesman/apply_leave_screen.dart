@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../services/leave_service.dart';
 import '../../models/leave_model.dart';
 
@@ -23,6 +24,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
   @override
   void initState() {
     super.initState();
+    print('ApplyLeaveScreen: Screen loaded successfully!');
     _loadLeaveBalance();
   }
 
@@ -216,6 +218,61 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Header Card - Always visible
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFD7BE69).withOpacity(0.1),
+                      const Color(0xFFD7BE69).withOpacity(0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD7BE69),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.event_note,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Apply for Leave',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Submit your leave request for approval',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
             // Leave Balance Summary Card
             if (leaveBalance != null)
               Card(
