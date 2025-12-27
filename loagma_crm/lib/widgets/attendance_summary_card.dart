@@ -228,18 +228,24 @@ class AttendanceSummaryCard extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(fontSize: 10, color: Colors.grey[700]),
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

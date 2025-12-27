@@ -3,29 +3,22 @@ import 'package:go_router/go_router.dart';
 import '../../models/leave_model.dart';
 import '../../services/leave_service.dart';
 import '../../widgets/leave_card.dart';
-import '../../widgets/leave_balance_card.dart';
 
-class LeaveManagementScreen extends StatefulWidget {
-  const LeaveManagementScreen({super.key});
+class MyLeaveStatusScreen extends StatefulWidget {
+  const MyLeaveStatusScreen({super.key});
 
   @override
-  State<LeaveManagementScreen> createState() => _LeaveManagementScreenState();
+  State<MyLeaveStatusScreen> createState() => _MyLeaveStatusScreenState();
 }
 
-class _LeaveManagementScreenState extends State<LeaveManagementScreen>
+class _MyLeaveStatusScreenState extends State<MyLeaveStatusScreen>
     with SingleTickerProviderStateMixin {
   List<LeaveModel> leaves = [];
-  LeaveStatistics? statistics;
   bool isLoading = true;
   String selectedStatus = 'ALL';
-  int currentPage = 1;
-  bool hasMore = true;
-  bool isLoadingMore = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-
-  final ScrollController _scrollController = ScrollController();
 
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -45,81 +38,38 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen>
       curve: Curves.easeInOut,
     );
     _loadLeaves();
-    _scrollController.addListener(_onScroll);
     _animationController.forward();
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      if (hasMore && !isLoadingMore) {
-        _loadMoreLeaves();
-      }
-    }
-  }
-
   Future<void> _loadLeaves() async {
-    setState(() {
-      isLoading = true;
-      currentPage = 1;
-      leaves.clear();
-    });
+    setState(() => isLoading = true);
 
     try {
       final result = await LeaveService.getMyLeaves(
         status: selectedStatus,
-        page: currentPage,
-        limit: 10,
+        page: 1,
+        limit: 50, // Load more leaves for status view
       );
 
-      setState(() {
-        leaves = result['leaves'];
-        statistics = result['statistics'];
-        hasMore = result['pagination']['hasNext'];
-        isLoading = false;
-      });
-    } catch (e) {
-      setState(() => isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        setState(() {
+          leaves = result['leaves'];
+          isLoading = false;
+        });
       }
-    }
-  }
-
-  Future<void> _loadMoreLeaves() async {
-    if (isLoadingMore) return;
-
-    setState(() => isLoadingMore = true);
-
-    try {
-      final result = await LeaveService.getMyLeaves(
-        status: selectedStatus,
-        page: currentPage + 1,
-        limit: 10,
-      );
-
-      setState(() {
-        leaves.addAll(result['leaves']);
-        currentPage++;
-        hasMore = result['pagination']['hasNext'];
-        isLoadingMore = false;
-      });
     } catch (e) {
-      setState(() => isLoadingMore = false);
       if (mounted) {
+        setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading more: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Error loading leaves: $e'),
+            backgroundColor: errorColor,
           ),
         );
       }
@@ -135,6 +85,282 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen>
       setState(() => selectedStatus = status);
       _loadLeaves();
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text(
+          'My Leave Status',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        backgroundColor: primaryColor,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _onRefresh,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: primaryColor,
+          child: Column(
+            children: [
+              // Header Card
+              _buildHeaderCard(),
+
+              const SizedBox(height: 16),
+
+              // Status Filter
+              _buildFilterSection(),
+
+              const SizedBox(height: 8),
+
+              // Leaves List
+              Expanded(
+                child: isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: primaryColor),
+                      )
+                    : leaves.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: leaves.length,
+                        itemBuilder: (context, index) {
+                          final leave = leaves[index];
+                          return AnimatedContainer(
+                            duration: Duration(
+                              milliseconds: 300 + (index * 50),
+                            ),
+                            curve: Curves.easeOutBack,
+                            child: LeaveCard(
+                              leave: leave,
+                              onCancel: leave.canCancel
+                                  ? () => _cancelLeave(leave)
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/dashboard/salesman/leaves/apply'),
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text(
+          'Apply Leave',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        elevation: 4,
+      ),
+    );
+  }
+
+  Widget _buildHeaderCard() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.event_available, color: primaryColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'My Leave Applications',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                Text(
+                  'Track your leave request status',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          if (leaves.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${leaves.length} leaves',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.filter_list, color: primaryColor, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Filter by Status',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: selectedStatus,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              filled: true,
+              fillColor: Colors.grey[50],
+              prefixIcon: Icon(
+                _getStatusIcon(selectedStatus),
+                color: _getStatusColor(selectedStatus),
+                size: 20,
+              ),
+            ),
+            items: LeaveService.getStatusOptions().map((status) {
+              return DropdownMenuItem(
+                value: status,
+                child: Row(
+                  children: [
+                    Icon(
+                      _getStatusIcon(status),
+                      color: _getStatusColor(status),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(status == 'ALL' ? 'All Leaves' : status),
+                  ],
+                ),
+              );
+            }).toList(),
+            onChanged: _onStatusChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              selectedStatus == 'ALL'
+                  ? Icons.event_busy
+                  : _getStatusIcon(selectedStatus),
+              size: 64,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            selectedStatus == 'ALL'
+                ? 'No leaves found'
+                : 'No ${selectedStatus.toLowerCase()} leaves',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            selectedStatus == 'ALL'
+                ? 'You haven\'t applied for any leaves yet'
+                : 'No ${selectedStatus.toLowerCase()} leaves found',
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => context.push('/dashboard/salesman/leaves/apply'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('Apply for Leave'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cancelLeave(LeaveModel leave) async {
@@ -236,250 +462,6 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen>
         }
       }
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          'Leave Management',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        backgroundColor: primaryColor,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _onRefresh,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: RefreshIndicator(
-          onRefresh: _onRefresh,
-          color: primaryColor,
-          child: Column(
-            children: [
-              // Leave Balance Card
-              if (statistics != null)
-                Container(
-                  margin: const EdgeInsets.all(16),
-                  child: LeaveBalanceCard(statistics: statistics!),
-                ),
-
-              // Status Filter and Summary
-              _buildFilterSection(),
-
-              const SizedBox(height: 8),
-
-              // Leaves List
-              Expanded(
-                child: isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(color: primaryColor),
-                      )
-                    : leaves.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: leaves.length + (isLoadingMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == leaves.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: primaryColor,
-                                ),
-                              ),
-                            );
-                          }
-
-                          final leave = leaves[index];
-                          return AnimatedContainer(
-                            duration: Duration(
-                              milliseconds: 300 + (index * 50),
-                            ),
-                            curve: Curves.easeOutBack,
-                            child: LeaveCard(
-                              leave: leave,
-                              onCancel: leave.canCancel
-                                  ? () => _cancelLeave(leave)
-                                  : null,
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/dashboard/salesman/leaves/apply'),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Apply Leave',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        elevation: 4,
-      ),
-    );
-  }
-
-  Widget _buildFilterSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.filter_list, color: primaryColor, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Filter Leaves',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              if (leaves.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${leaves.length} leaves',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: selectedStatus,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-              filled: true,
-              fillColor: Colors.grey[50],
-              prefixIcon: Icon(
-                _getStatusIcon(selectedStatus),
-                color: _getStatusColor(selectedStatus),
-                size: 20,
-              ),
-            ),
-            items: LeaveService.getStatusOptions().map((status) {
-              return DropdownMenuItem(
-                value: status,
-                child: Row(
-                  children: [
-                    Icon(
-                      _getStatusIcon(status),
-                      color: _getStatusColor(status),
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(status == 'ALL' ? 'All Leaves' : status),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: _onStatusChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              selectedStatus == 'ALL'
-                  ? Icons.event_busy
-                  : _getStatusIcon(selectedStatus),
-              size: 64,
-              color: Colors.grey[400],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            selectedStatus == 'ALL'
-                ? 'No leaves found'
-                : 'No ${selectedStatus.toLowerCase()} leaves',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            selectedStatus == 'ALL'
-                ? 'You haven\'t applied for any leaves yet'
-                : 'No ${selectedStatus.toLowerCase()} leaves found',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => context.push('/dashboard/salesman/leaves/apply'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            icon: const Icon(Icons.add),
-            label: const Text('Apply for Leave'),
-          ),
-        ],
-      ),
-    );
   }
 
   IconData _getStatusIcon(String status) {

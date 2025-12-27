@@ -207,17 +207,48 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen>
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       try {
         await LeaveService.approveLeave(
           leave.id,
           adminRemarks: result['remarks'],
         );
-        _showSuccess('Leave request approved successfully');
-        _loadPendingLeaves();
-        _loadAllLeaves();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Leave request approved for ${leave.employeeName}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          _loadPendingLeaves();
+          _loadAllLeaves();
+        }
       } catch (e) {
-        _showError('Error approving leave: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Error approving leave: $e')),
+                ],
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -237,18 +268,49 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen>
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       try {
         await LeaveService.rejectLeave(
           leave.id,
           rejectionReason: result['remarks']!,
           adminRemarks: result['adminRemarks'],
         );
-        _showSuccess('Leave request rejected successfully');
-        _loadPendingLeaves();
-        _loadAllLeaves();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Leave request rejected for ${leave.employeeName}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          _loadPendingLeaves();
+          _loadAllLeaves();
+        }
       } catch (e) {
-        _showError('Error rejecting leave: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Error rejecting leave: $e')),
+                ],
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -351,7 +413,7 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen>
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: selectedStatus,
+                          initialValue: selectedStatus,
                           decoration: const InputDecoration(
                             labelText: 'Status',
                             border: OutlineInputBorder(),
@@ -379,7 +441,7 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen>
                       const SizedBox(width: 16),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: selectedLeaveType,
+                          initialValue: selectedLeaveType,
                           decoration: const InputDecoration(
                             labelText: 'Type',
                             border: OutlineInputBorder(),

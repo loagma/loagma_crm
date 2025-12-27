@@ -1059,10 +1059,16 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 ),
               ),
               _buildActionCard(
-                'Leave Management',
-                Icons.event_available,
+                'Apply Leave',
+                Icons.event_note,
                 Colors.teal,
-                () => context.go('/dashboard/salesman/leaves'),
+                () => context.go('/dashboard/salesman/leaves/apply'),
+              ),
+              _buildActionCard(
+                'Leave Status',
+                Icons.event_available,
+                Colors.indigo,
+                () => context.go('/dashboard/salesman/leaves/status'),
               ),
               _buildActionCard(
                 'Punch',
