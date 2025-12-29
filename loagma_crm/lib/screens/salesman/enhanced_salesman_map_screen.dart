@@ -46,6 +46,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
   bool _isLegendCollapsed = false;
+  bool _isPincodeCollapsed = false;
+  List<String> _selectedPincodes = []; // Changed to List for multiple selection
+  List<Map<String, dynamic>> _assignedPincodes = [];
 
   // Current Area State
   String? _currentAreaName;
@@ -185,6 +188,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     await _getCurrentLocation();
     await _loadSalesmanAccounts();
     await _loadAreaAssignments();
+
+    // Load assigned pincodes after accounts are loaded
+    await _loadAssignedPincodes();
 
     if (_currentPosition != null) {
       await _loadNearbyPlaces();
@@ -333,6 +339,123 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
       }
     } catch (e) {
       print('❌ Error loading area assignments: $e');
+    }
+  }
+
+  Future<void> _loadAssignedPincodes() async {
+    try {
+      print('📡 Loading assigned pincodes...');
+
+      // Use the already loaded areaAssignments data
+      if (areaAssignments.isNotEmpty) {
+        print(
+          '📊 Using ${areaAssignments.length} already loaded area assignments',
+        );
+
+        // Extract unique pincodes with their details from areaAssignments
+        Map<String, Map<String, dynamic>> pincodeMap = {};
+        for (var assignment in areaAssignments) {
+          final pincode = assignment['pincode']?.toString();
+          if (pincode != null && pincode.isNotEmpty) {
+            // Count businesses for this pincode from salesman accounts
+            final businessCount = salesmanAccounts
+                .where((account) => account['pincode']?.toString() == pincode)
+                .length;
+
+            pincodeMap[pincode] = {
+              'pincode': pincode,
+              'city': assignment['city'] ?? '',
+              'state': assignment['state'] ?? '',
+              'district': assignment['district'] ?? '',
+              'areas': assignment['areas'] ?? [],
+              'businessTypes': assignment['businessTypes'] ?? [],
+              'totalBusinesses': businessCount,
+              'assignedDate': assignment['assignedDate'],
+            };
+          }
+        }
+
+        setState(() {
+          _assignedPincodes = pincodeMap.values.toList();
+        });
+
+        print(
+          '✅ Loaded ${_assignedPincodes.length} assigned pincodes from area assignments',
+        );
+
+        // Debug: Print all pincodes
+        for (int i = 0; i < _assignedPincodes.length; i++) {
+          print(
+            '📍 Pincode ${i + 1}: ${_assignedPincodes[i]['pincode']} - ${_assignedPincodes[i]['city']} - ${_assignedPincodes[i]['district']}',
+          );
+        }
+        return;
+      }
+
+      // If areaAssignments is empty, try to load from service
+      final userId = UserService.currentUserId;
+      if (userId == null || userId.isEmpty) {
+        print('⚠️ No user ID available for pincode assignments');
+        return;
+      }
+
+      final token = UserService.token;
+      if (token == null || token.isEmpty) {
+        print('⚠️ No token available for pincode assignments');
+        return;
+      }
+
+      print('📡 Fetching task assignments using service...');
+      final assignments =
+          await TaskAssignmentService.getSalesmanTaskAssignments();
+
+      print('📊 Task assignments loaded: ${assignments.length}');
+
+      // Debug: Print all assignments
+      for (int i = 0; i < assignments.length; i++) {
+        final assignment = assignments[i];
+        print(
+          '📍 Assignment ${i + 1}: ${assignment.city} - ${assignment.pincode} - ${assignment.district}',
+        );
+      }
+
+      // Extract unique pincodes with their details
+      Map<String, Map<String, dynamic>> pincodeMap = {};
+      for (var assignment in assignments) {
+        final pincode = assignment.pincode;
+        if (pincode.isNotEmpty) {
+          // Count businesses for this pincode from salesman accounts
+          final businessCount = salesmanAccounts
+              .where((account) => account['pincode']?.toString() == pincode)
+              .length;
+
+          pincodeMap[pincode] = {
+            'pincode': pincode,
+            'city': assignment.city,
+            'state': assignment.state,
+            'district': assignment.district,
+            'areas': assignment.areas,
+            'businessTypes': assignment.businessTypes,
+            'totalBusinesses': businessCount,
+            'assignedDate': assignment.assignedDate.toIso8601String(),
+          };
+        }
+      }
+
+      setState(() {
+        _assignedPincodes = pincodeMap.values.toList();
+      });
+
+      print('✅ Loaded ${_assignedPincodes.length} assigned pincodes');
+
+      // Debug: Print all pincodes
+      for (int i = 0; i < _assignedPincodes.length; i++) {
+        print(
+          '📍 Pincode ${i + 1}: ${_assignedPincodes[i]['pincode']} - ${_assignedPincodes[i]['city']} - ${_assignedPincodes[i]['district']}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error loading assigned pincodes: $e');
     }
   }
 
@@ -1027,6 +1150,543 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     }
   }
 
+  void _onPincodeSelected(String pincode, Map<String, dynamic> pincodeData) {
+    setState(() {
+      if (_selectedPincodes.contains(pincode)) {
+        _selectedPincodes.remove(pincode);
+      } else {
+        _selectedPincodes.add(pincode);
+      }
+    });
+
+    if (_selectedPincodes.isNotEmpty) {
+      // Focus map on selected pincodes and load shops
+      _focusOnSelectedPincodes();
+    } else {
+      // Reset filters and show all accounts
+      _updateMapMarkers();
+    }
+  }
+
+  Future<void> _focusOnSelectedPincodes() async {
+    print(
+      '🔍 Focusing on ${_selectedPincodes.length} selected pincodes: $_selectedPincodes',
+    );
+
+    // Find all accounts in selected pincodes
+    final pincodeAccounts = salesmanAccounts.where((account) {
+      final accountPincode = account['pincode']?.toString();
+      return accountPincode != null &&
+          _selectedPincodes.contains(accountPincode) &&
+          account['latitude'] != null &&
+          account['longitude'] != null;
+    }).toList();
+
+    print('📊 Found ${pincodeAccounts.length} accounts in selected pincodes');
+
+    // Update markers to show only accounts from selected pincodes
+    _updateMapMarkersForSelectedPincodes();
+
+    if (pincodeAccounts.isNotEmpty) {
+      // Calculate bounds for all accounts in selected pincodes
+      double minLat = double.infinity;
+      double maxLat = -double.infinity;
+      double minLng = double.infinity;
+      double maxLng = -double.infinity;
+      int validCount = 0;
+
+      for (var account in pincodeAccounts) {
+        try {
+          final lat = double.parse(account['latitude'].toString());
+          final lng = double.parse(account['longitude'].toString());
+          if (_isValidCoordinate(lat, lng)) {
+            minLat = lat < minLat ? lat : minLat;
+            maxLat = lat > maxLat ? lat : maxLat;
+            minLng = lng < minLng ? lng : minLng;
+            maxLng = lng > maxLng ? lng : maxLng;
+            validCount++;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (validCount > 0) {
+        if (validCount == 1) {
+          // Single point, zoom to it
+          await _safeAnimateCamera(
+            CameraUpdate.newLatLngZoom(LatLng(minLat, minLng), 14.0),
+            description: 'Focus on single account in selected pincodes',
+          );
+        } else {
+          // Multiple points, fit bounds
+          final latPadding = ((maxLat - minLat) * 0.1).clamp(0.01, 0.1);
+          final lngPadding = ((maxLng - minLng) * 0.1).clamp(0.01, 0.1);
+
+          final bounds = LatLngBounds(
+            southwest: LatLng(minLat - latPadding, minLng - lngPadding),
+            northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+          );
+
+          await _safeAnimateCamera(
+            CameraUpdate.newLatLngBounds(bounds, 100),
+            description: 'Focus on selected pincodes area',
+          );
+        }
+
+        // Update current position to center for loading nearby places
+        final centerLat = (minLat + maxLat) / 2;
+        final centerLng = (minLng + maxLng) / 2;
+        _currentPosition = Position(
+          latitude: centerLat,
+          longitude: centerLng,
+          timestamp: DateTime.now(),
+          accuracy: 0,
+          altitude: 0,
+          altitudeAccuracy: 0,
+          heading: 0,
+          headingAccuracy: 0,
+          speed: 0,
+          speedAccuracy: 0,
+        );
+
+        // Load nearby places for this area
+        await _loadNearbyPlaces();
+        return;
+      }
+    }
+
+    // If no accounts with coordinates, try to geocode the first selected pincode
+    if (_selectedPincodes.isNotEmpty) {
+      final firstPincode = _selectedPincodes.first;
+      final pincodeData = _assignedPincodes.firstWhere(
+        (p) => p['pincode'] == firstPincode,
+        orElse: () => {'pincode': firstPincode, 'city': '', 'district': ''},
+      );
+      await _geocodeAndFocusPincode(
+        firstPincode,
+        pincodeData['city'] ?? '',
+        pincodeData['district'] ?? '',
+      );
+    }
+  }
+
+  void _updateMapMarkersForSelectedPincodes() {
+    Set<Marker> markers = {};
+
+    // Add current location marker
+    if (_currentPosition != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: LatLng(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          ),
+          infoWindow: InfoWindow(
+            title: 'My Location',
+            snippet: UserService.name ?? 'Current Position',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ),
+      );
+    }
+
+    // Add account markers for selected pincodes only
+    for (var account in salesmanAccounts) {
+      final accountPincode = account['pincode']?.toString();
+      if (accountPincode != null &&
+          _selectedPincodes.contains(accountPincode)) {
+        if (account['latitude'] != null && account['longitude'] != null) {
+          try {
+            final lat = double.parse(account['latitude'].toString());
+            final lng = double.parse(account['longitude'].toString());
+
+            if (_isValidCoordinate(lat, lng)) {
+              final isApproved = account['isApproved'] == true;
+              final personName = account['personName'] ?? 'Unknown';
+              final businessName = account['businessName'];
+
+              markers.add(
+                Marker(
+                  markerId: MarkerId('account_${account['id']}'),
+                  position: LatLng(lat, lng),
+                  infoWindow: InfoWindow(
+                    title: personName,
+                    snippet: businessName ?? 'Business',
+                  ),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    isApproved
+                        ? BitmapDescriptor.hueGreen
+                        : BitmapDescriptor.hueOrange,
+                  ),
+                  onTap: () => _showAccountDetails(account),
+                ),
+              );
+            }
+          } catch (e) {
+            print('❌ Error creating marker for account ${account['id']}: $e');
+          }
+        }
+      }
+    }
+
+    // Add nearby places markers if enabled
+    if (_showPlaces) {
+      for (int i = 0; i < nearbyPlaces.length; i++) {
+        final place = nearbyPlaces[i];
+        if (place.latitude != null && place.longitude != null) {
+          markers.add(
+            Marker(
+              markerId: MarkerId('place_$i'),
+              position: LatLng(place.latitude!, place.longitude!),
+              infoWindow: InfoWindow(
+                title: place.name,
+                snippet:
+                    '${place.formattedRating} • ${place.statusDescription}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueViolet,
+              ),
+              onTap: () => _showPlaceDetails(place),
+            ),
+          );
+        }
+      }
+    }
+
+    setState(() {
+      _markers = markers;
+    });
+  }
+
+  void _selectAllPincodes() {
+    setState(() {
+      _selectedPincodes = _assignedPincodes
+          .map((p) => p['pincode']?.toString() ?? '')
+          .where((p) => p.isNotEmpty)
+          .toList();
+    });
+    _focusOnSelectedPincodes();
+  }
+
+  void _clearPincodeSelection() {
+    setState(() {
+      _selectedPincodes.clear();
+    });
+    _updateMapMarkers();
+  }
+
+  Future<void> _geocodeAndFocusPincode(
+    String pincode,
+    String city,
+    String district,
+  ) async {
+    try {
+      // Try to geocode using pincode + city + India
+      final searchQuery = '$pincode, $city, India';
+      print('🔍 Geocoding: $searchQuery');
+
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json'
+        '?address=${Uri.encodeComponent(searchQuery)}'
+        '&key=${GooglePlacesConfig.apiKey}',
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final result = data['results'][0];
+          final location = result['geometry']['location'];
+          final lat = location['lat'] as double;
+          final lng = location['lng'] as double;
+
+          print('📍 Geocoded location: ($lat, $lng)');
+
+          // Update current position to load nearby places
+          _currentPosition = Position(
+            latitude: lat,
+            longitude: lng,
+            timestamp: DateTime.now(),
+            accuracy: 0,
+            altitude: 0,
+            altitudeAccuracy: 0,
+            heading: 0,
+            headingAccuracy: 0,
+            speed: 0,
+            speedAccuracy: 0,
+          );
+
+          // Focus map on geocoded location
+          await _safeAnimateCamera(
+            CameraUpdate.newLatLngZoom(LatLng(lat, lng), 14.0),
+            description: 'Focus on geocoded pincode $pincode',
+          );
+
+          // Load nearby places for this area
+          await _loadNearbyPlaces();
+
+          // Update markers
+          _filterAccountsByPincode(pincode);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('📍 Focused on $pincode - $city'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          print('❌ Geocoding failed: ${data['status']}');
+          if (mounted) {
+            _showError('Could not find location for pincode $pincode');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error geocoding pincode: $e');
+      if (mounted) {
+        _showError('Error finding location for pincode $pincode');
+      }
+    }
+  }
+
+  void _filterAccountsByPincode(String pincode) {
+    final filteredAccounts = salesmanAccounts.where((account) {
+      return account['pincode']?.toString() == pincode;
+    }).toList();
+
+    print(
+      '🔍 Filtering ${filteredAccounts.length} accounts for pincode $pincode',
+    );
+
+    // Update markers to show only accounts from selected pincode
+    _updateMapMarkersForPincode(filteredAccounts);
+  }
+
+  void _updateMapMarkersForPincode(
+    List<Map<String, dynamic>> filteredAccounts,
+  ) {
+    Set<Marker> markers = {};
+
+    // Add current location marker
+    if (_currentPosition != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: LatLng(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          ),
+          infoWindow: InfoWindow(
+            title: 'My Location',
+            snippet: UserService.name ?? 'Current Position',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ),
+      );
+    }
+
+    // Add filtered account markers
+    for (var account in filteredAccounts) {
+      if (account['latitude'] != null && account['longitude'] != null) {
+        try {
+          final lat = double.parse(account['latitude'].toString());
+          final lng = double.parse(account['longitude'].toString());
+
+          if (lat != 0 || lng != 0) {
+            final isApproved = account['isApproved'] == true;
+            final personName = account['personName'] ?? 'Unknown';
+            final businessName = account['businessName'];
+
+            markers.add(
+              Marker(
+                markerId: MarkerId('account_${account['id']}'),
+                position: LatLng(lat, lng),
+                infoWindow: InfoWindow(
+                  title: personName,
+                  snippet: businessName ?? 'Business',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  isApproved
+                      ? BitmapDescriptor.hueGreen
+                      : BitmapDescriptor.hueOrange,
+                ),
+                onTap: () => _showAccountDetails(account),
+              ),
+            );
+          }
+        } catch (e) {
+          print('❌ Error creating marker for account ${account['id']}: $e');
+        }
+      }
+    }
+
+    setState(() {
+      _markers = markers;
+    });
+
+    // Fit markers in view
+    if (markers.isNotEmpty) {
+      _fitMarkersInView();
+    }
+  }
+
+  void _showPincodeDetails(Map<String, dynamic> pincodeData) {
+    final pincode = pincodeData['pincode'] ?? '';
+    final city = pincodeData['city'] ?? '';
+    final state = pincodeData['state'] ?? '';
+    final district = pincodeData['district'] ?? '';
+    final areas = List<String>.from(pincodeData['areas'] ?? []);
+    final businessTypes = List<String>.from(pincodeData['businessTypes'] ?? []);
+    final totalBusinesses = pincodeData['totalBusinesses'] ?? 0;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.location_on, color: primaryColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pincode $pincode',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (city.isNotEmpty)
+                          Text(
+                            '$city, $state',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (district.isNotEmpty)
+                _buildPincodeDetailRow('District', district),
+              _buildPincodeDetailRow(
+                'Total Businesses',
+                totalBusinesses.toString(),
+              ),
+              if (areas.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Assigned Areas:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: areas
+                      .map(
+                        (area) => Chip(
+                          label: Text(
+                            area,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          backgroundColor: primaryColor.withValues(alpha: 0.1),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              if (businessTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Business Types:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: businessTypes
+                      .map(
+                        (type) => Chip(
+                          label: Text(
+                            type,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPincodeDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
   /// Check if the map is in a valid state for operations
   bool _isMapInValidState() {
     return mounted &&
@@ -1287,6 +1947,15 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
             },
             tooltip: _showAccountsList ? 'Show Map' : 'Show Accounts List',
           ),
+          // Debug button to test pincode loading
+          IconButton(
+            icon: const Icon(Icons.pin_drop),
+            onPressed: () async {
+              print('🔄 Manual pincode test triggered from app bar');
+              await _loadAssignedPincodes();
+            },
+            tooltip: 'Test Pincode Loading',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _initializeMap,
@@ -1399,6 +2068,16 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
                 // Legend and Controls - positioned at bottom left
                 Positioned(bottom: 16, left: 16, child: _buildLegendCard()),
+
+                // Pincode popup - positioned beside legend with proper spacing
+                Positioned(
+                  bottom: 16,
+                  left: MediaQuery.of(context).size.width > 400
+                      ? 160
+                      : 16, // Increased gap from 140 to 160
+                  top: MediaQuery.of(context).size.width <= 400 ? 100 : null,
+                  child: _buildPincodeCard(),
+                ),
 
                 // Place Details Overlay
                 if (_showPlaceDetailsOverlay && _selectedPlace != null)
@@ -2083,6 +2762,273 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
           const SizedBox(width: 8),
           Text(label, style: const TextStyle(fontSize: 11)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPincodeCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Pincode items (show when expanded)
+            if (!_isPincodeCollapsed) ...[
+              if (_assignedPincodes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'No assigned pincodes',
+                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                )
+              else ...[
+                // Select All / Clear All buttons
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: _selectAllPincodes,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'All',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: _clearPincodeSelection,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Show all assigned pincodes with checkboxes
+                ..._assignedPincodes
+                    .map((pincode) => _buildPincodeItem(pincode))
+                    .toList(),
+                // Add refresh button to reload pincodes
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: InkWell(
+                    onTap: () async {
+                      print('🔄 Manual refresh of pincodes triggered');
+                      await _loadAssignedPincodes();
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Pincode refresh completed. Found: ${_assignedPincodes.length}',
+                            ),
+                            backgroundColor: _assignedPincodes.isEmpty
+                                ? Colors.orange
+                                : Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh, size: 12, color: primaryColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Refresh',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+            // Header with highlighted collapse arrow
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isPincodeCollapsed = !_isPincodeCollapsed;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Pincode (${_selectedPincodes.length}/${_assignedPincodes.length})',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (_selectedPincodes.isNotEmpty) ...[
+                      InkWell(
+                        onTap: () {
+                          _clearPincodeSelection();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Icon(
+                            Icons.clear,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Icon(
+                        _isPincodeCollapsed
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPincodeItem(Map<String, dynamic> pincodeData) {
+    final pincode = pincodeData['pincode'] ?? '';
+    final city = pincodeData['city'] ?? '';
+    final district = pincodeData['district'] ?? '';
+    final totalBusinesses = pincodeData['totalBusinesses'] ?? 0;
+    final isSelected = _selectedPincodes.contains(pincode);
+
+    return InkWell(
+      onTap: () => _onPincodeSelected(pincode, pincodeData),
+      onLongPress: () => _showPincodeDetails(pincodeData),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor.withValues(alpha: 0.2) : null,
+          borderRadius: BorderRadius.circular(4),
+          border: isSelected ? Border.all(color: primaryColor, width: 1) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Checkbox indicator
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: isSelected ? primaryColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(
+                  color: isSelected ? primaryColor : Colors.grey,
+                  width: 1.5,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, size: 12, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  pincode,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                if (city.isNotEmpty || district.isNotEmpty)
+                  Text(
+                    city.isNotEmpty ? city : district,
+                    style: const TextStyle(fontSize: 9, color: Colors.grey),
+                  ),
+                if (totalBusinesses > 0)
+                  Text(
+                    '$totalBusinesses businesses',
+                    style: const TextStyle(fontSize: 8, color: Colors.grey),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
