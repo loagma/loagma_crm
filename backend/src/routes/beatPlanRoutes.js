@@ -10,7 +10,9 @@ import {
     toggleBeatPlanLock,
     handleMissedBeat,
     getBeatPlanAnalytics,
-    getSalesmanBeatHistory
+    getSalesmanBeatHistory,
+    deleteWeeklyBeatPlan,
+    getThisWeeksBeatPlan
 } from '../controllers/beatPlanController.js';
 
 const router = express.Router();
@@ -23,11 +25,13 @@ router.post('/generate', generateWeeklyBeatPlan);                    // Generate
 router.get('/', getWeeklyBeatPlans);                                 // Get all beat plans (admin)
 router.get('/analytics', getBeatPlanAnalytics);                     // Get beat plan analytics
 router.put('/:id', updateWeeklyBeatPlan);                           // Update beat plan
+router.delete('/:id', deleteWeeklyBeatPlan);                        // Delete beat plan
 router.post('/:id/toggle-lock', toggleBeatPlanLock);                // Lock/unlock beat plan
 router.post('/handle-missed/:dailyBeatId', handleMissedBeat);       // Handle missed beats
 
 // Salesman routes - Beat plan execution
 router.get('/today', getTodaysBeatPlan);                            // Get today's beat plan
+router.get('/this-week', getThisWeeksBeatPlan);                     // Get this week's beat plan
 router.post('/complete-area', markBeatAreaComplete);                // Mark area as complete
 router.get('/salesman/history', getSalesmanBeatHistory);            // Get salesman's history
 

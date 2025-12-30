@@ -161,11 +161,12 @@ class DailyBeatPlan {
     this.completedAt,
     this.carriedFromDate,
     this.carriedToDate,
-    required this.createdAt,
-    required this.updatedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     this.beatCompletions,
     this.accounts,
-  });
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   factory DailyBeatPlan.fromJson(Map<String, dynamic> json) {
     return DailyBeatPlan(
@@ -229,7 +230,10 @@ class DailyBeatPlan {
       'Saturday',
       'Sunday',
     ];
-    return days[dayOfWeek] ?? 'Unknown';
+    if (dayOfWeek >= 1 && dayOfWeek <= 7) {
+      return days[dayOfWeek];
+    }
+    return 'Unknown';
   }
 
   String get statusDisplayName {

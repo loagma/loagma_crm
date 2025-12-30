@@ -511,6 +511,73 @@ export const getBeatPlanAnalytics = async (req, res) => {
 };
 
 /**
+ * @desc Delete weekly beat plan
+ * @route DELETE /beat-plans/:id
+ * @access Admin only
+ */
+export const deleteWeeklyBeatPlan = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validate admin role
+        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only admins can delete beat plans'
+            });
+        }
+
+        await BeatPlanService.deleteWeeklyBeatPlan(id);
+
+        res.json({
+            success: true,
+            message: 'Beat plan deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('❌ Error deleting beat plan:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete beat plan'
+        });
+    }
+};
+
+/**
+ * @desc Get this week's beat plan for salesman
+ * @route GET /beat-plans/this-week
+ * @access Salesman only
+ */
+export const getThisWeeksBeatPlan = async (req, res) => {
+    try {
+        const salesmanId = req.user.id;
+
+        const weeklyPlan = await BeatPlanService.getThisWeeksBeatPlan(salesmanId);
+
+        if (!weeklyPlan) {
+            return res.json({
+                success: true,
+                message: 'No beat plan found for this week',
+                data: null
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'This week\'s beat plan retrieved successfully',
+            data: weeklyPlan
+        });
+
+    } catch (error) {
+        console.error('❌ Error getting this week\'s beat plan:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get this week\'s beat plan'
+        });
+    }
+};
+
+/**
  * @desc Get salesman's beat plan history
  * @route GET /beat-plans/salesman/history
  * @access Salesman only

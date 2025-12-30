@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/beat_plan_model.dart';
 import '../../services/beat_plan_service.dart';
-import '../../services/user_service.dart';
 import 'generate_beat_plan_screen.dart';
 import 'beat_plan_details_screen.dart';
 
@@ -19,8 +18,9 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
   String? _error;
   int _currentPage = 1;
   bool _hasMoreData = true;
-  String? _selectedStatus;
-  String? _selectedSalesman;
+
+  // Theme colors - matching existing app
+  static const Color primaryColor = Color(0xFFD7BE69);
 
   final ScrollController _scrollController = ScrollController();
 
@@ -64,8 +64,6 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
       final result = await BeatPlanService.getWeeklyBeatPlans(
         page: _currentPage,
         limit: 10,
-        status: _selectedStatus,
-        salesmanId: _selectedSalesman,
       );
 
       final newBeatPlans = result['beatPlans'] as List<WeeklyBeatPlan>;
@@ -93,127 +91,64 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
     await _loadBeatPlans();
   }
 
-  Future<void> _toggleBeatPlanLock(WeeklyBeatPlan beatPlan, bool lock) async {
-    try {
-      await BeatPlanService.toggleBeatPlanLock(
-        beatPlanId: beatPlan.id,
-        lock: lock,
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Beat plan ${lock ? 'locked' : 'unlocked'} successfully',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Refresh the list
-      await _loadBeatPlans(refresh: true);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to ${lock ? 'lock' : 'unlock'} beat plan: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _updateBeatPlanStatus(
-    WeeklyBeatPlan beatPlan,
-    String newStatus,
-  ) async {
-    try {
-      await BeatPlanService.updateWeeklyBeatPlan(
-        beatPlanId: beatPlan.id,
-        status: newStatus,
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Beat plan status updated to $newStatus'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Refresh the list
-      await _loadBeatPlans(refresh: true);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update beat plan status: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _showFilterDialog() {
-    showDialog(
+  Future<void> _deleteBeatPlan(WeeklyBeatPlan beatPlan) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filter Beat Plans'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: _selectedStatus,
-              decoration: const InputDecoration(labelText: 'Status'),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('All Statuses')),
-                DropdownMenuItem(value: 'DRAFT', child: Text('Draft')),
-                DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                DropdownMenuItem(value: 'LOCKED', child: Text('Locked')),
-                DropdownMenuItem(value: 'COMPLETED', child: Text('Completed')),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedStatus = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            // TODO: Add salesman dropdown when user list is available
-          ],
+        title: const Text('Delete Beat Plan?'),
+        content: Text(
+          'Delete beat plan for ${beatPlan.salesmanName}?\nThis cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              setState(() {
-                _selectedStatus = null;
-                _selectedSalesman = null;
-              });
-              Navigator.pop(context);
-              _loadBeatPlans(refresh: true);
-            },
-            child: const Text('Clear'),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _loadBeatPlans(refresh: true);
-            },
-            child: const Text('Apply'),
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
+
+    if (confirm != true) return;
+
+    try {
+      await BeatPlanService.deleteBeatPlan(beatPlan.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Beat plan deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadBeatPlans(refresh: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Beat Plan Management'),
-        backgroundColor: Colors.blue,
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterDialog,
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => _loadBeatPlans(refresh: true),
@@ -221,7 +156,7 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -234,60 +169,98 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
             _loadBeatPlans(refresh: true);
           }
         },
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: primaryColor,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('New Plan', style: TextStyle(color: Colors.white)),
       ),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading && _beatPlans.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: primaryColor),
+            SizedBox(height: 16),
+            Text('Loading beat plans...'),
+          ],
+        ),
+      );
     }
 
     if (_error != null && _beatPlans.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading beat plans',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => _loadBeatPlans(refresh: true),
-              child: const Text('Retry'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              const Text(
+                'Error loading beat plans',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _loadBeatPlans(refresh: true),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (_beatPlans.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.calendar_today, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No Beat Plans Found',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            const Text('Create your first beat plan by tapping the + button.'),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.calendar_today,
+                  size: 64,
+                  color: primaryColor,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'No Beat Plans Yet',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create your first beat plan by tapping the button below.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: () => _loadBeatPlans(refresh: true),
+      color: primaryColor,
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
@@ -297,11 +270,10 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(color: primaryColor),
               ),
             );
           }
-
           return _buildBeatPlanCard(_beatPlans[index]);
         },
       ),
@@ -309,15 +281,56 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
   }
 
   Widget _buildBeatPlanCard(WeeklyBeatPlan beatPlan) {
-    return Card(
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
               children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      beatPlan.salesmanName.isNotEmpty
+                          ? beatPlan.salesmanName[0].toUpperCase()
+                          : 'S',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,55 +338,130 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
                       Text(
                         beatPlan.salesmanName,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 4),
                       Text(
                         beatPlan.weekDisplayName,
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
                   ),
                 ),
-                _buildStatusChip(beatPlan.status),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'Areas',
-                    beatPlan.totalAreas.toString(),
-                    Icons.location_on,
-                    Colors.blue,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
                   ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'Completion',
-                    '${beatPlan.completionRate}%',
-                    Icons.pie_chart,
-                    Colors.green,
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'Pincodes',
-                    beatPlan.pincodes.length.toString(),
-                    Icons.pin_drop,
-                    Colors.orange,
+                  child: const Text(
+                    'ACTIVE',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
+          ),
+
+          // Stats Row
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _buildStatItem(
+                  '${beatPlan.totalAreas}',
+                  'Areas',
+                  Icons.location_on,
+                  primaryColor,
+                ),
+                _buildStatItem(
+                  '${beatPlan.completionRate}%',
+                  'Done',
+                  Icons.check_circle,
+                  Colors.green,
+                ),
+                _buildStatItem(
+                  '${beatPlan.pincodes.length}',
+                  'Pincodes',
+                  Icons.pin_drop,
+                  Colors.orange,
+                ),
+              ],
+            ),
+          ),
+
+          // Day Distribution Preview
+          if (beatPlan.dailyPlans != null && beatPlan.dailyPlans!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: List.generate(6, (index) {
+                  final dayPlan = beatPlan.dailyPlans!.firstWhere(
+                    (dp) => dp.dayOfWeek == index + 1,
+                    orElse: () => DailyBeatPlan(
+                      id: '',
+                      weeklyBeatId: '',
+                      dayOfWeek: index + 1,
+                      dayDate: DateTime.now(),
+                      assignedAreas: [],
+                      plannedVisits: 0,
+                      actualVisits: 0,
+                      status: 'PLANNED',
+                    ),
+                  );
+                  final areaCount = dayPlan.assignedAreas.length;
+
+                  return Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: areaCount > 0
+                            ? primaryColor.withValues(alpha: 0.1)
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            dayNames[index],
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$areaCount',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: areaCount > 0 ? primaryColor : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+
+          // Actions
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: OutlinedButton.icon(
                     onPressed: () async {
                       final result = await Navigator.push(
                         context,
@@ -382,141 +470,59 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
                               BeatPlanDetailsScreen(beatPlanId: beatPlan.id),
                         ),
                       );
-
                       if (result == true) {
                         _loadBeatPlans(refresh: true);
                       }
                     },
-                    child: const Text('View Details'),
+                    icon: const Icon(Icons.visibility, size: 18),
+                    label: const Text('View'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryColor,
+                      side: const BorderSide(color: primaryColor),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (!beatPlan.isLocked) ...[
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _showActionMenu(beatPlan),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Actions'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _deleteBeatPlan(beatPlan),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[50],
+                      foregroundColor: Colors.red,
+                      elevation: 0,
                     ),
                   ),
-                ] else ...[
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _toggleBeatPlanLock(beatPlan, false),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Unlock'),
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    switch (status) {
-      case 'DRAFT':
-        color = Colors.orange;
-        break;
-      case 'ACTIVE':
-        color = Colors.green;
-        break;
-      case 'LOCKED':
-        color = Colors.red;
-        break;
-      case 'COMPLETED':
-        color = Colors.blue;
-        break;
-      default:
-        color = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildStatItem(
-    String label,
     String value,
+    String label,
     IconData icon,
     Color color,
   ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-      ],
-    );
-  }
-
-  void _showActionMenu(WeeklyBeatPlan beatPlan) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
+    return Expanded(
+      child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.play_arrow, color: Colors.green),
-            title: const Text('Activate Plan'),
-            onTap: () {
-              Navigator.pop(context);
-              _updateBeatPlanStatus(beatPlan, 'ACTIVE');
-            },
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.lock, color: Colors.red),
-            title: const Text('Lock Plan'),
-            onTap: () {
-              Navigator.pop(context);
-              _toggleBeatPlanLock(beatPlan, true);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.check_circle, color: Colors.blue),
-            title: const Text('Mark Complete'),
-            onTap: () {
-              Navigator.pop(context);
-              _updateBeatPlanStatus(beatPlan, 'COMPLETED');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.cancel, color: Colors.grey),
-            title: const Text('Cancel'),
-            onTap: () => Navigator.pop(context),
-          ),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
         ],
       ),
     );

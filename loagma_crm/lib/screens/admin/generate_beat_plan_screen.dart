@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../services/beat_plan_service.dart';
+import '../../services/user_service.dart';
+import '../../services/api_config.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class GenerateBeatPlanScreen extends StatefulWidget {
   const GenerateBeatPlanScreen({super.key});
@@ -15,28 +19,151 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
   String? _selectedSalesmanName;
   DateTime? _selectedWeekStart;
   final List<String> _pincodes = [];
+  final List<String> _availableAreas = [];
+  final List<String> _selectedAreas = [];
   final TextEditingController _pincodeController = TextEditingController();
 
-  bool _isLoading = false;
   bool _isGenerating = false;
+  bool _isLoadingSalesmen = false;
+  bool _isLoadingAreas = false;
+  bool _useRandomGeneration = true;
 
-  // Mock salesman data - In real app, fetch from API
-  final List<Map<String, dynamic>> _salesmen = [
-    {'id': '000001', 'name': 'John Doe', 'employeeCode': 'EMP001'},
-    {'id': '000002', 'name': 'Jane Smith', 'employeeCode': 'EMP002'},
-    {'id': '000003', 'name': 'Mike Johnson', 'employeeCode': 'EMP003'},
-  ];
+  // Dynamic salesman data from API
+  List<Map<String, dynamic>> _salesmen = [];
+  List<Map<String, dynamic>> _salesmanAreaAssignments = [];
+
+  // Theme colors - matching existing app
+  static const Color primaryColor = Color(0xFFD7BE69);
 
   @override
   void initState() {
     super.initState();
     _selectedWeekStart = BeatPlanService.getWeekStartDate(DateTime.now());
+    _loadSalesmen();
   }
 
   @override
   void dispose() {
     _pincodeController.dispose();
     super.dispose();
+  }
+
+  /// Load all salesmen from API
+  Future<void> _loadSalesmen() async {
+    setState(() => _isLoadingSalesmen = true);
+
+    try {
+      final result = await UserService.getAllUsers();
+
+      if (result['success'] == true) {
+        final users = result['data'] as List<dynamic>;
+
+        // Filter only salesmen/sales representatives
+        final salesmen = users.where((user) {
+          final role = user['role']?.toString().toLowerCase() ?? '';
+          return role.contains('sales') ||
+              role.contains('salesman') ||
+              role.contains('sr');
+        }).toList();
+
+        setState(() {
+          _salesmen = salesmen
+              .map(
+                (user) => {
+                  'id': user['id'] ?? user['_id'] ?? '',
+                  'name': user['name'] ?? 'Unknown',
+                  'employeeCode':
+                      user['employeeCode'] ?? user['contactNumber'] ?? 'N/A',
+                  'role': user['role'] ?? 'salesman',
+                },
+              )
+              .toList();
+        });
+
+        print('✅ Loaded ${_salesmen.length} salesmen');
+      } else {
+        throw Exception(result['message'] ?? 'Failed to load salesmen');
+      }
+    } catch (e) {
+      print('❌ Error loading salesmen: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load salesmen: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingSalesmen = false);
+    }
+  }
+
+  /// Load area assignments for selected salesman
+  Future<void> _loadSalesmanAreaAssignments(String salesmanId) async {
+    setState(() => _isLoadingAreas = true);
+
+    try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/area-assignments/salesman/$salesmanId'),
+        headers: headers,
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final assignments = data['assignments'] as List<dynamic>;
+
+        setState(() {
+          _salesmanAreaAssignments = assignments
+              .map((a) => Map<String, dynamic>.from(a))
+              .toList();
+
+          // Auto-populate pincodes from assignments
+          _pincodes.clear();
+          _availableAreas.clear();
+
+          for (var assignment in assignments) {
+            final pincode = assignment['pinCode']?.toString();
+            if (pincode != null && !_pincodes.contains(pincode)) {
+              _pincodes.add(pincode);
+            }
+
+            final areas = assignment['areas'] as List<dynamic>? ?? [];
+            for (var area in areas) {
+              final areaName = area.toString();
+              if (!_availableAreas.contains(areaName)) {
+                _availableAreas.add(areaName);
+              }
+            }
+          }
+        });
+
+        print('✅ Loaded ${assignments.length} area assignments for salesman');
+        print('📍 Auto-populated ${_pincodes.length} pincodes');
+        print('🏢 Found ${_availableAreas.length} available areas');
+      } else {
+        throw Exception(data['message'] ?? 'Failed to load area assignments');
+      }
+    } catch (e) {
+      print('❌ Error loading area assignments: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load area assignments: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingAreas = false);
+    }
   }
 
   void _addPincode() {
@@ -137,7 +264,6 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
   }
 
   void _showSuccessDialog(Map<String, dynamic> result) {
-    final weeklyPlan = result['weeklyPlan'];
     final totalAreas = result['totalAreas'];
     final distribution = result['distribution'] as List;
 
@@ -200,7 +326,11 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
       _selectedSalesmanName = null;
       _selectedWeekStart = BeatPlanService.getWeekStartDate(DateTime.now());
       _pincodes.clear();
+      _availableAreas.clear();
+      _selectedAreas.clear();
+      _salesmanAreaAssignments.clear();
       _pincodeController.clear();
+      _useRandomGeneration = true;
     });
   }
 
@@ -209,7 +339,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Generate Beat Plan'),
-        backgroundColor: Colors.blue,
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
       ),
       body: Form(
@@ -223,7 +353,13 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
               const SizedBox(height: 20),
               _buildWeekSelection(),
               const SizedBox(height: 20),
+              _buildGenerationModeSelection(),
+              const SizedBox(height: 20),
               _buildPincodeSection(),
+              if (!_useRandomGeneration && _availableAreas.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildManualAreaSelection(),
+              ],
               const SizedBox(height: 32),
               _buildGenerateButton(),
             ],
@@ -240,14 +376,22 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.person, color: Colors.blue),
-                SizedBox(width: 8),
-                Text(
+                Icon(Icons.person, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
                   'Select Salesman',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
+                if (_isLoadingSalesmen) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
@@ -266,14 +410,26 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                   ),
                 );
               }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedSalesmanId = value;
-                  _selectedSalesmanName = _salesmen.firstWhere(
-                    (s) => s['id'] == value,
-                  )['name'];
-                });
-              },
+              onChanged: _isLoadingSalesmen
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _selectedSalesmanId = value;
+                        _selectedSalesmanName = _salesmen.firstWhere(
+                          (s) => s['id'] == value,
+                        )['name'];
+
+                        // Clear previous data
+                        _pincodes.clear();
+                        _availableAreas.clear();
+                        _selectedAreas.clear();
+                      });
+
+                      // Load area assignments for selected salesman
+                      if (value != null) {
+                        _loadSalesmanAreaAssignments(value);
+                      }
+                    },
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Please select a salesman';
@@ -281,6 +437,44 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                 return null;
               },
             ),
+            if (_isLoadingAreas) ...[
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 8),
+                  Text('Loading area assignments...'),
+                ],
+              ),
+            ],
+            if (_salesmanAreaAssignments.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Assigned Areas:',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_salesmanAreaAssignments.length} area assignments found',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -294,11 +488,11 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.calendar_today, color: Colors.green),
-                SizedBox(width: 8),
-                Text(
+                Icon(Icons.calendar_today, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
                   'Select Week',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -347,6 +541,60 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
     );
   }
 
+  Widget _buildGenerationModeSelection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_awesome, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
+                  'Generation Mode',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            RadioListTile<bool>(
+              title: const Text('Random Generation'),
+              subtitle: const Text(
+                'Automatically distribute areas across 7 days',
+              ),
+              value: true,
+              groupValue: _useRandomGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _useRandomGeneration = value ?? true;
+                  _selectedAreas.clear();
+                });
+              },
+              activeColor: primaryColor,
+            ),
+            RadioListTile<bool>(
+              title: const Text('Manual Assignment'),
+              subtitle: const Text(
+                'Manually select specific areas for the week',
+              ),
+              value: false,
+              groupValue: _useRandomGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _useRandomGeneration = value ?? true;
+                  _selectedAreas.clear();
+                });
+              },
+              activeColor: primaryColor,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPincodeSection() {
     return Card(
       child: Padding(
@@ -354,24 +602,46 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.pin_drop, color: Colors.orange),
-                SizedBox(width: 8),
-                Text(
-                  'Assign Pincodes',
+                Icon(Icons.pin_drop, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
+                  'Assigned Pincodes',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: 16),
+            if (_pincodes.isNotEmpty) ...[
+              const Text(
+                'Auto-populated from area assignments:',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _pincodes.map((pincode) {
+                  return Chip(
+                    label: Text(pincode),
+                    deleteIcon: const Icon(Icons.close, size: 18),
+                    onDeleted: () => _removePincode(pincode),
+                    backgroundColor: primaryColor.withValues(alpha: 0.1),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+            ],
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     controller: _pincodeController,
                     decoration: const InputDecoration(
-                      labelText: 'Pincode',
+                      labelText: 'Add Additional Pincode',
                       hintText: 'Enter 6-digit pincode',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.location_on),
@@ -385,7 +655,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                 ElevatedButton(
                   onPressed: _addPincode,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.all(16),
                   ),
@@ -393,26 +663,8 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            if (_pincodes.isNotEmpty) ...[
-              const Text(
-                'Added Pincodes:',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _pincodes.map((pincode) {
-                  return Chip(
-                    label: Text(pincode),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                    onDeleted: () => _removePincode(pincode),
-                    backgroundColor: Colors.blue.withOpacity(0.1),
-                  );
-                }).toList(),
-              ),
-            ] else ...[
+            if (_pincodes.isEmpty) ...[
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -426,7 +678,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Add pincodes to assign areas to the salesman',
+                        'Select a salesman to auto-populate pincodes from their area assignments',
                         style: TextStyle(color: Colors.grey),
                       ),
                     ),
@@ -440,13 +692,76 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
     );
   }
 
+  Widget _buildManualAreaSelection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_city, color: primaryColor),
+                const SizedBox(width: 8),
+                const Text(
+                  'Select Areas Manually',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Choose specific areas to include in the beat plan:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 200,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListView.builder(
+                itemCount: _availableAreas.length,
+                itemBuilder: (context, index) {
+                  final area = _availableAreas[index];
+                  final isSelected = _selectedAreas.contains(area);
+
+                  return CheckboxListTile(
+                    title: Text(area),
+                    value: isSelected,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedAreas.add(area);
+                        } else {
+                          _selectedAreas.remove(area);
+                        }
+                      });
+                    },
+                    activeColor: primaryColor,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${_selectedAreas.length} of ${_availableAreas.length} areas selected',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildGenerateButton() {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _isGenerating ? null : _generateBeatPlan,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.all(16),
           textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -467,12 +782,16 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
                   Text('Generating Beat Plan...'),
                 ],
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.auto_awesome),
-                  SizedBox(width: 8),
-                  Text('Generate Beat Plan'),
+                  const Icon(Icons.auto_awesome),
+                  const SizedBox(width: 8),
+                  Text(
+                    _useRandomGeneration
+                        ? 'Generate Random Beat Plan'
+                        : 'Generate Manual Beat Plan',
+                  ),
                 ],
               ),
       ),
