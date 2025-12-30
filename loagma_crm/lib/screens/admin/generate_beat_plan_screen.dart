@@ -293,11 +293,30 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
               'Daily Distribution:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            ...List.generate(7, (index) {
-              final dayName = BeatPlanService.getDayName(index + 1);
-              final areas = distribution[index] as List;
-              return Text('$dayName: ${areas.length} areas');
-            }),
+            ...List.generate(
+              distribution.length > 6 ? 6 : distribution.length,
+              (index) {
+                final dayNames = [
+                  'Monday',
+                  'Tuesday',
+                  'Wednesday',
+                  'Thursday',
+                  'Friday',
+                  'Saturday',
+                ];
+
+                // Safety check to prevent RangeError
+                if (index >= dayNames.length || index >= distribution.length) {
+                  return const SizedBox.shrink();
+                }
+
+                final areas = distribution[index] as List;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 2),
+                  child: Text('• ${dayNames[index]}: ${areas.length} areas'),
+                );
+              },
+            ),
           ],
         ),
         actions: [
@@ -313,7 +332,11 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
               Navigator.pop(context); // Close dialog
               _resetForm(); // Reset form for new plan
             },
-            child: const Text('Generate Another'),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text(
+              'Generate Another',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -562,7 +585,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
             RadioListTile<bool>(
               title: const Text('Random Generation'),
               subtitle: const Text(
-                'Automatically distribute areas across 7 days',
+                'Automatically distribute areas across 6 days (Mon-Sat)',
               ),
               value: true,
               groupValue: _useRandomGeneration,

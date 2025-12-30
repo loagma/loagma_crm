@@ -16,6 +16,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Theme colors - matching existing app
+  static const Color primaryColor = Color(0xFFD7BE69);
+
   @override
   void initState() {
     super.initState();
@@ -81,8 +84,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Beat Plan Details'),
-        backgroundColor: Colors.blue,
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -96,7 +100,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(color: primaryColor),
+      );
     }
 
     if (_error != null) {
@@ -115,7 +121,8 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadBeatPlanDetails,
-              child: const Text('Retry'),
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+              child: const Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -180,7 +187,7 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                     'Total Areas',
                     beatPlan.totalAreas.toString(),
                     Icons.location_on,
-                    Colors.blue,
+                    primaryColor,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -206,7 +213,7 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
               children: beatPlan.pincodes.map((pincode) {
                 return Chip(
                   label: Text(pincode),
-                  backgroundColor: Colors.blue.withOpacity(0.1),
+                  backgroundColor: primaryColor.withValues(alpha: 0.1),
                 );
               }).toList(),
             ),
@@ -238,9 +245,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status,
@@ -262,9 +269,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -352,7 +359,7 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                     'Areas',
                     dailyPlan.totalAreasCount.toString(),
                     Icons.location_on,
-                    Colors.blue,
+                    primaryColor,
                   ),
                 ),
                 Expanded(
@@ -380,7 +387,7 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
               valueColor: AlwaysStoppedAnimation<Color>(
                 dailyPlan.completionPercentage == 100
                     ? Colors.green
-                    : Colors.blue,
+                    : primaryColor,
               ),
             ),
             const SizedBox(height: 8),
@@ -403,8 +410,8 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                   return Chip(
                     label: Text(area),
                     backgroundColor: isCompleted
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.1),
                     avatar: Icon(
                       isCompleted ? Icons.check_circle : Icons.location_on,
                       size: 16,
@@ -456,9 +463,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status.replaceAll('_', ' '),

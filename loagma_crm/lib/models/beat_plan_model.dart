@@ -45,25 +45,35 @@ class WeeklyBeatPlan {
 
   factory WeeklyBeatPlan.fromJson(Map<String, dynamic> json) {
     return WeeklyBeatPlan(
-      id: json['id'] ?? '',
-      salesmanId: json['salesmanId'] ?? '',
-      salesmanName: json['salesmanName'] ?? '',
-      weekStartDate: DateTime.parse(json['weekStartDate']),
-      weekEndDate: DateTime.parse(json['weekEndDate']),
-      pincodes: List<String>.from(json['pincodes'] ?? []),
+      id: json['id']?.toString() ?? '',
+      salesmanId: json['salesmanId']?.toString() ?? '',
+      salesmanName: json['salesmanName']?.toString() ?? '',
+      weekStartDate: DateTime.parse(
+        json['weekStartDate'] ?? DateTime.now().toIso8601String(),
+      ),
+      weekEndDate: DateTime.parse(
+        json['weekEndDate'] ?? DateTime.now().toIso8601String(),
+      ),
+      pincodes: List<String>.from(
+        (json['pincodes'] ?? []).map((e) => e?.toString() ?? ''),
+      ),
       totalAreas: json['totalAreas'] ?? 0,
-      status: json['status'] ?? 'DRAFT',
-      generatedBy: json['generatedBy'],
-      approvedBy: json['approvedBy'],
+      status: json['status']?.toString() ?? 'DRAFT',
+      generatedBy: json['generatedBy']?.toString(),
+      approvedBy: json['approvedBy']?.toString(),
       approvedAt: json['approvedAt'] != null
           ? DateTime.parse(json['approvedAt'])
           : null,
-      lockedBy: json['lockedBy'],
+      lockedBy: json['lockedBy']?.toString(),
       lockedAt: json['lockedAt'] != null
           ? DateTime.parse(json['lockedAt'])
           : null,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] ?? DateTime.now().toIso8601String(),
+      ),
       dailyPlans: json['dailyPlans'] != null
           ? (json['dailyPlans'] as List)
                 .map((e) => DailyBeatPlan.fromJson(e))
@@ -170,14 +180,18 @@ class DailyBeatPlan {
 
   factory DailyBeatPlan.fromJson(Map<String, dynamic> json) {
     return DailyBeatPlan(
-      id: json['id'] ?? '',
-      weeklyBeatId: json['weeklyBeatId'] ?? '',
+      id: json['id']?.toString() ?? '',
+      weeklyBeatId: json['weeklyBeatId']?.toString() ?? '',
       dayOfWeek: json['dayOfWeek'] ?? 1,
-      dayDate: DateTime.parse(json['dayDate']),
-      assignedAreas: List<String>.from(json['assignedAreas'] ?? []),
+      dayDate: DateTime.parse(
+        json['dayDate'] ?? DateTime.now().toIso8601String(),
+      ),
+      assignedAreas: List<String>.from(
+        (json['assignedAreas'] ?? []).map((e) => e?.toString() ?? ''),
+      ),
       plannedVisits: json['plannedVisits'] ?? 0,
       actualVisits: json['actualVisits'] ?? 0,
-      status: json['status'] ?? 'PLANNED',
+      status: json['status']?.toString() ?? 'PLANNED',
       completedAt: json['completedAt'] != null
           ? DateTime.parse(json['completedAt'])
           : null,
@@ -187,8 +201,12 @@ class DailyBeatPlan {
       carriedToDate: json['carriedToDate'] != null
           ? DateTime.parse(json['carriedToDate'])
           : null,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] ?? DateTime.now().toIso8601String(),
+      ),
       beatCompletions: json['beatCompletions'] != null
           ? (json['beatCompletions'] as List)
                 .map((e) => BeatCompletion.fromJson(e))
@@ -305,22 +323,28 @@ class BeatCompletion {
 
   factory BeatCompletion.fromJson(Map<String, dynamic> json) {
     return BeatCompletion(
-      id: json['id'] ?? '',
-      dailyBeatId: json['dailyBeatId'] ?? '',
-      salesmanId: json['salesmanId'] ?? '',
-      areaName: json['areaName'] ?? '',
+      id: json['id']?.toString() ?? '',
+      dailyBeatId: json['dailyBeatId']?.toString() ?? '',
+      salesmanId: json['salesmanId']?.toString() ?? '',
+      areaName: json['areaName']?.toString() ?? '',
       accountsVisited: json['accountsVisited'] ?? 0,
-      completedAt: DateTime.parse(json['completedAt']),
+      completedAt: DateTime.parse(
+        json['completedAt'] ?? DateTime.now().toIso8601String(),
+      ),
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
-      notes: json['notes'],
+      notes: json['notes']?.toString(),
       isVerified: json['isVerified'] ?? false,
-      verifiedBy: json['verifiedBy'],
+      verifiedBy: json['verifiedBy']?.toString(),
       verifiedAt: json['verifiedAt'] != null
           ? DateTime.parse(json['verifiedAt'])
           : null,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] ?? DateTime.now().toIso8601String(),
+      ),
     );
   }
 
