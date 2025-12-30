@@ -114,6 +114,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.event_available,
             "/dashboard/admin/leaves",
           ),
+          SidebarItem(
+            "Beat Plan Management",
+            Icons.route,
+            "/dashboard/admin/beat-plans",
+          ),
         ];
 
       case "employee":
@@ -160,6 +165,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Leave Management",
             Icons.event_available,
             "/dashboard/salesman/leaves",
+          ),
+          SidebarItem(
+            "Today's Beat Plan",
+            Icons.today,
+            "/dashboard/salesman/beat-plan/today",
           ),
         ];
 
