@@ -1,8 +1,13 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+import { runBeatPlanningMigration, checkBeatPlanningStatus } from '../controllers/migrationController.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 // Migration endpoint for working hours (admin only)
 router.post('/working-hours', async (req, res) => {
@@ -129,5 +134,9 @@ router.get('/working-hours/status', async (req, res) => {
         }
     }
 });
+
+// Beat Planning Migration Routes
+router.post('/beat-planning', runBeatPlanningMigration);
+router.get('/beat-planning/status', checkBeatPlanningStatus);
 
 export default router;
