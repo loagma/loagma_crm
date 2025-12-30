@@ -1,4 +1,4 @@
-import prisma from './src/config/db.js';
+import prisma from '../config/db.js';
 
 async function autoMigrateBeatPlanning() {
     try {
@@ -7,7 +7,7 @@ async function autoMigrateBeatPlanning() {
 
         // Check if we're in production and tables don't exist
         let needsMigration = false;
-        
+
         try {
             await prisma.$queryRaw`SELECT 1 FROM "WeeklyBeatPlan" LIMIT 1`;
             console.log('✅ Beat planning tables already exist');
@@ -95,7 +95,7 @@ async function autoMigrateBeatPlanning() {
             // Unique constraints
             'ALTER TABLE "WeeklyBeatPlan" ADD CONSTRAINT "WeeklyBeatPlan_salesmanId_weekStartDate_key" UNIQUE ("salesmanId", "weekStartDate")',
             'ALTER TABLE "DailyBeatPlan" ADD CONSTRAINT "DailyBeatPlan_weeklyBeatId_dayOfWeek_key" UNIQUE ("weeklyBeatId", "dayOfWeek")',
-            
+
             // Indexes
             'CREATE INDEX IF NOT EXISTS "WeeklyBeatPlan_salesmanId_idx" ON "WeeklyBeatPlan"("salesmanId")',
             'CREATE INDEX IF NOT EXISTS "WeeklyBeatPlan_weekStartDate_idx" ON "WeeklyBeatPlan"("weekStartDate")',
@@ -106,7 +106,7 @@ async function autoMigrateBeatPlanning() {
             'CREATE INDEX IF NOT EXISTS "BeatCompletion_dailyBeatId_idx" ON "BeatCompletion"("dailyBeatId")',
             'CREATE INDEX IF NOT EXISTS "BeatCompletion_salesmanId_idx" ON "BeatCompletion"("salesmanId")',
             'CREATE INDEX IF NOT EXISTS "BeatCompletion_areaName_idx" ON "BeatCompletion"("areaName")',
-            
+
             // Foreign keys
             'ALTER TABLE "WeeklyBeatPlan" ADD CONSTRAINT "WeeklyBeatPlan_salesmanId_fkey" FOREIGN KEY ("salesmanId") REFERENCES "User"("id") ON DELETE CASCADE',
             'ALTER TABLE "WeeklyBeatPlan" ADD CONSTRAINT "WeeklyBeatPlan_generatedBy_fkey" FOREIGN KEY ("generatedBy") REFERENCES "User"("id") ON DELETE SET NULL',

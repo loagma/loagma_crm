@@ -11,15 +11,14 @@ import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 import '../../config/google_places_config.dart';
 
-class EnhancedSalesmanMapScreen extends StatefulWidget {
-  const EnhancedSalesmanMapScreen({super.key});
+class AdminEnhancedMapScreen extends StatefulWidget {
+  const AdminEnhancedMapScreen({super.key});
 
   @override
-  State<EnhancedSalesmanMapScreen> createState() =>
-      _EnhancedSalesmanMapScreenState();
+  State<AdminEnhancedMapScreen> createState() => _AdminEnhancedMapScreenState();
 }
 
-class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
+class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     with TickerProviderStateMixin {
   GoogleMapController? _mapController;
   bool _isMapReady = false;

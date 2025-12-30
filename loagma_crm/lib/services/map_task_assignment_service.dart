@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import '../models/shop_model.dart';
 import '../services/user_service.dart';
-import 'google_places_service.dart';
 
 class MapTaskAssignmentService {
   final String baseUrl = ApiConfig.baseUrl;
