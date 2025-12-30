@@ -30,6 +30,7 @@ import leaveRoutes from './routes/leaveRoutes.js';
 import beatPlanRoutes from './routes/beatPlanRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import migrationRoutes from './routes/migrationRoutes.js';
+import quickMigrationRoutes from './routes/quickMigrationRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +72,11 @@ app.get('/beat-planning-migration', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/beat-planning-migration.html'));
 });
 
+// Quick Migration UI (no auth required)
+app.get('/quick-migrate', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/quick-migrate.html'));
+});
+
 // API Routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
@@ -98,6 +104,7 @@ app.use('/leaves', leaveRoutes);
 app.use('/beat-plans', beatPlanRoutes);
 app.use('/test', testRoutes);
 app.use('/api/migration', migrationRoutes);
+app.use('/quick-migrate', quickMigrationRoutes);
 
 // 404 Handler
 app.use((req, res) => {
@@ -123,6 +130,14 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 const WS_PORT = process.env.WS_PORT || 8081;
+
+// Auto-migrate beat planning tables in production
+if (process.env.NODE_ENV === 'production') {
+    console.log('🔄 Running auto-migration for beat planning...');
+    import('./auto_migrate_beat_planning.js').catch(error => {
+        console.error('❌ Auto-migration failed:', error.message);
+    });
+}
 
 const server = app.listen(PORT, HOST, () => {
     console.log(`✅ Server running on http://${HOST}:${PORT}`);
