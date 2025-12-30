@@ -220,6 +220,44 @@ class BeatPlanService {
     }
   }
 
+  /// Get this week's beat plan for salesman (all days)
+  static Future<WeeklyBeatPlan?> getThisWeeksBeatPlan() async {
+    try {
+      final headers = await _getHeaders();
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/this-week'),
+        headers: headers,
+      );
+
+      final responseData = _handleResponse(response);
+
+      if (responseData['data'] == null) {
+        return null;
+      }
+
+      return WeeklyBeatPlan.fromJson(responseData['data']);
+    } catch (e) {
+      throw Exception('Failed to get this week\'s beat plan: $e');
+    }
+  }
+
+  /// Delete a beat plan (admin only)
+  static Future<void> deleteBeatPlan(String beatPlanId) async {
+    try {
+      final headers = await _getHeaders();
+
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/$beatPlanId'),
+        headers: headers,
+      );
+
+      _handleResponse(response);
+    } catch (e) {
+      throw Exception('Failed to delete beat plan: $e');
+    }
+  }
+
   /// Mark beat area as complete
   static Future<BeatCompletion> markBeatAreaComplete({
     required String dailyBeatId,
@@ -400,7 +438,10 @@ class BeatPlanService {
       'Saturday',
       'Sunday',
     ];
-    return days[dayOfWeek] ?? 'Unknown';
+    if (dayOfWeek >= 1 && dayOfWeek <= 7) {
+      return days[dayOfWeek];
+    }
+    return 'Unknown';
   }
 
   /// Get status color for UI

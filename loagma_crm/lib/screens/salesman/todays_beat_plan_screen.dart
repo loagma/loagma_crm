@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/beat_plan_model.dart';
 import '../../services/beat_plan_service.dart';
-import '../../services/user_service.dart';
 
 class TodaysBeatPlanScreen extends StatefulWidget {
   const TodaysBeatPlanScreen({super.key});
@@ -13,46 +12,48 @@ class TodaysBeatPlanScreen extends StatefulWidget {
 
 class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   TodaysBeatPlan? _todaysPlan;
+  WeeklyBeatPlan? _weeklyPlan;
   bool _isLoading = true;
   String? _error;
   Position? _currentPosition;
+  int _selectedDayIndex = -1; // -1 means today
+
+  // Theme colors - matching existing app
+  static const Color primaryColor = Color(0xFFD7BE69);
+  static const Color secondaryColor = Color(0xFFB8A054);
+
+  final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   @override
   void initState() {
     super.initState();
-    _loadTodaysBeatPlan();
+    _loadBeatPlan();
     _getCurrentLocation();
   }
 
-  Future<void> _loadTodaysBeatPlan() async {
+  Future<void> _loadBeatPlan() async {
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      // Try to get from cache first for offline support
-      TodaysBeatPlan? cachedPlan =
-          await BeatPlanService.getCachedTodaysBeatPlan();
+      // Load this week's beat plan
+      final weeklyPlan = await BeatPlanService.getThisWeeksBeatPlan();
 
-      if (cachedPlan != null) {
-        setState(() {
-          _todaysPlan = cachedPlan;
-          _isLoading = false;
-        });
-      }
-
-      // Fetch fresh data from API
-      final plan = await BeatPlanService.getTodaysBeatPlan();
-
-      if (plan != null) {
-        // Cache the fresh data
-        await BeatPlanService.cacheTodaysBeatPlan(plan);
-      }
+      // Also try to get today's specific plan
+      final todaysPlan = await BeatPlanService.getTodaysBeatPlan();
 
       setState(() {
-        _todaysPlan = plan;
+        _weeklyPlan = weeklyPlan;
+        _todaysPlan = todaysPlan;
         _isLoading = false;
+
+        // Set selected day to today
+        final today = DateTime.now().weekday;
+        if (today >= 1 && today <= 6) {
+          _selectedDayIndex = today - 1;
+        }
       });
     } catch (e) {
       setState(() {
@@ -80,21 +81,17 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
         _currentPosition = position;
       });
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
     }
   }
 
-  Future<void> _markAreaComplete(String areaName) async {
-    if (_todaysPlan?.dailyPlan == null) return;
-
+  Future<void> _markAreaComplete(String areaName, String dailyBeatId) async {
     try {
-      // Show completion dialog
       final result = await _showAreaCompletionDialog(areaName);
       if (result == null) return;
 
-      // Mark area as complete
       await BeatPlanService.markBeatAreaComplete(
-        dailyBeatId: _todaysPlan!.dailyPlan!.id,
+        dailyBeatId: dailyBeatId,
         areaName: areaName,
         accountsVisited: result['accountsVisited'] ?? 0,
         latitude: _currentPosition?.latitude,
@@ -102,13 +99,12 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
         notes: result['notes'],
       );
 
-      // Refresh the beat plan
-      await _loadTodaysBeatPlan();
+      await _loadBeatPlan();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Area "$areaName" marked as complete!'),
+            content: Text('✅ "$areaName" marked as complete!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -116,10 +112,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to mark area complete: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -134,7 +127,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Complete Area: $areaName'),
+        title: Text('Complete: $areaName'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -143,16 +136,17 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Accounts Visited',
-                hintText: 'Enter number of accounts visited',
+                hintText: 'How many accounts did you visit?',
+                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             TextField(
               controller: notesController,
-              maxLines: 3,
+              maxLines: 2,
               decoration: const InputDecoration(
                 labelText: 'Notes (Optional)',
-                hintText: 'Add any notes about this area visit',
+                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -171,7 +165,11 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     : notesController.text.trim(),
               });
             },
-            child: const Text('Complete'),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text(
+              'Complete',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -181,15 +179,14 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Today\'s Beat Plan'),
-        backgroundColor: Colors.blue,
+        title: const Text('My Beat Plan'),
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadTodaysBeatPlan,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadBeatPlan),
         ],
       ),
       body: _buildBody(),
@@ -198,130 +195,115 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: primaryColor),
+            SizedBox(height: 16),
+            Text('Loading your beat plan...'),
+          ],
+        ),
+      );
     }
 
     if (_error != null) {
-      return Center(
+      return _buildErrorState();
+    }
+
+    if (_weeklyPlan == null && _todaysPlan == null) {
+      return _buildNoPlanState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadBeatPlan,
+      color: primaryColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            _buildWeekHeader(),
+            _buildDaySelector(),
+            _buildSelectedDayContent(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
             const SizedBox(height: 16),
-            Text(
-              'Error loading beat plan',
-              style: Theme.of(context).textTheme.headlineSmall,
+            const Text(
+              'Something went wrong',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: TextStyle(color: Colors.grey[600]),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadTodaysBeatPlan,
-              child: const Text('Retry'),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadBeatPlan,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    if (_todaysPlan == null || !_todaysPlan!.hasBeatPlan) {
-      return Center(
+  Widget _buildNoPlanState() {
+    final today = DateTime.now();
+    final isSunday = today.weekday == 7;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.calendar_today, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No Beat Plan for Today',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Your admin hasn\'t assigned a beat plan for today.\nPlease contact your admin.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadTodaysBeatPlan,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPlanOverview(),
-            const SizedBox(height: 20),
-            _buildAreasSection(),
-            const SizedBox(height: 20),
-            _buildAccountsSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlanOverview() {
-    final plan = _todaysPlan!;
-    final dailyPlan = plan.dailyPlan!;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.today, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  'Today\'s Plan',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Areas Assigned',
-                    plan.totalAreas.toString(),
-                    Icons.location_on,
-                    Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Completed',
-                    plan.completedAreasCount.toString(),
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: plan.completionPercentage / 100,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                plan.completionPercentage == 100 ? Colors.green : Colors.blue,
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isSunday ? Icons.weekend : Icons.calendar_today,
+                size: 64,
+                color: primaryColor,
               ),
             ),
+            const SizedBox(height: 24),
+            Text(
+              isSunday ? 'It\'s Sunday!' : 'No Beat Plan This Week',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text(
-              '${plan.completionPercentage.toStringAsFixed(1)}% Complete',
-              style: Theme.of(context).textTheme.bodySmall,
+              isSunday
+                  ? 'Enjoy your day off! Beat plans are for Monday-Saturday.'
+                  : 'Your admin hasn\'t assigned a beat plan for this week yet.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: _loadBeatPlan,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh'),
+              style: OutlinedButton.styleFrom(foregroundColor: primaryColor),
             ),
           ],
         ),
@@ -329,200 +311,362 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     );
   }
 
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildWeekHeader() {
+    final weekStart =
+        _weeklyPlan?.weekStartDate ??
+        BeatPlanService.getWeekStartDate(DateTime.now());
+    final weekEnd = weekStart.add(const Duration(days: 5)); // Saturday
+
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [primaryColor, secondaryColor],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
-          Text(
-            value,
+          const Text(
+            'This Week\'s Beat Plan',
             style: TextStyle(
-              fontSize: 20,
+              color: Colors.white,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: color,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
-            title,
-            style: TextStyle(fontSize: 12, color: color),
-            textAlign: TextAlign.center,
+            '${weekStart.day}/${weekStart.month} - ${weekEnd.day}/${weekEnd.month}/${weekEnd.year}',
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _buildHeaderStat(
+                'Total Areas',
+                '${_weeklyPlan?.totalAreas ?? 0}',
+                Icons.location_on,
+              ),
+              const SizedBox(width: 24),
+              _buildHeaderStat('Days', '6', Icons.calendar_view_week),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAreasSection() {
-    final plan = _todaysPlan!;
-    final dailyPlan = plan.dailyPlan!;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+  Widget _buildHeaderStat(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white70, size: 20),
+        const SizedBox(width: 8),
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.map, color: Colors.orange),
-                const SizedBox(width: 8),
-                Text(
-                  'Areas to Visit',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 16),
-            ...dailyPlan.assignedAreas.map((area) => _buildAreaTile(area)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildAreaTile(String areaName) {
-    final isCompleted = _todaysPlan!.completedAreas.contains(areaName);
-    final accountsInArea = _todaysPlan!.accounts
-        .where((account) => account['area'] == areaName)
-        .length;
+  Widget _buildDaySelector() {
+    final today = DateTime.now().weekday;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: isCompleted ? Colors.green : Colors.grey[300]!,
-        ),
-        borderRadius: BorderRadius.circular(8),
-        color: isCompleted ? Colors.green.withOpacity(0.1) : null,
-      ),
-      child: ListTile(
-        leading: Icon(
-          isCompleted ? Icons.check_circle : Icons.location_on,
-          color: isCompleted ? Colors.green : Colors.orange,
-        ),
-        title: Text(
-          areaName,
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            decoration: isCompleted ? TextDecoration.lineThrough : null,
-          ),
-        ),
-        subtitle: Text('$accountsInArea accounts'),
-        trailing: isCompleted
-            ? Icon(Icons.done, color: Colors.green)
-            : ElevatedButton(
-                onPressed: () => _markAreaComplete(areaName),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      color: Colors.white,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: List.generate(6, (index) {
+            final isSelected = _selectedDayIndex == index;
+            final isToday = (index + 1) == today;
+            final dayNumber = index + 1;
+
+            // Get areas for this day
+            final dailyPlan = _weeklyPlan?.dailyPlans?.firstWhere(
+              (dp) => dp.dayOfWeek == dayNumber,
+              orElse: () => DailyBeatPlan(
+                id: '',
+                weeklyBeatId: '',
+                dayOfWeek: dayNumber,
+                dayDate: DateTime.now(),
+                assignedAreas: [],
+                plannedVisits: 0,
+                actualVisits: 0,
+                status: 'PLANNED',
+              ),
+            );
+
+            final areaCount = dailyPlan?.assignedAreas.length ?? 0;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedDayIndex = index),
+                child: Container(
+                  width: 60,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? primaryColor
+                        : (isToday
+                              ? primaryColor.withValues(alpha: 0.1)
+                              : Colors.grey[100]),
+                    borderRadius: BorderRadius.circular(12),
+                    border: isToday && !isSelected
+                        ? Border.all(color: primaryColor, width: 2)
+                        : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        _dayNames[index],
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : (isToday ? primaryColor : Colors.grey[700]),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.2)
+                              : primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$areaCount',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : primaryColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      if (isToday) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : primaryColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                child: const Text('Complete'),
               ),
+            );
+          }),
+        ),
       ),
     );
   }
 
-  Widget _buildAccountsSection() {
-    final accounts = _todaysPlan!.accounts;
+  Widget _buildSelectedDayContent() {
+    final dayNumber = _selectedDayIndex + 1;
+    final dailyPlan = _weeklyPlan?.dailyPlans?.firstWhere(
+      (dp) => dp.dayOfWeek == dayNumber,
+      orElse: () => DailyBeatPlan(
+        id: '',
+        weeklyBeatId: '',
+        dayOfWeek: dayNumber,
+        dayDate: DateTime.now(),
+        assignedAreas: [],
+        plannedVisits: 0,
+        actualVisits: 0,
+        status: 'PLANNED',
+      ),
+    );
 
-    if (accounts.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Icon(Icons.business, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                'No Accounts Found',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const Text('No accounts found for today\'s assigned areas.'),
-            ],
-          ),
+    final areas = dailyPlan?.assignedAreas ?? [];
+    final completedAreas =
+        dailyPlan?.beatCompletions?.map((bc) => bc.areaName).toList() ?? [];
+    final isToday = (dayNumber) == DateTime.now().weekday;
+
+    if (areas.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(Icons.event_busy, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              'No areas assigned for ${_dayNames[_selectedDayIndex]}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
         ),
       );
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.business, color: Colors.purple),
-                const SizedBox(width: 8),
-                Text(
-                  'Accounts to Visit (${accounts.length})',
-                  style: Theme.of(context).textTheme.titleLarge,
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_dayNames[_selectedDayIndex]}\'s Areas',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...accounts.map((account) => _buildAccountTile(account)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAccountTile(Map<String, dynamic> account) {
-    final areaCompleted = _todaysPlan!.completedAreas.contains(account['area']);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
-        color: areaCompleted ? Colors.green.withOpacity(0.05) : null,
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: areaCompleted ? Colors.green : Colors.blue,
-          child: Text(
-            (account['personName'] ?? 'U')[0].toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isToday
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  isToday ? 'TODAY' : '${areas.length} areas',
+                  style: TextStyle(
+                    color: isToday ? Colors.green : Colors.grey[600],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        title: Text(
-          account['personName'] ?? 'Unknown',
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (account['businessName'] != null) Text(account['businessName']),
-            Text('📞 ${account['contactNumber'] ?? 'No contact'}'),
-            Text('📍 ${account['area'] ?? 'No area'}'),
+          const SizedBox(height: 16),
+          ...areas.map((area) {
+            final isCompleted = completedAreas.contains(area);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isCompleted ? Colors.green : Colors.grey[200]!,
+                  width: isCompleted ? 2 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isCompleted
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isCompleted ? Icons.check_circle : Icons.location_on,
+                    color: isCompleted ? Colors.green : primaryColor,
+                  ),
+                ),
+                title: Text(
+                  area,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                    color: isCompleted ? Colors.grey : Colors.black87,
+                  ),
+                ),
+                subtitle: Text(
+                  isCompleted ? 'Completed ✓' : 'Pending visit',
+                  style: TextStyle(
+                    color: isCompleted ? Colors.green : Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+                trailing:
+                    isToday &&
+                        !isCompleted &&
+                        dailyPlan?.id != null &&
+                        dailyPlan!.id.isNotEmpty
+                    ? ElevatedButton(
+                        onPressed: () => _markAreaComplete(area, dailyPlan.id),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Done'),
+                      )
+                    : isCompleted
+                    ? const Icon(Icons.check, color: Colors.green)
+                    : null,
+              ),
+            );
+          }),
+          if (completedAreas.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.trending_up, color: Colors.green),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${completedAreas.length}/${areas.length} areas completed',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
-        trailing: areaCompleted
-            ? Icon(Icons.check_circle, color: Colors.green)
-            : Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          // TODO: Navigate to account details or call
-        },
+        ],
       ),
     );
   }
