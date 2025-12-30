@@ -36,8 +36,10 @@ import '../screens/salesman/salesman_map_screen.dart';
 import '../screens/salesman/enhanced_punch_screen.dart';
 import '../screens/salesman/leave_management_screen.dart';
 import '../screens/salesman/apply_leave_screen.dart';
-import '../screens/salesman/apply_leave_screen_test.dart';
 import '../screens/salesman/my_leave_status_screen.dart';
+
+// Admin Map screen
+import '../screens/admin/map_view_screen.dart';
 
 // Admin screens - Leave Management
 import '../screens/admin/leave_requests_screen.dart';
@@ -192,7 +194,16 @@ final GoRouter appRouter = GoRouter(
           path: 'assignments',
           builder: (_, __) => const SalesmanAssignmentsScreen(),
         ),
-        GoRoute(path: 'map', builder: (_, __) => const SalesmanMapScreen()),
+        GoRoute(
+          path: 'map',
+          builder: (context, state) {
+            final role = state.pathParameters['role']?.toLowerCase();
+            if (role == 'admin') {
+              return const EnhancedSalesmanMapScreen();
+            }
+            return const SalesmanMapScreen();
+          },
+        ),
         GoRoute(path: 'punch', builder: (_, __) => const EnhancedPunchScreen()),
         GoRoute(
           path: 'leaves',
