@@ -1,6 +1,8 @@
 import './config/env.js';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { startExpiryJob, stopExpiryJob } from './jobs/approvalExpiryJob.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -28,6 +30,9 @@ import leaveRoutes from './routes/leaveRoutes.js';
 import beatPlanRoutes from './routes/beatPlanRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import migrationRoutes from './routes/migrationRoutes.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -59,6 +64,11 @@ app.get('/health', (req, res) => {
         message: 'Server is healthy',
         timestamp: new Date().toISOString()
     });
+});
+
+// Beat Planning Migration UI
+app.get('/beat-planning-migration', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/beat-planning-migration.html'));
 });
 
 // API Routes
