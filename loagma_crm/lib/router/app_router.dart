@@ -42,6 +42,12 @@ import '../screens/salesman/my_leave_status_screen.dart';
 // Admin screens - Leave Management
 import '../screens/admin/leave_requests_screen.dart';
 
+// Beat Planning screens
+import '../screens/admin/beat_plan_management_screen.dart';
+import '../screens/admin/generate_beat_plan_screen.dart';
+import '../screens/admin/beat_plan_details_screen.dart';
+import '../screens/salesman/todays_beat_plan_screen.dart';
+
 // Telecaller screens
 import '../screens/telecaller/verify_account_master_screen.dart';
 
@@ -158,6 +164,23 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const LeaveRequestsScreen(),
         ),
 
+        // Beat Planning routes (Admin)
+        GoRoute(
+          path: 'beat-plans',
+          builder: (_, __) => const BeatPlanManagementScreen(),
+        ),
+        GoRoute(
+          path: 'beat-plans/generate',
+          builder: (_, __) => const GenerateBeatPlanScreen(),
+        ),
+        GoRoute(
+          path: 'beat-plans/:id',
+          builder: (context, state) {
+            final beatPlanId = state.pathParameters['id']!;
+            return BeatPlanDetailsScreen(beatPlanId: beatPlanId);
+          },
+        ),
+
         // Shared routes (Admin, Salesman, etc.)
         GoRoute(
           path: 'account/master',
@@ -205,6 +228,12 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'leaves/status',
           builder: (_, __) => const MyLeaveStatusScreen(),
+        ),
+
+        // Beat Planning routes (Salesman)
+        GoRoute(
+          path: 'beat-plan/today',
+          builder: (_, __) => const TodaysBeatPlanScreen(),
         ),
 
         // Telecaller-specific routes

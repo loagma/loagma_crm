@@ -25,6 +25,7 @@ import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js
 import employeeWorkingHoursRoutes from './routes/employeeWorkingHoursRoutes.js';
 import punchStatusRoutes from './routes/punchStatusRoutes.js';
 import leaveRoutes from './routes/leaveRoutes.js';
+import beatPlanRoutes from './routes/beatPlanRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import migrationRoutes from './routes/migrationRoutes.js';
 
@@ -84,6 +85,7 @@ app.use('/early-punch-out-approval', earlyPunchOutApprovalRoutes);
 app.use('/employee-working-hours', employeeWorkingHoursRoutes);
 app.use('/punch', punchStatusRoutes);
 app.use('/leaves', leaveRoutes);
+app.use('/beat-plans', beatPlanRoutes);
 app.use('/test', testRoutes);
 app.use('/api/migration', migrationRoutes);
 
