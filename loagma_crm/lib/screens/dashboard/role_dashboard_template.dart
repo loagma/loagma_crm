@@ -103,6 +103,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.stacked_line_chart, // great for analytics
             "/dashboard/admin/reports",
           ),
+          SidebarItem("Maps", Icons.map_outlined, "/dashboard/admin/map"),
 
           SidebarItem(
             "Attendance Management",
