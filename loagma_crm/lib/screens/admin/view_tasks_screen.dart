@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/map_task_assignment_service.dart';
-import 'admin_assignments_map_screen.dart';
 import 'assignment_map_detail_screen.dart';
 
 class ViewTasksScreen extends StatefulWidget {

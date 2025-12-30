@@ -222,7 +222,7 @@ final GoRouter appRouter = GoRouter(
           builder: (context, state) {
             final role = state.pathParameters['role']?.toLowerCase();
             if (role == 'admin') {
-              return const EnhancedSalesmanMapScreen();
+              return const AdminEnhancedMapScreen();
             }
             return const SalesmanMapScreen();
           },
