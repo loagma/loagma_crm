@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
 import '../models/notification_model.dart';
 import '../screens/admin/notifications_screen.dart';
+import '../screens/salesman/salesman_notifications_screen.dart';
 
 class NotificationBell extends StatefulWidget {
   final String? userId;
@@ -50,7 +51,7 @@ class NotificationBellState extends State<NotificationBell> {
         });
       }
     } catch (e) {
-      print('Error loading notification counts: $e');
+      debugPrint('Error loading notification counts: $e');
       if (mounted) {
         setState(() => isLoading = false);
       }
@@ -63,12 +64,26 @@ class NotificationBellState extends State<NotificationBell> {
   }
 
   void _openNotifications() {
+    // Navigate to role-specific notification screen
+    final role = widget.role?.toLowerCase();
+
+    Widget notificationScreen;
+    if (role == 'admin') {
+      notificationScreen = NotificationsScreen(
+        userId: widget.userId,
+        role: widget.role,
+      );
+    } else {
+      // For salesman, telecaller, and other roles - use salesman notifications screen
+      notificationScreen = SalesmanNotificationsScreen(
+        userId: widget.userId,
+        role: widget.role,
+      );
+    }
+
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) =>
-            NotificationsScreen(userId: widget.userId, role: widget.role),
-      ),
+      MaterialPageRoute(builder: (context) => notificationScreen),
     ).then((_) {
       // Refresh counts when returning from notifications screen
       _loadNotificationCounts();
