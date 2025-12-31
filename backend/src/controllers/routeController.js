@@ -675,10 +675,381 @@ const getCurrentDistance = async (req, res) => {
     }
 };
 
+/**
+ * Get detailed route analytics for playback and graphs
+ * Includes idle time detection, distance vs time data, movement timeline
+ */
+const getRouteAnalytics = async (req, res) => {
+    try {
+        const { attendanceId } = req.params;
+
+        if (!attendanceId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Attendance ID is required'
+            });
+        }
+
+        // Fetch attendance with route points
+        const attendance = await prisma.attendance.findUnique({
+            where: { id: attendanceId },
+            include: {
+                routeLogs: {
+                    orderBy: { recordedAt: 'asc' }
+                }
+            }
+        });
+
+        if (!attendance) {
+            return res.status(404).json({
+                success: false,
+                message: 'Attendance session not found'
+            });
+        }
+
+        const routePoints = attendance.routeLogs;
+
+        if (routePoints.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    attendanceId,
+                    hasData: false,
+                    message: 'No route data available'
+                }
+            });
+        }
+
+        // Calculate analytics
+        const IDLE_DISTANCE_THRESHOLD = 0.05; // 50 meters in km
+        const IDLE_TIME_THRESHOLD = 5 * 60 * 1000; // 5 minutes in ms
+
+        let totalIdleTimeMs = 0;
+        let idlePeriods = [];
+        let distanceVsTime = [];
+        let movementTimeline = [];
+        let cumulativeDistance = 0;
+
+        const startTime = new Date(routePoints[0].recordedAt).getTime();
+
+        // First point
+        distanceVsTime.push({
+            timestamp: routePoints[0].recordedAt,
+            timeElapsedMinutes: 0,
+            distanceKm: 0,
+            latitude: routePoints[0].latitude,
+            longitude: routePoints[0].longitude
+        });
+
+        movementTimeline.push({
+            type: 'start',
+            timestamp: routePoints[0].recordedAt,
+            latitude: routePoints[0].latitude,
+            longitude: routePoints[0].longitude,
+            description: 'Route started'
+        });
+
+        let currentIdleStart = null;
+        let currentIdleLocation = null;
+
+        for (let i = 1; i < routePoints.length; i++) {
+            const prev = routePoints[i - 1];
+            const curr = routePoints[i];
+
+            const distance = calculateDistance(
+                prev.latitude, prev.longitude,
+                curr.latitude, curr.longitude
+            );
+
+            const timeDiff = new Date(curr.recordedAt).getTime() - new Date(prev.recordedAt).getTime();
+            cumulativeDistance += distance;
+
+            const timeElapsedMinutes = (new Date(curr.recordedAt).getTime() - startTime) / (1000 * 60);
+
+            // Distance vs time data point
+            distanceVsTime.push({
+                timestamp: curr.recordedAt,
+                timeElapsedMinutes: Math.round(timeElapsedMinutes * 100) / 100,
+                distanceKm: Math.round(cumulativeDistance * 100) / 100,
+                latitude: curr.latitude,
+                longitude: curr.longitude,
+                speed: curr.speed
+            });
+
+            // Idle detection
+            if (distance < IDLE_DISTANCE_THRESHOLD && timeDiff >= IDLE_TIME_THRESHOLD) {
+                if (!currentIdleStart) {
+                    currentIdleStart = prev.recordedAt;
+                    currentIdleLocation = { latitude: prev.latitude, longitude: prev.longitude };
+                }
+                totalIdleTimeMs += timeDiff;
+            } else if (currentIdleStart) {
+                // End of idle period
+                idlePeriods.push({
+                    startTime: currentIdleStart,
+                    endTime: prev.recordedAt,
+                    durationMinutes: Math.round((new Date(prev.recordedAt).getTime() - new Date(currentIdleStart).getTime()) / (1000 * 60)),
+                    latitude: currentIdleLocation.latitude,
+                    longitude: currentIdleLocation.longitude
+                });
+
+                movementTimeline.push({
+                    type: 'idle',
+                    timestamp: currentIdleStart,
+                    endTimestamp: prev.recordedAt,
+                    latitude: currentIdleLocation.latitude,
+                    longitude: currentIdleLocation.longitude,
+                    description: `Idle for ${Math.round((new Date(prev.recordedAt).getTime() - new Date(currentIdleStart).getTime()) / (1000 * 60))} minutes`
+                });
+
+                currentIdleStart = null;
+                currentIdleLocation = null;
+            }
+
+            // Add movement events for significant movements
+            if (distance > 0.5) { // More than 500m movement
+                movementTimeline.push({
+                    type: 'movement',
+                    timestamp: curr.recordedAt,
+                    latitude: curr.latitude,
+                    longitude: curr.longitude,
+                    distanceKm: Math.round(distance * 100) / 100,
+                    description: `Moved ${Math.round(distance * 1000)}m`
+                });
+            }
+        }
+
+        // Close any remaining idle period
+        if (currentIdleStart) {
+            const lastPoint = routePoints[routePoints.length - 1];
+            idlePeriods.push({
+                startTime: currentIdleStart,
+                endTime: lastPoint.recordedAt,
+                durationMinutes: Math.round((new Date(lastPoint.recordedAt).getTime() - new Date(currentIdleStart).getTime()) / (1000 * 60)),
+                latitude: currentIdleLocation.latitude,
+                longitude: currentIdleLocation.longitude
+            });
+        }
+
+        // Add end point to timeline
+        const lastPoint = routePoints[routePoints.length - 1];
+        movementTimeline.push({
+            type: 'end',
+            timestamp: lastPoint.recordedAt,
+            latitude: lastPoint.latitude,
+            longitude: lastPoint.longitude,
+            description: 'Route ended'
+        });
+
+        // Calculate total duration
+        const totalDurationMs = new Date(lastPoint.recordedAt).getTime() - startTime;
+        const totalDurationMinutes = Math.round(totalDurationMs / (1000 * 60));
+        const activeTimeMinutes = totalDurationMinutes - Math.round(totalIdleTimeMs / (1000 * 60));
+
+        // Prepare playback points (simplified for animation)
+        const playbackPoints = routePoints.map((point, index) => ({
+            index,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            timestamp: point.recordedAt,
+            speed: point.speed,
+            cumulativeDistanceKm: distanceVsTime[index]?.distanceKm || 0
+        }));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                attendanceId,
+                employeeId: attendance.employeeId,
+                employeeName: attendance.employeeName,
+                date: attendance.date,
+                hasData: true,
+
+                // Summary stats
+                summary: {
+                    totalDistanceKm: Math.round(cumulativeDistance * 100) / 100,
+                    totalDurationMinutes,
+                    activeTimeMinutes,
+                    idleTimeMinutes: Math.round(totalIdleTimeMs / (1000 * 60)),
+                    totalPoints: routePoints.length,
+                    averageSpeedKmh: totalDurationMinutes > 0
+                        ? Math.round((cumulativeDistance / (totalDurationMinutes / 60)) * 100) / 100
+                        : 0,
+                    idlePeriodsCount: idlePeriods.length
+                },
+
+                // For graphs
+                distanceVsTime,
+
+                // Idle analysis
+                idlePeriods,
+
+                // Timeline events
+                movementTimeline,
+
+                // For playback animation
+                playbackPoints,
+
+                // Start and end info
+                startLocation: {
+                    latitude: routePoints[0].latitude,
+                    longitude: routePoints[0].longitude,
+                    timestamp: routePoints[0].recordedAt
+                },
+                endLocation: {
+                    latitude: lastPoint.latitude,
+                    longitude: lastPoint.longitude,
+                    timestamp: lastPoint.recordedAt
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching route analytics:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching route analytics'
+        });
+    }
+};
+
+/**
+ * Get route completion summary for punch-out
+ * Provides final stats when salesman completes their day
+ */
+const getRouteCompletionSummary = async (req, res) => {
+    try {
+        const { attendanceId } = req.params;
+
+        if (!attendanceId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Attendance ID is required'
+            });
+        }
+
+        const attendance = await prisma.attendance.findUnique({
+            where: { id: attendanceId },
+            include: {
+                routeLogs: {
+                    orderBy: { recordedAt: 'asc' }
+                }
+            }
+        });
+
+        if (!attendance) {
+            return res.status(404).json({
+                success: false,
+                message: 'Attendance session not found'
+            });
+        }
+
+        const routePoints = attendance.routeLogs;
+        const totalDistanceKm = calculateTotalRouteDistance(routePoints);
+
+        // Calculate idle time
+        let totalIdleTimeMs = 0;
+        const IDLE_DISTANCE_THRESHOLD = 0.05;
+        const IDLE_TIME_THRESHOLD = 5 * 60 * 1000;
+
+        for (let i = 1; i < routePoints.length; i++) {
+            const prev = routePoints[i - 1];
+            const curr = routePoints[i];
+            const distance = calculateDistance(
+                prev.latitude, prev.longitude,
+                curr.latitude, curr.longitude
+            );
+            const timeDiff = new Date(curr.recordedAt).getTime() - new Date(prev.recordedAt).getTime();
+
+            if (distance < IDLE_DISTANCE_THRESHOLD && timeDiff >= IDLE_TIME_THRESHOLD) {
+                totalIdleTimeMs += timeDiff;
+            }
+        }
+
+        // Find unique locations (clusters within 100m)
+        const uniqueLocations = [];
+        const CLUSTER_THRESHOLD = 0.1; // 100m
+
+        for (const point of routePoints) {
+            const isNearExisting = uniqueLocations.some(loc =>
+                calculateDistance(loc.latitude, loc.longitude, point.latitude, point.longitude) < CLUSTER_THRESHOLD
+            );
+            if (!isNearExisting) {
+                uniqueLocations.push({
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    timestamp: point.recordedAt
+                });
+            }
+        }
+
+        // Calculate duration
+        const startTime = attendance.punchInTime;
+        const endTime = attendance.punchOutTime || new Date();
+        const totalDurationMinutes = Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60));
+
+        // Route preview (simplified path for quick display)
+        const routePreview = routePoints.length > 20
+            ? routePoints.filter((_, i) => i % Math.ceil(routePoints.length / 20) === 0)
+            : routePoints;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                attendanceId,
+                employeeId: attendance.employeeId,
+                employeeName: attendance.employeeName,
+                date: attendance.date,
+                status: attendance.status,
+
+                // Summary
+                totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
+                totalDurationMinutes,
+                idleTimeMinutes: Math.round(totalIdleTimeMs / (1000 * 60)),
+                activeTimeMinutes: totalDurationMinutes - Math.round(totalIdleTimeMs / (1000 * 60)),
+                uniqueLocationsCount: uniqueLocations.length,
+                totalRoutePoints: routePoints.length,
+
+                // Locations
+                startLocation: {
+                    latitude: attendance.punchInLatitude,
+                    longitude: attendance.punchInLongitude,
+                    address: attendance.punchInAddress,
+                    time: attendance.punchInTime
+                },
+                endLocation: attendance.punchOutTime ? {
+                    latitude: attendance.punchOutLatitude,
+                    longitude: attendance.punchOutLongitude,
+                    address: attendance.punchOutAddress,
+                    time: attendance.punchOutTime
+                } : null,
+
+                // Unique locations visited
+                uniqueLocations: uniqueLocations.slice(0, 10), // Limit to 10 for summary
+
+                // Route preview for quick map display
+                routePreview: routePreview.map(p => ({
+                    latitude: p.latitude,
+                    longitude: p.longitude
+                }))
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching route completion summary:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching route completion summary'
+        });
+    }
+};
+
 export {
     storeRoutePoint,
     getAttendanceRoute,
     getRouteSummary,
     getHistoricalRoutes,
-    getCurrentDistance
+    getCurrentDistance,
+    getRouteAnalytics,
+    getRouteCompletionSummary
 };
