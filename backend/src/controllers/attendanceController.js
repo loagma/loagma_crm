@@ -173,21 +173,75 @@ export const punchIn = async (req, res) => {
         });
 
         if (activeAttendance) {
-            console.log('❌ Active attendance found:', {
+            // Check if the active attendance is from a previous day (stale session)
+            const attendanceDate = new Date(activeAttendance.punchInTime);
+            const isStaleSession = attendanceDate < startOfDay;
+
+            console.log('🔍 Active attendance check:', {
                 id: activeAttendance.id,
                 punchInTime: activeAttendance.punchInTime.toISOString(),
-                status: activeAttendance.status
+                status: activeAttendance.status,
+                isStaleSession,
+                attendanceDate: attendanceDate.toISOString(),
+                startOfDay: startOfDay.toISOString()
             });
 
-            return res.status(400).json({
-                success: false,
-                message: 'You have an active session. Please punch out first before starting a new session.',
-                data: {
-                    ...activeAttendance,
-                    punchInTimeIST: formatISTTime(activeAttendance.punchInTime, 'datetime'),
-                    currentWorkHours: getCurrentWorkDurationIST(activeAttendance.punchInTime)
+            if (isStaleSession) {
+                // Auto-close stale session from previous day
+                console.log('🔄 Auto-closing stale session from previous day:', activeAttendance.id);
+
+                // Calculate work hours based on a reasonable end time (end of that day or 8 hours max)
+                const punchInTime = new Date(activeAttendance.punchInTime);
+                const endOfPunchInDay = new Date(punchInTime);
+                endOfPunchInDay.setHours(23, 59, 59, 999);
+
+                // Use end of day as punch out time for stale sessions
+                const stalePunchOutTime = endOfPunchInDay;
+                const staleWorkHours = Math.min(
+                    (stalePunchOutTime - punchInTime) / (1000 * 60 * 60),
+                    12 // Cap at 12 hours max for auto-closed sessions
+                );
+
+                try {
+                    await prisma.attendance.update({
+                        where: { id: activeAttendance.id },
+                        data: {
+                            status: 'completed',
+                            punchOutTime: stalePunchOutTime,
+                            punchOutLatitude: activeAttendance.punchInLatitude,
+                            punchOutLongitude: activeAttendance.punchInLongitude,
+                            punchOutAddress: 'Auto-closed: Session from previous day',
+                            totalWorkHours: Math.round(staleWorkHours * 100) / 100,
+                            totalDistanceKm: 0
+                        }
+                    });
+                    console.log('✅ Stale session auto-closed successfully:', {
+                        id: activeAttendance.id,
+                        autoClosedAt: stalePunchOutTime.toISOString(),
+                        workHours: staleWorkHours.toFixed(2)
+                    });
+                } catch (autoCloseError) {
+                    console.error('❌ Failed to auto-close stale session:', autoCloseError);
+                    // Continue anyway - don't block the new punch-in
                 }
-            });
+            } else {
+                // Active session is from today - block new punch-in
+                console.log('❌ Active attendance found from today:', {
+                    id: activeAttendance.id,
+                    punchInTime: activeAttendance.punchInTime.toISOString(),
+                    status: activeAttendance.status
+                });
+
+                return res.status(400).json({
+                    success: false,
+                    message: 'You have an active session. Please punch out first before starting a new session.',
+                    data: {
+                        ...activeAttendance,
+                        punchInTimeIST: formatISTTime(activeAttendance.punchInTime, 'datetime'),
+                        currentWorkHours: getCurrentWorkDurationIST(activeAttendance.punchInTime)
+                    }
+                });
+            }
         }
 
         // Check for multiple sessions today (optional limit)
