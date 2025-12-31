@@ -353,4 +353,85 @@ class RouteService {
       };
     }
   }
+
+  /// Get detailed route analytics for playback and graphs
+  /// Includes idle time detection, distance vs time data, movement timeline
+  ///
+  /// Parameters:
+  /// - attendanceId: ID of the attendance session
+  ///
+  /// Returns:
+  /// - Analytics data with playback points, idle periods, graphs data
+  static Future<Map<String, dynamic>> getRouteAnalytics(
+    String attendanceId,
+  ) async {
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/routes/analytics/$attendanceId',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data['data']};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch route analytics',
+        };
+      }
+    } catch (e) {
+      print('❌ RouteService.getRouteAnalytics error: $e');
+      return {
+        'success': false,
+        'message': 'Network error while fetching route analytics',
+      };
+    }
+  }
+
+  /// Get route completion summary for punch-out
+  /// Provides final stats when salesman completes their day
+  ///
+  /// Parameters:
+  /// - attendanceId: ID of the attendance session
+  ///
+  /// Returns:
+  /// - Completion summary with distance, duration, idle time, unique locations
+  static Future<Map<String, dynamic>> getRouteCompletionSummary(
+    String attendanceId,
+  ) async {
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/routes/completion/$attendanceId',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data['data']};
+      } else {
+        return {
+          'success': false,
+          'message':
+              data['message'] ?? 'Failed to fetch route completion summary',
+        };
+      }
+    } catch (e) {
+      print('❌ RouteService.getRouteCompletionSummary error: $e');
+      return {
+        'success': false,
+        'message': 'Network error while fetching route completion summary',
+      };
+    }
+  }
 }

@@ -11,6 +11,7 @@ import '../../services/attendance_service.dart';
 import '../../services/route_service.dart';
 import '../../services/admin_live_tracking_socket.dart';
 import '../../models/attendance_model.dart';
+import 'route_playback_screen.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
   const LiveTrackingScreen({super.key});
@@ -328,6 +329,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         });
         _updateMapMarkers();
 
+        // Auto-focus camera on first active employee
+        if (newActiveEmployees.isNotEmpty) {
+          _focusCameraOnActiveEmployees();
+        }
+
         // Load routes if enabled and on live tracking tab
         if (showRoutes && _tabController.index == 0) {
           _loadEmployeeRoutes();
@@ -339,6 +345,55 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         _showErrorSnackBar('Failed to load active employees: $e');
       }
     }
+  }
+
+  /// Focus camera on all active employees or first one
+  void _focusCameraOnActiveEmployees() {
+    if (_mapController == null || activeEmployees.isEmpty) return;
+
+    // If only one employee, focus on them
+    if (activeEmployees.length == 1) {
+      final employee = activeEmployees.first;
+      final lat = employee.currentLatitude ?? employee.punchInLatitude;
+      final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+        ),
+      );
+      return;
+    }
+
+    // Multiple employees - fit all in view
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+
+    for (var employee in activeEmployees) {
+      final lat = employee.currentLatitude ?? employee.punchInLatitude;
+      final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
+      minLat = math.min(minLat, lat);
+      maxLat = math.max(maxLat, lat);
+      minLng = math.min(minLng, lng);
+      maxLng = math.max(maxLng, lng);
+    }
+
+    // Add some padding
+    final latPadding = (maxLat - minLat) * 0.1;
+    final lngPadding = (maxLng - minLng) * 0.1;
+
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat - latPadding, minLng - lngPadding),
+          northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+        ),
+        50.0,
+      ),
+    );
   }
 
   Future<void> _loadCurrentPositions(List<AttendanceModel> employees) async {
@@ -510,32 +565,34 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
     // Add current position markers for active employees
     for (var employee in activeEmployees) {
-      if (employee.currentLatitude != null &&
-          employee.currentLongitude != null) {
-        final isSelected = selectedEmployeeId == employee.employeeId;
-        markers.add(
-          Marker(
-            markerId: MarkerId('current_${employee.employeeId}'),
-            position: LatLng(
-              employee.currentLatitude!,
-              employee.currentLongitude!,
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              isSelected
-                  ? BitmapDescriptor
-                        .hueBlue // Highlight selected employee
-                  : employee.isMoving == true
-                  ? BitmapDescriptor.hueGreen
-                  : BitmapDescriptor.hueOrange,
-            ),
-            infoWindow: InfoWindow(
-              title: '${isSelected ? '⭐ ' : ''}${employee.employeeName}',
-              snippet:
-                  'Current Location - ${employee.isMoving == true ? "Moving" : "Stationary"}',
-            ),
+      // Use current position if available, otherwise fall back to punch-in location
+      final lat = employee.currentLatitude ?? employee.punchInLatitude;
+      final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
+      final isSelected = selectedEmployeeId == employee.employeeId;
+      final hasCurrentPosition =
+          employee.currentLatitude != null && employee.currentLongitude != null;
+
+      markers.add(
+        Marker(
+          markerId: MarkerId('current_${employee.employeeId}'),
+          position: LatLng(lat, lng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            isSelected
+                ? BitmapDescriptor
+                      .hueBlue // Highlight selected employee
+                : employee.isMoving == true
+                ? BitmapDescriptor.hueGreen
+                : BitmapDescriptor.hueOrange,
           ),
-        );
-      }
+          infoWindow: InfoWindow(
+            title: '${isSelected ? '⭐ ' : ''}${employee.employeeName}',
+            snippet: hasCurrentPosition
+                ? 'Live Location - ${employee.isMoving == true ? "Moving" : "Stationary"}'
+                : 'Punch-in Location',
+          ),
+        ),
+      );
     }
 
     // Add home location markers if enabled
@@ -624,20 +681,17 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       orElse: () => activeEmployees.first,
     );
 
-    if (selectedEmployee.currentLatitude != null &&
-        selectedEmployee.currentLongitude != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(
-              selectedEmployee.currentLatitude!,
-              selectedEmployee.currentLongitude!,
-            ),
-            zoom: 15.0,
-          ),
-        ),
-      );
-    }
+    // Use current position if available, otherwise fall back to punch-in location
+    final lat =
+        selectedEmployee.currentLatitude ?? selectedEmployee.punchInLatitude;
+    final lng =
+        selectedEmployee.currentLongitude ?? selectedEmployee.punchInLongitude;
+
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+      ),
+    );
   }
 
   void _updateHistoricalMapData() {
@@ -807,25 +861,50 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: Colors.white,
           child: Row(
             children: [
               Icon(
                 isLiveTrackingEnabled ? Icons.play_circle : Icons.pause_circle,
                 color: isLiveTrackingEnabled ? successColor : warningColor,
+                size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                isLiveTrackingEnabled
-                    ? 'Live Tracking Active'
-                    : 'Live Tracking Paused',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isLiveTrackingEnabled ? successColor : warningColor,
+              Expanded(
+                child: Text(
+                  isLiveTrackingEnabled
+                      ? 'Live Tracking Active'
+                      : 'Live Tracking Paused',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isLiveTrackingEnabled ? successColor : warningColor,
+                  ),
                 ),
               ),
-              const Spacer(),
+              // Refresh button
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: () async {
+                  setState(() => isLoading = true);
+                  await _loadActiveEmployees();
+                  _showInfoSnackBar('Data refreshed');
+                },
+                tooltip: 'Refresh',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              // Focus all button
+              IconButton(
+                icon: const Icon(Icons.center_focus_strong, size: 20),
+                onPressed: _focusCameraOnActiveEmployees,
+                tooltip: 'Focus on employees',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
               Switch(
                 value: isLiveTrackingEnabled,
                 onChanged: (value) {
@@ -842,7 +921,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             ],
           ),
         ),
-        Expanded(child: _buildMap()),
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildMap(),
+        ),
         _buildActiveEmployeesList(),
       ],
     );
@@ -903,47 +986,77 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Selected Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
             ],
           ),
         ),
-        if (selectedSalesmanId != null) ...[
+        if (selectedSalesmanId != null && historicalRoutes.isNotEmpty) ...[
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.blue[50],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.play_arrow),
-                  onPressed: () {
-                    _showInfoSnackBar(
-                      'Playing route for ${DateFormat('MMM dd').format(selectedDate)}',
-                    );
-                  },
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.play_circle_fill),
+                      label: const Text('Full Playback'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        if (historicalRoutes.isNotEmpty) {
+                          final route = historicalRoutes.first;
+                          final employeeName =
+                              route['employeeName'] as String? ?? 'Unknown';
+                          final attendanceId = route['attendanceId'] as String;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => RoutePlaybackScreen(
+                                attendanceId: attendanceId,
+                                employeeName: employeeName,
+                                date: selectedDate,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.analytics),
+                      onPressed: () {
+                        _showRouteAnalyticsDialog();
+                      },
+                      tooltip: 'View Analytics',
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.pause),
-                  onPressed: () {
-                    _showInfoSnackBar('Route playback paused');
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.stop),
-                  onPressed: () {
-                    _showInfoSnackBar('Route playback stopped');
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.speed),
-                  onPressed: () {
-                    _showInfoSnackBar('Playback speed: 2x');
-                  },
-                ),
+                const SizedBox(height: 8),
+                if (historicalRoutes.isNotEmpty)
+                  _buildRouteQuickStats(historicalRoutes.first),
               ],
             ),
           ),
           Expanded(child: _buildMap()),
-        ] else
+        ] else if (selectedSalesmanId != null && isLoading)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (selectedSalesmanId != null)
+          const Expanded(
+            child: Center(
+              child: Text(
+                'No route data found for selected date',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          )
+        else
           const Expanded(
             child: Center(
               child: Text(
@@ -953,6 +1066,147 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             ),
           ),
       ],
+    );
+  }
+
+  /// Build quick stats widget for route
+  Widget _buildRouteQuickStats(Map<String, dynamic> route) {
+    final routeSummary = route['routeSummary'] as Map<String, dynamic>?;
+    final totalDistanceKm = routeSummary?['totalDistanceKm'] ?? 0.0;
+    final duration = routeSummary?['duration'] ?? 0;
+    final totalPoints = routeSummary?['totalPoints'] ?? 0;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildStatChip(Icons.route, '${totalDistanceKm.toStringAsFixed(2)} km'),
+        _buildStatChip(Icons.timer, '$duration min'),
+        _buildStatChip(Icons.location_on, '$totalPoints pts'),
+      ],
+    );
+  }
+
+  Widget _buildStatChip(IconData icon, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue[200]!),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.blue),
+          const SizedBox(width: 4),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show route analytics dialog
+  Future<void> _showRouteAnalyticsDialog() async {
+    if (historicalRoutes.isEmpty) return;
+
+    final route = historicalRoutes.first;
+    final attendanceId = route['attendanceId'] as String;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await RouteService.getRouteAnalytics(attendanceId);
+      Navigator.pop(context); // Close loading dialog
+
+      if (result['success'] == true && mounted) {
+        final data = result['data'];
+        final summary = data['summary'] as Map<String, dynamic>?;
+
+        if (summary != null) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Route Analytics - ${route['employeeName']}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildAnalyticsRow(
+                      Icons.route,
+                      'Total Distance',
+                      '${summary['totalDistanceKm']?.toStringAsFixed(2) ?? '0'} km',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.timer,
+                      'Total Duration',
+                      '${summary['totalDurationMinutes'] ?? 0} min',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.directions_walk,
+                      'Active Time',
+                      '${summary['activeTimeMinutes'] ?? 0} min',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.pause_circle,
+                      'Idle Time',
+                      '${summary['idleTimeMinutes'] ?? 0} min',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.speed,
+                      'Avg Speed',
+                      '${summary['averageSpeedKmh']?.toStringAsFixed(1) ?? '0'} km/h',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.location_on,
+                      'Route Points',
+                      '${summary['totalPoints'] ?? 0}',
+                    ),
+                    _buildAnalyticsRow(
+                      Icons.hourglass_empty,
+                      'Idle Periods',
+                      '${summary['idlePeriodsCount'] ?? 0}',
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        _showErrorSnackBar(result['message'] ?? 'Failed to load analytics');
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      _showErrorSnackBar('Error loading analytics: $e');
+    }
+  }
+
+  Widget _buildAnalyticsRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: primaryColor),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 
@@ -1182,19 +1436,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     }
 
     return Container(
-      height: 120,
+      height: 140,
       color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
                 Text(
                   'Active Employees (${activeEmployees.length})',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1208,7 +1462,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                       _updateMapMarkers();
                       _updateRoutePolylines();
                     },
-                    child: const Text('Clear Selection'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Clear Selection',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
               ],
             ),
@@ -1216,6 +1478,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
               itemCount: activeEmployees.length,
               itemBuilder: (context, index) {
                 final employee = activeEmployees[index];
@@ -1235,9 +1498,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     }
                   },
                   child: Container(
-                    width: 200,
-                    margin: const EdgeInsets.only(left: 16, bottom: 16),
-                    padding: const EdgeInsets.all(12),
+                    width: 180,
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isSelected ? Colors.blue[100] : Colors.grey[100],
                       borderRadius: BorderRadius.circular(8),
@@ -1248,6 +1511,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           children: [
@@ -1260,7 +1524,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                                   : employee.isMoving == true
                                   ? successColor
                                   : warningColor,
-                              size: 16,
+                              size: 14,
                             ),
                             const SizedBox(width: 4),
                             Expanded(
@@ -1268,7 +1532,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                                 employee.employeeName,
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   color: isSelected ? Colors.blue[800] : null,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -1278,38 +1542,52 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                               const Icon(
                                 Icons.star,
                                 color: Colors.blue,
-                                size: 16,
+                                size: 14,
                               ),
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Working: ${_getWorkingDuration(employee.punchInTime)}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isSelected ? Colors.blue[700] : Colors.grey,
-                          ),
-                        ),
-                        if (employee.currentDistanceKm != null)
-                          Text(
-                            'Distance: ${employee.currentDistanceKm!.toStringAsFixed(1)} km',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isSelected
-                                  ? Colors.blue[700]
-                                  : Colors.grey,
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 10,
+                              color: Colors.grey[600],
                             ),
-                          ),
+                            const SizedBox(width: 2),
+                            Text(
+                              _getWorkingDuration(employee.punchInTime),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (employee.currentDistanceKm != null) ...[
+                              Icon(
+                                Icons.route,
+                                size: 10,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${employee.currentDistanceKm!.toStringAsFixed(1)} km',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Text(
-                          isSelected
-                              ? 'Tap to deselect'
-                              : 'Tap to highlight on map',
+                          isSelected ? 'Tap to deselect' : 'Tap to focus',
                           style: TextStyle(
                             fontSize: 9,
                             color: isSelected
                                 ? Colors.blue[600]
-                                : Colors.grey[600],
+                                : Colors.grey[500],
                             fontStyle: FontStyle.italic,
                           ),
                         ),

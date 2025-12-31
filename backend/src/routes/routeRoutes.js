@@ -4,7 +4,9 @@ import {
     getAttendanceRoute,
     getRouteSummary,
     getHistoricalRoutes,
-    getCurrentDistance
+    getCurrentDistance,
+    getRouteAnalytics,
+    getRouteCompletionSummary
 } from '../controllers/routeController.js';
 
 const router = express.Router();
@@ -33,5 +35,13 @@ router.get('/historical', getHistoricalRoutes);
 // GET /api/routes/distance/:employeeId - Get real-time distance for active session
 // Used by Admin to view current distance traveled by a salesman
 router.get('/distance/:employeeId', getCurrentDistance);
+
+// GET /api/routes/analytics/:attendanceId - Get detailed route analytics for playback
+// Used by Admin for route playback with graphs, idle time, movement timeline
+router.get('/analytics/:attendanceId', getRouteAnalytics);
+
+// GET /api/routes/completion/:attendanceId - Get route completion summary
+// Used after punch-out to show final route stats
+router.get('/completion/:attendanceId', getRouteCompletionSummary);
 
 export default router;
