@@ -81,7 +81,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     _pulseController.dispose();
     _liveTimer?.cancel();
     _refreshTimer?.cancel();
-    _mapController?.dispose();
+    // Set to null before disposing to prevent use after dispose
+    final controller = _mapController;
+    _mapController = null;
+    controller?.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -157,8 +160,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   /// Handle real-time location updates from WebSocket
   void _handleRealTimeLocationUpdate(LocationUpdate update) {
-    if (!mounted || _tabController.index != 0)
-      return; // Only update on Live Tracking tab
+    if (!mounted) return; // Widget disposed
+    if (_tabController.index != 0) return; // Only update on Live Tracking tab
 
     try {
       final salesmanId = update.salesmanId;
@@ -180,17 +183,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             location.totalDistanceKm; // Update distance from WebSocket
 
         // Update marker smoothly without rebuilding map
-        _updateSalesmanMarker(employee, location);
+        if (mounted) {
+          _updateSalesmanMarker(employee, location);
 
-        // Update route polyline
-        _updateSalesmanRoute(salesmanId, location.latLng);
-
-        print(
-          '📍 Real-time update for ${employee.employeeName} | ${location.totalDistanceKm.toStringAsFixed(2)} km',
-        );
+          // Update route polyline
+          _updateSalesmanRoute(salesmanId, location.latLng);
+        }
       }
     } catch (e) {
-      print('❌ Error handling real-time location update: $e');
+      // Ignore errors after dispose
     }
   }
 
@@ -349,51 +350,56 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   /// Focus camera on all active employees or first one
   void _focusCameraOnActiveEmployees() {
-    if (_mapController == null || activeEmployees.isEmpty) return;
+    if (!mounted || _mapController == null || activeEmployees.isEmpty) return;
 
-    // If only one employee, focus on them
-    if (activeEmployees.length == 1) {
-      final employee = activeEmployees.first;
-      final lat = employee.currentLatitude ?? employee.punchInLatitude;
-      final lng = employee.currentLongitude ?? employee.punchInLongitude;
+    try {
+      // If only one employee, focus on them
+      if (activeEmployees.length == 1) {
+        final employee = activeEmployees.first;
+        final lat = employee.currentLatitude ?? employee.punchInLatitude;
+        final lng = employee.currentLongitude ?? employee.punchInLongitude;
 
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+          ),
+        );
+        return;
+      }
+
+      // Multiple employees - fit all in view
+      double minLat = double.infinity;
+      double maxLat = -double.infinity;
+      double minLng = double.infinity;
+      double maxLng = -double.infinity;
+
+      for (var employee in activeEmployees) {
+        final lat = employee.currentLatitude ?? employee.punchInLatitude;
+        final lng = employee.currentLongitude ?? employee.punchInLongitude;
+
+        minLat = math.min(minLat, lat);
+        maxLat = math.max(maxLat, lat);
+        minLng = math.min(minLng, lng);
+        maxLng = math.max(maxLng, lng);
+      }
+
+      // Add some padding
+      final latPadding = (maxLat - minLat) * 0.1;
+      final lngPadding = (maxLng - minLng) * 0.1;
+
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat - latPadding, minLng - lngPadding),
+            northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
+          ),
+          50.0,
         ),
       );
-      return;
+    } catch (e) {
+      // Ignore map controller errors after dispose
+      print('Map camera error (ignored): $e');
     }
-
-    // Multiple employees - fit all in view
-    double minLat = double.infinity;
-    double maxLat = -double.infinity;
-    double minLng = double.infinity;
-    double maxLng = -double.infinity;
-
-    for (var employee in activeEmployees) {
-      final lat = employee.currentLatitude ?? employee.punchInLatitude;
-      final lng = employee.currentLongitude ?? employee.punchInLongitude;
-
-      minLat = math.min(minLat, lat);
-      maxLat = math.max(maxLat, lat);
-      minLng = math.min(minLng, lng);
-      maxLng = math.max(maxLng, lng);
-    }
-
-    // Add some padding
-    final latPadding = (maxLat - minLat) * 0.1;
-    final lngPadding = (maxLng - minLng) * 0.1;
-
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat - latPadding, minLng - lngPadding),
-          northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
-        ),
-        50.0,
-      ),
-    );
   }
 
   Future<void> _loadCurrentPositions(List<AttendanceModel> employees) async {
@@ -674,24 +680,30 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   /// Focus camera on selected employee
   void _focusOnSelectedEmployee() {
-    if (selectedEmployeeId == null || _mapController == null) return;
+    if (!mounted || selectedEmployeeId == null || _mapController == null)
+      return;
 
-    final selectedEmployee = activeEmployees.firstWhere(
-      (e) => e.employeeId == selectedEmployeeId,
-      orElse: () => activeEmployees.first,
-    );
+    try {
+      final selectedEmployee = activeEmployees.firstWhere(
+        (e) => e.employeeId == selectedEmployeeId,
+        orElse: () => activeEmployees.first,
+      );
 
-    // Use current position if available, otherwise fall back to punch-in location
-    final lat =
-        selectedEmployee.currentLatitude ?? selectedEmployee.punchInLatitude;
-    final lng =
-        selectedEmployee.currentLongitude ?? selectedEmployee.punchInLongitude;
+      // Use current position if available, otherwise fall back to punch-in location
+      final lat =
+          selectedEmployee.currentLatitude ?? selectedEmployee.punchInLatitude;
+      final lng =
+          selectedEmployee.currentLongitude ??
+          selectedEmployee.punchInLongitude;
 
-    _mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
-      ),
-    );
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+        ),
+      );
+    } catch (e) {
+      // Ignore map controller errors after dispose
+    }
   }
 
   void _updateHistoricalMapData() {
@@ -1256,7 +1268,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   /// Focus map camera on the loaded route
   void _focusMapOnRoute() {
-    if (historicalRoutes.isEmpty || _mapController == null) return;
+    if (!mounted || historicalRoutes.isEmpty || _mapController == null) return;
 
     try {
       final route = historicalRoutes.first;
@@ -1264,14 +1276,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
       if (routePreview != null && routePreview.isNotEmpty) {
         final bounds = _calculateRouteBounds(routePreview);
-        _mapController!.animateCamera(
+        _mapController?.animateCamera(
           CameraUpdate.newLatLngBounds(bounds, 100.0),
         );
       } else {
         // Focus on start location if no route preview
         final startLocation = route['startLocation'] as Map<String, dynamic>?;
         if (startLocation != null) {
-          _mapController!.animateCamera(
+          _mapController?.animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
                 target: LatLng(
@@ -1285,7 +1297,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         }
       }
     } catch (e) {
-      print('Error focusing on route: $e');
+      // Ignore map controller errors after dispose
     }
   }
 
