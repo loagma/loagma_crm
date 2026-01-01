@@ -22,6 +22,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
   String? _searchQuery;
   String? _filterCustomerStage;
   bool? _filterIsApproved;
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
+  String? _filterSalesmanId;
+  List<Map<String, dynamic>> _salesmen = [];
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -38,6 +42,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
   void initState() {
     super.initState();
     _loadAccounts(refresh: true);
+    _loadSalesmen();
     _scrollController.addListener(_onScroll);
   }
 
@@ -67,14 +72,27 @@ class _AccountListScreenState extends State<AccountListScreen> {
     }
 
     try {
+      print('🔍 Loading accounts with filters:');
+      print('   Customer Stage: $_filterCustomerStage');
+      print('   Is Approved: $_filterIsApproved');
+      print('   Salesman ID: $_filterSalesmanId');
+      print('   Start Date: $_filterStartDate');
+      print('   End Date: $_filterEndDate');
+      print('   Should Filter By Owner: $_shouldFilterByOwner');
+      print('   Current User ID: $_currentUserId');
+
       final result = await AccountService.fetchAccounts(
         page: _currentPage,
         limit: 20,
         search: _searchQuery,
         customerStage: _filterCustomerStage,
         isApproved: _filterIsApproved,
-        // apply owner filter for non-admin roles
-        createdById: _shouldFilterByOwner ? _currentUserId : null,
+        startDate: _filterStartDate,
+        endDate: _filterEndDate,
+        // For non-admin users, if no salesman filter is selected, show only their accounts
+        // For admin users, show all accounts unless a specific salesman is selected
+        createdById:
+            _filterSalesmanId ?? (_shouldFilterByOwner ? _currentUserId : null),
       );
 
       // result expected: { 'accounts': List<Account>, 'pagination': {'totalPages': n} }
@@ -111,6 +129,20 @@ class _AccountListScreenState extends State<AccountListScreen> {
 
   Future<void> _refreshAccounts() async {
     await _loadAccounts(refresh: true);
+  }
+
+  Future<void> _loadSalesmen() async {
+    try {
+      final result = await UserService.getAllUsers();
+      if (result['success'] == true) {
+        setState(() {
+          _salesmen = List<Map<String, dynamic>>.from(result['data'] ?? []);
+        });
+      }
+    } catch (e) {
+      // Silently handle error - salesmen dropdown will just be empty
+      print('Error loading salesmen: $e');
+    }
   }
 
   void _showError(String message) {
@@ -165,43 +197,150 @@ class _AccountListScreenState extends State<AccountListScreen> {
       builder: (context) {
         String? tmpStage = _filterCustomerStage;
         bool? tmpApproved = _filterIsApproved;
+        DateTime? tmpStartDate = _filterStartDate;
+        DateTime? tmpEndDate = _filterEndDate;
+        String? tmpSalesmanId = _filterSalesmanId;
+
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Filter Accounts'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
+              title: Row(
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: tmpStage,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer Stage',
-                    ),
-                    items: ['Lead', 'Prospect', 'Customer']
-                        .map(
-                          (stage) => DropdownMenuItem(
-                            value: stage,
-                            child: Text(stage),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => tmpStage = value),
-                  ),
-                  const SizedBox(height: 15),
-                  DropdownButtonFormField<bool>(
-                    initialValue: tmpApproved,
-                    decoration: const InputDecoration(
-                      labelText: 'Approval Status',
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: true, child: Text('Approved')),
-                      DropdownMenuItem(value: false, child: Text('Pending')),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => tmpApproved = value),
-                  ),
+                  Icon(Icons.filter_list, color: Color(0xFFD7BE69)),
+                  SizedBox(width: 8),
+                  Text('Filter Accounts'),
                 ],
+              ),
+              content: Container(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: tmpStage,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Stage',
+                        ),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('All Stages'),
+                          ),
+                          ...['Lead', 'Prospect', 'Customer'].map(
+                            (stage) => DropdownMenuItem(
+                              value: stage,
+                              child: Text(stage),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => tmpStage = value),
+                      ),
+                      const SizedBox(height: 15),
+                      DropdownButtonFormField<bool>(
+                        value: tmpApproved,
+                        decoration: const InputDecoration(
+                          labelText: 'Approval Status',
+                        ),
+                        items: const [
+                          DropdownMenuItem<bool>(
+                            value: null,
+                            child: Text('All Status'),
+                          ),
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text('Approved'),
+                          ),
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('Pending'),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => tmpApproved = value),
+                      ),
+                      const SizedBox(height: 15),
+                      DropdownButtonFormField<String>(
+                        value: tmpSalesmanId,
+                        decoration: const InputDecoration(
+                          labelText: 'Salesman',
+                        ),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('All Salesmen'),
+                          ),
+                          ..._salesmen.map(
+                            (salesman) => DropdownMenuItem<String>(
+                              value: salesman['id'] ?? salesman['_id'],
+                              child: Text(salesman['name'] ?? 'Unknown'),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => tmpSalesmanId = value),
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'Start Date',
+                                suffixIcon: Icon(Icons.calendar_today),
+                              ),
+                              readOnly: true,
+                              controller: TextEditingController(
+                                text: tmpStartDate != null
+                                    ? '${tmpStartDate!.day}/${tmpStartDate!.month}/${tmpStartDate!.year}'
+                                    : '',
+                              ),
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: tmpStartDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (date != null) {
+                                  setDialogState(() => tmpStartDate = date);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'End Date',
+                                suffixIcon: Icon(Icons.calendar_today),
+                              ),
+                              readOnly: true,
+                              controller: TextEditingController(
+                                text: tmpEndDate != null
+                                    ? '${tmpEndDate!.day}/${tmpEndDate!.month}/${tmpEndDate!.year}'
+                                    : '',
+                              ),
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: tmpEndDate ?? DateTime.now(),
+                                  firstDate: tmpStartDate ?? DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (date != null) {
+                                  setDialogState(() => tmpEndDate = date);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -209,22 +348,35 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     setState(() {
                       _filterCustomerStage = null;
                       _filterIsApproved = null;
+                      _filterStartDate = null;
+                      _filterEndDate = null;
+                      _filterSalesmanId = null;
                     });
                     Navigator.pop(context);
                     _refreshAccounts();
                   },
-                  child: const Text('Clear'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey[600],
+                  ),
+                  child: const Text('Clear All'),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
                       _filterCustomerStage = tmpStage;
                       _filterIsApproved = tmpApproved;
+                      _filterStartDate = tmpStartDate;
+                      _filterEndDate = tmpEndDate;
+                      _filterSalesmanId = tmpSalesmanId;
                     });
                     Navigator.pop(context);
                     _refreshAccounts();
                   },
-                  child: const Text('Apply'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFFD7BE69),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Apply Filters'),
                 ),
               ],
             );
@@ -232,6 +384,48 @@ class _AccountListScreenState extends State<AccountListScreen> {
         );
       },
     );
+  }
+
+  bool _hasActiveFilters() {
+    return _filterCustomerStage != null ||
+        _filterIsApproved != null ||
+        _filterStartDate != null ||
+        _filterEndDate != null ||
+        _filterSalesmanId != null;
+  }
+
+  String _getActiveFiltersText() {
+    List<String> activeFilters = [];
+
+    if (_filterCustomerStage != null) {
+      activeFilters.add(_filterCustomerStage!);
+    }
+    if (_filterIsApproved != null) {
+      activeFilters.add(_filterIsApproved! ? 'Approved' : 'Pending');
+    }
+    if (_filterSalesmanId != null) {
+      final salesman = _salesmen.firstWhere(
+        (s) => (s['id'] ?? s['_id']) == _filterSalesmanId,
+        orElse: () => {'name': 'Unknown Salesman'},
+      );
+      activeFilters.add('By: ${salesman['name'] ?? 'Unknown'}');
+    }
+    if (_filterStartDate != null || _filterEndDate != null) {
+      String dateRange = 'Date: ';
+      if (_filterStartDate != null && _filterEndDate != null) {
+        dateRange +=
+            '${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year} - ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
+      } else if (_filterStartDate != null) {
+        dateRange +=
+            'From ${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year}';
+      } else if (_filterEndDate != null) {
+        dateRange +=
+            'Until ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
+      }
+      activeFilters.add(dateRange);
+    }
+
+    return activeFilters.join(', ');
   }
 
   // Navigate to create screen
@@ -256,9 +450,26 @@ class _AccountListScreenState extends State<AccountListScreen> {
         title: const Text('Accounts'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterDialog,
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                onPressed: _showFilterDialog,
+              ),
+              if (_hasActiveFilters())
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -303,6 +514,59 @@ class _AccountListScreenState extends State<AccountListScreen> {
               },
             ),
           ),
+
+          // Active filters indicator
+          if (_hasActiveFilters())
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 15),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Color(0xFFD7BE69).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Color(0xFFD7BE69).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt, size: 16, color: Color(0xFFD7BE69)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Filters active: ${_getActiveFiltersText()}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFD7BE69),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _filterCustomerStage = null;
+                        _filterIsApproved = null;
+                        _filterStartDate = null;
+                        _filterEndDate = null;
+                        _filterSalesmanId = null;
+                      });
+                      _refreshAccounts();
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFD7BE69),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Accounts List
           Expanded(

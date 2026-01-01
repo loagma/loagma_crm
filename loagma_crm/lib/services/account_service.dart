@@ -124,6 +124,8 @@ class AccountService {
     bool? isApproved,
     String? createdById,
     String? search,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -137,7 +139,17 @@ class AccountService {
         if (isApproved != null) 'isApproved': isApproved.toString(),
         if (createdById != null) 'createdById': createdById,
         if (search != null) 'search': search,
+        if (startDate != null)
+          'startDate': startDate.toIso8601String().split(
+            'T',
+          )[0], // Send only date part
+        if (endDate != null)
+          'endDate': endDate.toIso8601String().split(
+            'T',
+          )[0], // Send only date part
       };
+
+      print('🔍 Query params: $queryParams');
 
       final uri = Uri.parse(
         ApiConfig.accountsUrl,
