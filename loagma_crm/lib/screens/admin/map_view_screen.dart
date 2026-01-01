@@ -42,6 +42,36 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   bool _showAccountsList = false;
   List<String> _selectedPlaceTypes = ['store'];
   int _searchRadius = 1500;
+
+  // Place types for business discovery
+  final List<Map<String, dynamic>> _placeTypes = [
+    {'type': 'store', 'name': 'Stores', 'icon': Icons.store},
+    {'type': 'restaurant', 'name': 'Restaurants', 'icon': Icons.restaurant},
+    {'type': 'shopping_mall', 'name': 'Malls', 'icon': Icons.shopping_bag},
+    {
+      'type': 'supermarket',
+      'name': 'Supermarkets',
+      'icon': Icons.local_grocery_store,
+    },
+    {
+      'type': 'convenience_store',
+      'name': 'Grocery Store',
+      'icon': Icons.storefront,
+    },
+    {'type': 'lodging', 'name': 'Hotels', 'icon': Icons.hotel},
+    {'type': 'meal_takeaway', 'name': 'Caterers', 'icon': Icons.takeout_dining},
+    {'type': 'food', 'name': 'Sweets', 'icon': Icons.cake},
+    {'type': 'bank', 'name': 'Banks', 'icon': Icons.account_balance},
+    {
+      'type': 'gas_station',
+      'name': 'Gas Stations',
+      'icon': Icons.local_gas_station,
+    },
+    {'type': 'pharmacy', 'name': 'Pharmacies', 'icon': Icons.local_pharmacy},
+    {'type': 'hospital', 'name': 'Hospitals', 'icon': Icons.local_hospital},
+    {'type': 'school', 'name': 'Schools', 'icon': Icons.school},
+    {'type': 'cafe', 'name': 'Cafes', 'icon': Icons.local_cafe},
+  ];
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
   bool _isLegendCollapsed = false;
@@ -1378,6 +1408,86 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ),
             ],
           ),
+          if (_showPlaces) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Shop Categories',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              height: 100,
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  childAspectRatio: 2.5,
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
+                ),
+                itemCount: _placeTypes.length,
+                itemBuilder: (context, index) {
+                  final placeType = _placeTypes[index];
+                  final isSelected = _selectedPlaceTypes.contains(
+                    placeType['type'],
+                  );
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedPlaceTypes.remove(placeType['type']);
+                          // Ensure at least one place type is always selected
+                          if (_selectedPlaceTypes.isEmpty) {
+                            _selectedPlaceTypes.add('store');
+                          }
+                        } else {
+                          _selectedPlaceTypes.add(placeType['type']);
+                        }
+                      });
+                      _loadNearbyPlaces();
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? primaryColor.withOpacity(0.2)
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isSelected ? primaryColor : Colors.grey[300]!,
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            placeType['icon'],
+                            size: 16,
+                            color: isSelected ? primaryColor : Colors.grey[600],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            placeType['name'],
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? primaryColor
+                                  : Colors.grey[700],
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
