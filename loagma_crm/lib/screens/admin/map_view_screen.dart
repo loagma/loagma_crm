@@ -9,6 +9,7 @@ import '../../services/google_places_service.dart';
 import '../../services/location_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
+import '../../services/shop_service.dart';
 import '../../config/google_places_config.dart';
 
 class AdminEnhancedMapScreen extends StatefulWidget {
@@ -25,6 +26,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   bool _isControllerDisposed = false;
   Set<Marker> _markers = {};
   bool isLoading = true;
+
+  List<Map<String, dynamic>> _googlePlacesShops = [];
+  bool _isLoadingGooglePlaces = false;
 
   List<Map<String, dynamic>> salesmanAccounts = [];
   List<PlaceInfo> nearbyPlaces = [];
@@ -504,7 +508,19 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   }
 
   void _updateMapMarkers() {
+    if (_selectedPincodes.isNotEmpty) {
+      // If pincodes are selected, show all shops (existing + Google Places)
+      _updateMapMarkersWithAllShops();
+    } else {
+      // Default behavior - show only salesman accounts and nearby places
+      _updateMapMarkersDefault();
+    }
+  }
+
+  void _updateMapMarkersDefault() {
     Set<Marker> markers = {};
+
+    // Add current location marker
     if (_currentPosition != null) {
       markers.add(
         Marker(
@@ -518,6 +534,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         ),
       );
     }
+
+    // Add salesman accounts
     if (_showAccounts) {
       for (var account in _getFilteredAccounts()) {
         if (account['latitude'] != null && account['longitude'] != null) {
@@ -525,6 +543,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             final lat = double.parse(account['latitude'].toString());
             final lng = double.parse(account['longitude'].toString());
             if (!_isValidCoordinate(lat, lng)) continue;
+
             markers.add(
               Marker(
                 markerId: MarkerId('account_${account['id']}'),
@@ -542,10 +561,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 onTap: () => _showAccountDetails(account),
               ),
             );
-          } catch (e) {}
+          } catch (e) {
+            print('❌ Error adding account marker: $e');
+          }
         }
       }
     }
+
+    // Add nearby places
     if (_showPlaces) {
       for (int i = 0; i < nearbyPlaces.length; i++) {
         final place = nearbyPlaces[i];
@@ -556,7 +579,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               position: LatLng(place.latitude!, place.longitude!),
               infoWindow: InfoWindow(title: place.name),
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet,
+                BitmapDescriptor.hueRed,
               ),
               onTap: () => _showPlaceDetails(place),
             ),
@@ -564,6 +587,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         }
       }
     }
+
     setState(() => _markers = markers);
   }
 
@@ -844,18 +868,543 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
   void _onPincodeSelected(String pincode, Map<String, dynamic> pincodeData) {
     print('🎯 Pincode selected: $pincode');
+    print('📊 Current selected pincodes: $_selectedPincodes');
+
     setState(() {
       if (_selectedPincodes.contains(pincode)) {
         _selectedPincodes.remove(pincode);
+        print('➖ Removed pincode: $pincode');
       } else {
         _selectedPincodes.add(pincode);
+        print('➕ Added pincode: $pincode');
       }
     });
+
+    print('📊 Updated selected pincodes: $_selectedPincodes');
+
     if (_selectedPincodes.isNotEmpty) {
-      _focusOnSelectedPincodes();
+      print('🔄 Loading all shops for selected pincodes...');
+      _loadAllShopsForSelectedPincodes();
     } else {
+      print('🔄 No pincodes selected, updating markers normally...');
       _updateMapMarkers();
     }
+  }
+
+  Future<void> _loadAllShopsForSelectedPincodes() async {
+    print('🔍 Loading all shops for pincodes: $_selectedPincodes');
+    setState(() => _isLoadingGooglePlaces = true);
+
+    try {
+      // First, focus on salesman accounts for selected pincodes
+      await _focusOnSelectedPincodes();
+
+      // Then load Google Places shops for each selected pincode
+      List<Map<String, dynamic>> allGoogleShops = [];
+
+      for (String pincode in _selectedPincodes) {
+        print('🔎 Loading Google Places shops for pincode: $pincode');
+
+        // Get pincode data for geocoding
+        final pincodeData = _assignedPincodes.firstWhere(
+          (p) => p['pincode'] == pincode,
+          orElse: () => {'pincode': pincode, 'city': ''},
+        );
+
+        final googleShops = await _loadGooglePlacesForPincode(
+          pincode,
+          pincodeData['city'] ?? '',
+        );
+        allGoogleShops.addAll(googleShops);
+      }
+
+      setState(() {
+        _googlePlacesShops = allGoogleShops;
+      });
+
+      print('✅ Loaded ${allGoogleShops.length} Google Places shops');
+      print('📊 Sample Google Places data: ${allGoogleShops.take(2).toList()}');
+
+      // Update markers to show both types
+      _updateMapMarkersWithAllShops();
+    } catch (e) {
+      print('❌ Error loading all shops: $e');
+      _showError('Failed to load shops from Google Places');
+    } finally {
+      setState(() => _isLoadingGooglePlaces = false);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadGooglePlacesForPincode(
+    String pincode,
+    String city,
+  ) async {
+    try {
+      print('🔎 Loading shops from backend API for pincode: $pincode');
+
+      // Use the new backend API to get all shops for this pincode
+      final result = await ShopService.getShopsByPincode(
+        pincode,
+        businessTypes: [
+          'store',
+          'restaurant',
+          'supermarket',
+          'convenience_store',
+          'bakery',
+          'cafe',
+          'pharmacy',
+          'gas_station',
+          'bank',
+          'shopping_mall',
+        ],
+      );
+
+      if (result['success'] == true && result['data'] != null) {
+        final data = result['data'];
+        final googlePlacesShops =
+            data['googlePlacesShops']?['shops'] as List? ?? [];
+
+        print(
+          '✅ Loaded ${googlePlacesShops.length} Google Places shops from backend',
+        );
+
+        // Convert to our expected format and validate data
+        List<Map<String, dynamic>> validShops = [];
+
+        for (var shop in googlePlacesShops) {
+          try {
+            // Validate required fields
+            if (shop['latitude'] != null &&
+                shop['longitude'] != null &&
+                shop['name'] != null &&
+                shop['placeId'] != null) {
+              validShops.add({
+                'id': shop['id'] ?? 'google_${shop['placeId']}',
+                'placeId': shop['placeId'],
+                'name': shop['name'] ?? 'Unknown Shop',
+                'businessType': shop['businessType'] ?? 'store',
+                'address': shop['address'] ?? '',
+                'pincode': pincode,
+                'latitude': _parseDouble(shop['latitude']),
+                'longitude': _parseDouble(shop['longitude']),
+                'rating': _parseDouble(shop['rating']),
+                'isGooglePlace': true,
+                'isApproved': null,
+                'salesmanName': null,
+              });
+            } else {
+              print(
+                '⚠️ Skipping invalid shop: ${shop['name']} - missing required fields',
+              );
+            }
+          } catch (e) {
+            print('❌ Error processing shop ${shop['name']}: $e');
+          }
+        }
+
+        print('✅ Processed ${validShops.length} valid Google Places shops');
+        return validShops;
+      } else {
+        print('❌ Backend API failed: ${result['message'] ?? 'Unknown error'}');
+        return [];
+      }
+    } catch (e) {
+      print('❌ Error loading shops from backend: $e');
+      return [];
+    }
+  }
+
+  void _updateMapMarkersWithAllShops() {
+    print('🗺️ Updating map markers with all shops');
+    print('📊 Google Places shops count: ${_googlePlacesShops.length}');
+    print(
+      '📊 Salesman accounts count: ${_getFilteredAccountsForSelectedPincodes().length}',
+    );
+
+    Set<Marker> markers = {};
+
+    // Add current location marker
+    if (_currentPosition != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: LatLng(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          ),
+          infoWindow: const InfoWindow(title: 'My Location'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ),
+      );
+    }
+
+    // Add salesman-created accounts (existing shops)
+    if (_showAccounts) {
+      for (var account in _getFilteredAccountsForSelectedPincodes()) {
+        if (account['latitude'] != null && account['longitude'] != null) {
+          try {
+            final lat = double.parse(account['latitude'].toString());
+            final lng = double.parse(account['longitude'].toString());
+            if (!_isValidCoordinate(lat, lng)) continue;
+
+            markers.add(
+              Marker(
+                markerId: MarkerId('salesman_account_${account['id']}'),
+                position: LatLng(lat, lng),
+                infoWindow: InfoWindow(
+                  title: account['personName'] ?? 'Unknown',
+                  snippet:
+                      '${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''} • EXISTING',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  account['isApproved'] == true
+                      ? BitmapDescriptor
+                            .hueGreen // Green for approved salesman shops
+                      : BitmapDescriptor
+                            .hueOrange, // Orange for pending salesman shops
+                ),
+                onTap: () => _showAccountDetails(account),
+              ),
+            );
+          } catch (e) {
+            print('❌ Error adding salesman account marker: $e');
+          }
+        }
+      }
+    }
+
+    // Add Google Places shops (new potential shops)
+    print(
+      '🟣 Processing ${_googlePlacesShops.length} Google Places shops for markers',
+    );
+    int googleMarkersAdded = 0;
+
+    for (var shop in _googlePlacesShops) {
+      print(
+        '🔍 Processing Google Place: ${shop['name']} at (${shop['latitude']}, ${shop['longitude']})',
+      );
+
+      if (shop['latitude'] != null && shop['longitude'] != null) {
+        try {
+          final lat = _parseDouble(shop['latitude']);
+          final lng = _parseDouble(shop['longitude']);
+
+          print(
+            '📍 Coordinates: ($lat, $lng), Valid: ${lat != null && lng != null && _isValidCoordinate(lat, lng)}',
+          );
+
+          if (lat == null || lng == null || !_isValidCoordinate(lat, lng))
+            continue;
+
+          markers.add(
+            Marker(
+              markerId: MarkerId('google_shop_${shop['id']}'),
+              position: LatLng(lat, lng),
+              infoWindow: InfoWindow(
+                title: shop['name'] ?? 'Unknown Shop',
+                snippet:
+                    '${shop['businessType']?.toUpperCase() ?? ''} • GOOGLE PLACES • Rating: ${shop['rating']?.toStringAsFixed(1) ?? 'N/A'}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueViolet, // Purple for Google Places shops
+              ),
+              onTap: () => _showGooglePlaceDetails(shop),
+            ),
+          );
+          googleMarkersAdded++;
+          print('✅ Added Google Places marker for ${shop['name']}');
+        } catch (e) {
+          print('❌ Error adding Google Places marker for ${shop['name']}: $e');
+        }
+      } else {
+        print('⚠️ Skipping Google Place ${shop['name']} - missing coordinates');
+      }
+    }
+
+    print(
+      '🟣 Added $googleMarkersAdded Google Places markers out of ${_googlePlacesShops.length}',
+    );
+
+    // Add regular nearby places if enabled
+    if (_showPlaces) {
+      for (int i = 0; i < nearbyPlaces.length; i++) {
+        final place = nearbyPlaces[i];
+        if (place.latitude != null && place.longitude != null) {
+          markers.add(
+            Marker(
+              markerId: MarkerId('nearby_place_$i'),
+              position: LatLng(place.latitude!, place.longitude!),
+              infoWindow: InfoWindow(
+                title: place.name,
+                snippet: 'NEARBY PLACE',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueRed, // Red for general nearby places
+              ),
+              onTap: () => _showPlaceDetails(place),
+            ),
+          );
+        }
+      }
+    }
+
+    setState(() => _markers = markers);
+    print('🗺️ Updated map with ${markers.length} markers');
+    print('   - Current location: ${_currentPosition != null ? 1 : 0}');
+    print(
+      '   - Salesman accounts: ${_getFilteredAccountsForSelectedPincodes().length}',
+    );
+    print('   - Google Places: $googleMarkersAdded');
+    print('   - Nearby places: ${_showPlaces ? nearbyPlaces.length : 0}');
+  }
+
+  List<Map<String, dynamic>> _getFilteredAccountsForSelectedPincodes() {
+    if (_selectedPincodes.isEmpty) return [];
+
+    return salesmanAccounts.where((account) {
+      final accountPincode = account['pincode']?.toString();
+      return accountPincode != null &&
+          _selectedPincodes.contains(accountPincode);
+    }).toList();
+  }
+
+  void _showGooglePlaceDetails(Map<String, dynamic> shop) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.purple,
+                  child: Icon(Icons.store, color: Colors.white, size: 30),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shop['name'] ?? 'Unknown Shop',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Google Places Shop',
+                        style: TextStyle(color: Colors.purple),
+                      ),
+                      if (shop['rating'] != null)
+                        Row(
+                          children: [
+                            Icon(Icons.star, color: Colors.amber, size: 16),
+                            Text(' ${shop['rating'].toStringAsFixed(1)}'),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            if (shop['businessType'] != null)
+              _buildDetailRow(
+                Icons.business,
+                'Type',
+                shop['businessType'].toString().toUpperCase(),
+              ),
+            if (shop['address'] != null)
+              _buildDetailRow(Icons.location_on, 'Address', shop['address']),
+            _buildDetailRow(
+              Icons.pin_drop,
+              'Pincode',
+              shop['pincode'] ?? 'N/A',
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _focusOnGooglePlace(shop);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.my_location),
+                    label: const Text('Focus on Map'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCreateAccountFromGooglePlace(shop),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.add_business),
+                    label: const Text('Add as Account'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _focusOnGooglePlace(Map<String, dynamic> shop) async {
+    if (!mounted || shop['latitude'] == null || shop['longitude'] == null)
+      return;
+
+    try {
+      final lat = _parseDouble(shop['latitude']);
+      final lng = _parseDouble(shop['longitude']);
+      if (lat != null && lng != null && _isValidCoordinate(lat, lng)) {
+        await _safeAnimateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
+        );
+      }
+    } catch (e) {
+      print('❌ Error focusing on Google Place: $e');
+    }
+  }
+
+  void _showCreateAccountFromGooglePlace(Map<String, dynamic> shop) {
+    Navigator.pop(context); // Close the details modal first
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.add_business, color: primaryColor),
+            const SizedBox(width: 8),
+            const Text('Add as Account'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Do you want to add this Google Places shop as a new account?',
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shop['name'] ?? 'Unknown Shop',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (shop['address'] != null) Text(shop['address']),
+                  if (shop['businessType'] != null)
+                    Text(
+                      'Type: ${shop['businessType'].toString().toUpperCase()}',
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _createAccountFromGooglePlace(shop);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text('Add Account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createAccountFromGooglePlace(Map<String, dynamic> shop) async {
+    try {
+      setState(() => _isLoadingGooglePlaces = true);
+
+      final placeId = shop['placeId'];
+      if (placeId == null) {
+        _showError('Invalid place ID');
+        return;
+      }
+
+      print('🔄 Creating account from Google Place: $placeId');
+
+      final result = await ShopService.createAccountFromGooglePlace(
+        placeId,
+        customerStage: 'Lead',
+        funnelStage: 'Awareness',
+        notes: 'Created from Google Places via Admin Map',
+      );
+
+      if (result['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Account created successfully!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+
+        // Refresh the data to show the new account
+        await _loadAccountsForSelectedSalesmen();
+
+        print('✅ Account created successfully');
+      } else {
+        _showError(result['message'] ?? 'Failed to create account');
+      }
+    } catch (e) {
+      print('❌ Error creating account: $e');
+      _showError('Error creating account: ${e.toString()}');
+    } finally {
+      setState(() => _isLoadingGooglePlaces = false);
+    }
+  }
+
+  // Helper method to safely parse double values
+  double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        print('❌ Error parsing double from string: $value');
+        return null;
+      }
+    }
+    print('❌ Unknown type for double parsing: ${value.runtimeType}');
+    return null;
   }
 
   Future<void> _focusOnSelectedPincodes() async {
@@ -1029,11 +1578,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           .where((p) => p.isNotEmpty)
           .toList(),
     );
-    _focusOnSelectedPincodes();
+    _loadAllShopsForSelectedPincodes();
   }
 
   void _clearPincodeSelection() {
-    setState(() => _selectedPincodes.clear());
+    setState(() {
+      _selectedPincodes.clear();
+      _googlePlacesShops.clear();
+    });
     _updateMapMarkers();
   }
 
@@ -1527,9 +2079,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         children: [
           if (!_isLegendCollapsed) ...[
             _buildLegendItem('My Location', Colors.blue),
-            _buildLegendItem('Approved', Colors.green),
-            _buildLegendItem('Pending', Colors.orange),
-            _buildLegendItem('Places', Colors.purple),
+            _buildLegendItem('Approved Shops', Colors.green),
+            _buildLegendItem('Pending Shops', Colors.orange),
+            _buildLegendItem('Google Places', Colors.purple),
+            _buildLegendItem('Nearby Places', Colors.red),
             const SizedBox(height: 8),
           ],
           InkWell(
@@ -1637,8 +2190,30 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                         ),
                       ),
                     ),
+                    if (_isLoadingGooglePlaces) ...[
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ],
                   ],
                 ),
+                const SizedBox(height: 4),
+                if (_selectedPincodes.isNotEmpty &&
+                    _googlePlacesShops.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${_googlePlacesShops.length} Google Places shops found',
+                      style: const TextStyle(fontSize: 8, color: Colors.purple),
+                    ),
+                  ),
                 const SizedBox(height: 4),
                 Flexible(
                   child: SingleChildScrollView(

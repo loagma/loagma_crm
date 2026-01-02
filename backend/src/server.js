@@ -28,6 +28,7 @@ import employeeWorkingHoursRoutes from './routes/employeeWorkingHoursRoutes.js';
 import punchStatusRoutes from './routes/punchStatusRoutes.js';
 import leaveRoutes from './routes/leaveRoutes.js';
 import beatPlanRoutes from './routes/beatPlanRoutes.js';
+import shopRoutes from './routes/shopRoutes.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -90,6 +91,7 @@ app.use('/employee-working-hours', employeeWorkingHoursRoutes);
 app.use('/punch', punchStatusRoutes);
 app.use('/leaves', leaveRoutes);
 app.use('/beat-plans', beatPlanRoutes);
+app.use('/shops', shopRoutes);
 
 // 404 Handler
 app.use((req, res) => {
