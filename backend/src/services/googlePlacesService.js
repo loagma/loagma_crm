@@ -56,6 +56,15 @@ export const getCoordinatesFromPincode = async (pincode, country = 'India') => {
  */
 export const searchBusinessesNearby = async (latitude, longitude, businessType, radius = 5000) => {
   try {
+    // Validate API key
+    if (!GOOGLE_MAPS_API_KEY) {
+      return {
+        success: false,
+        message: 'Google Maps API key not configured',
+        businesses: []
+      };
+    }
+
     const types = BUSINESS_TYPE_MAPPING[businessType.toLowerCase()] || ['store'];
     const allResults = [];
 
@@ -63,20 +72,26 @@ export const searchBusinessesNearby = async (latitude, longitude, businessType, 
     console.log(`📋 Using Google Places types: ${types.join(', ')}`);
 
     for (const type of types) {
-      const response = await axios.get(`${PLACES_API_URL}/nearbysearch/json`, {
-        params: {
-          location: `${latitude},${longitude}`,
-          radius: radius,
-          type: type,
-          key: GOOGLE_MAPS_API_KEY
-        }
-      });
+      try {
+        const response = await axios.get(`${PLACES_API_URL}/nearbysearch/json`, {
+          params: {
+            location: `${latitude},${longitude}`,
+            radius: radius,
+            type: type,
+            key: GOOGLE_MAPS_API_KEY
+          }
+        });
 
-      if (response.data.results) {
-        console.log(`✅ Found ${response.data.results.length} results for type: ${type}`);
-        allResults.push(...response.data.results);
-      } else {
-        console.log(`⚠️  No results for type: ${type}`);
+        if (response.data.status === 'OK' && response.data.results) {
+          console.log(`✅ Found ${response.data.results.length} results for type: ${type}`);
+          allResults.push(...response.data.results);
+        } else if (response.data.status === 'ZERO_RESULTS') {
+          console.log(`⚠️ No results for type: ${type}`);
+        } else {
+          console.log(`⚠️ API error for type ${type}: ${response.data.status} - ${response.data.error_message || ''}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error searching type ${type}:`, error.message);
       }
 
       // Add delay to avoid rate limiting
@@ -96,15 +111,20 @@ export const searchBusinessesNearby = async (latitude, longitude, businessType, 
         placeId: place.place_id,
         name: place.name,
         address: place.vicinity,
-        latitude: place.geometry.location.lat,
-        longitude: place.geometry.location.lng,
+        latitude: place.geometry?.location?.lat,
+        longitude: place.geometry?.location?.lng,
         rating: place.rating,
         businessType: businessType
       }))
     };
   } catch (error) {
     console.error('Places search error:', error.message);
-    return { success: false, message: 'Failed to search businesses', error: error.message };
+    return {
+      success: false,
+      message: 'Failed to search businesses',
+      error: error.message,
+      businesses: []
+    };
   }
 };
 
@@ -143,10 +163,25 @@ export const searchBusinessesByPincode = async (pincode, businessTypes, areas = 
     console.log(`\n🔍 Searching businesses in pincode: ${pincode}`);
     console.log(`📋 Business types requested: ${businessTypes.join(', ')}`);
 
+    // Validate API key
+    if (!GOOGLE_MAPS_API_KEY) {
+      console.error('❌ Google Maps API key not configured');
+      return {
+        success: false,
+        message: 'Google Maps API key not configured',
+        businesses: []
+      };
+    }
+
     // Get coordinates for pincode
     const coordsResult = await getCoordinatesFromPincode(pincode);
     if (!coordsResult.success) {
-      return coordsResult;
+      console.log(`❌ Could not geocode pincode ${pincode}: ${coordsResult.message}`);
+      return {
+        success: false,
+        message: `Could not find location for pincode ${pincode}`,
+        businesses: []
+      };
     }
 
     const { latitude, longitude } = coordsResult;
@@ -159,29 +194,51 @@ export const searchBusinessesByPincode = async (pincode, businessTypes, areas = 
     for (const businessType of businessTypes) {
       const normalizedType = businessType.toLowerCase();
       console.log(`\n🔎 Searching for: ${businessType} (normalized: ${normalizedType})`);
-      
-      const result = await searchBusinessesNearby(latitude, longitude, normalizedType);
-      if (result.success) {
-        allBusinesses.push(...result.businesses);
-        breakdown[businessType] = result.businesses.length;
-        console.log(`✅ Found ${result.businesses.length} ${businessType} businesses`);
-      } else {
-        console.log(`❌ Failed to search ${businessType}: ${result.message}`);
+
+      try {
+        const result = await searchBusinessesNearby(latitude, longitude, normalizedType);
+        if (result.success && result.businesses) {
+          allBusinesses.push(...result.businesses);
+          breakdown[businessType] = result.businesses.length;
+          console.log(`✅ Found ${result.businesses.length} ${businessType} businesses`);
+        } else {
+          console.log(`⚠️ Failed to search ${businessType}: ${result.message || 'Unknown error'}`);
+          breakdown[businessType] = 0;
+        }
+      } catch (error) {
+        console.error(`❌ Error searching ${businessType}:`, error.message);
+        breakdown[businessType] = 0;
       }
     }
 
-    console.log(`\n📊 Total businesses found: ${allBusinesses.length}`);
+    // Remove duplicates based on placeId
+    const uniqueBusinesses = [];
+    const seenPlaceIds = new Set();
+
+    for (const business of allBusinesses) {
+      if (business.placeId && !seenPlaceIds.has(business.placeId)) {
+        seenPlaceIds.add(business.placeId);
+        uniqueBusinesses.push(business);
+      }
+    }
+
+    console.log(`\n📊 Total businesses found: ${uniqueBusinesses.length}`);
     console.log(`📊 Breakdown:`, breakdown);
 
     return {
       success: true,
-      totalBusinesses: allBusinesses.length,
+      totalBusinesses: uniqueBusinesses.length,
       breakdown: breakdown,
-      businesses: allBusinesses,
-      message: `Found ${allBusinesses.length} businesses in pincode ${pincode}`
+      businesses: uniqueBusinesses,
+      message: `Found ${uniqueBusinesses.length} businesses in pincode ${pincode}`
     };
   } catch (error) {
-    console.error('Business search error:', error.message);
-    return { success: false, message: 'Failed to search businesses', error: error.message };
+    console.error('❌ Business search error:', error.message);
+    return {
+      success: false,
+      message: 'Failed to search businesses',
+      error: error.message,
+      businesses: []
+    };
   }
 };
