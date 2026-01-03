@@ -541,7 +541,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       }
 
       final uri = Uri.parse(
-        '${ApiConfig.baseUrl}/api/routes/historical',
+        '${ApiConfig.baseUrl}/routes/historical',
       ).replace(queryParameters: queryParams);
 
       final response = await http.get(uri, headers: headers);
