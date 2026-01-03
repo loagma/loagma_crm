@@ -278,7 +278,6 @@ class _EnhancedSalesmanReportsScreenState
             Tab(icon: Icon(Icons.dashboard), text: 'Overview'),
             Tab(icon: Icon(Icons.people), text: 'Performance'),
             Tab(icon: Icon(Icons.calendar_today), text: 'Daily'),
-            Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
           ],
         ),
       ),
@@ -368,11 +367,7 @@ class _EnhancedSalesmanReportsScreenState
                 ),
               ),
               const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.download),
-                onPressed: _exportReports,
-                tooltip: 'Export',
-              ),
+
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: _loadReports,
@@ -522,7 +517,6 @@ class _EnhancedSalesmanReportsScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Key insights card
-          _buildKeyInsightsCard(summary, performanceMetrics),
           const SizedBox(height: 16),
 
           // Visit tracking info card
@@ -578,50 +572,6 @@ class _EnhancedSalesmanReportsScreenState
                 primaryColor,
               ),
             ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Performance metrics
-          const Text(
-            'Performance Metrics',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildMetricRow(
-                    'Accounts per Day',
-                    (performanceMetrics['accountsPerDay'] ?? 0.0)
-                        .toStringAsFixed(1),
-                    Icons.trending_up,
-                  ),
-                  const Divider(),
-                  _buildMetricRow(
-                    'Visits per Day',
-                    ((performanceMetrics['visitsPerDay'] ?? 0.0) as num)
-                        .toDouble()
-                        .toStringAsFixed(1),
-                    Icons.location_on,
-                  ),
-                  const Divider(),
-                  _buildMetricRow(
-                    'Approval Rate',
-                    '${((performanceMetrics['approvalRate'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}%',
-                    Icons.check_circle,
-                  ),
-                  const Divider(),
-                  _buildMetricRow(
-                    'Avg Work Hours',
-                    '${((performanceMetrics['averageWorkHours'] ?? 0.0) as num).toDouble().toStringAsFixed(1)}h',
-                    Icons.access_time,
-                  ),
-                ],
-              ),
-            ),
           ),
 
           const SizedBox(height: 24),
