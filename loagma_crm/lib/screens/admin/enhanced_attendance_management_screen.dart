@@ -561,7 +561,6 @@ class _EnhancedAttendanceManagementScreenState
             Tab(text: 'Dashboard'),
             Tab(text: 'Detailed View'),
             Tab(text: 'Live Tracking'),
-            Tab(text: 'Reports'),
           ],
         ),
       ),
@@ -575,7 +574,6 @@ class _EnhancedAttendanceManagementScreenState
                 _buildDashboardTab(),
                 _buildDetailedViewTab(),
                 _buildLiveTrackingTab(),
-                _buildReportsTab(),
               ],
             ),
     );
@@ -585,12 +583,8 @@ class _EnhancedAttendanceManagementScreenState
     final stats = dashboardData['statistics'] ?? {};
     final totalEmployees = stats['totalEmployees'] ?? 0;
     final presentEmployees = stats['presentEmployees'] ?? 0;
-    final absentEmployees = stats['absentEmployees'] ?? 0;
     final activeEmployees = stats['activeEmployees'] ?? 0;
     final completedEmployees = stats['completedEmployees'] ?? 0;
-    final totalSessions = stats['totalSessions'] ?? 0;
-    final avgWorkHours = stats['avgWorkHours'] ?? 0.0;
-    final totalWorkHours = stats['totalWorkHours'] ?? 0.0;
     final attendancePercentage = stats['attendancePercentage'] ?? 0.0;
 
     return RefreshIndicator(
@@ -624,7 +618,7 @@ class _EnhancedAttendanceManagementScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${presentEmployees} Present • ${totalSessions} Sessions',
+                    '${presentEmployees} Present ',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: isLiveTrackingEnabled ? Colors.green : Colors.grey,
@@ -732,13 +726,7 @@ class _EnhancedAttendanceManagementScreenState
                           Colors.green,
                         ),
                       ),
-                      Expanded(
-                        child: _buildStatItem(
-                          'Absent',
-                          absentEmployees,
-                          Colors.red,
-                        ),
-                      ),
+
                       Expanded(
                         child: _buildStatItem(
                           'Active',
@@ -753,35 +741,6 @@ class _EnhancedAttendanceManagementScreenState
                           Colors.blue,
                         ),
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Additional Statistics Row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatItem(
-                          'Sessions',
-                          totalSessions,
-                          Colors.purple,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildStatItemDouble(
-                          'Avg Hours',
-                          avgWorkHours.toDouble(),
-                          Colors.indigo,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildStatItemDouble(
-                          'Total Hours',
-                          totalWorkHours.toDouble(),
-                          Colors.teal,
-                        ),
-                      ),
                       Expanded(
                         child: _buildStatItem(
                           'Total Staff',
@@ -791,6 +750,10 @@ class _EnhancedAttendanceManagementScreenState
                       ),
                     ],
                   ),
+
+                  const SizedBox(height: 16),
+
+                  // Additional Statistics Row
                 ],
               ),
             ),
@@ -1533,46 +1496,6 @@ class _EnhancedAttendanceManagementScreenState
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildReportsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Reports',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-
-          _buildReportCard(
-            'Daily Report',
-            'Today\'s attendance summary',
-            Icons.today,
-            Colors.blue,
-            () {},
-          ),
-          const SizedBox(height: 12),
-          _buildReportCard(
-            'Weekly Report',
-            'This week\'s attendance analysis',
-            Icons.date_range,
-            Colors.green,
-            () {},
-          ),
-          const SizedBox(height: 12),
-          _buildReportCard(
-            'Monthly Report',
-            'Monthly attendance statistics',
-            Icons.calendar_month,
-            Colors.orange,
-            () {},
-          ),
-        ],
-      ),
     );
   }
 
