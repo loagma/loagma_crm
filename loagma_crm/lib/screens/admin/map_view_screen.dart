@@ -44,14 +44,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   bool _showPlaces = true;
   bool _showAccounts = true;
   bool _showAccountsList = false;
-  List<String> _selectedPlaceTypes = ['store'];
+  List<String> _selectedPlaceTypes = ['convenience_store'];
   int _searchRadius = 1500;
 
-  // Place types for business discovery
+  // Place types for business discovery - minimal but accurate
   final List<Map<String, dynamic>> _placeTypes = [
-    {'type': 'store', 'name': 'Stores', 'icon': Icons.store},
     {'type': 'restaurant', 'name': 'Restaurants', 'icon': Icons.restaurant},
-    {'type': 'shopping_mall', 'name': 'Malls', 'icon': Icons.shopping_bag},
     {
       'type': 'supermarket',
       'name': 'Supermarkets',
@@ -59,7 +57,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     },
     {
       'type': 'convenience_store',
-      'name': 'Grocery Store',
+      'name': 'Kirana Store',
       'icon': Icons.storefront,
     },
     {'type': 'lodging', 'name': 'Hotels', 'icon': Icons.hotel},
@@ -89,6 +87,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   List<String> selectedPincodes = [];
   List<String> selectedAssignedAreas = [];
   bool? selectedApprovalStatus;
+  DateTime? selectedFromDate; // Custom from date
+  DateTime? selectedToDate; // Custom to date
 
   List<String> tempSelectedCustomerStages = [];
   List<String> tempSelectedBusinessTypes = [];
@@ -96,6 +96,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   List<String> tempSelectedPincodes = [];
   List<String> tempSelectedAssignedAreas = [];
   bool? tempSelectedApprovalStatus;
+  DateTime? tempSelectedFromDate; // Temp from date
+  DateTime? tempSelectedToDate; // Temp to date
 
   List<String> availableFunnelStages = [];
   List<String> availablePincodes = [];
@@ -601,6 +603,37 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
   List<Map<String, dynamic>> _getFilteredAccounts() {
     return salesmanAccounts.where((account) {
+      // Custom date range filter
+      if (selectedFromDate != null || selectedToDate != null) {
+        final createdAt = account['createdAt'];
+        if (createdAt != null) {
+          final accountDate = DateTime.parse(createdAt.toString());
+
+          // Check from date
+          if (selectedFromDate != null) {
+            final fromDate = DateTime(
+              selectedFromDate!.year,
+              selectedFromDate!.month,
+              selectedFromDate!.day,
+            );
+            if (accountDate.isBefore(fromDate)) return false;
+          }
+
+          // Check to date
+          if (selectedToDate != null) {
+            final toDate = DateTime(
+              selectedToDate!.year,
+              selectedToDate!.month,
+              selectedToDate!.day,
+              23,
+              59,
+              59, // End of day
+            );
+            if (accountDate.isAfter(toDate)) return false;
+          }
+        }
+      }
+
       if (selectedCustomerStages.isNotEmpty &&
           !selectedCustomerStages.contains(account['customerStage']))
         return false;
@@ -823,11 +856,15 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       selectedFunnelStages.clear();
       selectedPincodes.clear();
       selectedApprovalStatus = null;
+      selectedFromDate = null;
+      selectedToDate = null;
       tempSelectedCustomerStages.clear();
       tempSelectedBusinessTypes.clear();
       tempSelectedFunnelStages.clear();
       tempSelectedPincodes.clear();
       tempSelectedApprovalStatus = null;
+      tempSelectedFromDate = null;
+      tempSelectedToDate = null;
     });
     _updateMapMarkers();
   }
@@ -839,6 +876,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       selectedFunnelStages = List.from(tempSelectedFunnelStages);
       selectedPincodes = List.from(tempSelectedPincodes);
       selectedApprovalStatus = tempSelectedApprovalStatus;
+      selectedFromDate = tempSelectedFromDate;
+      selectedToDate = tempSelectedToDate;
     });
     _updateMapMarkers();
   }
@@ -848,7 +887,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       selectedBusinessTypes.length != tempSelectedBusinessTypes.length ||
       selectedFunnelStages.length != tempSelectedFunnelStages.length ||
       selectedPincodes.length != tempSelectedPincodes.length ||
-      selectedApprovalStatus != tempSelectedApprovalStatus;
+      selectedApprovalStatus != tempSelectedApprovalStatus ||
+      selectedFromDate != tempSelectedFromDate ||
+      selectedToDate != tempSelectedToDate;
   void _resetTempFilters() {
     setState(() {
       tempSelectedCustomerStages = List.from(selectedCustomerStages);
@@ -856,6 +897,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       tempSelectedFunnelStages = List.from(selectedFunnelStages);
       tempSelectedPincodes = List.from(selectedPincodes);
       tempSelectedApprovalStatus = selectedApprovalStatus;
+      tempSelectedFromDate = selectedFromDate;
+      tempSelectedToDate = selectedToDate;
     });
   }
 
@@ -864,7 +907,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       selectedBusinessTypes.isNotEmpty ||
       selectedFunnelStages.isNotEmpty ||
       selectedPincodes.isNotEmpty ||
-      selectedApprovalStatus != null;
+      selectedApprovalStatus != null ||
+      selectedFromDate != null ||
+      selectedToDate != null;
 
   void _onPincodeSelected(String pincode, Map<String, dynamic> pincodeData) {
     print('🎯 Pincode selected: $pincode');
@@ -941,22 +986,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   ) async {
     try {
       print('🔎 Loading shops from backend API for pincode: $pincode');
+      print('🔍 Selected place types: $_selectedPlaceTypes');
 
-      // Use the new backend API to get all shops for this pincode
+      // Use the selected place types from the filter instead of hardcoded list
       final result = await ShopService.getShopsByPincode(
         pincode,
-        businessTypes: [
-          'store',
-          'restaurant',
-          'supermarket',
-          'convenience_store',
-          'bakery',
-          'cafe',
-          'pharmacy',
-          'gas_station',
-          'bank',
-          'shopping_mall',
-        ],
+        businessTypes: _selectedPlaceTypes,
       );
 
       if (result['success'] == true && result['data'] != null) {
@@ -1003,6 +1038,15 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         }
 
         print('✅ Processed ${validShops.length} valid Google Places shops');
+
+        // Debug: Log unique business types to understand the data
+        final uniqueBusinessTypes = validShops
+            .map((shop) => shop['businessType']?.toString())
+            .where((type) => type != null)
+            .toSet()
+            .toList();
+        print('🔍 Unique business types found: $uniqueBusinessTypes');
+
         return validShops;
       } else {
         print('❌ Backend API failed: ${result['message'] ?? 'Unknown error'}');
@@ -1073,60 +1117,324 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
     }
 
-    // Add Google Places shops (new potential shops)
-    print(
-      '🟣 Processing ${_googlePlacesShops.length} Google Places shops for markers',
-    );
-    int googleMarkersAdded = 0;
-
-    for (var shop in _googlePlacesShops) {
+    // Add Google Places shops (new potential shops) - only if Places toggle is ON
+    if (_showPlaces) {
       print(
-        '🔍 Processing Google Place: ${shop['name']} at (${shop['latitude']}, ${shop['longitude']})',
+        '🟣 Processing ${_googlePlacesShops.length} Google Places shops for markers',
+      );
+      print('🔍 Filtering by place types: $_selectedPlaceTypes');
+
+      // Filter Google Places shops by selected place types
+      final filteredGoogleShops = _googlePlacesShops.where((shop) {
+        final shopBusinessType =
+            shop['businessType']?.toString().toLowerCase() ?? '';
+        final shopName = shop['name']?.toString().toLowerCase() ?? '';
+
+        if (shopBusinessType.isEmpty) return false;
+
+        print('🔍 Checking shop: ${shop['name']} with type: $shopBusinessType');
+
+        // Check if the shop's business type matches any of the selected place types
+        bool matches = _selectedPlaceTypes.any((selectedType) {
+          final selectedTypeLower = selectedType.toLowerCase();
+
+          // Direct mapping between UI filter types and Google Places business types
+          switch (selectedTypeLower) {
+            case 'convenience_store':
+              // This maps to "Kirana Store" in your UI - be very precise
+              final isKiranaType =
+                  shopBusinessType == 'convenience_store' ||
+                  shopBusinessType.contains('convenience') ||
+                  shopBusinessType.contains('grocery');
+
+              final hasKiranaName =
+                  shopName.contains('grocery') ||
+                  shopName.contains('kirana') ||
+                  shopName.contains('general store') ||
+                  shopName.contains('provision') ||
+                  shopName.contains('departmental') ||
+                  shopName.contains('mart') ||
+                  (shopName.contains('store') &&
+                      !shopName.contains('book') &&
+                      !shopName.contains('mobile') &&
+                      !shopName.contains('electronic'));
+
+              // Exclude non-kirana businesses
+              final isNotKirana =
+                  shopName.contains('pharmacy') ||
+                  shopName.contains('medical') ||
+                  shopName.contains('hospital') ||
+                  shopName.contains('bank') ||
+                  shopName.contains('restaurant') ||
+                  shopName.contains('hotel') ||
+                  shopName.contains('cafe') ||
+                  shopName.contains('bakery') ||
+                  shopName.contains('sweet') ||
+                  shopBusinessType.contains('pharmacy') ||
+                  shopBusinessType.contains('restaurant') ||
+                  shopBusinessType.contains('lodging') ||
+                  shopBusinessType.contains('bank') ||
+                  shopBusinessType.contains('bakery');
+
+              return (isKiranaType || hasKiranaName) && !isNotKirana;
+
+            case 'supermarket':
+              // Supermarkets - large grocery stores
+              return (shopBusinessType == 'supermarket' ||
+                      shopBusinessType.contains('supermarket') ||
+                      shopName.contains('supermarket') ||
+                      shopName.contains('super market') ||
+                      shopName.contains('hypermarket')) &&
+                  !shopName.contains('pharmacy');
+
+            case 'restaurant':
+              // Restaurants - must be restaurant, NOT cafe or hotel
+              final isRestaurantType =
+                  shopBusinessType == 'restaurant' ||
+                  shopBusinessType.contains('restaurant');
+
+              final hasRestaurantName =
+                  shopName.contains('restaurant') ||
+                  shopName.contains('dhaba') ||
+                  shopName.contains('biryani') ||
+                  shopName.contains('kitchen') ||
+                  shopName.contains('dining');
+
+              // Exclude cafes, hotels, and sweet shops
+              final isNotRestaurant =
+                  shopBusinessType.contains('lodging') ||
+                  shopBusinessType.contains('cafe') ||
+                  shopName.contains('cafe') ||
+                  shopName.contains('hotel') ||
+                  shopName.contains('sweet') ||
+                  shopName.contains('bakery');
+
+              return (isRestaurantType || hasRestaurantName) &&
+                  !isNotRestaurant;
+
+            case 'lodging':
+              // Hotels (maps to "Hotels" in your UI)
+              // Must be a hotel AND name should indicate it's a hotel
+              final isLodgingType =
+                  shopBusinessType == 'lodging' ||
+                  shopBusinessType.contains('lodging') ||
+                  shopBusinessType == 'hotel' ||
+                  shopBusinessType.contains('hotel');
+
+              final hasHotelName =
+                  shopName.contains('hotel') ||
+                  shopName.contains('resort') ||
+                  shopName.contains('lodge') ||
+                  shopName.contains('inn') ||
+                  shopName.contains('guest house') ||
+                  shopName.contains('oyo') ||
+                  shopName.contains('taj') ||
+                  shopName.contains('marriott') ||
+                  shopName.contains('hyatt');
+
+              // Exclude if name contains non-hotel keywords
+              final isNotHotel =
+                  shopName.contains('bakery') ||
+                  shopName.contains('cafe') ||
+                  shopName.contains('restaurant') ||
+                  shopName.contains('sweet') ||
+                  shopName.contains('shop') ||
+                  shopName.contains('store');
+
+              return (isLodgingType || hasHotelName) && !isNotHotel;
+
+            case 'meal_takeaway':
+              // Caterers (maps to "Caterers" in your UI)
+              return shopBusinessType == 'meal_takeaway' ||
+                  shopBusinessType.contains('takeaway') ||
+                  shopName.contains('catering') ||
+                  shopName.contains('caterer') ||
+                  shopName.contains('tiffin');
+
+            case 'food':
+              // Sweets (maps to "Sweets" in your UI)
+              // Must be sweet shop, bakery, confectionery - NOT cafe or restaurant
+              final isSweetType =
+                  shopBusinessType == 'food' ||
+                  shopBusinessType.contains('bakery');
+
+              final hasSweetName =
+                  shopName.contains('sweet') ||
+                  shopName.contains('bakery') ||
+                  shopName.contains('cake') ||
+                  shopName.contains('mithai') ||
+                  shopName.contains('confectionery') ||
+                  shopName.contains('pastry') ||
+                  shopName.contains('dessert');
+
+              // Exclude cafes and restaurants
+              final isNotSweet =
+                  shopName.contains('cafe') ||
+                  shopName.contains('restaurant') ||
+                  shopName.contains('hotel') ||
+                  shopBusinessType.contains('cafe') ||
+                  shopBusinessType.contains('restaurant') ||
+                  shopBusinessType.contains('lodging');
+
+              return (isSweetType || hasSweetName) && !isNotSweet;
+
+            case 'bank':
+              // Banks
+              return shopBusinessType == 'bank' ||
+                  shopBusinessType.contains('bank') ||
+                  shopName.contains('bank') ||
+                  shopName.contains('atm');
+
+            case 'gas_station':
+              // Gas stations
+              return shopBusinessType == 'gas_station' ||
+                  shopBusinessType.contains('gas') ||
+                  shopBusinessType.contains('fuel') ||
+                  shopName.contains('petrol') ||
+                  shopName.contains('fuel');
+
+            case 'pharmacy':
+              // Pharmacies - must be pharmacy or medical store
+              final isPharmacyType =
+                  shopBusinessType == 'pharmacy' ||
+                  shopBusinessType.contains('pharmacy');
+
+              final hasPharmacyName =
+                  shopName.contains('pharmacy') ||
+                  shopName.contains('medical') ||
+                  shopName.contains('chemist') ||
+                  shopName.contains('medicine') ||
+                  shopName.contains('drug');
+
+              // Exclude hospitals
+              final isNotPharmacy =
+                  shopName.contains('hospital') ||
+                  shopBusinessType.contains('hospital');
+
+              return (isPharmacyType || hasPharmacyName) && !isNotPharmacy;
+
+            case 'hospital':
+              // Hospitals - must be hospital or clinic
+              final isHospitalType =
+                  shopBusinessType == 'hospital' ||
+                  shopBusinessType.contains('hospital') ||
+                  shopBusinessType.contains('clinic');
+
+              final hasHospitalName =
+                  shopName.contains('hospital') ||
+                  shopName.contains('clinic') ||
+                  shopName.contains('nursing home') ||
+                  shopName.contains('medical center') ||
+                  shopName.contains('healthcare');
+
+              // Exclude pharmacies
+              final isNotHospital =
+                  shopName.contains('pharmacy') ||
+                  shopName.contains('chemist') ||
+                  shopBusinessType.contains('pharmacy');
+
+              return (isHospitalType || hasHospitalName) && !isNotHospital;
+
+            case 'school':
+              // Schools
+              return shopBusinessType == 'school' ||
+                  shopBusinessType.contains('school') ||
+                  shopName.contains('school') ||
+                  shopName.contains('college');
+
+            case 'cafe':
+              // Cafes - must be cafe or coffee shop
+              final isCafeType =
+                  shopBusinessType == 'cafe' ||
+                  shopBusinessType.contains('cafe');
+
+              final hasCafeName =
+                  shopName.contains('cafe') ||
+                  shopName.contains('coffee') ||
+                  shopName.contains('starbucks') ||
+                  shopName.contains('ccd') ||
+                  shopName.contains('barista');
+
+              // Exclude hotels and restaurants
+              final isNotCafe =
+                  shopBusinessType.contains('lodging') ||
+                  shopBusinessType.contains('hotel') ||
+                  (shopName.contains('hotel') && !shopName.contains('cafe'));
+
+              return (isCafeType || hasCafeName) && !isNotCafe;
+
+            default:
+              // For any other type, do direct match
+              return shopBusinessType.contains(selectedTypeLower) ||
+                  shopName.contains(selectedTypeLower);
+          }
+        });
+
+        if (matches) {
+          print(
+            '✅ Shop ${shop['name']} MATCHES filter (type: $shopBusinessType)',
+          );
+        }
+        return matches;
+      }).toList();
+
+      print(
+        '🟣 Filtered to ${filteredGoogleShops.length} shops matching selected types',
       );
 
-      if (shop['latitude'] != null && shop['longitude'] != null) {
-        try {
-          final lat = _parseDouble(shop['latitude']);
-          final lng = _parseDouble(shop['longitude']);
+      int googleMarkersAdded = 0;
 
+      for (var shop in filteredGoogleShops) {
+        print(
+          '🔍 Processing Google Place: ${shop['name']} at (${shop['latitude']}, ${shop['longitude']})',
+        );
+
+        if (shop['latitude'] != null && shop['longitude'] != null) {
+          try {
+            final lat = _parseDouble(shop['latitude']);
+            final lng = _parseDouble(shop['longitude']);
+
+            print(
+              '📍 Coordinates: ($lat, $lng), Valid: ${lat != null && lng != null && _isValidCoordinate(lat, lng)}',
+            );
+
+            if (lat == null || lng == null || !_isValidCoordinate(lat, lng))
+              continue;
+
+            markers.add(
+              Marker(
+                markerId: MarkerId('google_shop_${shop['id']}'),
+                position: LatLng(lat, lng),
+                infoWindow: InfoWindow(
+                  title: shop['name'] ?? 'Unknown Shop',
+                  snippet:
+                      'TYPE: ${shop['businessType']?.toUpperCase() ?? 'N/A'} • GOOGLE PLACES • Rating: ${shop['rating']?.toStringAsFixed(1) ?? 'N/A'}',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueViolet, // Purple for Google Places shops
+                ),
+                onTap: () => _showGooglePlaceDetails(shop),
+              ),
+            );
+            googleMarkersAdded++;
+            print('✅ Added Google Places marker for ${shop['name']}');
+          } catch (e) {
+            print(
+              '❌ Error adding Google Places marker for ${shop['name']}: $e',
+            );
+          }
+        } else {
           print(
-            '📍 Coordinates: ($lat, $lng), Valid: ${lat != null && lng != null && _isValidCoordinate(lat, lng)}',
+            '⚠️ Skipping Google Place ${shop['name']} - missing coordinates',
           );
-
-          if (lat == null || lng == null || !_isValidCoordinate(lat, lng))
-            continue;
-
-          markers.add(
-            Marker(
-              markerId: MarkerId('google_shop_${shop['id']}'),
-              position: LatLng(lat, lng),
-              infoWindow: InfoWindow(
-                title: shop['name'] ?? 'Unknown Shop',
-                snippet:
-                    '${shop['businessType']?.toUpperCase() ?? ''} • GOOGLE PLACES • Rating: ${shop['rating']?.toStringAsFixed(1) ?? 'N/A'}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet, // Purple for Google Places shops
-              ),
-              onTap: () => _showGooglePlaceDetails(shop),
-            ),
-          );
-          googleMarkersAdded++;
-          print('✅ Added Google Places marker for ${shop['name']}');
-        } catch (e) {
-          print('❌ Error adding Google Places marker for ${shop['name']}: $e');
         }
-      } else {
-        print('⚠️ Skipping Google Place ${shop['name']} - missing coordinates');
       }
-    }
 
-    print(
-      '🟣 Added $googleMarkersAdded Google Places markers out of ${_googlePlacesShops.length}',
-    );
+      print(
+        '🟣 Added $googleMarkersAdded Google Places markers out of ${filteredGoogleShops.length} filtered shops (${_googlePlacesShops.length} total)',
+      );
 
-    // Add regular nearby places if enabled
-    if (_showPlaces) {
+      // Add regular nearby places
       for (int i = 0; i < nearbyPlaces.length; i++) {
         final place = nearbyPlaces[i];
         if (place.latitude != null && place.longitude != null) {
@@ -1146,6 +1454,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           );
         }
       }
+    } else {
+      print('🟣 Places toggle is OFF - skipping Google Places markers');
     }
 
     setState(() => _markers = markers);
@@ -1154,7 +1464,6 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     print(
       '   - Salesman accounts: ${_getFilteredAccountsForSelectedPincodes().length}',
     );
-    print('   - Google Places: $googleMarkersAdded');
     print('   - Nearby places: ${_showPlaces ? nearbyPlaces.length : 0}');
   }
 
@@ -1171,96 +1480,293 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   void _showGooglePlaceDetails(Map<String, dynamic> shop) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: Colors.purple,
-                  child: Icon(Icons.store, color: Colors.white, size: 30),
+                // Header
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: Colors.purple,
+                      child: Icon(Icons.store, color: Colors.white, size: 30),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            shop['name'] ?? 'Unknown Shop',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Google Places Shop',
+                            style: TextStyle(color: Colors.purple),
+                          ),
+                          if (shop['rating'] != null)
+                            Row(
+                              children: [
+                                ...List.generate(5, (index) {
+                                  final rating = shop['rating'] ?? 0.0;
+                                  return Icon(
+                                    index < rating.floor()
+                                        ? Icons.star
+                                        : index < rating
+                                        ? Icons.star_half
+                                        : Icons.star_border,
+                                    color: Colors.amber,
+                                    size: 16,
+                                  );
+                                }),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${shop['rating']?.toStringAsFixed(1) ?? 'N/A'} ${shop['userRatingsTotal'] != null ? '(${shop['userRatingsTotal']} reviews)' : ''}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
+                const Divider(height: 24),
+
+                // Details
+                if (shop['businessType'] != null)
+                  _buildDetailRow(
+                    Icons.business,
+                    'Type',
+                    shop['businessType'].toString().toUpperCase(),
+                  ),
+                if (shop['address'] != null)
+                  _buildDetailRow(
+                    Icons.location_on,
+                    'Address',
+                    shop['address'],
+                  ),
+                _buildDetailRow(
+                  Icons.pin_drop,
+                  'Pincode',
+                  shop['pincode'] ?? 'N/A',
+                ),
+                if (shop['phoneNumber'] != null)
+                  _buildDetailRow(Icons.phone, 'Phone', shop['phoneNumber']),
+                if (shop['website'] != null)
+                  _buildDetailRow(Icons.web, 'Website', shop['website']),
+
+                // Opening Hours
+                if (shop['openingHours'] != null)
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        shop['name'] ?? 'Unknown Shop',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 20,
+                            color: primaryColor,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Opening Hours:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ),
-                      Text(
-                        'Google Places Shop',
-                        style: TextStyle(color: Colors.purple),
-                      ),
-                      if (shop['rating'] != null)
-                        Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.star, color: Colors.amber, size: 16),
-                            Text(' ${shop['rating'].toStringAsFixed(1)}'),
+                            if (shop['openNow'] != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: shop['openNow'] == true
+                                      ? Colors.green
+                                      : Colors.red,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  shop['openNow'] == true
+                                      ? 'Open Now'
+                                      : 'Closed',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            if (shop['openingHours'] is List)
+                              ...((shop['openingHours'] as List)
+                                  .take(7)
+                                  .map(
+                                    (hour) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        hour.toString(),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  )),
                           ],
                         ),
+                      ),
                     ],
                   ),
+
+                // Price Level
+                if (shop['priceLevel'] != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.attach_money,
+                            size: 20,
+                            color: primaryColor,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Price Level:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          ...List.generate(4, (index) {
+                            return Icon(
+                              Icons.attach_money,
+                              size: 16,
+                              color: index < (shop['priceLevel'] ?? 0)
+                                  ? Colors.green
+                                  : Colors.grey[300],
+                            );
+                          }),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                // Photos
+                if (shop['photos'] != null &&
+                    (shop['photos'] as List).isNotEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(Icons.photo, size: 20, color: primaryColor),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Photos:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 100,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: (shop['photos'] as List).length,
+                          itemBuilder: (context, index) {
+                            final photo = (shop['photos'] as List)[index];
+                            return Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              width: 100,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.grey[200],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: photo['photoReference'] != null
+                                    ? Image.network(
+                                        'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo['photoReference']}&key=${GooglePlacesConfig.apiKey}',
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.image_not_supported,
+                                                ),
+                                      )
+                                    : const Icon(Icons.image_not_supported),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 20),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _focusOnGooglePlace(shop);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: const Icon(Icons.my_location),
+                        label: const Text('Focus on Map'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () =>
+                            _showCreateAccountFromGooglePlace(shop),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: const Icon(Icons.add_business),
+                        label: const Text('Add as Account'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const Divider(height: 24),
-            if (shop['businessType'] != null)
-              _buildDetailRow(
-                Icons.business,
-                'Type',
-                shop['businessType'].toString().toUpperCase(),
-              ),
-            if (shop['address'] != null)
-              _buildDetailRow(Icons.location_on, 'Address', shop['address']),
-            _buildDetailRow(
-              Icons.pin_drop,
-              'Pincode',
-              shop['pincode'] ?? 'N/A',
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _focusOnGooglePlace(shop);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    icon: const Icon(Icons.my_location),
-                    label: const Text('Focus on Map'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showCreateAccountFromGooglePlace(shop),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    icon: const Icon(Icons.add_business),
-                    label: const Text('Add as Account'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1405,6 +1911,45 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
     print('❌ Unknown type for double parsing: ${value.runtimeType}');
     return null;
+  }
+
+  // Helper method to format dates
+  String _formatDate(dynamic dateValue) {
+    try {
+      final date = DateTime.parse(dateValue.toString());
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final accountDate = DateTime(date.year, date.month, date.day);
+
+      if (accountDate == today) {
+        return 'Today ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      } else if (accountDate == yesterday) {
+        return 'Yesterday ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      } else {
+        return '${date.day}/${date.month}/${date.year}';
+      }
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+
+  // Helper method to format date range for display
+  String _formatDateRange() {
+    if (selectedFromDate == null && selectedToDate == null) {
+      return 'All Time';
+    } else if (selectedFromDate != null && selectedToDate != null) {
+      return '${_formatDateOnly(selectedFromDate!)} - ${_formatDateOnly(selectedToDate!)}';
+    } else if (selectedFromDate != null) {
+      return 'From ${_formatDateOnly(selectedFromDate!)}';
+    } else {
+      return 'Until ${_formatDateOnly(selectedToDate!)}';
+    }
+  }
+
+  // Helper method to format date only (without time)
+  String _formatDateOnly(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   Future<void> _focusOnSelectedPincodes() async {
@@ -1587,6 +2132,66 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       _googlePlacesShops.clear();
     });
     _updateMapMarkers();
+  }
+
+  // Date picker methods
+  Future<void> _selectFromDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: tempSelectedFromDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        tempSelectedFromDate = picked;
+        // If to date is before from date, clear it
+        if (tempSelectedToDate != null &&
+            tempSelectedToDate!.isBefore(picked)) {
+          tempSelectedToDate = null;
+        }
+      });
+    }
+  }
+
+  Future<void> _selectToDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: tempSelectedToDate ?? DateTime.now(),
+      firstDate: tempSelectedFromDate ?? DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        tempSelectedToDate = picked;
+      });
+    }
   }
 
   @override
@@ -1791,19 +2396,38 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             color: primaryColor.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
+          child: Column(
             children: [
-              Icon(Icons.people, color: primaryColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${_selectedSalesmenIds.length} salesmen • ${accounts.length} accounts',
+              Row(
+                children: [
+                  Icon(Icons.people, color: primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_selectedSalesmenIds.length} salesmen • ${accounts.length} accounts',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showSalesmanSelectionDialog,
+                    child: const Text('Change'),
+                  ),
+                ],
+              ),
+              if (selectedFromDate != null || selectedToDate != null)
+                Row(
+                  children: [
+                    Icon(Icons.date_range, color: primaryColor, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Date Range: ${_formatDateRange()}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              TextButton(
-                onPressed: _showSalesmanSelectionDialog,
-                child: const Text('Change'),
-              ),
             ],
           ),
         ),
@@ -1864,6 +2488,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                                   fontSize: 12,
                                 ),
                               ),
+                            if (account['createdAt'] != null)
+                              Text(
+                                'Created: ${_formatDate(account['createdAt'])}',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 10,
+                                ),
+                              ),
                           ],
                         ),
                         trailing: _canFocusOnAccount(account)
@@ -1914,14 +2546,15 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
-              if (_hasActiveFilters())
-                TextButton(
-                  onPressed: _clearAllFilters,
-                  child: const Text(
-                    'Clear All',
-                    style: TextStyle(fontSize: 10, color: Colors.red),
+              if (_googlePlacesShops.isNotEmpty)
+                if (_hasActiveFilters())
+                  TextButton(
+                    onPressed: _clearAllFilters,
+                    child: const Text(
+                      'Clear All',
+                      style: TextStyle(fontSize: 10, color: Colors.red),
+                    ),
                   ),
-                ),
               IconButton(
                 icon: const Icon(Icons.close, size: 20),
                 onPressed: () {
@@ -1960,6 +2593,140 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ),
             ],
           ),
+          // Date Range Filter
+          const SizedBox(height: 8),
+          const Text(
+            'Date Range Filter',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              // From Date
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectFromDate(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tempSelectedFromDate != null
+                          ? primaryColor.withOpacity(0.1)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: tempSelectedFromDate != null
+                            ? primaryColor
+                            : Colors.grey[300]!,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16,
+                          color: tempSelectedFromDate != null
+                              ? primaryColor
+                              : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tempSelectedFromDate != null
+                                ? _formatDateOnly(tempSelectedFromDate!)
+                                : 'From Date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: tempSelectedFromDate != null
+                                  ? primaryColor
+                                  : Colors.grey[600],
+                              fontWeight: tempSelectedFromDate != null
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (tempSelectedFromDate != null)
+                          InkWell(
+                            onTap: () =>
+                                setState(() => tempSelectedFromDate = null),
+                            child: Icon(
+                              Icons.clear,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // To Date
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectToDate(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tempSelectedToDate != null
+                          ? primaryColor.withOpacity(0.1)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: tempSelectedToDate != null
+                            ? primaryColor
+                            : Colors.grey[300]!,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16,
+                          color: tempSelectedToDate != null
+                              ? primaryColor
+                              : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tempSelectedToDate != null
+                                ? _formatDateOnly(tempSelectedToDate!)
+                                : 'To Date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: tempSelectedToDate != null
+                                  ? primaryColor
+                                  : Colors.grey[600],
+                              fontWeight: tempSelectedToDate != null
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (tempSelectedToDate != null)
+                          InkWell(
+                            onTap: () =>
+                                setState(() => tempSelectedToDate = null),
+                            child: Icon(
+                              Icons.clear,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (_showPlaces) ...[
             const SizedBox(height: 8),
             const Text(
@@ -1989,13 +2756,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                           _selectedPlaceTypes.remove(placeType['type']);
                           // Ensure at least one place type is always selected
                           if (_selectedPlaceTypes.isEmpty) {
-                            _selectedPlaceTypes.add('store');
+                            _selectedPlaceTypes.add('convenience_store');
                           }
                         } else {
                           _selectedPlaceTypes.add(placeType['type']);
                         }
                       });
+
+                      // Reload nearby places for current location
                       _loadNearbyPlaces();
+
+                      // If pincodes are selected, reload Google Places shops with new filter
+                      if (_selectedPincodes.isNotEmpty) {
+                        _loadAllShopsForSelectedPincodes();
+                      }
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -2209,9 +2983,24 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       color: Colors.purple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(
-                      '${_googlePlacesShops.length} Google Places shops found',
-                      style: const TextStyle(fontSize: 8, color: Colors.purple),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_googlePlacesShops.length} total Google Places',
+                          style: const TextStyle(
+                            fontSize: 8,
+                            color: Colors.purple,
+                          ),
+                        ),
+                        Text(
+                          'Filtered by: ${_selectedPlaceTypes.join(", ")}',
+                          style: const TextStyle(
+                            fontSize: 7,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 const SizedBox(height: 4),

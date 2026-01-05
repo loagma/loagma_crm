@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/account_model.dart';
 import 'api_config.dart';
+import 'network_service.dart';
 
 class AccountService {
   // Get auth token from shared preferences
@@ -128,6 +129,14 @@ class AccountService {
     DateTime? endDate,
   }) async {
     try {
+      // Check connectivity first
+      final isConnected = await NetworkService.checkConnectivity();
+      if (!isConnected) {
+        throw Exception(
+          'No internet connection. Please check your network and try again.',
+        );
+      }
+
       final headers = await _getHeaders();
       final queryParams = {
         'page': page.toString(),
@@ -149,13 +158,18 @@ class AccountService {
           )[0], // Send only date part
       };
 
-      print('🔍 Query params: $queryParams');
-
       final uri = Uri.parse(
         ApiConfig.accountsUrl,
       ).replace(queryParameters: queryParams);
 
-      final response = await http.get(uri, headers: headers);
+      // Use retry mechanism for better reliability
+      final response = await NetworkService.retryApiCall(
+        () => http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 15)),
+        maxRetries: 2,
+        delay: const Duration(seconds: 2),
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -166,10 +180,10 @@ class AccountService {
           'pagination': data['pagination'],
         };
       }
-      throw Exception('Failed to load accounts');
+      throw Exception('Failed to load accounts: ${response.statusCode}');
     } catch (e) {
-      print('Error fetching accounts: $e');
-      rethrow;
+      final errorMessage = NetworkService.getErrorMessage(e);
+      throw Exception(errorMessage);
     }
   }
 

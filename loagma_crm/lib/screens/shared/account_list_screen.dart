@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:async';
 
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
+import '../../services/network_service.dart';
+import '../../widgets/connectivity_banner.dart';
 import 'edit_account_master_screen.dart';
 
 class AccountListScreen extends StatefulWidget {
@@ -26,9 +29,12 @@ class _AccountListScreenState extends State<AccountListScreen> {
   DateTime? _filterEndDate;
   String? _filterSalesmanId;
   List<Map<String, dynamic>> _salesmen = [];
+  bool _hasNetworkError = false;
+  String? _lastErrorMessage;
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   // Determines whether we should pass createdBy filter (non-admin)
   bool get _shouldFilterByOwner {
@@ -41,9 +47,83 @@ class _AccountListScreenState extends State<AccountListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAccounts(refresh: true);
-    _loadSalesmen();
     _scrollController.addListener(_onScroll);
+    // Use post frame callback to avoid blocking initial render
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
+  }
+
+  void _showNetworkErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.wifi_off, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Network Error'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_lastErrorMessage ?? 'Unable to connect to server'),
+            SizedBox(height: 16),
+            Text(
+              'Troubleshooting tips:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text('• Check your internet connection'),
+            Text('• Wait 30-60 seconds if using free hosting'),
+            Text('• Try refreshing the page'),
+            Text('• Contact support if problem persists'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _retryConnection();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFFD7BE69),
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _retryConnection() async {
+    setState(() {
+      _hasNetworkError = false;
+      _lastErrorMessage = null;
+    });
+    await _refreshAccounts();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() => _searchQuery = value.isEmpty ? null : value);
+        _refreshAccounts();
+      }
+    });
+  }
+
+  Future<void> _loadInitialData() async {
+    // Load data in parallel but don't block UI
+    await Future.wait([_loadAccounts(refresh: true), _loadSalesmen()]);
   }
 
   @override
@@ -51,6 +131,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -72,28 +153,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
     }
 
     try {
-      print('🔍 Loading accounts with filters:');
-      print('   Customer Stage: $_filterCustomerStage');
-      print('   Is Approved: $_filterIsApproved');
-      print('   Salesman ID: $_filterSalesmanId');
-      print('   Start Date: $_filterStartDate');
-      print('   End Date: $_filterEndDate');
-      print('   Should Filter By Owner: $_shouldFilterByOwner');
-      print('   Current User ID: $_currentUserId');
+      // Use compute for heavy data processing to avoid blocking main thread
+      final result = await _fetchAccountsInBackground();
 
-      final result = await AccountService.fetchAccounts(
-        page: _currentPage,
-        limit: 20,
-        search: _searchQuery,
-        customerStage: _filterCustomerStage,
-        isApproved: _filterIsApproved,
-        startDate: _filterStartDate,
-        endDate: _filterEndDate,
-        // For non-admin users, if no salesman filter is selected, show only their accounts
-        // For admin users, show all accounts unless a specific salesman is selected
-        createdById:
-            _filterSalesmanId ?? (_shouldFilterByOwner ? _currentUserId : null),
-      );
+      if (!mounted) return;
 
       // result expected: { 'accounts': List<Account>, 'pagination': {'totalPages': n} }
       final fetched = List<Account>.from(result['accounts'] ?? []);
@@ -108,15 +171,36 @@ class _AccountListScreenState extends State<AccountListScreen> {
         _totalPages = (pagination['totalPages'] as int?) ?? 1;
         _isLoading = false;
         _isLoadingMore = false;
+        // Clear network errors on successful load
+        _hasNetworkError = false;
+        _lastErrorMessage = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
+        _hasNetworkError = true;
+        _lastErrorMessage = e.toString();
       });
-      _showError('Failed to load accounts: $e');
+      _showError(e.toString());
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchAccountsInBackground() async {
+    return await AccountService.fetchAccounts(
+      page: _currentPage,
+      limit: 20,
+      search: _searchQuery,
+      customerStage: _filterCustomerStage,
+      isApproved: _filterIsApproved,
+      startDate: _filterStartDate,
+      endDate: _filterEndDate,
+      // For non-admin users, if no salesman filter is selected, show only their accounts
+      // For admin users, show all accounts unless a specific salesman is selected
+      createdById:
+          _filterSalesmanId ?? (_shouldFilterByOwner ? _currentUserId : null),
+    );
   }
 
   Future<void> _loadMoreAccounts() async {
@@ -128,20 +212,53 @@ class _AccountListScreenState extends State<AccountListScreen> {
   }
 
   Future<void> _refreshAccounts() async {
+    // Clear any previous network errors
+    if (_hasNetworkError) {
+      setState(() {
+        _hasNetworkError = false;
+        _lastErrorMessage = null;
+      });
+    }
     await _loadAccounts(refresh: true);
   }
 
   Future<void> _loadSalesmen() async {
     try {
+      // Check connectivity first
+      final isConnected = await NetworkService.checkConnectivity();
+      if (!isConnected) {
+        if (mounted) {
+          setState(() {
+            _salesmen = [];
+          });
+        }
+        return;
+      }
+
+      // Use a separate isolate or at least add delay to prevent blocking
+      await Future.delayed(const Duration(milliseconds: 100));
+
       final result = await UserService.getAllUsers();
+
+      if (!mounted) return;
+
       if (result['success'] == true) {
         setState(() {
           _salesmen = List<Map<String, dynamic>>.from(result['data'] ?? []);
         });
+      } else {
+        // Show error message from the service
+        if (result['message'] != null) {
+          _showError(result['message']);
+        }
       }
     } catch (e) {
       // Silently handle error - salesmen dropdown will just be empty
-      print('Error loading salesmen: $e');
+      if (mounted) {
+        setState(() {
+          _salesmen = [];
+        });
+      }
     }
   }
 
@@ -219,7 +336,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DropdownButtonFormField<String>(
-                        value: tmpStage,
+                        initialValue: tmpStage,
                         decoration: const InputDecoration(
                           labelText: 'Customer Stage',
                         ),
@@ -240,7 +357,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<bool>(
-                        value: tmpApproved,
+                        initialValue: tmpApproved,
                         decoration: const InputDecoration(
                           labelText: 'Approval Status',
                         ),
@@ -263,7 +380,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<String>(
-                        value: tmpSalesmanId,
+                        initialValue: tmpSalesmanId,
                         decoration: const InputDecoration(
                           labelText: 'Salesman',
                         ),
@@ -428,14 +545,6 @@ class _AccountListScreenState extends State<AccountListScreen> {
     return activeFilters.join(', ');
   }
 
-  // Navigate to create screen
-  Future<void> _navigateToCreate() async {
-    // expecting a route /account/create to exist
-    await context.push('/account/create');
-    // after returning, refresh list
-    await _refreshAccounts();
-  }
-
   // Navigate to detail screen
   Future<void> _navigateToDetail(String accountId) async {
     context.push(
@@ -450,6 +559,13 @@ class _AccountListScreenState extends State<AccountListScreen> {
         title: const Text('Accounts'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
+          // Network status indicator
+          if (_hasNetworkError)
+            IconButton(
+              icon: Icon(Icons.wifi_off, color: Colors.red),
+              onPressed: () => _showNetworkErrorDialog(),
+              tooltip: 'Network Error - Tap for details',
+            ),
           Stack(
             children: [
               IconButton(
@@ -460,12 +576,14 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 Positioned(
                   right: 8,
                   top: 8,
-                  child: Container(
+                  child: SizedBox(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ),
@@ -509,11 +627,58 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 ),
               ),
               onSubmitted: (value) {
-                setState(() => _searchQuery = value.isEmpty ? null : value);
-                _refreshAccounts();
+                _onSearchChanged(value);
+              },
+              onChanged: (value) {
+                _onSearchChanged(value);
               },
             ),
           ),
+
+          // Network error banner
+          if (_hasNetworkError)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.symmetric(horizontal: 15),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.wifi_off, size: 16, color: Colors.red),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Connection lost. Some features may not work.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _retryConnection,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Active filters indicator
           if (_hasActiveFilters())
@@ -521,9 +686,11 @@ class _AccountListScreenState extends State<AccountListScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 15),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Color(0xFFD7BE69).withOpacity(0.1),
+                color: Color(0xFFD7BE69).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Color(0xFFD7BE69).withOpacity(0.3)),
+                border: Border.all(
+                  color: Color(0xFFD7BE69).withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
@@ -580,6 +747,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       controller: _scrollController,
                       padding: const EdgeInsets.all(15),
                       itemCount: _accounts.length + (_isLoadingMore ? 1 : 0),
+                      // Add caching for better performance
+                      cacheExtent: 1000,
                       itemBuilder: (context, index) {
                         if (index == _accounts.length) {
                           return const Center(
@@ -602,13 +771,53 @@ class _AccountListScreenState extends State<AccountListScreen> {
         },
         backgroundColor: const Color(0xFFD7BE69),
         tooltip: "Create New Account",
-        child: const Icon(Icons.add),
         shape: const CircleBorder(),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildEmptyState() {
+    if (_hasNetworkError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.wifi_off, size: 80, color: Colors.red[300]),
+            const SizedBox(height: 20),
+            Text(
+              'Connection Error',
+              style: TextStyle(
+                fontSize: 20,
+                color: Colors.red[600],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _lastErrorMessage ?? 'Unable to connect to server',
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _retryConnection,
+              icon: Icon(Icons.refresh),
+              label: Text('Retry Connection'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFFD7BE69),
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -651,7 +860,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD7BE69).withOpacity(0.1),
+                      color: const Color(0xFFD7BE69).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -690,8 +899,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: account.isApproved
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.orange.withOpacity(0.1),
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -728,10 +937,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 _buildInfoRow(Icons.business, account.businessType!),
               if (account.customerStage != null)
                 _buildInfoRow(Icons.stairs, account.customerStage!),
-              if (account.createdBy != null)
+              if (account.createdBy != null && account.createdBy!.isNotEmpty)
                 _buildInfoRow(
                   Icons.person_add,
-                  'Created by: ${account.createdByName ?? account.createdBy}',
+                  'Created by: ${account.createdByName}',
                 ),
               const SizedBox(height: 10),
               Row(
