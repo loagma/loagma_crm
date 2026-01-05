@@ -104,6 +104,10 @@ export const getShopsByPincode = async (req, res) => {
                     latitude: shop.latitude,
                     longitude: shop.longitude,
                     rating: shop.rating,
+                    userRatingsTotal: shop.userRatingsTotal,
+                    openNow: shop.openNow,
+                    photos: shop.photos || [],
+                    priceLevel: shop.priceLevel,
                     isGooglePlace: true
                 }))
             }

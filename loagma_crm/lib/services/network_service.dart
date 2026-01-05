@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
@@ -34,6 +35,11 @@ class NetworkService {
 
     _lastConnectivityCheck = DateTime.now();
     return _isOnline;
+  }
+
+  /// Check if the device has internet connectivity (alias for checkConnectivity)
+  static Future<bool> hasInternetConnection() async {
+    return await checkConnectivity();
   }
 
   /// Test if our API server is reachable
@@ -81,6 +87,56 @@ class NetworkService {
       return 'Network unreachable. Please check your internet connection.';
     } else {
       return 'Network error occurred. Please try again later.';
+    }
+  }
+
+  /// Get network error message (alias for getErrorMessage)
+  static String getNetworkErrorMessage(dynamic error) {
+    return getErrorMessage(error);
+  }
+
+  /// Show network status to user
+  static void showNetworkStatus(BuildContext context, bool hasConnection) {
+    if (!hasConnection) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No internet connection. Please check your network settings.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () {
+              // Trigger a connectivity check
+              checkConnectivity();
+            },
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.wifi, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Connected to internet'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
