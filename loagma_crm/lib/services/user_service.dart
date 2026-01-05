@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
+import 'network_service.dart';
 
 class UserService {
   static SharedPreferences? _prefs;
@@ -94,31 +95,37 @@ class UserService {
   /// API METHODS
   /// -------------------------------------------------------------
 
-  // Get All Users (Admin)
+  // Get All Users (Admin) - Optimized with better error handling
   static Future<Map<String, dynamic>> getAllUsers() async {
     try {
+      // Check connectivity first
+      final isConnected = await NetworkService.checkConnectivity();
+      if (!isConnected) {
+        return {
+          'success': false,
+          'message':
+              'No internet connection. Please check your network and try again.',
+          'data': [],
+        };
+      }
+
       final token = UserService.token;
       final headers = {
         'Content-Type': 'application/json',
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      print('🔍 Fetching all users');
-      print('🔑 Token available: ${token != null && token.isNotEmpty}');
-
-      final response = await http
-          .get(
-            Uri.parse('${ApiConfig.baseUrl}/users/get-all'),
-            headers: headers,
-          )
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Request timeout. Please check your connection.');
-            },
-          );
-
-      print('📊 Users response status: ${response.statusCode}');
+      // Use retry mechanism for better reliability
+      final response = await NetworkService.retryApiCall(
+        () => http
+            .get(
+              Uri.parse('${ApiConfig.baseUrl}/users/get-all'),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15)),
+        maxRetries: 2,
+        delay: const Duration(seconds: 3),
+      );
 
       final data = jsonDecode(response.body);
 
@@ -138,15 +145,7 @@ class UserService {
         };
       }
     } catch (e) {
-      print('❌ Error fetching users: $e');
-      String errorMessage = 'Network error. Please try again.';
-
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'Request timeout. Please check your connection.';
-      } else if (e.toString().contains('SocketException')) {
-        errorMessage = 'No internet connection. Please check your network.';
-      }
-
+      final errorMessage = NetworkService.getErrorMessage(e);
       return {'success': false, 'message': errorMessage, 'data': []};
     }
   }
