@@ -16,6 +16,8 @@ export const getAllAccounts = async (req, res) => {
       isApproved,
       createdById,
       search,
+      startDate,
+      endDate,
       page = 1,
       limit = 50
     } = req.query;
@@ -28,6 +30,20 @@ export const getAllAccounts = async (req, res) => {
     if (funnelStage) where.funnelStage = funnelStage;
     if (isApproved !== undefined) where.isApproved = isApproved === 'true';
     if (createdById) where.createdById = createdById;
+    
+    // Date range filtering
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Add one day to endDate to include the entire end date
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        where.createdAt.lte = endOfDay;
+      }
+    }
     
     if (search) {
       where.OR = [
@@ -42,6 +58,14 @@ export const getAllAccounts = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
+
+    console.log('🔍 Account query filters:', {
+      where,
+      startDate,
+      endDate,
+      page,
+      limit
+    });
 
     const [accounts, total] = await Promise.all([
       prisma.account.findMany({
@@ -101,6 +125,8 @@ export const getAllAccounts = async (req, res) => {
       }),
       prisma.account.count({ where })
     ]);
+
+    console.log('✅ Found accounts:', accounts.length, 'of', total);
 
     res.json({
       success: true,

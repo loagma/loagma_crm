@@ -9,32 +9,30 @@ const prisma = new PrismaClient();
  * 
  * Features:
  * - JWT Authentication
- * - In-memory location storage
- * - Admin broadcast system
- * - Heartbeat monitoring
- * - Memory cleanup
- * - Route persistence on disconnect
+ * - Real-time location broadcast to admins
+ * - Accurate distance calculation using Haversine formula
+ * - Route persistence in database
+ * - Heartbeat monitoring for connection health
+ * - Auto-cleanup on disconnect
  */
 
 class LiveTrackingServer {
     constructor() {
         this.wss = null;
 
-        // In-memory structures
+        // In-memory structures for real-time tracking
         this.salesmanSockets = new Map(); // salesmanId -> WebSocket
         this.adminSockets = new Set(); // Set of admin WebSockets
-        this.salesmanLocations = new Map(); // salesmanId -> { lastLocation, route[] }
+        this.salesmanLocations = new Map(); // salesmanId -> { lastLocation, route[], totalDistanceKm }
 
         // Heartbeat monitoring
         this.heartbeatInterval = null;
         this.HEARTBEAT_INTERVAL = 30000; // 30 seconds
-        this.CONNECTION_TIMEOUT = 60000; // 60 seconds
+        this.CONNECTION_TIMEOUT = 90000; // 90 seconds
     }
 
     /**
      * Initialize WebSocket server
-     * @param {number} port - WebSocket port
-     * @param {Object} httpServer - Optional HTTP server for upgrade
      */
     initialize(port = 8081, httpServer = null) {
         const options = {
@@ -44,7 +42,6 @@ class LiveTrackingServer {
         };
 
         this.wss = new WebSocketServer(options);
-
         this.wss.on('connection', this.handleConnection.bind(this));
         this.startHeartbeat();
 
@@ -60,13 +57,12 @@ class LiveTrackingServer {
             const token = url.searchParams.get('token');
 
             if (!token) {
-                console.log('❌ WebSocket connection rejected: No token provided');
+                console.log('❌ WebSocket rejected: No token');
                 return false;
             }
 
-            // Handle development mode token (for testing only)
+            // Development mode token
             if (token === 'dev_mode_token') {
-                console.log('✅ WebSocket connection verified for development mode');
                 const userType = url.searchParams.get('userType');
                 const employeeId = url.searchParams.get('employeeId');
 
@@ -76,29 +72,24 @@ class LiveTrackingServer {
                         roles: ['salesman'],
                         name: `Dev Salesman ${employeeId}`
                     };
-                    console.log(`🔧 Dev mode salesman connection: ${employeeId}`);
                 } else {
                     info.req.user = {
                         id: 'dev_admin',
                         roles: ['admin'],
                         name: 'Dev Admin'
                     };
-                    console.log('🔧 Dev mode admin connection');
                 }
                 return true;
             }
 
-            // Verify JWT token for production
+            // Verify JWT token
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-
-            // Store JWT payload temporarily, we'll fetch user details in handleConnection
             info.req.jwtPayload = decoded;
-
-            console.log(`✅ WebSocket JWT verified for user: ${decoded.id}`);
+            console.log(`✅ WebSocket JWT verified: ${decoded.id}`);
             return true;
 
         } catch (error) {
-            console.log('❌ WebSocket authentication failed:', error.message);
+            console.log('❌ WebSocket auth failed:', error.message);
             return false;
         }
     }
@@ -110,47 +101,27 @@ class LiveTrackingServer {
         try {
             const user = await prisma.user.findUnique({
                 where: { id: jwtPayload.id },
-                select: {
-                    id: true,
-                    name: true,
-                    roleId: true,
-                    isActive: true
-                }
+                select: { id: true, name: true, roleId: true, isActive: true }
             });
 
-            if (!user || !user.isActive) {
-                console.log(`❌ User not found or inactive: ${jwtPayload.id}`);
-                return null;
-            }
+            if (!user || !user.isActive) return null;
 
-            // Map role IDs to role names - this matches your database structure
             const roleMapping = {
                 'R001': 'admin',
                 'R002': 'salesman',
                 'R003': 'telecaller'
             };
 
-            // Get role from roleId field (primary source based on your DB)
             let roleName = 'unknown';
-
-            // 1. First check user's roleId from database
             if (user.roleId && roleMapping[user.roleId]) {
                 roleName = roleMapping[user.roleId];
-            }
-            // 2. Fallback to JWT roleId if database roleId is null
-            else if (jwtPayload.roleId && roleMapping[jwtPayload.roleId]) {
+            } else if (jwtPayload.roleId && roleMapping[jwtPayload.roleId]) {
                 roleName = roleMapping[jwtPayload.roleId];
             }
 
-            console.log(`🔍 User ${user.id} (${user.name}) role: ${user.roleId} -> ${roleName}`);
-
-            return {
-                id: user.id,
-                name: user.name,
-                roles: [roleName]
-            };
+            return { id: user.id, name: user.name, roles: [roleName] };
         } catch (error) {
-            console.error('Error fetching user from database:', error);
+            console.error('Error fetching user:', error);
             return null;
         }
     }
@@ -161,11 +132,9 @@ class LiveTrackingServer {
     async handleConnection(ws, req) {
         let user = req.user;
 
-        // If we have a JWT payload instead of user object, fetch user details
         if (!user && req.jwtPayload) {
             user = await this.getUserFromJWT(req.jwtPayload);
             if (!user) {
-                console.log('❌ User not found in database, closing connection');
                 ws.close(1008, 'User not found');
                 return;
             }
@@ -174,24 +143,20 @@ class LiveTrackingServer {
         const userId = user.id;
         const userRole = user.roles?.[0] || 'unknown';
 
-        // Set connection metadata
         ws.userId = userId;
         ws.userRole = userRole;
         ws.isAlive = true;
         ws.lastPong = Date.now();
 
-        // Handle different user types
         if (userRole === 'admin') {
             this.handleAdminConnection(ws, userId);
         } else if (userRole === 'salesman') {
             this.handleSalesmanConnection(ws, userId);
         } else {
-            console.log(`⚠️ Unknown user role: ${userRole}`);
             ws.close(1008, 'Unknown user role');
             return;
         }
 
-        // Set up message handlers
         ws.on('message', (data) => this.handleMessage(ws, data));
         ws.on('close', () => this.handleDisconnection(ws));
         ws.on('error', (error) => this.handleError(ws, error));
@@ -204,16 +169,20 @@ class LiveTrackingServer {
     }
 
     /**
-     * Handle admin connection
+     * Handle admin connection - send current salesman locations
      */
     handleAdminConnection(ws, adminId) {
         this.adminSockets.add(ws);
 
-        // Send current salesman locations to new admin
+        // Send all current salesman locations to new admin
         const currentLocations = {};
         for (const [salesmanId, locationData] of this.salesmanLocations) {
             if (locationData.lastLocation) {
-                currentLocations[salesmanId] = locationData.lastLocation;
+                currentLocations[salesmanId] = {
+                    ...locationData.lastLocation,
+                    totalDistanceKm: locationData.totalDistanceKm || 0,
+                    totalPoints: locationData.route?.length || 0
+                };
             }
         }
 
@@ -223,6 +192,8 @@ class LiveTrackingServer {
                 locations: currentLocations
             });
         }
+
+        console.log(`📡 Admin ${adminId} connected, sent ${Object.keys(currentLocations).length} locations`);
     }
 
     /**
@@ -237,13 +208,16 @@ class LiveTrackingServer {
 
         this.salesmanSockets.set(salesmanId, ws);
 
-        // Initialize location data if not exists
+        // Initialize or preserve location data
         if (!this.salesmanLocations.has(salesmanId)) {
             this.salesmanLocations.set(salesmanId, {
                 lastLocation: null,
-                route: []
+                route: [],
+                totalDistanceKm: 0
             });
         }
+
+        console.log(`📍 Salesman ${salesmanId} connected`);
     }
 
     /**
@@ -268,10 +242,7 @@ class LiveTrackingServer {
 
         } catch (error) {
             console.error('❌ Error parsing message:', error);
-            this.sendToSocket(ws, {
-                type: 'ERROR',
-                message: 'Invalid message format'
-            });
+            this.sendToSocket(ws, { type: 'ERROR', message: 'Invalid message format' });
         }
     }
 
@@ -279,186 +250,98 @@ class LiveTrackingServer {
      * Handle location update from salesman
      */
     async handleLocationUpdate(ws, message) {
-        const { salesmanId, lat, lng, timestamp, isHomeLocation } = message;
+        const { salesmanId, lat, lng, timestamp, isHomeLocation, accuracy, speed } = message;
 
-        // Validate message format
+        // Validate
         if (!salesmanId || typeof lat !== 'number' || typeof lng !== 'number') {
-            console.log('❌ Invalid location message format');
+            console.log('❌ Invalid location message');
             return;
         }
 
-        // Validate coordinates
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             console.log('❌ Invalid GPS coordinates');
             return;
         }
 
-        // Ensure salesman owns this connection
         if (ws.userId !== salesmanId) {
-            console.log(`❌ Unauthorized location update: ${ws.userId} tried to update ${salesmanId}`);
+            console.log(`❌ Unauthorized: ${ws.userId} tried to update ${salesmanId}`);
             return;
         }
 
-        const locationData = this.salesmanLocations.get(salesmanId);
+        let locationData = this.salesmanLocations.get(salesmanId);
         if (!locationData) {
-            console.log(`❌ No location data found for salesman: ${salesmanId}`);
-            return;
+            locationData = { lastLocation: null, route: [], totalDistanceKm: 0 };
+            this.salesmanLocations.set(salesmanId, locationData);
         }
 
         const newLocation = {
             lat,
             lng,
             timestamp: timestamp || Date.now(),
-            isHomeLocation: isHomeLocation || false
+            isHomeLocation: isHomeLocation || false,
+            accuracy: accuracy || null,
+            speed: speed || null
         };
 
         // Calculate distance from last location
-        let distanceFromLast = 0;
+        let distanceFromLastKm = 0;
         if (locationData.lastLocation) {
-            distanceFromLast = this.calculateDistance(
+            distanceFromLastKm = this.calculateDistanceKm(
                 locationData.lastLocation.lat, locationData.lastLocation.lng,
                 lat, lng
             );
         }
 
-        // Update last known location
+        // Update total distance
+        if (distanceFromLastKm > 0.005) { // Only add if > 5 meters
+            locationData.totalDistanceKm += distanceFromLastKm;
+        }
+
+        // Update last location
         locationData.lastLocation = newLocation;
 
-        // Append to route (with distance filtering to avoid spam)
+        // Add to route if significant movement (> 5 meters)
         if (this.shouldAddToRoute(locationData.route, newLocation)) {
             locationData.route.push(newLocation);
 
-            // Store location in database immediately for route visualization
-            await this.storeLocationInDatabase(salesmanId, newLocation);
+            // Store in database
+            await this.storeLocationInDatabase(salesmanId, newLocation, locationData.totalDistanceKm);
         }
 
-        // Calculate total distance traveled
-        const totalDistanceKm = this.calculateTotalRouteDistance(locationData.route);
-
-        // Broadcast to all connected admins with distance info
+        // Broadcast to all admins with full data
         this.broadcastToAdmins({
             type: 'LOCATION',
             salesmanId,
             lat,
             lng,
             timestamp: newLocation.timestamp,
-            distanceFromLastKm: Math.round(distanceFromLast * 1000) / 1000,
-            totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
+            distanceFromLastKm: Math.round(distanceFromLastKm * 1000) / 1000,
+            totalDistanceKm: Math.round(locationData.totalDistanceKm * 100) / 100,
             totalPoints: locationData.route.length,
-            isHomeLocation: newLocation.isHomeLocation
+            isHomeLocation: newLocation.isHomeLocation,
+            accuracy: newLocation.accuracy,
+            speed: newLocation.speed
         });
 
+        // Send acknowledgment to salesman
+        this.sendToSocket(ws, { type: 'ACK', timestamp: newLocation.timestamp });
+
         const homeTag = newLocation.isHomeLocation ? ' (HOME)' : '';
-        console.log(`📍 Location updated for ${salesmanId}${homeTag}: ${lat.toFixed(6)}, ${lng.toFixed(6)} | Distance: ${totalDistanceKm.toFixed(2)} km`);
+        console.log(`📍 ${salesmanId}${homeTag}: ${lat.toFixed(6)}, ${lng.toFixed(6)} | ${locationData.totalDistanceKm.toFixed(2)} km | ${locationData.route.length} pts`);
     }
 
     /**
-     * Calculate total distance for a route
+     * Calculate distance in kilometers using Haversine formula
      */
-    calculateTotalRouteDistance(route) {
-        if (!route || route.length < 2) return 0;
-
-        let totalDistance = 0;
-        for (let i = 1; i < route.length; i++) {
-            totalDistance += this.calculateDistance(
-                route[i - 1].lat, route[i - 1].lng,
-                route[i].lat, route[i].lng
-            );
-        }
-        return totalDistance;
-    }
-
-    /**
-     * Store location update in database for route visualization
-     * Includes deduplication to avoid storing duplicate points from REST API
-     */
-    async storeLocationInDatabase(salesmanId, location) {
-        try {
-            // Find the current active attendance session for this salesman
-            const activeAttendance = await prisma.attendance.findFirst({
-                where: {
-                    employeeId: salesmanId,
-                    status: 'active'
-                },
-                orderBy: {
-                    punchInTime: 'desc'
-                }
-            });
-
-            if (!activeAttendance) {
-                console.log(`⚠️ No active attendance found for salesman ${salesmanId}`);
-                return;
-            }
-
-            // Check for recent duplicate points (within 5 seconds and 10 meters)
-            const recentPoint = await prisma.salesmanRouteLog.findFirst({
-                where: {
-                    attendanceId: activeAttendance.id,
-                    recordedAt: {
-                        gte: new Date(Date.now() - 5000) // Within last 5 seconds
-                    }
-                },
-                orderBy: { recordedAt: 'desc' },
-                select: {
-                    latitude: true,
-                    longitude: true,
-                    recordedAt: true
-                }
-            });
-
-            if (recentPoint) {
-                const distance = this.calculateDistance(
-                    recentPoint.latitude, recentPoint.longitude,
-                    location.lat, location.lng
-                );
-                if (distance < 10) { // Less than 10 meters
-                    console.log(`⏭️ Skipping duplicate point for ${salesmanId} (${distance.toFixed(1)}m from recent)`);
-                    return;
-                }
-            }
-
-            // Check if this is the first point (home location) - use client flag or check database
-            const existingPointsCount = await prisma.salesmanRouteLog.count({
-                where: { attendanceId: activeAttendance.id }
-            });
-
-            const isFirstPoint = existingPointsCount === 0;
-            const shouldMarkAsHome = isFirstPoint || location.isHomeLocation === true;
-
-            // Store the location point in the database
-            // Try with isHomeLocation first, fallback without it if column doesn't exist
-            try {
-                await prisma.salesmanRouteLog.create({
-                    data: {
-                        employeeId: salesmanId,
-                        attendanceId: activeAttendance.id,
-                        latitude: location.lat,
-                        longitude: location.lng,
-                        recordedAt: new Date(location.timestamp),
-                        isHomeLocation: shouldMarkAsHome
-                    }
-                });
-            } catch (createError) {
-                if (createError.code === 'P2022' || createError.message?.includes('isHomeLocation')) {
-                    console.log('isHomeLocation column not found, storing without it');
-                    await prisma.salesmanRouteLog.create({
-                        data: {
-                            employeeId: salesmanId,
-                            attendanceId: activeAttendance.id,
-                            latitude: location.lat,
-                            longitude: location.lng,
-                            recordedAt: new Date(location.timestamp)
-                        }
-                    });
-                } else {
-                    throw createError;
-                }
-            }
-
-            console.log(`💾 Stored location in database for ${salesmanId}${shouldMarkAsHome ? ' (HOME)' : ''}`);
-        } catch (error) {
-            console.error(`❌ Error storing location in database for ${salesmanId}:`, error);
-        }
+    calculateDistanceKm(lat1, lng1, lat2, lng2) {
+        const R = 6371; // Earth's radius in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     /**
@@ -468,27 +351,99 @@ class LiveTrackingServer {
         if (route.length === 0) return true;
 
         const lastLocation = route[route.length - 1];
-        const distance = this.calculateDistance(
+        const distance = this.calculateDistanceKm(
             lastLocation.lat, lastLocation.lng,
             newLocation.lat, newLocation.lng
         );
 
-        // Only add if moved more than 10 meters
-        return distance >= 10;
+        // Add if moved more than 5 meters
+        return distance >= 0.005;
     }
 
     /**
-     * Calculate distance between two points in meters
+     * Store location in database
      */
-    calculateDistance(lat1, lng1, lat2, lng2) {
-        const R = 6371000; // Earth's radius in meters
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLng = (lng2 - lng1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
+    async storeLocationInDatabase(salesmanId, location, totalDistanceKm) {
+        try {
+            // Find active attendance
+            const activeAttendance = await prisma.attendance.findFirst({
+                where: { employeeId: salesmanId, status: 'active' },
+                orderBy: { punchInTime: 'desc' }
+            });
+
+            if (!activeAttendance) {
+                console.log(`⚠️ No active attendance for ${salesmanId}`);
+                return;
+            }
+
+            // Check for recent duplicate
+            const recentPoint = await prisma.salesmanRouteLog.findFirst({
+                where: {
+                    attendanceId: activeAttendance.id,
+                    recordedAt: { gte: new Date(Date.now() - 5000) }
+                },
+                orderBy: { recordedAt: 'desc' }
+            });
+
+            if (recentPoint) {
+                const distance = this.calculateDistanceKm(
+                    recentPoint.latitude, recentPoint.longitude,
+                    location.lat, location.lng
+                );
+                if (distance < 0.005) return; // Skip if < 5 meters
+            }
+
+            // Check if first point (home location)
+            const existingCount = await prisma.salesmanRouteLog.count({
+                where: { attendanceId: activeAttendance.id }
+            });
+
+            const isFirstPoint = existingCount === 0;
+            const shouldMarkAsHome = isFirstPoint || location.isHomeLocation === true;
+
+            // Store the point
+            try {
+                await prisma.salesmanRouteLog.create({
+                    data: {
+                        employeeId: salesmanId,
+                        attendanceId: activeAttendance.id,
+                        latitude: location.lat,
+                        longitude: location.lng,
+                        speed: location.speed,
+                        accuracy: location.accuracy,
+                        recordedAt: new Date(location.timestamp),
+                        isHomeLocation: shouldMarkAsHome
+                    }
+                });
+            } catch (createError) {
+                // Fallback without isHomeLocation if column doesn't exist
+                if (createError.code === 'P2022') {
+                    await prisma.salesmanRouteLog.create({
+                        data: {
+                            employeeId: salesmanId,
+                            attendanceId: activeAttendance.id,
+                            latitude: location.lat,
+                            longitude: location.lng,
+                            speed: location.speed,
+                            accuracy: location.accuracy,
+                            recordedAt: new Date(location.timestamp)
+                        }
+                    });
+                } else {
+                    throw createError;
+                }
+            }
+
+            // Update attendance with total distance
+            await prisma.attendance.update({
+                where: { id: activeAttendance.id },
+                data: { totalDistanceKm: Math.round(totalDistanceKm * 100) / 100 }
+            });
+
+            console.log(`💾 Stored: ${salesmanId}${shouldMarkAsHome ? ' (HOME)' : ''}`);
+        } catch (error) {
+            console.error(`❌ DB error for ${salesmanId}:`, error.message);
+        }
     }
 
     /**
@@ -506,7 +461,7 @@ class LiveTrackingServer {
         }
 
         if (sentCount > 0) {
-            console.log(`📡 Broadcasted to ${sentCount} admin(s)`);
+            console.log(`📡 Broadcast to ${sentCount} admin(s)`);
         }
     }
 
@@ -520,7 +475,7 @@ class LiveTrackingServer {
     }
 
     /**
-     * Handle connection disconnection
+     * Handle disconnection
      */
     handleDisconnection(ws) {
         const userId = ws.userId;
@@ -533,31 +488,11 @@ class LiveTrackingServer {
         } else if (userRole === 'salesman') {
             this.salesmanSockets.delete(userId);
 
-            // Persist route to database before cleanup
-            this.persistSalesmanRoute(userId);
-
-            console.log(`🔌 Salesman disconnected: ${userId}`);
-        }
-    }
-
-    /**
-     * Persist salesman route to database on disconnect
-     * Since we now store locations in real-time, this just clears the in-memory route
-     */
-    async persistSalesmanRoute(salesmanId) {
-        try {
-            const locationData = this.salesmanLocations.get(salesmanId);
-            if (!locationData || locationData.route.length === 0) {
-                return;
+            // Keep location data for reconnection, clear route after some time
+            const locationData = this.salesmanLocations.get(userId);
+            if (locationData) {
+                console.log(`🔌 Salesman ${userId} disconnected | ${locationData.totalDistanceKm.toFixed(2)} km | ${locationData.route.length} pts`);
             }
-
-            console.log(`💾 Clearing in-memory route for ${salesmanId}: ${locationData.route.length} points (already stored in database)`);
-
-            // Clear route after disconnect since points are already stored in database
-            locationData.route = [];
-
-        } catch (error) {
-            console.error(`❌ Error clearing route for ${salesmanId}:`, error);
         }
     }
 
@@ -565,7 +500,7 @@ class LiveTrackingServer {
      * Handle WebSocket errors
      */
     handleError(ws, error) {
-        console.error(`❌ WebSocket error for ${ws.userId}:`, error);
+        console.error(`❌ WebSocket error for ${ws.userId}:`, error.message);
     }
 
     /**
@@ -577,7 +512,7 @@ class LiveTrackingServer {
 
             this.wss.clients.forEach((ws) => {
                 if (!ws.isAlive || (now - ws.lastPong) > this.CONNECTION_TIMEOUT) {
-                    console.log(`💔 Terminating stale connection: ${ws.userId}`);
+                    console.log(`💔 Terminating stale: ${ws.userId}`);
                     ws.terminate();
                     return;
                 }
@@ -598,12 +533,12 @@ class LiveTrackingServer {
             connectedAdmins: this.adminSockets.size,
             trackedSalesmen: this.salesmanLocations.size,
             totalRoutePoints: Array.from(this.salesmanLocations.values())
-                .reduce((total, data) => total + data.route.length, 0)
+                .reduce((total, data) => total + (data.route?.length || 0), 0)
         };
     }
 
     /**
-     * Cleanup and shutdown
+     * Shutdown server
      */
     shutdown() {
         if (this.heartbeatInterval) {
@@ -612,11 +547,6 @@ class LiveTrackingServer {
 
         if (this.wss) {
             this.wss.close();
-        }
-
-        // Persist all routes before shutdown
-        for (const salesmanId of this.salesmanSockets.keys()) {
-            this.persistSalesmanRoute(salesmanId);
         }
 
         console.log('🛑 Live Tracking WebSocket Server shutdown');
