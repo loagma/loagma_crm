@@ -49,7 +49,7 @@ class _EnhancedAttendanceManagementScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _dateController.text = DateFormat('dd-MM-yyyy').format(selectedDate);
     _loadInitialData();
     _loadEmployees();

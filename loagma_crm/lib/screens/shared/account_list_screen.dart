@@ -219,7 +219,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DropdownButtonFormField<String>(
-                        value: tmpStage,
+                        initialValue: tmpStage,
                         decoration: const InputDecoration(
                           labelText: 'Customer Stage',
                         ),
@@ -240,7 +240,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<bool>(
-                        value: tmpApproved,
+                        initialValue: tmpApproved,
                         decoration: const InputDecoration(
                           labelText: 'Approval Status',
                         ),
@@ -263,7 +263,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<String>(
-                        value: tmpSalesmanId,
+                        initialValue: tmpSalesmanId,
                         decoration: const InputDecoration(
                           labelText: 'Salesman',
                         ),
@@ -428,14 +428,6 @@ class _AccountListScreenState extends State<AccountListScreen> {
     return activeFilters.join(', ');
   }
 
-  // Navigate to create screen
-  Future<void> _navigateToCreate() async {
-    // expecting a route /account/create to exist
-    await context.push('/account/create');
-    // after returning, refresh list
-    await _refreshAccounts();
-  }
-
   // Navigate to detail screen
   Future<void> _navigateToDetail(String accountId) async {
     context.push(
@@ -460,12 +452,14 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 Positioned(
                   right: 8,
                   top: 8,
-                  child: Container(
+                  child: SizedBox(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ),
@@ -521,9 +515,11 @@ class _AccountListScreenState extends State<AccountListScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 15),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Color(0xFFD7BE69).withOpacity(0.1),
+                color: Color(0xFFD7BE69).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Color(0xFFD7BE69).withOpacity(0.3)),
+                border: Border.all(
+                  color: Color(0xFFD7BE69).withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
@@ -602,8 +598,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
         },
         backgroundColor: const Color(0xFFD7BE69),
         tooltip: "Create New Account",
-        child: const Icon(Icons.add),
         shape: const CircleBorder(),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -651,7 +647,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD7BE69).withOpacity(0.1),
+                      color: const Color(0xFFD7BE69).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -690,8 +686,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: account.isApproved
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.orange.withOpacity(0.1),
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -728,11 +724,15 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 _buildInfoRow(Icons.business, account.businessType!),
               if (account.customerStage != null)
                 _buildInfoRow(Icons.stairs, account.customerStage!),
-              if (account.createdBy != null)
+              if (account.createdByName != 'Unknown')
                 _buildInfoRow(
                   Icons.person_add,
-                  'Created by: ${account.createdByName ?? account.createdBy}',
+                  'Created by: ${account.createdByName}',
                 ),
+              _buildInfoRow(
+                Icons.calendar_today,
+                'Created: ${account.createdAt.day}/${account.createdAt.month}/${account.createdAt.year}',
+              ),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
