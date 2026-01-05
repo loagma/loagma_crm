@@ -937,11 +937,15 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 _buildInfoRow(Icons.business, account.businessType!),
               if (account.customerStage != null)
                 _buildInfoRow(Icons.stairs, account.customerStage!),
-              if (account.createdBy != null && account.createdBy!.isNotEmpty)
+              if (account.createdByName != 'Unknown')
                 _buildInfoRow(
                   Icons.person_add,
                   'Created by: ${account.createdByName}',
                 ),
+              _buildInfoRow(
+                Icons.calendar_today,
+                'Created: ${account.createdAt.day}/${account.createdAt.month}/${account.createdAt.year}',
+              ),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
