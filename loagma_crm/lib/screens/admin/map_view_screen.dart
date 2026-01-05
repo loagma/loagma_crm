@@ -47,32 +47,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   List<String> _selectedPlaceTypes = ['convenience_store'];
   int _searchRadius = 1500;
 
-  // Place types for business discovery - minimal but accurate
+  // Place types for business discovery - simplified and accurate
   final List<Map<String, dynamic>> _placeTypes = [
-    {'type': 'restaurant', 'name': 'Restaurants', 'icon': Icons.restaurant},
+    {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
     {
       'type': 'supermarket',
-      'name': 'Supermarkets',
+      'name': 'Supermarket',
       'icon': Icons.local_grocery_store,
     },
-    {
-      'type': 'convenience_store',
-      'name': 'Kirana Store',
-      'icon': Icons.storefront,
-    },
-    {'type': 'lodging', 'name': 'Hotels', 'icon': Icons.hotel},
-    {'type': 'meal_takeaway', 'name': 'Caterers', 'icon': Icons.takeout_dining},
-    {'type': 'food', 'name': 'Sweets', 'icon': Icons.cake},
-    {'type': 'bank', 'name': 'Banks', 'icon': Icons.account_balance},
-    {
-      'type': 'gas_station',
-      'name': 'Gas Stations',
-      'icon': Icons.local_gas_station,
-    },
-    {'type': 'pharmacy', 'name': 'Pharmacies', 'icon': Icons.local_pharmacy},
-    {'type': 'hospital', 'name': 'Hospitals', 'icon': Icons.local_hospital},
-    {'type': 'school', 'name': 'Schools', 'icon': Icons.school},
-    {'type': 'cafe', 'name': 'Cafes', 'icon': Icons.local_cafe},
+    {'type': 'convenience_store', 'name': 'Kirana', 'icon': Icons.storefront},
+    {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
+    {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
+    {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
+    {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
+    {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
   ];
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
@@ -1124,279 +1112,42 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
       print('🔍 Filtering by place types: $_selectedPlaceTypes');
 
-      // Filter Google Places shops by selected place types
+      // Filter Google Places shops by selected place types - simplified logic
       final filteredGoogleShops = _googlePlacesShops.where((shop) {
-        final shopBusinessType =
-            shop['businessType']?.toString().toLowerCase() ?? '';
-        final shopName = shop['name']?.toString().toLowerCase() ?? '';
+        final shopType = shop['businessType']?.toString().toLowerCase() ?? '';
+        if (shopType.isEmpty) return false;
 
-        if (shopBusinessType.isEmpty) return false;
+        // Simple direct type matching
+        return _selectedPlaceTypes.any((selectedType) {
+          final selected = selectedType.toLowerCase();
 
-        print('🔍 Checking shop: ${shop['name']} with type: $shopBusinessType');
+          // Direct type match
+          if (shopType == selected || shopType.contains(selected)) return true;
 
-        // Check if the shop's business type matches any of the selected place types
-        bool matches = _selectedPlaceTypes.any((selectedType) {
-          final selectedTypeLower = selectedType.toLowerCase();
+          // Handle lodging -> hotel mapping
+          if (selected == 'lodging' &&
+              (shopType.contains('hotel') || shopType.contains('lodging')))
+            return true;
 
-          // Direct mapping between UI filter types and Google Places business types
-          switch (selectedTypeLower) {
-            case 'convenience_store':
-              // This maps to "Kirana Store" in your UI - be very precise
-              final isKiranaType =
-                  shopBusinessType == 'convenience_store' ||
-                  shopBusinessType.contains('convenience') ||
-                  shopBusinessType.contains('grocery');
+          // Handle convenience_store -> grocery/kirana
+          if (selected == 'convenience_store' &&
+              (shopType.contains('convenience') ||
+                  shopType.contains('grocery')))
+            return true;
 
-              final hasKiranaName =
-                  shopName.contains('grocery') ||
-                  shopName.contains('kirana') ||
-                  shopName.contains('general store') ||
-                  shopName.contains('provision') ||
-                  shopName.contains('departmental') ||
-                  shopName.contains('mart') ||
-                  (shopName.contains('store') &&
-                      !shopName.contains('book') &&
-                      !shopName.contains('mobile') &&
-                      !shopName.contains('electronic'));
-
-              // Exclude non-kirana businesses
-              final isNotKirana =
-                  shopName.contains('pharmacy') ||
-                  shopName.contains('medical') ||
-                  shopName.contains('hospital') ||
-                  shopName.contains('bank') ||
-                  shopName.contains('restaurant') ||
-                  shopName.contains('hotel') ||
-                  shopName.contains('cafe') ||
-                  shopName.contains('bakery') ||
-                  shopName.contains('sweet') ||
-                  shopBusinessType.contains('pharmacy') ||
-                  shopBusinessType.contains('restaurant') ||
-                  shopBusinessType.contains('lodging') ||
-                  shopBusinessType.contains('bank') ||
-                  shopBusinessType.contains('bakery');
-
-              return (isKiranaType || hasKiranaName) && !isNotKirana;
-
-            case 'supermarket':
-              // Supermarkets - large grocery stores
-              return (shopBusinessType == 'supermarket' ||
-                      shopBusinessType.contains('supermarket') ||
-                      shopName.contains('supermarket') ||
-                      shopName.contains('super market') ||
-                      shopName.contains('hypermarket')) &&
-                  !shopName.contains('pharmacy');
-
-            case 'restaurant':
-              // Restaurants - must be restaurant, NOT cafe or hotel
-              final isRestaurantType =
-                  shopBusinessType == 'restaurant' ||
-                  shopBusinessType.contains('restaurant');
-
-              final hasRestaurantName =
-                  shopName.contains('restaurant') ||
-                  shopName.contains('dhaba') ||
-                  shopName.contains('biryani') ||
-                  shopName.contains('kitchen') ||
-                  shopName.contains('dining');
-
-              // Exclude cafes, hotels, and sweet shops
-              final isNotRestaurant =
-                  shopBusinessType.contains('lodging') ||
-                  shopBusinessType.contains('cafe') ||
-                  shopName.contains('cafe') ||
-                  shopName.contains('hotel') ||
-                  shopName.contains('sweet') ||
-                  shopName.contains('bakery');
-
-              return (isRestaurantType || hasRestaurantName) &&
-                  !isNotRestaurant;
-
-            case 'lodging':
-              // Hotels (maps to "Hotels" in your UI)
-              // Must be a hotel AND name should indicate it's a hotel
-              final isLodgingType =
-                  shopBusinessType == 'lodging' ||
-                  shopBusinessType.contains('lodging') ||
-                  shopBusinessType == 'hotel' ||
-                  shopBusinessType.contains('hotel');
-
-              final hasHotelName =
-                  shopName.contains('hotel') ||
-                  shopName.contains('resort') ||
-                  shopName.contains('lodge') ||
-                  shopName.contains('inn') ||
-                  shopName.contains('guest house') ||
-                  shopName.contains('oyo') ||
-                  shopName.contains('taj') ||
-                  shopName.contains('marriott') ||
-                  shopName.contains('hyatt');
-
-              // Exclude if name contains non-hotel keywords
-              final isNotHotel =
-                  shopName.contains('bakery') ||
-                  shopName.contains('cafe') ||
-                  shopName.contains('restaurant') ||
-                  shopName.contains('sweet') ||
-                  shopName.contains('shop') ||
-                  shopName.contains('store');
-
-              return (isLodgingType || hasHotelName) && !isNotHotel;
-
-            case 'meal_takeaway':
-              // Caterers (maps to "Caterers" in your UI)
-              return shopBusinessType == 'meal_takeaway' ||
-                  shopBusinessType.contains('takeaway') ||
-                  shopName.contains('catering') ||
-                  shopName.contains('caterer') ||
-                  shopName.contains('tiffin');
-
-            case 'food':
-              // Sweets (maps to "Sweets" in your UI)
-              // Must be sweet shop, bakery, confectionery - NOT cafe or restaurant
-              final isSweetType =
-                  shopBusinessType == 'food' ||
-                  shopBusinessType.contains('bakery');
-
-              final hasSweetName =
-                  shopName.contains('sweet') ||
-                  shopName.contains('bakery') ||
-                  shopName.contains('cake') ||
-                  shopName.contains('mithai') ||
-                  shopName.contains('confectionery') ||
-                  shopName.contains('pastry') ||
-                  shopName.contains('dessert');
-
-              // Exclude cafes and restaurants
-              final isNotSweet =
-                  shopName.contains('cafe') ||
-                  shopName.contains('restaurant') ||
-                  shopName.contains('hotel') ||
-                  shopBusinessType.contains('cafe') ||
-                  shopBusinessType.contains('restaurant') ||
-                  shopBusinessType.contains('lodging');
-
-              return (isSweetType || hasSweetName) && !isNotSweet;
-
-            case 'bank':
-              // Banks
-              return shopBusinessType == 'bank' ||
-                  shopBusinessType.contains('bank') ||
-                  shopName.contains('bank') ||
-                  shopName.contains('atm');
-
-            case 'gas_station':
-              // Gas stations
-              return shopBusinessType == 'gas_station' ||
-                  shopBusinessType.contains('gas') ||
-                  shopBusinessType.contains('fuel') ||
-                  shopName.contains('petrol') ||
-                  shopName.contains('fuel');
-
-            case 'pharmacy':
-              // Pharmacies - must be pharmacy or medical store
-              final isPharmacyType =
-                  shopBusinessType == 'pharmacy' ||
-                  shopBusinessType.contains('pharmacy');
-
-              final hasPharmacyName =
-                  shopName.contains('pharmacy') ||
-                  shopName.contains('medical') ||
-                  shopName.contains('chemist') ||
-                  shopName.contains('medicine') ||
-                  shopName.contains('drug');
-
-              // Exclude hospitals
-              final isNotPharmacy =
-                  shopName.contains('hospital') ||
-                  shopBusinessType.contains('hospital');
-
-              return (isPharmacyType || hasPharmacyName) && !isNotPharmacy;
-
-            case 'hospital':
-              // Hospitals - must be hospital or clinic
-              final isHospitalType =
-                  shopBusinessType == 'hospital' ||
-                  shopBusinessType.contains('hospital') ||
-                  shopBusinessType.contains('clinic');
-
-              final hasHospitalName =
-                  shopName.contains('hospital') ||
-                  shopName.contains('clinic') ||
-                  shopName.contains('nursing home') ||
-                  shopName.contains('medical center') ||
-                  shopName.contains('healthcare');
-
-              // Exclude pharmacies
-              final isNotHospital =
-                  shopName.contains('pharmacy') ||
-                  shopName.contains('chemist') ||
-                  shopBusinessType.contains('pharmacy');
-
-              return (isHospitalType || hasHospitalName) && !isNotHospital;
-
-            case 'school':
-              // Schools
-              return shopBusinessType == 'school' ||
-                  shopBusinessType.contains('school') ||
-                  shopName.contains('school') ||
-                  shopName.contains('college');
-
-            case 'cafe':
-              // Cafes - must be cafe or coffee shop
-              final isCafeType =
-                  shopBusinessType == 'cafe' ||
-                  shopBusinessType.contains('cafe');
-
-              final hasCafeName =
-                  shopName.contains('cafe') ||
-                  shopName.contains('coffee') ||
-                  shopName.contains('starbucks') ||
-                  shopName.contains('ccd') ||
-                  shopName.contains('barista');
-
-              // Exclude hotels and restaurants
-              final isNotCafe =
-                  shopBusinessType.contains('lodging') ||
-                  shopBusinessType.contains('hotel') ||
-                  (shopName.contains('hotel') && !shopName.contains('cafe'));
-
-              return (isCafeType || hasCafeName) && !isNotCafe;
-
-            default:
-              // For any other type, do direct match
-              return shopBusinessType.contains(selectedTypeLower) ||
-                  shopName.contains(selectedTypeLower);
-          }
+          return false;
         });
-
-        if (matches) {
-          print(
-            '✅ Shop ${shop['name']} MATCHES filter (type: $shopBusinessType)',
-          );
-        }
-        return matches;
       }).toList();
 
-      print(
-        '🟣 Filtered to ${filteredGoogleShops.length} shops matching selected types',
-      );
+      print('🟣 Filtered to ${filteredGoogleShops.length} shops');
 
       int googleMarkersAdded = 0;
 
       for (var shop in filteredGoogleShops) {
-        print(
-          '🔍 Processing Google Place: ${shop['name']} at (${shop['latitude']}, ${shop['longitude']})',
-        );
-
         if (shop['latitude'] != null && shop['longitude'] != null) {
           try {
             final lat = _parseDouble(shop['latitude']);
             final lng = _parseDouble(shop['longitude']);
-
-            print(
-              '📍 Coordinates: ($lat, $lng), Valid: ${lat != null && lng != null && _isValidCoordinate(lat, lng)}',
-            );
 
             if (lat == null || lng == null || !_isValidCoordinate(lat, lng))
               continue;
@@ -1407,8 +1158,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 position: LatLng(lat, lng),
                 infoWindow: InfoWindow(
                   title: shop['name'] ?? 'Unknown Shop',
-                  snippet:
-                      'TYPE: ${shop['businessType']?.toUpperCase() ?? 'N/A'} • GOOGLE PLACES • Rating: ${shop['rating']?.toStringAsFixed(1) ?? 'N/A'}',
+                  snippet: _formatBusinessType(shop['businessType']),
                 ),
                 icon: BitmapDescriptor.defaultMarkerWithHue(
                   BitmapDescriptor.hueViolet, // Purple for Google Places shops
@@ -1477,423 +1227,626 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }).toList();
   }
 
-  void _showGooglePlaceDetails(Map<String, dynamic> shop) {
+  void _showGooglePlaceDetails(Map<String, dynamic> shop) async {
+    // Show loading modal first
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Fetch full details if we have a placeId
+    Map<String, dynamic> fullDetails = Map.from(shop);
+    if (shop['placeId'] != null) {
+      try {
+        final details = await GooglePlacesService.fetchPlaceDetails(
+          shop['placeId'],
+        );
+        if (details != null) {
+          fullDetails = {
+            ...shop,
+            'reviews': details['reviews'],
+            'photos': details['photos'],
+            'phoneNumber': details['formatted_phone_number'],
+            'website': details['website'],
+            'openNow': details['opening_hours']?['open_now'],
+            'userRatingsTotal': details['user_ratings_total'],
+          };
+        }
+      } catch (e) {
+        print('Error fetching place details: $e');
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+
+    // Show the details modal
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        minChildSize: 0.5,
-        builder: (context, scrollController) => Container(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            controller: scrollController,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.purple,
-                      child: Icon(Icons.store, color: Colors.white, size: 30),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header with close button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Icon(
+                      _getCategoryIcon(fullDetails['businessType']),
+                      color: primaryColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fullDetails['name'] ?? 'Unknown',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _formatBusinessType(fullDetails['businessType']),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            // Rating row
+            if (fullDetails['rating'] != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 18),
+                          const SizedBox(width: 4),
                           Text(
-                            shop['name'] ?? 'Unknown Shop',
+                            '${(fullDetails['rating'] as num?)?.toStringAsFixed(1) ?? 'N/A'}',
                             style: const TextStyle(
-                              fontSize: 20,
                               fontWeight: FontWeight.bold,
+                              fontSize: 14,
                             ),
                           ),
-                          Text(
-                            'Google Places Shop',
-                            style: TextStyle(color: Colors.purple),
-                          ),
-                          if (shop['rating'] != null)
-                            Row(
-                              children: [
-                                ...List.generate(5, (index) {
-                                  final rating = shop['rating'] ?? 0.0;
-                                  return Icon(
-                                    index < rating.floor()
-                                        ? Icons.star
-                                        : index < rating
-                                        ? Icons.star_half
-                                        : Icons.star_border,
-                                    color: Colors.amber,
-                                    size: 16,
-                                  );
-                                }),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${shop['rating']?.toStringAsFixed(1) ?? 'N/A'} ${shop['userRatingsTotal'] != null ? '(${shop['userRatingsTotal']} reviews)' : ''}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
                         ],
                       ),
                     ),
+                    if (fullDetails['userRatingsTotal'] != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '(${fullDetails['userRatingsTotal']} reviews)',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
+                    const Spacer(),
+                    if (fullDetails['openNow'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: fullDetails['openNow'] == true
+                              ? Colors.green
+                              : Colors.red,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          fullDetails['openNow'] == true ? 'Open' : 'Closed',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                const Divider(height: 24),
-
-                // Details
-                if (shop['businessType'] != null)
-                  _buildDetailRow(
-                    Icons.business,
-                    'Type',
-                    shop['businessType'].toString().toUpperCase(),
-                  ),
-                if (shop['address'] != null)
-                  _buildDetailRow(
-                    Icons.location_on,
-                    'Address',
-                    shop['address'],
-                  ),
-                _buildDetailRow(
-                  Icons.pin_drop,
-                  'Pincode',
-                  shop['pincode'] ?? 'N/A',
-                ),
-                if (shop['phoneNumber'] != null)
-                  _buildDetailRow(Icons.phone, 'Phone', shop['phoneNumber']),
-                if (shop['website'] != null)
-                  _buildDetailRow(Icons.web, 'Website', shop['website']),
-
-                // Opening Hours
-                if (shop['openingHours'] != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              ),
+            const Divider(height: 1),
+            // Scrollable content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Address
+                    if (fullDetails['address'] != null)
+                      _buildInfoCard(
+                        Icons.location_on,
+                        'Address',
+                        fullDetails['address'],
+                        Colors.blue,
+                      ),
+                    // Phone
+                    if (fullDetails['phoneNumber'] != null)
+                      _buildInfoCard(
+                        Icons.phone,
+                        'Phone',
+                        fullDetails['phoneNumber'],
+                        Colors.green,
+                      ),
+                    // Photos Section
+                    if (fullDetails['photos'] != null &&
+                        (fullDetails['photos'] as List).isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
                           Icon(
-                            Icons.access_time,
+                            Icons.photo_library,
                             size: 20,
                             color: primaryColor,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Opening Hours:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (shop['openNow'] != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: shop['openNow'] == true
-                                      ? Colors.green
-                                      : Colors.red,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  shop['openNow'] == true
-                                      ? 'Open Now'
-                                      : 'Closed',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            if (shop['openingHours'] is List)
-                              ...((shop['openingHours'] as List)
-                                  .take(7)
-                                  .map(
-                                    (hour) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 2,
-                                      ),
-                                      child: Text(
-                                        hour.toString(),
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                  )),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                // Price Level
-                if (shop['priceLevel'] != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.attach_money,
-                            size: 20,
-                            color: primaryColor,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Price Level:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(width: 8),
-                          ...List.generate(4, (index) {
-                            return Icon(
-                              Icons.attach_money,
-                              size: 16,
-                              color: index < (shop['priceLevel'] ?? 0)
-                                  ? Colors.green
-                                  : Colors.grey[300],
-                            );
-                          }),
-                        ],
-                      ),
-                    ],
-                  ),
-
-                // Photos
-                if (shop['photos'] != null &&
-                    (shop['photos'] as List).isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Icon(Icons.photo, size: 20, color: primaryColor),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Photos:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          Text(
+                            'Photos (${(fullDetails['photos'] as List).length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        height: 100,
+                      SizedBox(
+                        height: 140,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          itemCount: (shop['photos'] as List).length,
+                          itemCount: (fullDetails['photos'] as List).length,
                           itemBuilder: (context, index) {
-                            final photo = (shop['photos'] as List)[index];
+                            final photo =
+                                (fullDetails['photos'] as List)[index];
+                            final photoRef = photo is Map
+                                ? (photo['photoReference'] ??
+                                      photo['photo_reference'])
+                                : photo.toString();
                             return Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              width: 100,
+                              margin: const EdgeInsets.only(right: 10),
+                              width: 140,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: photo['photoReference'] != null
+                                borderRadius: BorderRadius.circular(12),
+                                child: photoRef != null
                                     ? Image.network(
-                                        'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo['photoReference']}&key=${GooglePlacesConfig.apiKey}',
+                                        'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=$photoRef&key=${GooglePlacesConfig.apiKey}',
                                         fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                const Icon(
-                                                  Icons.image_not_supported,
+                                        loadingBuilder:
+                                            (context, child, progress) {
+                                              if (progress == null)
+                                                return child;
+                                              return Container(
+                                                color: Colors.grey[200],
+                                                child: const Center(
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
                                                 ),
+                                              );
+                                            },
+                                        errorBuilder: (context, error, stack) =>
+                                            Container(
+                                              color: Colors.grey[200],
+                                              child: const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
                                       )
-                                    : const Icon(Icons.image_not_supported),
+                                    : Container(
+                                        color: Colors.grey[200],
+                                        child: const Icon(
+                                          Icons.image,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
                               ),
                             );
                           },
                         ),
                       ),
                     ],
-                  ),
-
-                const SizedBox(height: 20),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _focusOnGooglePlace(shop);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.my_location),
-                        label: const Text('Focus on Map'),
+                    // Reviews Section
+                    if (fullDetails['reviews'] != null &&
+                        (fullDetails['reviews'] as List).isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Icon(Icons.reviews, size: 20, color: primaryColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Reviews (${(fullDetails['reviews'] as List).length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () =>
-                            _showCreateAccountFromGooglePlace(shop),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                      const SizedBox(height: 8),
+                      ...(fullDetails['reviews'] as List)
+                          .take(5)
+                          .map((review) => _buildReviewCard(review)),
+                    ],
+                    // No photos/reviews message
+                    if ((fullDetails['photos'] == null ||
+                            (fullDetails['photos'] as List).isEmpty) &&
+                        (fullDetails['reviews'] == null ||
+                            (fullDetails['reviews'] as List).isEmpty))
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 48,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No photos or reviews available',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
                         ),
-                        icon: const Icon(Icons.add_business),
-                        label: const Text('Add as Account'),
                       ),
-                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _focusOnGooglePlace(Map<String, dynamic> shop) async {
-    if (!mounted || shop['latitude'] == null || shop['longitude'] == null)
-      return;
-
-    try {
-      final lat = _parseDouble(shop['latitude']);
-      final lng = _parseDouble(shop['longitude']);
-      if (lat != null && lng != null && _isValidCoordinate(lat, lng)) {
-        await _safeAnimateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
-        );
-      }
-    } catch (e) {
-      print('❌ Error focusing on Google Place: $e');
-    }
-  }
-
-  void _showCreateAccountFromGooglePlace(Map<String, dynamic> shop) {
-    Navigator.pop(context); // Close the details modal first
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.add_business, color: primaryColor),
-            const SizedBox(width: 8),
-            const Text('Add as Account'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Do you want to add this Google Places shop as a new account?',
+  Widget _buildInfoCard(
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(color: Colors.grey[800], fontSize: 14),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    shop['name'] ?? 'Unknown Shop',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  if (shop['address'] != null) Text(shop['address']),
-                  if (shop['businessType'] != null)
-                    Text(
-                      'Type: ${shop['businessType'].toString().toUpperCase()}',
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _createAccountFromGooglePlace(shop);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
-            child: const Text('Add Account'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _createAccountFromGooglePlace(Map<String, dynamic> shop) async {
-    try {
-      setState(() => _isLoadingGooglePlaces = true);
+  Widget _buildReviewCard(dynamic review) {
+    final authorName =
+        review['authorName'] ?? review['author_name'] ?? 'Anonymous';
+    final rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
+    final text = review['text'] ?? '';
+    final time =
+        review['relativeTimeDescription'] ??
+        review['relative_time_description'] ??
+        '';
+    final photoUrl = review['profilePhotoUrl'] ?? review['profile_photo_url'];
 
-      final placeId = shop['placeId'];
-      if (placeId == null) {
-        _showError('Invalid place ID');
-        return;
-      }
-
-      print('🔄 Creating account from Google Place: $placeId');
-
-      final result = await ShopService.createAccountFromGooglePlace(
-        placeId,
-        customerStage: 'Lead',
-        funnelStage: 'Awareness',
-        notes: 'Created from Google Places via Admin Map',
-      );
-
-      if (result['success'] == true) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Account created successfully!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: primaryColor.withValues(alpha: 0.1),
+                backgroundImage: photoUrl != null
+                    ? NetworkImage(photoUrl)
+                    : null,
+                child: photoUrl == null
+                    ? Text(
+                        authorName[0].toUpperCase(),
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      authorName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        ...List.generate(
+                          5,
+                          (i) => Icon(
+                            i < rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          time,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              text,
+              style: TextStyle(color: Colors.grey[700], fontSize: 13),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
-          );
-        }
+          ],
+        ],
+      ),
+    );
+  }
 
-        // Refresh the data to show the new account
-        await _loadAccountsForSelectedSalesmen();
-
-        print('✅ Account created successfully');
-      } else {
-        _showError(result['message'] ?? 'Failed to create account');
-      }
-    } catch (e) {
-      print('❌ Error creating account: $e');
-      _showError('Error creating account: ${e.toString()}');
-    } finally {
-      setState(() => _isLoadingGooglePlaces = false);
+  IconData _getCategoryIcon(String? type) {
+    if (type == null) return Icons.store;
+    switch (type.toLowerCase()) {
+      case 'restaurant':
+        return Icons.restaurant;
+      case 'cafe':
+        return Icons.local_cafe;
+      case 'bank':
+        return Icons.account_balance;
+      case 'hospital':
+        return Icons.local_hospital;
+      case 'pharmacy':
+        return Icons.local_pharmacy;
+      case 'school':
+        return Icons.school;
+      case 'supermarket':
+        return Icons.local_grocery_store;
+      case 'convenience_store':
+        return Icons.storefront;
+      case 'lodging':
+      case 'hotel':
+        return Icons.hotel;
+      case 'gas_station':
+        return Icons.local_gas_station;
+      default:
+        return Icons.store;
     }
+  }
+
+  /// Format business type for display
+  String _formatBusinessType(String? businessType) {
+    if (businessType == null || businessType.isEmpty) return 'Business';
+
+    // Custom mappings for better display names
+    const typeDisplayNames = {
+      'accounting': 'Accounting',
+      'airport': 'Airport',
+      'amusement_park': 'Amusement Park',
+      'aquarium': 'Aquarium',
+      'art_gallery': 'Art Gallery',
+      'atm': 'ATM',
+      'bakery': 'Bakery',
+      'bank': 'Bank',
+      'bar': 'Bar',
+      'beauty_salon': 'Beauty Salon',
+      'bicycle_store': 'Bicycle Store',
+      'book_store': 'Book Store',
+      'bowling_alley': 'Bowling Alley',
+      'bus_station': 'Bus Station',
+      'cafe': 'Cafe',
+      'campground': 'Campground',
+      'car_dealer': 'Car Dealer',
+      'car_rental': 'Car Rental',
+      'car_repair': 'Car Repair',
+      'car_wash': 'Car Wash',
+      'casino': 'Casino',
+      'cemetery': 'Cemetery',
+      'church': 'Church',
+      'city_hall': 'City Hall',
+      'clothing_store': 'Clothing Store',
+      'convenience_store': 'Convenience Store',
+      'courthouse': 'Courthouse',
+      'dentist': 'Dentist',
+      'department_store': 'Department Store',
+      'doctor': 'Doctor',
+      'drugstore': 'Drugstore',
+      'electrician': 'Electrician',
+      'electronics_store': 'Electronics Store',
+      'embassy': 'Embassy',
+      'fire_station': 'Fire Station',
+      'florist': 'Florist',
+      'funeral_home': 'Funeral Home',
+      'furniture_store': 'Furniture Store',
+      'gas_station': 'Gas Station',
+      'grocery_or_supermarket': 'Grocery Store',
+      'gym': 'Gym',
+      'hair_care': 'Hair Care',
+      'hardware_store': 'Hardware Store',
+      'hindu_temple': 'Hindu Temple',
+      'home_goods_store': 'Home Goods Store',
+      'hospital': 'Hospital',
+      'insurance_agency': 'Insurance Agency',
+      'jewelry_store': 'Jewelry Store',
+      'laundry': 'Laundry',
+      'lawyer': 'Lawyer',
+      'library': 'Library',
+      'light_rail_station': 'Light Rail Station',
+      'liquor_store': 'Liquor Store',
+      'local_government_office': 'Government Office',
+      'locksmith': 'Locksmith',
+      'lodging': 'Hotel',
+      'meal_delivery': 'Meal Delivery',
+      'meal_takeaway': 'Takeaway',
+      'mosque': 'Mosque',
+      'movie_rental': 'Movie Rental',
+      'movie_theater': 'Movie Theater',
+      'moving_company': 'Moving Company',
+      'museum': 'Museum',
+      'night_club': 'Night Club',
+      'painter': 'Painter',
+      'park': 'Park',
+      'parking': 'Parking',
+      'pet_store': 'Pet Store',
+      'pharmacy': 'Pharmacy',
+      'physiotherapist': 'Physiotherapist',
+      'plumber': 'Plumber',
+      'police': 'Police',
+      'post_office': 'Post Office',
+      'primary_school': 'Primary School',
+      'real_estate_agency': 'Real Estate Agency',
+      'restaurant': 'Restaurant',
+      'roofing_contractor': 'Roofing Contractor',
+      'rv_park': 'RV Park',
+      'school': 'School',
+      'secondary_school': 'Secondary School',
+      'shoe_store': 'Shoe Store',
+      'shopping_mall': 'Shopping Mall',
+      'spa': 'Spa',
+      'stadium': 'Stadium',
+      'storage': 'Storage',
+      'store': 'Store',
+      'subway_station': 'Subway Station',
+      'supermarket': 'Supermarket',
+      'synagogue': 'Synagogue',
+      'taxi_stand': 'Taxi Stand',
+      'tourist_attraction': 'Tourist Attraction',
+      'train_station': 'Train Station',
+      'transit_station': 'Transit Station',
+      'travel_agency': 'Travel Agency',
+      'university': 'University',
+      'veterinary_care': 'Veterinary Care',
+      'zoo': 'Zoo',
+      // Additional common types
+      'food': 'Food & Dining',
+      'health': 'Health & Medical',
+      'finance': 'Financial Services',
+      'establishment': 'Business',
+    };
+
+    final lowerType = businessType.toLowerCase();
+    return typeDisplayNames[lowerType] ??
+        businessType
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map(
+              (word) =>
+                  word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1),
+            )
+            .join(' ');
   }
 
   // Helper method to safely parse double values
@@ -1905,11 +1858,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       try {
         return double.parse(value);
       } catch (e) {
-        print('❌ Error parsing double from string: $value');
         return null;
       }
     }
-    print('❌ Unknown type for double parsing: ${value.runtimeType}');
     return null;
   }
 

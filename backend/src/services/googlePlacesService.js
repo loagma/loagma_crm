@@ -114,7 +114,11 @@ export const searchBusinessesNearby = async (latitude, longitude, businessType, 
         latitude: place.geometry?.location?.lat,
         longitude: place.geometry?.location?.lng,
         rating: place.rating,
-        businessType: businessType
+        userRatingsTotal: place.user_ratings_total,
+        businessType: businessType,
+        openNow: place.opening_hours?.open_now,
+        photos: place.photos?.map(p => ({ photoReference: p.photo_reference })) || [],
+        priceLevel: place.price_level
       }))
     };
   } catch (error) {
@@ -136,15 +140,42 @@ export const getPlaceDetails = async (placeId) => {
     const response = await axios.get(`${PLACES_API_URL}/details/json`, {
       params: {
         place_id: placeId,
-        fields: 'name,formatted_address,formatted_phone_number,geometry,rating,types',
+        fields: 'name,formatted_address,formatted_phone_number,geometry,rating,types,reviews,photos,opening_hours,user_ratings_total,price_level,website',
         key: GOOGLE_MAPS_API_KEY
       }
     });
 
     if (response.data.result) {
+      const place = response.data.result;
+      
+      // Format photos with photo references
+      const photos = place.photos?.map(photo => ({
+        photoReference: photo.photo_reference,
+        width: photo.width,
+        height: photo.height
+      })) || [];
+
+      // Format reviews
+      const reviews = place.reviews?.map(review => ({
+        authorName: review.author_name,
+        profilePhotoUrl: review.profile_photo_url,
+        rating: review.rating,
+        text: review.text,
+        relativeTimeDescription: review.relative_time_description,
+        time: review.time
+      })) || [];
+
       return {
         success: true,
-        place: response.data.result
+        place: {
+          ...place,
+          photos,
+          reviews,
+          userRatingsTotal: place.user_ratings_total,
+          priceLevel: place.price_level,
+          openNow: place.opening_hours?.open_now,
+          openingHours: place.opening_hours?.weekday_text
+        }
       };
     }
 

@@ -162,12 +162,31 @@ class PlaceDetailsWidget extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // Types
+        // Business Type (improved display)
         if (place.types.isNotEmpty) ...[
+          Row(
+            children: [
+              const Icon(Icons.business, color: Colors.grey, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Type: ${_getDisplayType(place.types)}',
+                style: TextStyle(
+                  color: Colors.grey[700],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // Additional Types (filtered)
+        if (_getFilteredTypes(place.types).isNotEmpty) ...[
           Wrap(
             spacing: 8,
             runSpacing: 4,
-            children: place.types.take(3).map((type) {
+            children: _getFilteredTypes(place.types).map((type) {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -176,7 +195,7 @@ class PlaceDetailsWidget extends StatelessWidget {
                   border: Border.all(color: Colors.blue[200]!),
                 ),
                 child: Text(
-                  type.replaceAll('_', ' ').toUpperCase(),
+                  _formatTypeName(type),
                   style: TextStyle(
                     color: Colors.blue[700],
                     fontSize: 10,
@@ -189,6 +208,267 @@ class PlaceDetailsWidget extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// Get the most appropriate display type for the business
+  String _getDisplayType(List<String> types) {
+    // Priority order for business types (most specific first)
+    const typeHierarchy = [
+      // Specific business types
+      'restaurant', 'cafe', 'bakery', 'bar', 'night_club',
+      'hospital', 'pharmacy', 'doctor', 'dentist', 'veterinary_care',
+      'bank', 'atm', 'insurance_agency', 'real_estate_agency',
+      'gas_station', 'car_dealer', 'car_repair', 'car_wash',
+      'supermarket', 'convenience_store', 'grocery_or_supermarket',
+      'clothing_store', 'shoe_store', 'jewelry_store', 'electronics_store',
+      'book_store', 'furniture_store', 'home_goods_store', 'hardware_store',
+      'beauty_salon', 'hair_care', 'spa', 'gym',
+      'school', 'university', 'library', 'museum',
+      'church', 'mosque', 'synagogue', 'hindu_temple',
+      'hotel', 'lodging', 'campground',
+      'tourist_attraction', 'amusement_park', 'zoo', 'aquarium',
+      // General types
+      'store', 'food', 'health', 'finance',
+    ];
+
+    // Find the most specific type
+    for (String priorityType in typeHierarchy) {
+      if (types.contains(priorityType)) {
+        return _formatTypeName(priorityType);
+      }
+    }
+
+    // If no specific type found, use the first non-generic type
+    final filteredTypes = types
+        .where(
+          (type) => ![
+            'establishment',
+            'point_of_interest',
+            'premise',
+            'geocode',
+          ].contains(type),
+        )
+        .toList();
+
+    if (filteredTypes.isNotEmpty) {
+      return _formatTypeName(filteredTypes.first);
+    }
+
+    return 'Business';
+  }
+
+  /// Get filtered types for display (excluding generic ones and the main type)
+  List<String> _getFilteredTypes(List<String> types) {
+    final mainType = _getMainType(types);
+    return types
+        .where(
+          (type) =>
+              ![
+                'establishment',
+                'point_of_interest',
+                'premise',
+                'geocode',
+              ].contains(type) &&
+              type != mainType,
+        )
+        .take(2)
+        .toList(); // Show max 2 additional types
+  }
+
+  /// Get the main type (used internally)
+  String _getMainType(List<String> types) {
+    const typeHierarchy = [
+      'restaurant',
+      'cafe',
+      'bakery',
+      'bar',
+      'night_club',
+      'hospital',
+      'pharmacy',
+      'doctor',
+      'dentist',
+      'veterinary_care',
+      'bank',
+      'atm',
+      'insurance_agency',
+      'real_estate_agency',
+      'gas_station',
+      'car_dealer',
+      'car_repair',
+      'car_wash',
+      'supermarket',
+      'convenience_store',
+      'grocery_or_supermarket',
+      'clothing_store',
+      'shoe_store',
+      'jewelry_store',
+      'electronics_store',
+      'book_store',
+      'furniture_store',
+      'home_goods_store',
+      'hardware_store',
+      'beauty_salon',
+      'hair_care',
+      'spa',
+      'gym',
+      'school',
+      'university',
+      'library',
+      'museum',
+      'church',
+      'mosque',
+      'synagogue',
+      'hindu_temple',
+      'hotel',
+      'lodging',
+      'campground',
+      'tourist_attraction',
+      'amusement_park',
+      'zoo',
+      'aquarium',
+      'store',
+      'food',
+      'health',
+      'finance',
+    ];
+
+    for (String priorityType in typeHierarchy) {
+      if (types.contains(priorityType)) {
+        return priorityType;
+      }
+    }
+
+    final filteredTypes = types
+        .where(
+          (type) => ![
+            'establishment',
+            'point_of_interest',
+            'premise',
+            'geocode',
+          ].contains(type),
+        )
+        .toList();
+
+    return filteredTypes.isNotEmpty ? filteredTypes.first : 'establishment';
+  }
+
+  /// Format type name for display
+  String _formatTypeName(String type) {
+    // Custom mappings for better display names
+    const typeDisplayNames = {
+      'accounting': 'Accounting',
+      'airport': 'Airport',
+      'amusement_park': 'Amusement Park',
+      'aquarium': 'Aquarium',
+      'art_gallery': 'Art Gallery',
+      'atm': 'ATM',
+      'bakery': 'Bakery',
+      'bank': 'Bank',
+      'bar': 'Bar',
+      'beauty_salon': 'Beauty Salon',
+      'bicycle_store': 'Bicycle Store',
+      'book_store': 'Book Store',
+      'bowling_alley': 'Bowling Alley',
+      'bus_station': 'Bus Station',
+      'cafe': 'Cafe',
+      'campground': 'Campground',
+      'car_dealer': 'Car Dealer',
+      'car_rental': 'Car Rental',
+      'car_repair': 'Car Repair',
+      'car_wash': 'Car Wash',
+      'casino': 'Casino',
+      'cemetery': 'Cemetery',
+      'church': 'Church',
+      'city_hall': 'City Hall',
+      'clothing_store': 'Clothing Store',
+      'convenience_store': 'Convenience Store',
+      'courthouse': 'Courthouse',
+      'dentist': 'Dentist',
+      'department_store': 'Department Store',
+      'doctor': 'Doctor',
+      'drugstore': 'Drugstore',
+      'electrician': 'Electrician',
+      'electronics_store': 'Electronics Store',
+      'embassy': 'Embassy',
+      'fire_station': 'Fire Station',
+      'florist': 'Florist',
+      'funeral_home': 'Funeral Home',
+      'furniture_store': 'Furniture Store',
+      'gas_station': 'Gas Station',
+      'grocery_or_supermarket': 'Grocery Store',
+      'gym': 'Gym',
+      'hair_care': 'Hair Care',
+      'hardware_store': 'Hardware Store',
+      'hindu_temple': 'Hindu Temple',
+      'home_goods_store': 'Home Goods Store',
+      'hospital': 'Hospital',
+      'insurance_agency': 'Insurance Agency',
+      'jewelry_store': 'Jewelry Store',
+      'laundry': 'Laundry',
+      'lawyer': 'Lawyer',
+      'library': 'Library',
+      'light_rail_station': 'Light Rail Station',
+      'liquor_store': 'Liquor Store',
+      'local_government_office': 'Government Office',
+      'locksmith': 'Locksmith',
+      'lodging': 'Lodging',
+      'meal_delivery': 'Meal Delivery',
+      'meal_takeaway': 'Takeaway',
+      'mosque': 'Mosque',
+      'movie_rental': 'Movie Rental',
+      'movie_theater': 'Movie Theater',
+      'moving_company': 'Moving Company',
+      'museum': 'Museum',
+      'night_club': 'Night Club',
+      'painter': 'Painter',
+      'park': 'Park',
+      'parking': 'Parking',
+      'pet_store': 'Pet Store',
+      'pharmacy': 'Pharmacy',
+      'physiotherapist': 'Physiotherapist',
+      'plumber': 'Plumber',
+      'police': 'Police',
+      'post_office': 'Post Office',
+      'primary_school': 'Primary School',
+      'real_estate_agency': 'Real Estate Agency',
+      'restaurant': 'Restaurant',
+      'roofing_contractor': 'Roofing Contractor',
+      'rv_park': 'RV Park',
+      'school': 'School',
+      'secondary_school': 'Secondary School',
+      'shoe_store': 'Shoe Store',
+      'shopping_mall': 'Shopping Mall',
+      'spa': 'Spa',
+      'stadium': 'Stadium',
+      'storage': 'Storage',
+      'store': 'Store',
+      'subway_station': 'Subway Station',
+      'supermarket': 'Supermarket',
+      'synagogue': 'Synagogue',
+      'taxi_stand': 'Taxi Stand',
+      'tourist_attraction': 'Tourist Attraction',
+      'train_station': 'Train Station',
+      'transit_station': 'Transit Station',
+      'travel_agency': 'Travel Agency',
+      'university': 'University',
+      'veterinary_care': 'Veterinary Care',
+      'zoo': 'Zoo',
+      // Additional common types
+      'food': 'Food & Dining',
+      'health': 'Health & Medical',
+      'finance': 'Financial Services',
+      'establishment': 'Business',
+    };
+
+    return typeDisplayNames[type] ??
+        type
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map(
+              (word) =>
+                  word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1),
+            )
+            .join(' ');
   }
 
   Widget _buildPhotosSection() {
