@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'user_service.dart';
 import 'api_config.dart';
 
 /// Admin WebSocket service for receiving real-time salesman locations
-/// Handles live location updates and route tracking for admin dashboard
+/// Handles live location updates, route tracking, and distance display
 class AdminLiveTrackingSocket {
   static AdminLiveTrackingSocket? _instance;
   static AdminLiveTrackingSocket get instance =>
@@ -22,18 +23,22 @@ class AdminLiveTrackingSocket {
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
   Timer? _heartbeatTimer;
+  DateTime? _lastHeartbeatResponse;
+  bool _isPendingReconnect = false;
 
   // Configuration
-  static const int _reconnectDelaySeconds = 5;
-  static const int _maxReconnectAttempts = 10;
+  static const int _reconnectDelaySeconds = 3;
+  static const int _maxReconnectAttempts = 50;
+  static const int _heartbeatIntervalSeconds = 25;
 
   // Data streams
   final _locationController = StreamController<LocationUpdate>.broadcast();
   final _connectionController = StreamController<bool>.broadcast();
 
-  // Current data
+  // Current data - stores all salesman locations and routes
   final Map<String, SalesmanLocation> _salesmanLocations = {};
   final Map<String, List<LatLng>> _salesmanRoutes = {};
+  final Map<String, double> _salesmanDistances = {};
 
   // Getters
   bool get isConnected => _isConnected;
@@ -48,55 +53,49 @@ class AdminLiveTrackingSocket {
   Future<bool> connect() async {
     try {
       if (_isConnected) {
-        print('📡 Admin live tracking already connected');
+        debugPrint('📡 Admin live tracking already connected');
         return true;
       }
 
       final token = UserService.token;
       if (token == null || token.isEmpty) {
-        print('❌ No authentication token available');
+        debugPrint('❌ No authentication token available');
         return false;
       }
 
-      // Verify we have valid authentication
       if (!UserService.hasValidAuth) {
-        print('❌ Invalid authentication - missing user ID or token');
+        debugPrint('❌ Invalid authentication');
         return false;
       }
 
-      // Build WebSocket URL
       final wsUrl = _buildWebSocketUrl(token);
-      print('🔗 Admin connecting to WebSocket: $wsUrl');
+      debugPrint('🔗 Admin connecting to WebSocket: $wsUrl');
 
-      // Create WebSocket connection
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
-      // Set up message listener
       _messageSubscription = _channel!.stream.listen(
         _handleMessage,
         onError: _handleError,
         onDone: _handleDisconnection,
       );
 
-      // Wait for connection to establish
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Check if connection is still open after delay
-      // (server might have closed it due to auth failure)
       if (_channel == null) {
-        print('❌ Connection was closed during handshake');
+        debugPrint('❌ Connection closed during handshake');
         return false;
       }
 
       _isConnected = true;
-      _reconnectAttempts = 0; // Only reset on successful stable connection
+      _reconnectAttempts = 0;
+      _isPendingReconnect = false;
       _startHeartbeat();
       _connectionController.add(true);
 
-      print('✅ Admin WebSocket connected successfully');
+      debugPrint('✅ Admin WebSocket connected successfully');
       return true;
     } catch (e) {
-      print('❌ Admin WebSocket connection failed: $e');
+      debugPrint('❌ Admin WebSocket connection failed: $e');
       _scheduleReconnect();
       return false;
     }
@@ -108,8 +107,6 @@ class AdminLiveTrackingSocket {
     final wsUrl = baseUrl
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
-
-    // Use real JWT token for authentication
     return '$wsUrl/ws?token=$token';
   }
 
@@ -125,7 +122,7 @@ class AdminLiveTrackingSocket {
     _isConnected = false;
     _connectionController.add(false);
 
-    print('🔌 Admin WebSocket disconnected');
+    debugPrint('🔌 Admin WebSocket disconnected');
   }
 
   /// Handle incoming WebSocket messages
@@ -143,22 +140,22 @@ class AdminLiveTrackingSocket {
           break;
 
         case 'PONG':
-          // Heartbeat response
+          _lastHeartbeatResponse = DateTime.now();
           break;
 
         case 'ERROR':
-          print('❌ Server error: ${message['message']}');
+          debugPrint('❌ Server error: ${message['message']}');
           break;
 
         default:
-          print('📨 Unknown message type: ${message['type']}');
+          debugPrint('📨 Unknown message type: ${message['type']}');
       }
     } catch (e) {
-      print('❌ Error handling WebSocket message: $e');
+      debugPrint('❌ Error handling WebSocket message: $e');
     }
   }
 
-  /// Handle real-time location update
+  /// Handle real-time location update from salesman
   void _handleLocationUpdate(Map<String, dynamic> message) {
     try {
       final salesmanId = message['salesmanId'] as String;
@@ -170,8 +167,11 @@ class AdminLiveTrackingSocket {
       final distanceFromLastKm =
           (message['distanceFromLastKm'] as num?)?.toDouble() ?? 0.0;
       final totalPoints = (message['totalPoints'] as int?) ?? 0;
+      final isHomeLocation = message['isHomeLocation'] as bool? ?? false;
+      final accuracy = (message['accuracy'] as num?)?.toDouble();
+      final speed = (message['speed'] as num?)?.toDouble();
 
-      // Update salesman location with distance info
+      // Create location object with all data
       final location = SalesmanLocation(
         salesmanId: salesmanId,
         latitude: lat,
@@ -180,19 +180,32 @@ class AdminLiveTrackingSocket {
         totalDistanceKm: totalDistanceKm,
         distanceFromLastKm: distanceFromLastKm,
         totalPoints: totalPoints,
+        isHomeLocation: isHomeLocation,
+        accuracy: accuracy,
+        speed: speed,
       );
 
+      // Update stored location
       _salesmanLocations[salesmanId] = location;
+      _salesmanDistances[salesmanId] = totalDistanceKm;
 
-      // Add to route
+      // Add to route polyline
       final routePoint = LatLng(lat, lng);
       if (_salesmanRoutes.containsKey(salesmanId)) {
-        _salesmanRoutes[salesmanId]!.add(routePoint);
+        // Only add if different from last point (avoid duplicates)
+        final lastPoint = _salesmanRoutes[salesmanId]!.isNotEmpty
+            ? _salesmanRoutes[salesmanId]!.last
+            : null;
+        if (lastPoint == null ||
+            lastPoint.latitude != lat ||
+            lastPoint.longitude != lng) {
+          _salesmanRoutes[salesmanId]!.add(routePoint);
+        }
       } else {
         _salesmanRoutes[salesmanId] = [routePoint];
       }
 
-      // Emit location update
+      // Emit location update to listeners
       _locationController.add(
         LocationUpdate(
           salesmanId: salesmanId,
@@ -201,11 +214,11 @@ class AdminLiveTrackingSocket {
         ),
       );
 
-      print(
-        '📍 Location update for $salesmanId: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} | ${totalDistanceKm.toStringAsFixed(2)} km',
+      debugPrint(
+        '📍 ${isHomeLocation ? "HOME " : ""}Location: $salesmanId | ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} | ${totalDistanceKm.toStringAsFixed(2)} km | ${totalPoints} pts',
       );
     } catch (e) {
-      print('❌ Error processing location update: $e');
+      debugPrint('❌ Error processing location update: $e');
     }
   }
 
@@ -221,20 +234,23 @@ class AdminLiveTrackingSocket {
         final lat = (locationData['lat'] as num).toDouble();
         final lng = (locationData['lng'] as num).toDouble();
         final timestamp = locationData['timestamp'] as int;
+        final totalDistanceKm =
+            (locationData['totalDistanceKm'] as num?)?.toDouble() ?? 0.0;
+        final totalPoints = (locationData['totalPoints'] as int?) ?? 0;
 
         final location = SalesmanLocation(
           salesmanId: salesmanId,
           latitude: lat,
           longitude: lng,
           timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp),
+          totalDistanceKm: totalDistanceKm,
+          totalPoints: totalPoints,
         );
 
         _salesmanLocations[salesmanId] = location;
-
-        // Initialize route
+        _salesmanDistances[salesmanId] = totalDistanceKm;
         _salesmanRoutes[salesmanId] = [LatLng(lat, lng)];
 
-        // Emit initial location
         _locationController.add(
           LocationUpdate(
             salesmanId: salesmanId,
@@ -244,9 +260,11 @@ class AdminLiveTrackingSocket {
         );
       }
 
-      print('📍 Received initial locations for ${locations.length} salesmen');
+      debugPrint(
+        '📍 Received initial locations for ${locations.length} salesmen',
+      );
     } catch (e) {
-      print('❌ Error processing initial locations: $e');
+      debugPrint('❌ Error processing initial locations: $e');
     }
   }
 
@@ -256,7 +274,7 @@ class AdminLiveTrackingSocket {
       try {
         _channel!.sink.add(jsonEncode(message));
       } catch (e) {
-        print('❌ Error sending WebSocket message: $e');
+        debugPrint('❌ Error sending WebSocket message: $e');
         _handleError(e);
       }
     }
@@ -264,7 +282,7 @@ class AdminLiveTrackingSocket {
 
   /// Handle WebSocket errors
   void _handleError(dynamic error) {
-    print('❌ Admin WebSocket error: $error');
+    debugPrint('❌ Admin WebSocket error: $error');
     _isConnected = false;
     _connectionController.add(false);
     _scheduleReconnect();
@@ -272,7 +290,7 @@ class AdminLiveTrackingSocket {
 
   /// Handle WebSocket disconnection
   void _handleDisconnection() {
-    print('🔌 Admin WebSocket disconnected');
+    debugPrint('🔌 Admin WebSocket disconnected');
     _isConnected = false;
     _connectionController.add(false);
     _scheduleReconnect();
@@ -280,35 +298,49 @@ class AdminLiveTrackingSocket {
 
   /// Schedule reconnection attempt
   void _scheduleReconnect() {
-    // Cancel any existing reconnect timer
-    _reconnectTimer?.cancel();
-
+    if (_isPendingReconnect) return;
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      print('❌ Max reconnection attempts reached');
+      debugPrint('❌ Max reconnection attempts reached');
       return;
     }
 
+    _isPendingReconnect = true;
     _reconnectAttempts++;
-    // Use exponential backoff with minimum 5 seconds
-    final delay = _reconnectDelaySeconds * _reconnectAttempts;
+    final delay = (_reconnectDelaySeconds * _reconnectAttempts).clamp(3, 30);
 
-    print(
-      '🔄 Scheduling admin reconnect attempt $_reconnectAttempts/$_maxReconnectAttempts in ${delay}s',
+    debugPrint(
+      '🔄 Admin reconnecting in ${delay}s (attempt $_reconnectAttempts/$_maxReconnectAttempts)',
     );
 
+    _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: delay), () async {
-      print('🔄 Admin attempting to reconnect...');
+      _isPendingReconnect = false;
       await connect();
     });
   }
 
   /// Start heartbeat to keep connection alive
   void _startHeartbeat() {
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isConnected) {
-        _sendMessage({'type': 'PING'});
-      }
-    });
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(
+      Duration(seconds: _heartbeatIntervalSeconds),
+      (timer) {
+        if (_isConnected) {
+          _sendMessage({'type': 'PING'});
+
+          // Check heartbeat response
+          if (_lastHeartbeatResponse != null) {
+            final timeSinceResponse = DateTime.now().difference(
+              _lastHeartbeatResponse!,
+            );
+            if (timeSinceResponse.inSeconds > _heartbeatIntervalSeconds * 2) {
+              debugPrint('⚠️ No heartbeat response, reconnecting...');
+              _handleDisconnection();
+            }
+          }
+        }
+      },
+    );
   }
 
   /// Get specific salesman location
@@ -321,9 +353,21 @@ class AdminLiveTrackingSocket {
     return _salesmanRoutes[salesmanId] ?? [];
   }
 
-  /// Clear route for salesman (when they disconnect/reconnect)
+  /// Get salesman total distance
+  double getSalesmanDistance(String salesmanId) {
+    return _salesmanDistances[salesmanId] ?? 0.0;
+  }
+
+  /// Clear route for salesman
   void clearSalesmanRoute(String salesmanId) {
     _salesmanRoutes[salesmanId]?.clear();
+  }
+
+  /// Clear all data (when refreshing)
+  void clearAllData() {
+    _salesmanLocations.clear();
+    _salesmanRoutes.clear();
+    _salesmanDistances.clear();
   }
 
   /// Get connection status
@@ -347,7 +391,7 @@ class AdminLiveTrackingSocket {
   }
 }
 
-/// Data classes for location updates
+/// Salesman location data with distance tracking
 class SalesmanLocation {
   final String salesmanId;
   final double latitude;
@@ -356,6 +400,9 @@ class SalesmanLocation {
   final double totalDistanceKm;
   final double distanceFromLastKm;
   final int totalPoints;
+  final bool isHomeLocation;
+  final double? accuracy;
+  final double? speed;
 
   SalesmanLocation({
     required this.salesmanId,
@@ -365,11 +412,15 @@ class SalesmanLocation {
     this.totalDistanceKm = 0.0,
     this.distanceFromLastKm = 0.0,
     this.totalPoints = 0,
+    this.isHomeLocation = false,
+    this.accuracy,
+    this.speed,
   });
 
   LatLng get latLng => LatLng(latitude, longitude);
 }
 
+/// Location update event
 class LocationUpdate {
   final String salesmanId;
   final SalesmanLocation location;
