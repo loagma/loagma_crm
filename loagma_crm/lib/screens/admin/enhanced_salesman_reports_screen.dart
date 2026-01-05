@@ -44,7 +44,7 @@ class _EnhancedSalesmanReportsScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadSalesmenList();
     _loadReports();
     _startAutoRefresh();
@@ -297,7 +297,6 @@ class _EnhancedSalesmanReportsScreenState
                       _buildOverviewTab(),
                       _buildPerformanceTab(),
                       _buildDailyTab(),
-                      _buildAnalyticsTab(),
                     ],
                   ),
           ),
