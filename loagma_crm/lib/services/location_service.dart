@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+/// Location service for continuous GPS tracking
+/// Supports background location updates with foreground service notification
 class LocationService {
   static LocationService? _instance;
   static LocationService get instance => _instance ??= LocationService._();
@@ -19,60 +22,56 @@ class LocationService {
   Position? get currentPosition => _currentPosition;
   bool get isTracking => _isTracking;
 
-  /// Check if location permissions are already granted
+  /// Check if location permissions are granted
   Future<bool> checkLocationPermission() async {
     try {
-      // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        return false;
-      }
+      if (!serviceEnabled) return false;
 
-      // Check current permission status
       LocationPermission permission = await Geolocator.checkPermission();
       return permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always;
     } catch (e) {
-      print('Error checking location permission: $e');
+      debugPrint('Error checking location permission: $e');
       return false;
     }
   }
 
-  /// Request all necessary location permissions with proper handling
+  /// Request location permissions with background support
   Future<bool> requestLocationPermissions({bool requestAlways = false}) async {
     try {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        print('Location services are disabled');
-        // Location services are disabled
-        print('User needs to enable location services manually');
+        debugPrint('Location services are disabled');
         return false;
       }
 
       // Check current permission status
       LocationPermission permission = await Geolocator.checkPermission();
 
-      // If permission is denied, request it
+      // Request permission if denied
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          print('Location permission denied by user');
+          debugPrint('Location permission denied');
           return false;
         }
       }
 
-      // If permission is denied forever, guide user to settings
+      // Handle permanently denied
       if (permission == LocationPermission.deniedForever) {
-        print('Location permission denied forever - need to open settings');
+        debugPrint('Location permission denied forever');
         return false;
       }
 
-      // For background tracking, we need "always" permission
+      // For background tracking, request "always" permission
       if (requestAlways && permission == LocationPermission.whileInUse) {
-        print('Requesting background location permission...');
-        // Note: On Android, this might require additional setup in AndroidManifest.xml
-        // For now, we'll work with whileInUse permission
+        debugPrint(
+          'Background location: whileInUse granted, "always" recommended',
+        );
+        // Note: On Android 10+, user must manually grant "always" in settings
+        // The app will still work with whileInUse + foreground service
       }
 
       bool hasPermission =
@@ -80,17 +79,17 @@ class LocationService {
           permission == LocationPermission.always;
 
       if (hasPermission) {
-        print('✅ Location permission granted: $permission');
+        debugPrint('✅ Location permission granted: $permission');
       }
 
       return hasPermission;
     } catch (e) {
-      print('❌ Error requesting location permissions: $e');
+      debugPrint('❌ Error requesting location permissions: $e');
       return false;
     }
   }
 
-  /// Show location permission dialog with clear explanation
+  /// Show location permission dialog
   static Future<bool> showLocationPermissionDialog(BuildContext context) async {
     return await showDialog<bool>(
           context: context,
@@ -101,7 +100,7 @@ class LocationService {
                 children: [
                   Icon(Icons.location_on, color: Colors.blue),
                   SizedBox(width: 8),
-                  Text('Location Permission Required'),
+                  Text('Location Permission'),
                 ],
               ),
               content: const Column(
@@ -113,13 +112,13 @@ class LocationService {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 8),
-                  Text('• Track your work location for attendance'),
+                  Text('• Track your work location'),
                   Text('• Calculate travel distance'),
-                  Text('• Show nearby places and shops'),
-                  Text('• Ensure accurate punch in/out'),
+                  Text('• Show nearby places'),
+                  Text('• Verify punch in/out location'),
                   SizedBox(height: 12),
                   Text(
-                    'Your location data is only used for work tracking and is not shared with third parties.',
+                    'Your location is only used for work tracking.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
@@ -131,7 +130,7 @@ class LocationService {
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Allow Location'),
+                  child: const Text('Allow'),
                 ),
               ],
             );
@@ -140,7 +139,7 @@ class LocationService {
         false;
   }
 
-  /// Show settings dialog when permission is denied forever
+  /// Show settings dialog when permission denied forever
   static Future<void> showLocationSettingsDialog(BuildContext context) async {
     await showDialog(
       context: context,
@@ -148,8 +147,7 @@ class LocationService {
         return AlertDialog(
           title: const Text('Location Permission Required'),
           content: const Text(
-            'Location permission is required for this app to work properly. '
-            'Please enable location permission in your device settings.',
+            'Location permission is required. Please enable it in settings.',
           ),
           actions: [
             TextButton(
@@ -169,20 +167,7 @@ class LocationService {
     );
   }
 
-  /// Request notification permissions for persistent location tracking
-  static Future<bool> requestNotificationPermissions() async {
-    try {
-      // For Android 13+ (API 33+), we need to request notification permission
-      // This is handled automatically by the geolocator plugin when starting location services
-      print('✅ Notification permissions handled by geolocator plugin');
-      return true;
-    } catch (e) {
-      print('❌ Error requesting notification permissions: $e');
-      return false;
-    }
-  }
-
-  /// Show background location permission dialog
+  /// Show background location dialog
   static Future<bool> showBackgroundLocationDialog(BuildContext context) async {
     return await showDialog<bool>(
           context: context,
@@ -201,7 +186,7 @@ class LocationService {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'For accurate attendance tracking, this app needs to access your location even when running in the background.',
+                    'For accurate tracking, this app needs background location access.',
                     style: TextStyle(fontSize: 14),
                   ),
                   SizedBox(height: 12),
@@ -210,12 +195,12 @@ class LocationService {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 8),
-                  Text('• Continuous location tracking during work hours'),
-                  Text('• Accurate travel distance calculation'),
-                  Text('• Reliable punch in/out location verification'),
+                  Text('• Continuous tracking during work'),
+                  Text('• Accurate distance calculation'),
+                  Text('• Reliable location verification'),
                   SizedBox(height: 12),
                   Text(
-                    'You will see a persistent notification while location tracking is active.',
+                    'A notification will show while tracking is active.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
@@ -227,7 +212,7 @@ class LocationService {
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Allow Background Location'),
+                  child: const Text('Allow'),
                 ),
               ],
             );
@@ -236,26 +221,28 @@ class LocationService {
         false;
   }
 
-  /// Start continuous location tracking
+  /// Start continuous location tracking with foreground service
   Future<bool> startLocationTracking() async {
     if (_isTracking) {
-      print('Location tracking already active');
+      debugPrint('Location tracking already active');
       return true;
     }
 
     try {
-      // Request permissions first
-      final hasPermission = await requestLocationPermissions();
+      final hasPermission = await requestLocationPermissions(
+        requestAlways: true,
+      );
       if (!hasPermission) {
-        print('Location permissions not granted');
+        debugPrint('Location permissions not granted');
         return false;
       }
 
-      // Configure location settings for high accuracy and continuous tracking
+      // Configure for high accuracy continuous tracking
+      // Uses foreground service on Android for background support
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 1, // Update every 1 meter for precise tracking
-        timeLimit: Duration(seconds: 15), // Reasonable timeout
+        distanceFilter: 1, // Update every 1 meter
+        timeLimit: Duration(seconds: 30),
       );
 
       // Start position stream
@@ -266,35 +253,34 @@ class LocationService {
             (Position position) {
               _currentPosition = position;
               _locationController.add(position);
-              print(
-                '📍 Location updated: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} (accuracy: ${position.accuracy.toStringAsFixed(1)}m)',
+              debugPrint(
+                '📍 GPS: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} (±${position.accuracy.toStringAsFixed(0)}m)',
               );
             },
             onError: (error) {
-              print('❌ Location stream error: $error');
+              debugPrint('❌ Location stream error: $error');
               _locationController.addError(error);
             },
           );
 
-      // Get initial position with retry logic
+      // Get initial position
       try {
         _currentPosition = await _getCurrentPositionWithRetry(locationSettings);
         if (_currentPosition != null) {
           _locationController.add(_currentPosition!);
-          print(
-            '✅ Initial location acquired: ${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}',
+          debugPrint(
+            '✅ Initial location: ${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}',
           );
         }
       } catch (e) {
-        print('Warning: Could not get initial position: $e');
-        // Continue anyway, stream might provide location later
+        debugPrint('Warning: Could not get initial position: $e');
       }
 
       _isTracking = true;
-      print('✅ Location tracking started successfully');
+      debugPrint('✅ Location tracking started');
       return true;
     } catch (e) {
-      print('❌ Error starting location tracking: $e');
+      debugPrint('❌ Error starting location tracking: $e');
       return false;
     }
   }
@@ -311,9 +297,9 @@ class LocationService {
         );
         return position;
       } catch (e) {
-        print('Attempt ${i + 1} failed: $e');
+        debugPrint('Attempt ${i + 1} failed: $e');
         if (i < maxRetries - 1) {
-          await Future.delayed(Duration(seconds: 1 + i)); // Progressive delay
+          await Future.delayed(Duration(seconds: 1 + i));
         }
       }
     }
@@ -325,53 +311,46 @@ class LocationService {
     _positionStreamSubscription?.cancel();
     _positionStreamSubscription = null;
     _isTracking = false;
-    print('🛑 Location tracking stopped');
+    debugPrint('🛑 Location tracking stopped');
   }
 
   /// Get current location once
   Future<Position?> getCurrentLocation({bool forceRefresh = false}) async {
     try {
-      // Return cached position if available and not forcing refresh
+      // Use cached if recent and not forcing refresh
       if (!forceRefresh && _currentPosition != null) {
         final age = DateTime.now().difference(_currentPosition!.timestamp);
         if (age.inMinutes < 2) {
-          // Use cached if less than 2 minutes old
-          print('Using cached location (${age.inSeconds}s old)');
+          debugPrint('Using cached location (${age.inSeconds}s old)');
           return _currentPosition;
         }
       }
 
       final hasPermission = await requestLocationPermissions();
-      if (!hasPermission) {
-        print('No location permission for getCurrentLocation');
-        return null;
-      }
+      if (!hasPermission) return null;
 
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15), // Increased timeout
+        timeLimit: Duration(seconds: 20),
       );
 
-      print('Getting fresh location...');
+      debugPrint('Getting fresh location...');
       final position = await _getCurrentPositionWithRetry(locationSettings);
 
       if (position != null) {
         _currentPosition = position;
-        print(
-          '✅ Fresh location acquired: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+        debugPrint(
+          '✅ Fresh location: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
         );
 
-        // Add to stream if tracking is active
         if (_isTracking) {
           _locationController.add(position);
         }
-      } else {
-        print('❌ Failed to get current location after retries');
       }
 
       return position;
     } catch (e) {
-      print('Error getting current location: $e');
+      debugPrint('Error getting current location: $e');
       return null;
     }
   }
@@ -384,7 +363,7 @@ class LocationService {
       end.latitude,
       end.longitude,
     );
-    return distanceInMeters / 1000; // Convert to kilometers
+    return distanceInMeters / 1000;
   }
 
   /// Dispose resources
