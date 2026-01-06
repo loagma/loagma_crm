@@ -47,20 +47,57 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   List<String> _selectedPlaceTypes = ['convenience_store'];
   int _searchRadius = 1500;
 
-  // Place types for business discovery - simplified and accurate
+  // Place types for business discovery - matching Google Maps API types exactly
   final List<Map<String, dynamic>> _placeTypes = [
+    // Food & Dining
     {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
+    {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
+    {'type': 'bakery', 'name': 'Bakery', 'icon': Icons.bakery_dining},
+    {'type': 'bar', 'name': 'Bar', 'icon': Icons.local_bar},
+    {'type': 'meal_takeaway', 'name': 'Takeaway', 'icon': Icons.takeout_dining},
+    // Retail & Shopping
+    {'type': 'convenience_store', 'name': 'Kirana', 'icon': Icons.storefront},
     {
       'type': 'supermarket',
       'name': 'Supermarket',
       'icon': Icons.local_grocery_store,
     },
-    {'type': 'convenience_store', 'name': 'Kirana', 'icon': Icons.storefront},
-    {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
-    {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
+    {'type': 'shopping_mall', 'name': 'Mall', 'icon': Icons.shopping_bag},
+    {'type': 'clothing_store', 'name': 'Clothing', 'icon': Icons.checkroom},
+    {'type': 'electronics_store', 'name': 'Electronics', 'icon': Icons.devices},
+    {'type': 'jewelry_store', 'name': 'Jewelry', 'icon': Icons.diamond},
+    {'type': 'shoe_store', 'name': 'Shoes', 'icon': Icons.shopping_basket},
+    {'type': 'furniture_store', 'name': 'Furniture', 'icon': Icons.chair},
+    {'type': 'hardware_store', 'name': 'Hardware', 'icon': Icons.hardware},
+    {'type': 'book_store', 'name': 'Books', 'icon': Icons.menu_book},
+    {'type': 'pet_store', 'name': 'Pet Store', 'icon': Icons.pets},
+    {'type': 'florist', 'name': 'Florist', 'icon': Icons.local_florist},
+    // Health & Medical
     {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
     {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
-    {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
+    {'type': 'doctor', 'name': 'Doctor', 'icon': Icons.medical_services},
+    {'type': 'dentist', 'name': 'Dentist', 'icon': Icons.medical_information},
+    {'type': 'gym', 'name': 'Gym', 'icon': Icons.fitness_center},
+    {'type': 'spa', 'name': 'Spa', 'icon': Icons.spa},
+    // Services
+    {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
+    {'type': 'atm', 'name': 'ATM', 'icon': Icons.atm},
+    {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
+    {
+      'type': 'gas_station',
+      'name': 'Petrol Pump',
+      'icon': Icons.local_gas_station,
+    },
+    {'type': 'car_repair', 'name': 'Car Repair', 'icon': Icons.car_repair},
+    {'type': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
+    {'type': 'laundry', 'name': 'Laundry', 'icon': Icons.local_laundry_service},
+    {'type': 'beauty_salon', 'name': 'Salon', 'icon': Icons.content_cut},
+    {'type': 'hair_care', 'name': 'Hair Care', 'icon': Icons.face},
+    // Education & Others
+    {'type': 'school', 'name': 'School', 'icon': Icons.school},
+    {'type': 'library', 'name': 'Library', 'icon': Icons.local_library},
+    {'type': 'movie_theater', 'name': 'Cinema', 'icon': Icons.movie},
+    {'type': 'liquor_store', 'name': 'Liquor', 'icon': Icons.liquor},
   ];
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
@@ -525,7 +562,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
     }
 
-    // Add salesman accounts
+    // Add salesman accounts - only if _showAccounts is true
     if (_showAccounts) {
       for (var account in _getFilteredAccounts()) {
         if (account['latitude'] != null && account['longitude'] != null) {
@@ -558,7 +595,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
     }
 
-    // Add nearby places
+    // Add nearby places - only if _showPlaces is true
     if (_showPlaces) {
       for (int i = 0; i < nearbyPlaces.length; i++) {
         final place = nearbyPlaces[i];
@@ -595,30 +632,37 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       if (selectedFromDate != null || selectedToDate != null) {
         final createdAt = account['createdAt'];
         if (createdAt != null) {
-          final accountDate = DateTime.parse(createdAt.toString());
+          try {
+            final accountDate = DateTime.parse(createdAt.toString());
 
-          // Check from date
-          if (selectedFromDate != null) {
-            final fromDate = DateTime(
-              selectedFromDate!.year,
-              selectedFromDate!.month,
-              selectedFromDate!.day,
-            );
-            if (accountDate.isBefore(fromDate)) return false;
-          }
+            // Check from date
+            if (selectedFromDate != null) {
+              final fromDate = DateTime(
+                selectedFromDate!.year,
+                selectedFromDate!.month,
+                selectedFromDate!.day,
+              );
+              if (accountDate.isBefore(fromDate)) return false;
+            }
 
-          // Check to date
-          if (selectedToDate != null) {
-            final toDate = DateTime(
-              selectedToDate!.year,
-              selectedToDate!.month,
-              selectedToDate!.day,
-              23,
-              59,
-              59, // End of day
-            );
-            if (accountDate.isAfter(toDate)) return false;
+            // Check to date
+            if (selectedToDate != null) {
+              final toDate = DateTime(
+                selectedToDate!.year,
+                selectedToDate!.month,
+                selectedToDate!.day,
+                23,
+                59,
+                59, // End of day
+              );
+              if (accountDate.isAfter(toDate)) return false;
+            }
+          } catch (e) {
+            // If date parsing fails, include the account
           }
+        } else {
+          // If no createdAt date and filter is active, exclude account
+          return false;
         }
       }
 
@@ -1047,11 +1091,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   }
 
   void _updateMapMarkersWithAllShops() {
-    print('🗺️ Updating map markers with all shops');
-    print('📊 Google Places shops count: ${_googlePlacesShops.length}');
+    print('=== _updateMapMarkersWithAllShops called ===');
+    print('Google Places shops count: ${_googlePlacesShops.length}');
     print(
-      '📊 Salesman accounts count: ${_getFilteredAccountsForSelectedPincodes().length}',
+      'Salesman accounts count: ${_getFilteredAccountsForSelectedPincodes().length}',
     );
+    print('Show Accounts: $_showAccounts, Show Places: $_showPlaces');
 
     Set<Marker> markers = {};
 
@@ -1070,9 +1115,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
     }
 
-    // Add salesman-created accounts (existing shops)
+    // Add salesman-created accounts (existing shops) - only if _showAccounts is true
     if (_showAccounts) {
-      for (var account in _getFilteredAccountsForSelectedPincodes()) {
+      final filteredAccounts = _getFilteredAccountsForSelectedPincodes();
+      print('Adding ${filteredAccounts.length} salesman account markers');
+
+      for (var account in filteredAccounts) {
         if (account['latitude'] != null && account['longitude'] != null) {
           try {
             final lat = double.parse(account['latitude'].toString());
@@ -1086,60 +1134,133 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 infoWindow: InfoWindow(
                   title: account['personName'] ?? 'Unknown',
                   snippet:
-                      '${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''} • EXISTING',
+                      '${account['businessName'] ?? ''} - SR: ${account['salesmanName'] ?? ''} - EXISTING',
                 ),
                 icon: BitmapDescriptor.defaultMarkerWithHue(
                   account['isApproved'] == true
-                      ? BitmapDescriptor
-                            .hueGreen // Green for approved salesman shops
-                      : BitmapDescriptor
-                            .hueOrange, // Orange for pending salesman shops
+                      ? BitmapDescriptor.hueGreen
+                      : BitmapDescriptor.hueOrange,
                 ),
                 onTap: () => _showAccountDetails(account),
               ),
             );
           } catch (e) {
-            print('❌ Error adding salesman account marker: $e');
+            print('Error adding salesman account marker: $e');
           }
         }
       }
+    } else {
+      print('Accounts toggle is OFF - skipping salesman account markers');
     }
 
     // Add Google Places shops (new potential shops) - only if Places toggle is ON
     if (_showPlaces) {
       print(
-        '🟣 Processing ${_googlePlacesShops.length} Google Places shops for markers',
+        'Processing ${_googlePlacesShops.length} Google Places shops for markers',
       );
-      print('🔍 Filtering by place types: $_selectedPlaceTypes');
+      print('Filtering by place types: $_selectedPlaceTypes');
 
-      // Filter Google Places shops by selected place types - simplified logic
+      // Filter Google Places shops by selected place types - strict matching
       final filteredGoogleShops = _googlePlacesShops.where((shop) {
         final shopType = shop['businessType']?.toString().toLowerCase() ?? '';
         if (shopType.isEmpty) return false;
 
-        // Simple direct type matching
+        // Check if any selected type matches - strict matching only
         return _selectedPlaceTypes.any((selectedType) {
           final selected = selectedType.toLowerCase();
 
-          // Direct type match
-          if (shopType == selected || shopType.contains(selected)) return true;
+          // Direct type match only
+          if (shopType == selected) return true;
 
-          // Handle lodging -> hotel mapping
-          if (selected == 'lodging' &&
-              (shopType.contains('hotel') || shopType.contains('lodging')))
-            return true;
-
-          // Handle convenience_store -> grocery/kirana
-          if (selected == 'convenience_store' &&
-              (shopType.contains('convenience') ||
-                  shopType.contains('grocery')))
-            return true;
-
-          return false;
+          // Handle specific mappings - exact Google Maps API type matching
+          switch (selected) {
+            // Food & Dining
+            case 'restaurant':
+              return shopType == 'restaurant';
+            case 'cafe':
+              return shopType == 'cafe';
+            case 'bakery':
+              return shopType == 'bakery';
+            case 'bar':
+              return shopType == 'bar';
+            case 'meal_takeaway':
+              return shopType == 'meal_takeaway' || shopType == 'meal_delivery';
+            // Retail & Shopping
+            case 'convenience_store':
+              return shopType == 'convenience_store';
+            case 'supermarket':
+              return shopType == 'supermarket' ||
+                  shopType == 'grocery_or_supermarket';
+            case 'shopping_mall':
+              return shopType == 'shopping_mall';
+            case 'clothing_store':
+              return shopType == 'clothing_store';
+            case 'electronics_store':
+              return shopType == 'electronics_store';
+            case 'jewelry_store':
+              return shopType == 'jewelry_store';
+            case 'shoe_store':
+              return shopType == 'shoe_store';
+            case 'furniture_store':
+              return shopType == 'furniture_store';
+            case 'hardware_store':
+              return shopType == 'hardware_store';
+            case 'book_store':
+              return shopType == 'book_store';
+            case 'pet_store':
+              return shopType == 'pet_store';
+            case 'florist':
+              return shopType == 'florist';
+            // Health & Medical
+            case 'pharmacy':
+              return shopType == 'pharmacy' || shopType == 'drugstore';
+            case 'hospital':
+              return shopType == 'hospital';
+            case 'doctor':
+              return shopType == 'doctor';
+            case 'dentist':
+              return shopType == 'dentist';
+            case 'gym':
+              return shopType == 'gym';
+            case 'spa':
+              return shopType == 'spa';
+            // Services
+            case 'bank':
+              return shopType == 'bank';
+            case 'atm':
+              return shopType == 'atm';
+            case 'lodging':
+              return shopType == 'lodging' || shopType == 'hotel';
+            case 'gas_station':
+              return shopType == 'gas_station';
+            case 'car_repair':
+              return shopType == 'car_repair';
+            case 'car_wash':
+              return shopType == 'car_wash';
+            case 'laundry':
+              return shopType == 'laundry';
+            case 'beauty_salon':
+              return shopType == 'beauty_salon';
+            case 'hair_care':
+              return shopType == 'hair_care';
+            // Education & Others
+            case 'school':
+              return shopType == 'school' ||
+                  shopType == 'primary_school' ||
+                  shopType == 'secondary_school';
+            case 'library':
+              return shopType == 'library';
+            case 'movie_theater':
+              return shopType == 'movie_theater';
+            case 'liquor_store':
+              return shopType == 'liquor_store';
+            default:
+              return shopType == selected;
+          }
         });
       }).toList();
 
-      print('🟣 Filtered to ${filteredGoogleShops.length} shops');
+      print('Filtered to ${filteredGoogleShops.length} shops');
 
       int googleMarkersAdded = 0;
 
@@ -1167,16 +1288,11 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ),
             );
             googleMarkersAdded++;
-            print('✅ Added Google Places marker for ${shop['name']}');
           } catch (e) {
             print(
               '❌ Error adding Google Places marker for ${shop['name']}: $e',
             );
           }
-        } else {
-          print(
-            '⚠️ Skipping Google Place ${shop['name']} - missing coordinates',
-          );
         }
       }
 
@@ -1205,16 +1321,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         }
       }
     } else {
-      print('🟣 Places toggle is OFF - skipping Google Places markers');
+      print(
+        'Places toggle is OFF - skipping ALL place markers (Google Places + Nearby)',
+      );
     }
 
     setState(() => _markers = markers);
-    print('🗺️ Updated map with ${markers.length} markers');
-    print('   - Current location: ${_currentPosition != null ? 1 : 0}');
-    print(
-      '   - Salesman accounts: ${_getFilteredAccountsForSelectedPincodes().length}',
-    );
-    print('   - Nearby places: ${_showPlaces ? nearbyPlaces.length : 0}');
+    print('=== Updated map with ${markers.length} total markers ===');
   }
 
   List<Map<String, dynamic>> _getFilteredAccountsForSelectedPincodes() {
@@ -1222,8 +1335,64 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
     return salesmanAccounts.where((account) {
       final accountPincode = account['pincode']?.toString();
-      return accountPincode != null &&
-          _selectedPincodes.contains(accountPincode);
+      if (accountPincode == null ||
+          !_selectedPincodes.contains(accountPincode)) {
+        return false;
+      }
+
+      // Apply date range filter
+      if (selectedFromDate != null || selectedToDate != null) {
+        final createdAt = account['createdAt'];
+        if (createdAt != null) {
+          try {
+            final accountDate = DateTime.parse(createdAt.toString());
+
+            // Check from date
+            if (selectedFromDate != null) {
+              final fromDate = DateTime(
+                selectedFromDate!.year,
+                selectedFromDate!.month,
+                selectedFromDate!.day,
+              );
+              if (accountDate.isBefore(fromDate)) return false;
+            }
+
+            // Check to date
+            if (selectedToDate != null) {
+              final toDate = DateTime(
+                selectedToDate!.year,
+                selectedToDate!.month,
+                selectedToDate!.day,
+                23,
+                59,
+                59, // End of day
+              );
+              if (accountDate.isAfter(toDate)) return false;
+            }
+          } catch (e) {
+            // If date parsing fails, include the account
+          }
+        } else {
+          // If no createdAt date and filter is active, exclude account
+          return false;
+        }
+      }
+
+      // Apply other filters
+      if (selectedCustomerStages.isNotEmpty &&
+          !selectedCustomerStages.contains(account['customerStage']))
+        return false;
+      if (selectedBusinessTypes.isNotEmpty &&
+          !selectedBusinessTypes.contains(account['businessType']))
+        return false;
+      if (selectedFunnelStages.isNotEmpty &&
+          !selectedFunnelStages.contains(account['funnelStage']))
+        return false;
+      if (selectedApprovalStatus != null &&
+          account['isApproved'] != selectedApprovalStatus)
+        return false;
+
+      return true;
     }).toList();
   }
 
@@ -2034,34 +2203,71 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         ),
       );
     }
-    for (var account in salesmanAccounts) {
-      final accountPincode = account['pincode']?.toString();
-      if (accountPincode != null &&
-          _selectedPincodes.contains(accountPincode) &&
-          account['latitude'] != null &&
-          account['longitude'] != null) {
-        try {
-          final lat = double.parse(account['latitude'].toString());
-          final lng = double.parse(account['longitude'].toString());
-          if (_isValidCoordinate(lat, lng)) {
-            markers.add(
-              Marker(
-                markerId: MarkerId('account_${account['id']}'),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: account['personName'] ?? 'Unknown',
-                  snippet: account['businessName'] ?? '',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  account['isApproved'] == true
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
-                ),
-                onTap: () => _showAccountDetails(account),
-              ),
-            );
+
+    // Only add account markers if _showAccounts is true
+    if (_showAccounts) {
+      for (var account in salesmanAccounts) {
+        final accountPincode = account['pincode']?.toString();
+        if (accountPincode != null &&
+            _selectedPincodes.contains(accountPincode) &&
+            account['latitude'] != null &&
+            account['longitude'] != null) {
+          // Apply date filter
+          if (selectedFromDate != null || selectedToDate != null) {
+            final createdAt = account['createdAt'];
+            if (createdAt != null) {
+              try {
+                final accountDate = DateTime.parse(createdAt.toString());
+                if (selectedFromDate != null) {
+                  final fromDate = DateTime(
+                    selectedFromDate!.year,
+                    selectedFromDate!.month,
+                    selectedFromDate!.day,
+                  );
+                  if (accountDate.isBefore(fromDate)) continue;
+                }
+                if (selectedToDate != null) {
+                  final toDate = DateTime(
+                    selectedToDate!.year,
+                    selectedToDate!.month,
+                    selectedToDate!.day,
+                    23,
+                    59,
+                    59,
+                  );
+                  if (accountDate.isAfter(toDate)) continue;
+                }
+              } catch (e) {
+                // Continue if date parsing fails
+              }
+            } else {
+              continue; // Skip if no date and filter is active
+            }
           }
-        } catch (e) {}
+
+          try {
+            final lat = double.parse(account['latitude'].toString());
+            final lng = double.parse(account['longitude'].toString());
+            if (_isValidCoordinate(lat, lng)) {
+              markers.add(
+                Marker(
+                  markerId: MarkerId('account_${account['id']}'),
+                  position: LatLng(lat, lng),
+                  infoWindow: InfoWindow(
+                    title: account['personName'] ?? 'Unknown',
+                    snippet: account['businessName'] ?? '',
+                  ),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    account['isApproved'] == true
+                        ? BitmapDescriptor.hueGreen
+                        : BitmapDescriptor.hueOrange,
+                  ),
+                  onTap: () => _showAccountDetails(account),
+                ),
+              );
+            }
+          } catch (e) {}
+        }
       }
     }
     setState(() => _markers = markers);
@@ -2455,8 +2661,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                                   Icons.my_location,
                                   color: primaryColor,
                                 ),
-                                onPressed: () {
+                                onPressed: () async {
+                                  // Switch to map view first
                                   setState(() => _showAccountsList = false);
+                                  // Wait for map to be ready then focus
+                                  await Future.delayed(
+                                    const Duration(milliseconds: 300),
+                                  );
                                   _focusOnAccount(account);
                                 },
                               )
@@ -2524,8 +2735,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                   title: const Text('Accounts', style: TextStyle(fontSize: 12)),
                   value: _showAccounts,
                   onChanged: (v) {
-                    setState(() => _showAccounts = v);
-                    _updateMapMarkers();
+                    print('Accounts toggle changed to: $v');
+                    setState(() {
+                      _showAccounts = v;
+                    });
+                    // Force proper marker update after state change
+                    Future.microtask(() {
+                      if (_selectedPincodes.isNotEmpty) {
+                        print('Calling _updateMapMarkersWithAllShops');
+                        _updateMapMarkersWithAllShops();
+                      } else {
+                        print('Calling _updateMapMarkersDefault');
+                        _updateMapMarkersDefault();
+                      }
+                    });
                   },
                   activeColor: primaryColor,
                 ),
@@ -2536,8 +2759,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                   title: const Text('Places', style: TextStyle(fontSize: 12)),
                   value: _showPlaces,
                   onChanged: (v) {
-                    setState(() => _showPlaces = v);
-                    _updateMapMarkers();
+                    print('Places toggle changed to: $v');
+                    setState(() {
+                      _showPlaces = v;
+                    });
+                    // Force proper marker update after state change
+                    Future.microtask(() {
+                      if (_selectedPincodes.isNotEmpty) {
+                        print('Calling _updateMapMarkersWithAllShops');
+                        _updateMapMarkersWithAllShops();
+                      } else {
+                        print('Calling _updateMapMarkersDefault');
+                        _updateMapMarkersDefault();
+                      }
+                    });
                   },
                   activeColor: primaryColor,
                 ),
@@ -2680,17 +2915,26 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           ),
           if (_showPlaces) ...[
             const SizedBox(height: 8),
-            const Text(
-              'Shop Categories',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Shop Categories',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${_selectedPlaceTypes.length} selected',
+                  style: TextStyle(fontSize: 10, color: primaryColor),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Container(
-              height: 100,
+              height: 160,
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
-                  childAspectRatio: 2.5,
+                  childAspectRatio: 1.8,
                   crossAxisSpacing: 4,
                   mainAxisSpacing: 4,
                 ),
@@ -2738,14 +2982,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                         children: [
                           Icon(
                             placeType['icon'],
-                            size: 16,
+                            size: 18,
                             color: isSelected ? primaryColor : Colors.grey[600],
                           ),
                           const SizedBox(height: 2),
                           Text(
                             placeType['name'],
                             style: TextStyle(
-                              fontSize: 8,
+                              fontSize: 9,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal,
@@ -2763,6 +3007,44 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                   );
                 },
               ),
+            ),
+            // Quick select/deselect buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedPlaceTypes = _placeTypes
+                          .map((p) => p['type'] as String)
+                          .toList();
+                    });
+                    _loadNearbyPlaces();
+                    if (_selectedPincodes.isNotEmpty) {
+                      _loadAllShopsForSelectedPincodes();
+                    }
+                  },
+                  child: const Text(
+                    'Select All',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedPlaceTypes = ['convenience_store'];
+                    });
+                    _loadNearbyPlaces();
+                    if (_selectedPincodes.isNotEmpty) {
+                      _loadAllShopsForSelectedPincodes();
+                    }
+                  },
+                  child: const Text(
+                    'Clear',
+                    style: TextStyle(fontSize: 10, color: Colors.red),
+                  ),
+                ),
+              ],
             ),
           ],
           const SizedBox(height: 8),
@@ -2860,7 +3142,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   Widget _buildPincodeCard() => Card(
     elevation: 4,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 300, maxWidth: 180),
+      constraints: const BoxConstraints(maxHeight: 300, maxWidth: 200),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -2877,59 +3159,11 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                   ),
                 )
               else ...[
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: _selectAllPincodes,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'All',
-                          style: TextStyle(fontSize: 9, color: Colors.blue),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: _clearPincodeSelection,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Clear',
-                          style: TextStyle(fontSize: 9, color: Colors.red),
-                        ),
-                      ),
-                    ),
-                    if (_isLoadingGooglePlaces) ...[
-                      const SizedBox(width: 8),
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
                 if (_selectedPincodes.isNotEmpty &&
                     _googlePlacesShops.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(4),
+                    margin: const EdgeInsets.only(bottom: 4),
                     decoration: BoxDecoration(
                       color: Colors.purple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(4),
@@ -2954,7 +3188,17 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       ],
                     ),
                   ),
-                const SizedBox(height: 4),
+                if (_isLoadingGooglePlaces)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
                 Flexible(
                   child: SingleChildScrollView(
                     child: Column(
@@ -2965,6 +3209,62 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                // All and Clear buttons at bottom right
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: _selectAllPincodes,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.blue.withOpacity(0.3),
+                          ),
+                        ),
+                        child: const Text(
+                          'Select All',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: _clearPincodeSelection,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: const Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
               const SizedBox(height: 8),
             ],
@@ -2972,7 +3272,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               onTap: () =>
                   setState(() => _isPincodeCollapsed = !_isPincodeCollapsed),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(4),
@@ -2988,22 +3288,6 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (_selectedPincodes.isNotEmpty)
-                      InkWell(
-                        onTap: _clearPincodeSelection,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: const Icon(
-                            Icons.clear,
-                            size: 12,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
                     Icon(
                       _isPincodeCollapsed
                           ? Icons.expand_less
