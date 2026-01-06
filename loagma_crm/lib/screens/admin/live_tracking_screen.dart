@@ -1593,6 +1593,32 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                           ],
                         ),
                         const SizedBox(height: 2),
+                        // Show last update time with color indicator
+                        Row(
+                          children: [
+                            Icon(
+                              _getLastUpdateIcon(employee.lastPositionUpdate),
+                              size: 10,
+                              color: _getLastUpdateColor(
+                                employee.lastPositionUpdate,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                _getLastUpdateText(employee.lastPositionUpdate),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: _getLastUpdateColor(
+                                    employee.lastPositionUpdate,
+                                  ),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                         Text(
                           isSelected ? 'Tap to deselect' : 'Tap to focus',
                           style: TextStyle(
@@ -1720,6 +1746,50 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     return '${hours}h ${minutes}m';
+  }
+
+  /// Get icon for last update status
+  IconData _getLastUpdateIcon(DateTime? lastUpdate) {
+    if (lastUpdate == null) return Icons.signal_wifi_off;
+
+    final minutesAgo = DateTime.now().difference(lastUpdate).inMinutes;
+    if (minutesAgo < 2) return Icons.signal_wifi_4_bar;
+    if (minutesAgo < 5)
+      return Icons.signal_wifi_statusbar_connected_no_internet_4;
+    if (minutesAgo < 15) return Icons.signal_wifi_bad;
+    return Icons.signal_wifi_off;
+  }
+
+  /// Get color for last update status
+  Color _getLastUpdateColor(DateTime? lastUpdate) {
+    if (lastUpdate == null) return Colors.red;
+
+    final minutesAgo = DateTime.now().difference(lastUpdate).inMinutes;
+    if (minutesAgo < 2) return successColor;
+    if (minutesAgo < 5) return Colors.orange;
+    if (minutesAgo < 15) return Colors.deepOrange;
+    return Colors.red;
+  }
+
+  /// Get text for last update status
+  String _getLastUpdateText(DateTime? lastUpdate) {
+    if (lastUpdate == null) return 'No updates';
+
+    final now = DateTime.now();
+    final difference = now.difference(lastUpdate);
+
+    if (difference.inSeconds < 60) {
+      return 'Updated ${difference.inSeconds}s ago';
+    } else if (difference.inMinutes < 60) {
+      final mins = difference.inMinutes;
+      if (mins < 2) return 'Updated just now';
+      if (mins < 5) return 'Updated ${mins}m ago';
+      return 'Last update ${mins}m ago ⚠️';
+    } else {
+      final hours = difference.inHours;
+      final mins = difference.inMinutes.remainder(60);
+      return 'OFFLINE ${hours}h ${mins}m ❌';
+    }
   }
 
   void _showErrorSnackBar(String message) {

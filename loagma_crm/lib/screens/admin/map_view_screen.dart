@@ -49,56 +49,54 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
   // Place types for business discovery - matching Google Maps API types exactly
   final List<Map<String, dynamic>> _placeTypes = [
-    // Food & Dining
-    {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
-    {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
-    {'type': 'bakery', 'name': 'Bakery', 'icon': Icons.bakery_dining},
-    {'type': 'bar', 'name': 'Bar', 'icon': Icons.local_bar},
-    {'type': 'meal_takeaway', 'name': 'Takeaway', 'icon': Icons.takeout_dining},
-    // Retail & Shopping
-    {'type': 'convenience_store', 'name': 'Kirana', 'icon': Icons.storefront},
-    {
-      'type': 'supermarket',
-      'name': 'Supermarket',
-      'icon': Icons.local_grocery_store,
-    },
-    {'type': 'shopping_mall', 'name': 'Mall', 'icon': Icons.shopping_bag},
-    {'type': 'clothing_store', 'name': 'Clothing', 'icon': Icons.checkroom},
-    {'type': 'electronics_store', 'name': 'Electronics', 'icon': Icons.devices},
-    {'type': 'jewelry_store', 'name': 'Jewelry', 'icon': Icons.diamond},
-    {'type': 'shoe_store', 'name': 'Shoes', 'icon': Icons.shopping_basket},
-    {'type': 'furniture_store', 'name': 'Furniture', 'icon': Icons.chair},
-    {'type': 'hardware_store', 'name': 'Hardware', 'icon': Icons.hardware},
-    {'type': 'book_store', 'name': 'Books', 'icon': Icons.menu_book},
-    {'type': 'pet_store', 'name': 'Pet Store', 'icon': Icons.pets},
-    {'type': 'florist', 'name': 'Florist', 'icon': Icons.local_florist},
-    // Health & Medical
-    {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
-    {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
-    {'type': 'doctor', 'name': 'Doctor', 'icon': Icons.medical_services},
-    {'type': 'dentist', 'name': 'Dentist', 'icon': Icons.medical_information},
-    {'type': 'gym', 'name': 'Gym', 'icon': Icons.fitness_center},
-    {'type': 'spa', 'name': 'Spa', 'icon': Icons.spa},
-    // Services
-    {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
-    {'type': 'atm', 'name': 'ATM', 'icon': Icons.atm},
-    {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
-    {
-      'type': 'gas_station',
-      'name': 'Petrol Pump',
-      'icon': Icons.local_gas_station,
-    },
-    {'type': 'car_repair', 'name': 'Car Repair', 'icon': Icons.car_repair},
-    {'type': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
-    {'type': 'laundry', 'name': 'Laundry', 'icon': Icons.local_laundry_service},
-    {'type': 'beauty_salon', 'name': 'Salon', 'icon': Icons.content_cut},
-    {'type': 'hair_care', 'name': 'Hair Care', 'icon': Icons.face},
-    // Education & Others
-    {'type': 'school', 'name': 'School', 'icon': Icons.school},
-    {'type': 'library', 'name': 'Library', 'icon': Icons.local_library},
-    {'type': 'movie_theater', 'name': 'Cinema', 'icon': Icons.movie},
-    {'type': 'liquor_store', 'name': 'Liquor', 'icon': Icons.liquor},
-  ];
+
+  // 🍽 Food & Dining
+  {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
+  {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
+  {'type': 'bakery', 'name': 'Bakery', 'icon': Icons.bakery_dining},
+  {'type': 'bar', 'name': 'Bar', 'icon': Icons.local_bar},
+  {'type': 'meal_takeaway', 'name': 'Takeaway', 'icon': Icons.takeout_dining},
+
+  // 🛒 Retail & Shopping
+  {'type': 'convenience_store', 'name': 'Kirana / Grocery', 'icon': Icons.store},
+  {'type': 'supermarket', 'name': 'Supermarket', 'icon': Icons.local_grocery_store},
+  {'type': 'shopping_mall', 'name': 'Mall', 'icon': Icons.shopping_bag},
+  {'type': 'clothing_store', 'name': 'Clothing', 'icon': Icons.checkroom},
+  {'type': 'electronics_store', 'name': 'Electronics', 'icon': Icons.devices},
+  {'type': 'jewelry_store', 'name': 'Jewelry', 'icon': Icons.diamond},
+  {'type': 'shoe_store', 'name': 'Shoes', 'icon': Icons.shopping_basket},
+  {'type': 'furniture_store', 'name': 'Furniture', 'icon': Icons.chair},
+  {'type': 'hardware_store', 'name': 'Hardware', 'icon': Icons.build},
+  {'type': 'book_store', 'name': 'Books', 'icon': Icons.menu_book},
+  {'type': 'pet_store', 'name': 'Pet Store', 'icon': Icons.pets},
+  {'type': 'florist', 'name': 'Florist', 'icon': Icons.local_florist},
+
+  // 🏥 Health & Medical
+  {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
+  {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
+  {'type': 'doctor', 'name': 'Doctor', 'icon': Icons.medical_services},
+  {'type': 'dentist', 'name': 'Dentist', 'icon': Icons.medical_services},
+  {'type': 'gym', 'name': 'Gym', 'icon': Icons.fitness_center},
+  {'type': 'spa', 'name': 'Spa', 'icon': Icons.spa},
+
+  // 🏦 Services
+  {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
+  {'type': 'atm', 'name': 'ATM', 'icon': Icons.atm},
+  {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
+  {'type': 'gas_station', 'name': 'Petrol Pump', 'icon': Icons.local_gas_station},
+  {'type': 'car_repair', 'name': 'Car Repair', 'icon': Icons.car_repair},
+  {'type': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
+  {'type': 'laundry', 'name': 'Laundry', 'icon': Icons.local_laundry_service},
+  {'type': 'beauty_salon', 'name': 'Salon', 'icon': Icons.content_cut},
+  {'type': 'hair_care', 'name': 'Hair Care', 'icon': Icons.face},
+
+  // 🎓 Education & Entertainment
+  {'type': 'school', 'name': 'School', 'icon': Icons.school},
+  {'type': 'library', 'name': 'Library', 'icon': Icons.local_library},
+  {'type': 'movie_theater', 'name': 'Cinema', 'icon': Icons.movie},
+  {'type': 'liquor_store', 'name': 'Liquor Store', 'icon': Icons.local_bar},
+];
+
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
   bool _isLegendCollapsed = false;

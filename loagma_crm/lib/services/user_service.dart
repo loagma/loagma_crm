@@ -12,6 +12,7 @@ class UserService {
   static const String _keyContact = "contactNumber";
   static const String _keyName = "name";
   static const String _keyToken = "token";
+  static const String _keyAttendanceId = "currentAttendanceId";
 
   /// -------------------------------------------------------------
   /// MUST CALL IN main() → before runApp()
@@ -81,6 +82,16 @@ class UserService {
   static String? get contactNumber => _prefs?.getString(_keyContact);
   static String? get name => _prefs?.getString(_keyName);
   static String? get token => _prefs?.getString(_keyToken);
+  static String? get currentAttendanceId => _prefs?.getString(_keyAttendanceId);
+
+  /// Set current attendance ID (called when punch-in)
+  static Future<void> setCurrentAttendanceId(String? attendanceId) async {
+    if (attendanceId != null) {
+      await _prefs?.setString(_keyAttendanceId, attendanceId);
+    } else {
+      await _prefs?.remove(_keyAttendanceId);
+    }
+  }
 
   /// Check if user has valid authentication (logged in with token)
   static bool get hasValidAuth {

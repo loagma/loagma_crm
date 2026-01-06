@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
 import 'user_service.dart';
 import 'location_service.dart';
+import 'route_service.dart';
 import 'api_config.dart';
 
 /// Production WebSocket service for real-time location tracking
@@ -185,14 +186,18 @@ class LiveLocationSocket {
     // Send via WebSocket if connected
     if (_isConnected) {
       _sendMessage(locationMessage);
+    } else {
+      // Fallback: Store via REST API when WebSocket is disconnected
+      _storeLocationViaRest(position);
     }
 
     // Update state
     _lastSentPosition = position;
 
     final homeTag = _isFirstLocation ? ' (HOME)' : '';
+    final connStatus = _isConnected ? '✅' : '⚠️REST';
     debugPrint(
-      '📍 Location sent$homeTag: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} | Total: ${_totalDistanceKm.toStringAsFixed(2)} km | Points: ${_routePoints.length}',
+      '📍 $connStatus Location sent$homeTag: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} | Total: ${_totalDistanceKm.toStringAsFixed(2)} km | Points: ${_routePoints.length}',
     );
 
     // Notify UI
@@ -201,6 +206,33 @@ class LiveLocationSocket {
     // Mark first location as sent
     if (_isFirstLocation) {
       _isFirstLocation = false;
+    }
+  }
+
+  /// Store location via REST API when WebSocket is disconnected
+  Future<void> _storeLocationViaRest(Position position) async {
+    try {
+      final salesmanId = UserService.currentUserId;
+      final attendanceId = UserService.currentAttendanceId;
+
+      if (salesmanId == null || attendanceId == null) {
+        debugPrint('❌ Missing salesman or attendance ID for REST fallback');
+        return;
+      }
+
+      await RouteService.storeRoutePoint(
+        employeeId: salesmanId,
+        attendanceId: attendanceId,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        speed: position.speed,
+        accuracy: position.accuracy,
+        isHomeLocation: _isFirstLocation,
+      );
+
+      debugPrint('📍 REST fallback: Location stored successfully');
+    } catch (e) {
+      debugPrint('❌ REST fallback failed: $e');
     }
   }
 
