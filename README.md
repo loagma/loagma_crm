@@ -117,6 +117,8 @@ cd loagma_crm
 
 # Install dependencies
 flutter pub get
+flutter run -d chrome --web-port 3000
+
 
 # Update API configuration
 # Edit lib/services/api_config.dart with your backend URL
