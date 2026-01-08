@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
@@ -36,6 +37,72 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   Position? _currentPosition;
   bool _locationPermissionGranted = false;
 
+  // Single place type filtering
+  String? _selectedSinglePlaceType;
+  List<Map<String, dynamic>> _filteredPlaces = [];
+  Map<String, List<Map<String, dynamic>>> _placeCache = {};
+  Timer? _filterDebounceTimer;
+
+  // Category mapping for Google Places types[] matching
+  // A place matches if ANY of its types[] is in the category's mapped types
+  static const Map<String, List<String>> categoryMap = {
+    // Food & Dining
+    'restaurant': ['restaurant', 'food', 'meal_takeaway', 'meal_delivery'],
+    'cafe': ['cafe', 'coffee_shop'],
+    'bakery': ['bakery'],
+    'bar': ['bar', 'night_club'],
+    'meal_takeaway': ['meal_takeaway', 'meal_delivery', 'food'],
+
+    // Retail & Shopping
+    'convenience_store': [
+      'convenience_store',
+      'grocery_or_supermarket',
+      'store',
+    ],
+    'grocery_or_supermarket': [
+      'grocery_or_supermarket',
+      'convenience_store',
+      'supermarket',
+      'store',
+    ],
+    'supermarket': ['supermarket', 'grocery_or_supermarket', 'store'],
+    'shopping_mall': ['shopping_mall', 'department_store'],
+    'clothing_store': ['clothing_store', 'shoe_store'],
+    'electronics_store': ['electronics_store', 'store'],
+    'jewelry_store': ['jewelry_store', 'store'],
+    'shoe_store': ['shoe_store', 'clothing_store'],
+    'furniture_store': ['furniture_store', 'home_goods_store', 'store'],
+    'hardware_store': ['hardware_store', 'store'],
+    'book_store': ['book_store', 'store'],
+    'pet_store': ['pet_store', 'store'],
+    'florist': ['florist', 'store'],
+
+    // Health & Medical
+    'pharmacy': ['pharmacy', 'drugstore', 'health'],
+    'hospital': ['hospital', 'health'],
+    'doctor': ['doctor', 'health'],
+    'dentist': ['dentist', 'health'],
+    'gym': ['gym', 'health'],
+    'spa': ['spa', 'beauty_salon', 'health'],
+
+    // Services
+    'bank': ['bank', 'atm', 'finance'],
+    'atm': ['atm', 'bank', 'finance'],
+    'lodging': ['lodging', 'hotel', 'motel', 'guest_house'],
+    'gas_station': ['gas_station'],
+    'car_repair': ['car_repair', 'car_dealer'],
+    'car_wash': ['car_wash'],
+    'laundry': ['laundry', 'dry_cleaning'],
+    'beauty_salon': ['beauty_salon', 'hair_care', 'spa'],
+    'hair_care': ['hair_care', 'beauty_salon'],
+
+    // Education & Entertainment
+    'school': ['school', 'primary_school', 'secondary_school', 'university'],
+    'library': ['library'],
+    'movie_theater': ['movie_theater', 'cinema'],
+    'liquor_store': ['liquor_store', 'store'],
+  };
+
   List<Map<String, dynamic>> _allSalesmen = [];
   List<String> _selectedSalesmenIds = [];
   bool _isLoadingSalesmen = false;
@@ -44,58 +111,69 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   bool _showPlaces = true;
   bool _showAccounts = true;
   bool _showAccountsList = false;
-  List<String> _selectedPlaceTypes = ['convenience_store'];
+  List<String> _selectedPlaceTypes = ['grocery_or_supermarket'];
   int _searchRadius = 1500;
 
   // Place types for business discovery - matching Google Maps API types exactly
   final List<Map<String, dynamic>> _placeTypes = [
+    // 🍽 Food & Dining
+    {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
+    {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
+    {'type': 'bakery', 'name': 'Bakery', 'icon': Icons.bakery_dining},
+    {'type': 'bar', 'name': 'Bar', 'icon': Icons.local_bar},
+    {'type': 'meal_takeaway', 'name': 'Takeaway', 'icon': Icons.takeout_dining},
 
-  // 🍽 Food & Dining
-  {'type': 'restaurant', 'name': 'Restaurant', 'icon': Icons.restaurant},
-  {'type': 'cafe', 'name': 'Cafe', 'icon': Icons.local_cafe},
-  {'type': 'bakery', 'name': 'Bakery', 'icon': Icons.bakery_dining},
-  {'type': 'bar', 'name': 'Bar', 'icon': Icons.local_bar},
-  {'type': 'meal_takeaway', 'name': 'Takeaway', 'icon': Icons.takeout_dining},
+    // 🛒 Retail & Shopping
+    {
+      'type': 'grocery_or_supermarket',
+      'name': 'Kirana / Grocery',
+      'icon': Icons.store,
+    },
+    {
+      'type': 'supermarket',
+      'name': 'Supermarket',
+      'icon': Icons.local_grocery_store,
+    },
+    {'type': 'shopping_mall', 'name': 'Mall', 'icon': Icons.shopping_bag},
+    {'type': 'clothing_store', 'name': 'Clothing', 'icon': Icons.checkroom},
+    {'type': 'electronics_store', 'name': 'Electronics', 'icon': Icons.devices},
+    {'type': 'jewelry_store', 'name': 'Jewelry', 'icon': Icons.diamond},
+    {'type': 'shoe_store', 'name': 'Shoes', 'icon': Icons.shopping_basket},
+    {'type': 'furniture_store', 'name': 'Furniture', 'icon': Icons.chair},
+    {'type': 'hardware_store', 'name': 'Hardware', 'icon': Icons.build},
+    {'type': 'book_store', 'name': 'Books', 'icon': Icons.menu_book},
+    {'type': 'pet_store', 'name': 'Pet Store', 'icon': Icons.pets},
+    {'type': 'florist', 'name': 'Florist', 'icon': Icons.local_florist},
 
-  // 🛒 Retail & Shopping
-  {'type': 'convenience_store', 'name': 'Kirana / Grocery', 'icon': Icons.store},
-  {'type': 'supermarket', 'name': 'Supermarket', 'icon': Icons.local_grocery_store},
-  {'type': 'shopping_mall', 'name': 'Mall', 'icon': Icons.shopping_bag},
-  {'type': 'clothing_store', 'name': 'Clothing', 'icon': Icons.checkroom},
-  {'type': 'electronics_store', 'name': 'Electronics', 'icon': Icons.devices},
-  {'type': 'jewelry_store', 'name': 'Jewelry', 'icon': Icons.diamond},
-  {'type': 'shoe_store', 'name': 'Shoes', 'icon': Icons.shopping_basket},
-  {'type': 'furniture_store', 'name': 'Furniture', 'icon': Icons.chair},
-  {'type': 'hardware_store', 'name': 'Hardware', 'icon': Icons.build},
-  {'type': 'book_store', 'name': 'Books', 'icon': Icons.menu_book},
-  {'type': 'pet_store', 'name': 'Pet Store', 'icon': Icons.pets},
-  {'type': 'florist', 'name': 'Florist', 'icon': Icons.local_florist},
+    // 🏥 Health & Medical
+    {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
+    {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
+    {'type': 'doctor', 'name': 'Doctor', 'icon': Icons.medical_services},
+    {'type': 'dentist', 'name': 'Dentist', 'icon': Icons.medical_services},
+    {'type': 'gym', 'name': 'Gym', 'icon': Icons.fitness_center},
+    {'type': 'spa', 'name': 'Spa', 'icon': Icons.spa},
 
-  // 🏥 Health & Medical
-  {'type': 'pharmacy', 'name': 'Pharmacy', 'icon': Icons.local_pharmacy},
-  {'type': 'hospital', 'name': 'Hospital', 'icon': Icons.local_hospital},
-  {'type': 'doctor', 'name': 'Doctor', 'icon': Icons.medical_services},
-  {'type': 'dentist', 'name': 'Dentist', 'icon': Icons.medical_services},
-  {'type': 'gym', 'name': 'Gym', 'icon': Icons.fitness_center},
-  {'type': 'spa', 'name': 'Spa', 'icon': Icons.spa},
+    // 🏦 Services
+    {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
+    {'type': 'atm', 'name': 'ATM', 'icon': Icons.atm},
+    {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
+    {
+      'type': 'gas_station',
+      'name': 'Petrol Pump',
+      'icon': Icons.local_gas_station,
+    },
+    {'type': 'car_repair', 'name': 'Car Repair', 'icon': Icons.car_repair},
+    {'type': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
+    {'type': 'laundry', 'name': 'Laundry', 'icon': Icons.local_laundry_service},
+    {'type': 'beauty_salon', 'name': 'Salon', 'icon': Icons.content_cut},
+    {'type': 'hair_care', 'name': 'Hair Care', 'icon': Icons.face},
 
-  // 🏦 Services
-  {'type': 'bank', 'name': 'Bank', 'icon': Icons.account_balance},
-  {'type': 'atm', 'name': 'ATM', 'icon': Icons.atm},
-  {'type': 'lodging', 'name': 'Hotel', 'icon': Icons.hotel},
-  {'type': 'gas_station', 'name': 'Petrol Pump', 'icon': Icons.local_gas_station},
-  {'type': 'car_repair', 'name': 'Car Repair', 'icon': Icons.car_repair},
-  {'type': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
-  {'type': 'laundry', 'name': 'Laundry', 'icon': Icons.local_laundry_service},
-  {'type': 'beauty_salon', 'name': 'Salon', 'icon': Icons.content_cut},
-  {'type': 'hair_care', 'name': 'Hair Care', 'icon': Icons.face},
-
-  // 🎓 Education & Entertainment
-  {'type': 'school', 'name': 'School', 'icon': Icons.school},
-  {'type': 'library', 'name': 'Library', 'icon': Icons.local_library},
-  {'type': 'movie_theater', 'name': 'Cinema', 'icon': Icons.movie},
-  {'type': 'liquor_store', 'name': 'Liquor Store', 'icon': Icons.local_bar},
-];
+    // 🎓 Education & Entertainment
+    {'type': 'school', 'name': 'School', 'icon': Icons.school},
+    {'type': 'library', 'name': 'Library', 'icon': Icons.local_library},
+    {'type': 'movie_theater', 'name': 'Cinema', 'icon': Icons.movie},
+    {'type': 'liquor_store', 'name': 'Liquor Store', 'icon': Icons.local_bar},
+  ];
 
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
@@ -181,6 +259,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     _isMapReady = false;
     _mapController = null;
     _filterAnimationController.dispose();
+    _filterDebounceTimer?.cancel();
     LocationService.instance.stopLocationTracking();
     super.dispose();
   }
@@ -532,6 +611,211 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
   }
 
+  /// Fetch places by single type using Google Places Nearby Search API
+  /// Integrates with existing map without rebuilding GoogleMap widget
+  Future<void> fetchPlacesByType(String? selectedPlaceType) async {
+    // Clear existing filtered places if no type selected
+    if (selectedPlaceType == null || selectedPlaceType.isEmpty) {
+      setState(() {
+        _selectedSinglePlaceType = null;
+        _filteredPlaces.clear();
+      });
+      _updateMapMarkers();
+      return;
+    }
+
+    // Debounce filter changes
+    _filterDebounceTimer?.cancel();
+    _filterDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      await _performPlaceSearch(selectedPlaceType);
+    });
+  }
+
+  Future<void> _performPlaceSearch(String placeType) async {
+    print('🔍 === _performPlaceSearch called ===');
+    print('🎯 Requested place type: $placeType');
+
+    // Get current location - use map center if available, fallback to user location
+    LatLng? searchLocation;
+
+    if (_mapController != null && _isMapReady) {
+      try {
+        final visibleRegion = await _mapController!.getVisibleRegion();
+        final center = LatLng(
+          (visibleRegion.northeast.latitude +
+                  visibleRegion.southwest.latitude) /
+              2,
+          (visibleRegion.northeast.longitude +
+                  visibleRegion.southwest.longitude) /
+              2,
+        );
+        searchLocation = center;
+        print('📍 Using map center: ${center.latitude}, ${center.longitude}');
+      } catch (e) {
+        // Fallback to user location
+        if (_currentPosition != null) {
+          searchLocation = LatLng(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          );
+          print(
+            '📍 Using user location: ${searchLocation!.latitude}, ${searchLocation!.longitude}',
+          );
+        }
+      }
+    } else if (_currentPosition != null) {
+      searchLocation = LatLng(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+      print(
+        '📍 Using user location (fallback): ${searchLocation!.latitude}, ${searchLocation!.longitude}',
+      );
+    }
+
+    if (searchLocation == null) {
+      print('❌ No location available for place search');
+      return;
+    }
+
+    // Create cache key
+    final cacheKey =
+        '${placeType}_${searchLocation.latitude.toStringAsFixed(4)}_${searchLocation.longitude.toStringAsFixed(4)}';
+
+    // Check cache first
+    if (_placeCache.containsKey(cacheKey)) {
+      print('💾 Using cached results for: $cacheKey');
+      setState(() {
+        _selectedSinglePlaceType = placeType;
+        _filteredPlaces = _placeCache[cacheKey]!;
+      });
+      _updateMapMarkers();
+      return;
+    }
+
+    try {
+      // Call Google Places Nearby Search API - SINGLE TYPE ONLY
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+        '?location=${searchLocation.latitude},${searchLocation.longitude}'
+        '&radius=5000'
+        '&type=$placeType'
+        '&key=${GooglePlacesConfig.apiKey}',
+      );
+
+      print('🌐 API URL: $url');
+      final response = await http.get(url);
+      print('📊 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('📊 API Status: ${data['status']}');
+
+        // Only process if status is OK
+        if (data['status'] == 'OK') {
+          final results = data['results'] as List? ?? [];
+          print('📊 Raw results count: ${results.length}');
+
+          // Log first few results to understand the data structure
+          if (results.isNotEmpty) {
+            print('🔍 === SAMPLE API RESULTS ===');
+            for (
+              int i = 0;
+              i < (results.length > 3 ? 3 : results.length);
+              i++
+            ) {
+              final place = results[i];
+              print('Place ${i + 1}:');
+              print('  Name: ${place['name']}');
+              print('  Types: ${place['types']}');
+              print('  Business Status: ${place['business_status']}');
+              print('  Rating: ${place['rating']}');
+              print('  Place ID: ${place['place_id']}');
+              print('  ---');
+            }
+            print('🔍 === END SAMPLE RESULTS ===');
+          }
+
+          // Convert to our format - store types[] as List<String>
+          final places = results
+              .map<Map<String, dynamic>>((place) {
+                final geometry = place['geometry']?['location'];
+
+                // Store types[] as List<String> for proper category matching
+                List<String> placeTypes = [];
+                if (place['types'] != null && place['types'] is List) {
+                  placeTypes = List<String>.from(
+                    (place['types'] as List).map(
+                      (t) => t.toString().toLowerCase(),
+                    ),
+                  );
+                }
+
+                return {
+                  'place_id': place['place_id'] ?? '',
+                  'name': place['name'] ?? 'Unknown Place',
+                  'latitude': geometry?['lat']?.toDouble(),
+                  'longitude': geometry?['lng']?.toDouble(),
+                  'rating': place['rating']?.toDouble(),
+                  'types': placeTypes, // Store as List<String>
+                  'businessType': placeTypes.isNotEmpty
+                      ? placeTypes.first
+                      : 'store',
+                  'vicinity': place['vicinity'] ?? '',
+                  'business_status': place['business_status'],
+                  'price_level': place['price_level'],
+                };
+              })
+              .where((place) {
+                // Filter out places without valid coordinates
+                return place['latitude'] != null &&
+                    place['longitude'] != null &&
+                    place['place_id'].toString().isNotEmpty;
+              })
+              .toList();
+
+          print('✅ Processed ${places.length} valid places');
+
+          // Log unique types found across all places
+          final allTypes = <String>{};
+          for (final place in places) {
+            final types = place['types'] as List<String>? ?? [];
+            allTypes.addAll(types);
+          }
+          print('🏷️ All unique types found: ${allTypes.toList()..sort()}');
+
+          // Cache the results
+          _placeCache[cacheKey] = places;
+
+          // Update state
+          setState(() {
+            _selectedSinglePlaceType = placeType;
+            _filteredPlaces = places;
+          });
+
+          _updateMapMarkers();
+
+          print('✅ Loaded ${places.length} places for type: $placeType');
+        } else {
+          print(
+            '❌ Google Places API error: ${data['status']} - ${data['error_message'] ?? ''}',
+          );
+          if (data['error_message'] != null) {
+            print('❌ Error details: ${data['error_message']}');
+          }
+          // Fail silently - don't affect UI
+        }
+      } else {
+        print('❌ HTTP error: ${response.statusCode}');
+        print('❌ Response body: ${response.body}');
+        // Fail silently - don't affect UI
+      }
+    } catch (e) {
+      print('❌ Error fetching places: $e');
+      // Fail silently - don't affect UI
+    }
+  }
+
   void _updateMapMarkers() {
     if (_selectedPincodes.isNotEmpty) {
       // If pincodes are selected, show all shops (existing + Google Places)
@@ -593,22 +877,56 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
     }
 
-    // Add nearby places - only if _showPlaces is true
+    // Add places - prioritize single-select filtered places over multi-select nearby places
     if (_showPlaces) {
-      for (int i = 0; i < nearbyPlaces.length; i++) {
-        final place = nearbyPlaces[i];
-        if (place.latitude != null && place.longitude != null) {
-          markers.add(
-            Marker(
-              markerId: MarkerId('place_$i'),
-              position: LatLng(place.latitude!, place.longitude!),
-              infoWindow: InfoWindow(title: place.name),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueRed,
+      if (_filteredPlaces.isNotEmpty) {
+        // Filter single-select filtered places using categoryMap
+        final placesToShow = _selectedSinglePlaceType != null
+            ? _filteredPlaces.where((place) {
+                final placeTypes = _getShopTypes(place);
+                return _matchesCategory(placeTypes, _selectedSinglePlaceType!);
+              }).toList()
+            : _filteredPlaces;
+
+        for (int i = 0; i < placesToShow.length; i++) {
+          final place = placesToShow[i];
+          if (place['latitude'] != null && place['longitude'] != null) {
+            markers.add(
+              Marker(
+                markerId: MarkerId(place['place_id'] ?? 'filtered_place_$i'),
+                position: LatLng(
+                  place['latitude'].toDouble(),
+                  place['longitude'].toDouble(),
+                ),
+                infoWindow: InfoWindow(
+                  title: place['name'] ?? 'Unknown Place',
+                  snippet: place['vicinity'] ?? '',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueViolet, // Purple for filtered places
+                ),
+                onTap: () => _showFilteredPlaceDetails(place),
               ),
-              onTap: () => _showPlaceDetails(place),
-            ),
-          );
+            );
+          }
+        }
+      } else {
+        // Add regular nearby places (multi-select)
+        for (int i = 0; i < nearbyPlaces.length; i++) {
+          final place = nearbyPlaces[i];
+          if (place.latitude != null && place.longitude != null) {
+            markers.add(
+              Marker(
+                markerId: MarkerId('place_$i'),
+                position: LatLng(place.latitude!, place.longitude!),
+                infoWindow: InfoWindow(title: place.name),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
+                onTap: () => _showPlaceDetails(place),
+              ),
+            );
+          }
         }
       }
     }
@@ -694,6 +1012,94 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           _showPlaceDetailsOverlay = true;
         });
     } catch (e) {}
+  }
+
+  void _showFilteredPlaceDetails(Map<String, dynamic> place) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.purple,
+                  child: Icon(
+                    _getCategoryIcon(_selectedSinglePlaceType),
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        place['name'] ?? 'Unknown Place',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_selectedSinglePlaceType != null)
+                        Text(
+                          _formatBusinessType(_selectedSinglePlaceType!),
+                          style: const TextStyle(color: Colors.purple),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            if (place['vicinity'] != null)
+              _buildDetailRow(Icons.location_on, 'Address', place['vicinity']),
+            if (place['rating'] != null)
+              _buildDetailRow(Icons.star, 'Rating', '${place['rating']} ⭐'),
+            if (place['business_status'] != null)
+              _buildDetailRow(
+                Icons.business,
+                'Status',
+                place['business_status'],
+              ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  if (_mapController != null && _isMapReady) {
+                    await _safeAnimateCamera(
+                      CameraUpdate.newLatLngZoom(
+                        LatLng(
+                          place['latitude'].toDouble(),
+                          place['longitude'].toDouble(),
+                        ),
+                        16,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.my_location),
+                label: const Text('Focus on Map'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showAccountDetails(Map<String, dynamic> account) {
@@ -1033,6 +1439,28 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           '✅ Loaded ${googlePlacesShops.length} Google Places shops from backend',
         );
 
+        // Log sample backend data structure
+        if (googlePlacesShops.isNotEmpty) {
+          print('🔍 === SAMPLE BACKEND DATA ===');
+          for (
+            int i = 0;
+            i < (googlePlacesShops.length > 2 ? 2 : googlePlacesShops.length);
+            i++
+          ) {
+            final shop = googlePlacesShops[i];
+            print('Backend Shop ${i + 1}:');
+            print('  Name: ${shop['name']}');
+            print('  Business Type: ${shop['businessType']}');
+            print(
+              '  Types: ${shop['types']}',
+            ); // Check if backend provides types[]
+            print('  Place ID: ${shop['placeId']}');
+            print('  Address: ${shop['address']}');
+            print('  ---');
+          }
+          print('🔍 === END BACKEND DATA ===');
+        }
+
         // Convert to our expected format and validate data
         List<Map<String, dynamic>> validShops = [];
 
@@ -1043,11 +1471,25 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 shop['longitude'] != null &&
                 shop['name'] != null &&
                 shop['placeId'] != null) {
+              // Store types[] as List<String> for proper category matching
+              List<String> placeTypes = [];
+              if (shop['types'] != null && shop['types'] is List) {
+                placeTypes = List<String>.from(
+                  (shop['types'] as List).map(
+                    (t) => t.toString().toLowerCase(),
+                  ),
+                );
+              } else if (shop['businessType'] != null) {
+                // Fallback: use businessType as single type
+                placeTypes = [shop['businessType'].toString().toLowerCase()];
+              }
+
               validShops.add({
                 'id': shop['id'] ?? 'google_${shop['placeId']}',
                 'placeId': shop['placeId'],
                 'name': shop['name'] ?? 'Unknown Shop',
                 'businessType': shop['businessType'] ?? 'store',
+                'types': placeTypes, // Store as List<String>
                 'address': shop['address'] ?? '',
                 'pincode': pincode,
                 'latitude': _parseDouble(shop['latitude']),
@@ -1069,13 +1511,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
         print('✅ Processed ${validShops.length} valid Google Places shops');
 
-        // Debug: Log unique business types to understand the data
-        final uniqueBusinessTypes = validShops
-            .map((shop) => shop['businessType']?.toString())
-            .where((type) => type != null)
+        // Debug: Log unique types to understand the data
+        final allTypes = validShops
+            .expand((shop) => (shop['types'] as List<String>?) ?? [])
             .toSet()
             .toList();
-        print('🔍 Unique business types found: $uniqueBusinessTypes');
+        print('🔍 Unique types found: $allTypes');
 
         return validShops;
       } else {
@@ -1158,107 +1599,24 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
       print('Filtering by place types: $_selectedPlaceTypes');
 
-      // Filter Google Places shops by selected place types - strict matching
+      // Filter Google Places shops using categoryMap for proper types[] matching
       final filteredGoogleShops = _googlePlacesShops.where((shop) {
-        final shopType = shop['businessType']?.toString().toLowerCase() ?? '';
-        if (shopType.isEmpty) return false;
+        // If no category selected, show all
+        if (_selectedPlaceTypes.isEmpty) return true;
 
-        // Check if any selected type matches - strict matching only
-        return _selectedPlaceTypes.any((selectedType) {
-          final selected = selectedType.toLowerCase();
+        // Get shop's types[] list
+        final shopTypes = _getShopTypes(shop);
+        if (shopTypes.isEmpty) return false;
 
-          // Direct type match only
-          if (shopType == selected) return true;
-
-          // Handle specific mappings - exact Google Maps API type matching
-          switch (selected) {
-            // Food & Dining
-            case 'restaurant':
-              return shopType == 'restaurant';
-            case 'cafe':
-              return shopType == 'cafe';
-            case 'bakery':
-              return shopType == 'bakery';
-            case 'bar':
-              return shopType == 'bar';
-            case 'meal_takeaway':
-              return shopType == 'meal_takeaway' || shopType == 'meal_delivery';
-            // Retail & Shopping
-            case 'convenience_store':
-              return shopType == 'convenience_store';
-            case 'supermarket':
-              return shopType == 'supermarket' ||
-                  shopType == 'grocery_or_supermarket';
-            case 'shopping_mall':
-              return shopType == 'shopping_mall';
-            case 'clothing_store':
-              return shopType == 'clothing_store';
-            case 'electronics_store':
-              return shopType == 'electronics_store';
-            case 'jewelry_store':
-              return shopType == 'jewelry_store';
-            case 'shoe_store':
-              return shopType == 'shoe_store';
-            case 'furniture_store':
-              return shopType == 'furniture_store';
-            case 'hardware_store':
-              return shopType == 'hardware_store';
-            case 'book_store':
-              return shopType == 'book_store';
-            case 'pet_store':
-              return shopType == 'pet_store';
-            case 'florist':
-              return shopType == 'florist';
-            // Health & Medical
-            case 'pharmacy':
-              return shopType == 'pharmacy' || shopType == 'drugstore';
-            case 'hospital':
-              return shopType == 'hospital';
-            case 'doctor':
-              return shopType == 'doctor';
-            case 'dentist':
-              return shopType == 'dentist';
-            case 'gym':
-              return shopType == 'gym';
-            case 'spa':
-              return shopType == 'spa';
-            // Services
-            case 'bank':
-              return shopType == 'bank';
-            case 'atm':
-              return shopType == 'atm';
-            case 'lodging':
-              return shopType == 'lodging' || shopType == 'hotel';
-            case 'gas_station':
-              return shopType == 'gas_station';
-            case 'car_repair':
-              return shopType == 'car_repair';
-            case 'car_wash':
-              return shopType == 'car_wash';
-            case 'laundry':
-              return shopType == 'laundry';
-            case 'beauty_salon':
-              return shopType == 'beauty_salon';
-            case 'hair_care':
-              return shopType == 'hair_care';
-            // Education & Others
-            case 'school':
-              return shopType == 'school' ||
-                  shopType == 'primary_school' ||
-                  shopType == 'secondary_school';
-            case 'library':
-              return shopType == 'library';
-            case 'movie_theater':
-              return shopType == 'movie_theater';
-            case 'liquor_store':
-              return shopType == 'liquor_store';
-            default:
-              return shopType == selected;
-          }
+        // Check if shop matches ANY selected category using categoryMap
+        return _selectedPlaceTypes.any((selectedCategory) {
+          return _matchesCategory(shopTypes, selectedCategory);
         });
       }).toList();
 
-      print('Filtered to ${filteredGoogleShops.length} shops');
+      print(
+        'Filtered to ${filteredGoogleShops.length} shops using categoryMap',
+      );
 
       int googleMarkersAdded = 0;
 
@@ -1326,6 +1684,58 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
     setState(() => _markers = markers);
     print('=== Updated map with ${markers.length} total markers ===');
+  }
+
+  /// Get shop types as List<String> from shop data
+  List<String> _getShopTypes(Map<String, dynamic> shop) {
+    // First try to get types[] list
+    if (shop['types'] != null && shop['types'] is List) {
+      return List<String>.from(
+        (shop['types'] as List).map((t) => t.toString().toLowerCase()),
+      );
+    }
+    // Fallback to businessType as single type
+    if (shop['businessType'] != null) {
+      return [shop['businessType'].toString().toLowerCase()];
+    }
+    return [];
+  }
+
+  /// Check if shop types match the selected category using categoryMap
+  /// Returns true if ANY shop type is in the category's mapped types
+  bool _matchesCategory(List<String> shopTypes, String selectedCategory) {
+    final category = selectedCategory.toLowerCase();
+
+    // Get mapped types for this category
+    final mappedTypes = categoryMap[category];
+
+    if (mappedTypes == null || mappedTypes.isEmpty) {
+      // No mapping found - do direct match
+      print('🔍 No mapping for category "$category", doing direct match');
+      return shopTypes.contains(category);
+    }
+
+    // Check if ANY shop type matches ANY mapped type
+    final matches = shopTypes.any((shopType) => mappedTypes.contains(shopType));
+
+    print('🔍 Category match check:');
+    print('  Category: $category');
+    print('  Shop types: $shopTypes');
+    print('  Mapped types: $mappedTypes');
+    print('  Matches: $matches');
+
+    return matches;
+  }
+
+  /// Get count of shops matching selected categories (for legend/stats)
+  int _getFilteredShopCount() {
+    if (_selectedPlaceTypes.isEmpty) return _googlePlacesShops.length;
+
+    return _googlePlacesShops.where((shop) {
+      final shopTypes = _getShopTypes(shop);
+      if (shopTypes.isEmpty) return false;
+      return _selectedPlaceTypes.any((cat) => _matchesCategory(shopTypes, cat));
+    }).length;
   }
 
   List<Map<String, dynamic>> _getFilteredAccountsForSelectedPincodes() {
@@ -1883,6 +2293,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       case 'supermarket':
         return Icons.local_grocery_store;
       case 'convenience_store':
+        return Icons.storefront;
+      case 'grocery_or_supermarket':
         return Icons.storefront;
       case 'lodging':
       case 'hotel':
@@ -2949,7 +3361,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                           _selectedPlaceTypes.remove(placeType['type']);
                           // Ensure at least one place type is always selected
                           if (_selectedPlaceTypes.isEmpty) {
-                            _selectedPlaceTypes.add('convenience_store');
+                            _selectedPlaceTypes.add('grocery_or_supermarket');
                           }
                         } else {
                           _selectedPlaceTypes.add(placeType['type']);
@@ -3030,7 +3442,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      _selectedPlaceTypes = ['convenience_store'];
+                      _selectedPlaceTypes = ['grocery_or_supermarket'];
                     });
                     _loadNearbyPlaces();
                     if (_selectedPincodes.isNotEmpty) {
@@ -3086,8 +3498,11 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             _buildLegendItem('My Location', Colors.blue),
             _buildLegendItem('Approved Shops', Colors.green),
             _buildLegendItem('Pending Shops', Colors.orange),
+            if (_filteredPlaces.isNotEmpty)
+              _buildLegendItem('Filtered Places', Colors.purple)
+            else
+              _buildLegendItem('Nearby Places', Colors.red),
             _buildLegendItem('Google Places', Colors.purple),
-            _buildLegendItem('Nearby Places', Colors.red),
             const SizedBox(height: 8),
           ],
           InkWell(
