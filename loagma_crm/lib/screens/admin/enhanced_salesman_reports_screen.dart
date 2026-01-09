@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
+import '../../services/account_service.dart';
 import '../../utils/time_formatting_utils.dart';
+import '../../models/account_model.dart';
 import 'route_visualization_screen.dart';
 
 class EnhancedSalesmanReportsScreen extends StatefulWidget {
@@ -33,6 +35,14 @@ class _EnhancedSalesmanReportsScreenState
   String selectedPeriod = 'today';
   DateTime? customStartDate;
   DateTime? customEndDate;
+
+  // Accounts pagination
+  List<Account> salesmanAccounts = [];
+  bool isLoadingAccounts = false;
+  int currentAccountsPage = 1;
+  int totalAccountsPages = 1;
+  bool hasMoreAccounts = false;
+  final int accountsPerPage = 10;
 
   // Colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -218,13 +228,75 @@ class _EnhancedSalesmanReportsScreenState
         queryParams['salesmanId'] = selectedSalesmanId!;
       }
 
-      if (customStartDate != null) {
-        queryParams['startDate'] = customStartDate!.toIso8601String();
+      // Handle date ranges based on selected period
+      DateTime? startDate;
+      DateTime? endDate;
+
+      final now = DateTime.now();
+
+      switch (selectedPeriod) {
+        case 'today':
+          startDate = DateTime(now.year, now.month, now.day, 0, 0, 0);
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          startDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            0,
+            0,
+            0,
+          );
+          endDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+            999,
+          );
+          break;
+        case 'custom':
+          if (customStartDate != null) {
+            startDate = DateTime(
+              customStartDate!.year,
+              customStartDate!.month,
+              customStartDate!.day,
+              0,
+              0,
+              0,
+            );
+          }
+          if (customEndDate != null) {
+            endDate = DateTime(
+              customEndDate!.year,
+              customEndDate!.month,
+              customEndDate!.day,
+              23,
+              59,
+              59,
+              999,
+            );
+          }
+          break;
       }
 
-      if (customEndDate != null) {
-        queryParams['endDate'] = customEndDate!.toIso8601String();
+      if (startDate != null) {
+        queryParams['startDate'] = startDate.toIso8601String();
       }
+
+      if (endDate != null) {
+        queryParams['endDate'] = endDate.toIso8601String();
+      }
+
+      // Debug logging
+      print('🗓️ Loading reports for period: $selectedPeriod');
+      print('📅 Start Date: $startDate');
+      print('📅 End Date: $endDate');
+      print('�  Selected Salesman ID: $selectedSalesmanId');
 
       final uri = Uri.parse(
         '${ApiConfig.baseUrl}/salesman-reports/reports',
@@ -250,6 +322,19 @@ class _EnhancedSalesmanReportsScreenState
             isLoading = false;
           });
           print('✅ Reports loaded successfully');
+
+          // Load accounts for selected salesman
+          if (selectedSalesmanId != null) {
+            _loadSalesmanAccounts();
+          } else {
+            // Clear accounts if no salesman selected
+            setState(() {
+              salesmanAccounts = [];
+              currentAccountsPage = 1;
+              totalAccountsPages = 1;
+              hasMoreAccounts = false;
+            });
+          }
         } else {
           throw Exception(data['message'] ?? 'Failed to load reports');
         }
@@ -261,6 +346,134 @@ class _EnhancedSalesmanReportsScreenState
       setState(() {
         isLoading = false;
         errorMessage = 'Error loading reports: $e';
+      });
+    }
+  }
+
+  Future<void> _loadSalesmanAccounts({int page = 1}) async {
+    if (selectedSalesmanId == null) return;
+
+    setState(() {
+      isLoadingAccounts = true;
+    });
+
+    try {
+      // Calculate date range based on selected period
+      DateTime? startDate;
+      DateTime? endDate;
+
+      final now = DateTime.now();
+
+      switch (selectedPeriod) {
+        case 'today':
+          startDate = DateTime(now.year, now.month, now.day, 0, 0, 0);
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          startDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            0,
+            0,
+            0,
+          );
+          endDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+            999,
+          );
+          break;
+        case 'custom':
+          if (customStartDate != null) {
+            startDate = DateTime(
+              customStartDate!.year,
+              customStartDate!.month,
+              customStartDate!.day,
+              0,
+              0,
+              0,
+            );
+          }
+          if (customEndDate != null) {
+            endDate = DateTime(
+              customEndDate!.year,
+              customEndDate!.month,
+              customEndDate!.day,
+              23,
+              59,
+              59,
+              999,
+            );
+          }
+          break;
+      }
+
+      // Debug logging
+      print('🗓️ Loading accounts for period: $selectedPeriod');
+      print('📅 Start Date: $startDate');
+      print('📅 End Date: $endDate');
+      print('👤 Salesman ID: $selectedSalesmanId');
+
+      final result = await AccountService.fetchAccounts(
+        page: page,
+        limit: accountsPerPage,
+        createdById: selectedSalesmanId,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      final accounts = result['accounts'] as List<Account>;
+      final pagination = result['pagination'] as Map<String, dynamic>;
+
+      print('📊 Loaded ${accounts.length} accounts for page $page');
+      if (accounts.isNotEmpty) {
+        print('📊 First account created: ${accounts.first.createdAt}');
+        print('📊 Last account created: ${accounts.last.createdAt}');
+
+        // Debug: Check if any accounts are from today when yesterday is selected
+        if (selectedPeriod == 'yesterday') {
+          final today = DateTime.now();
+          final todayStart = DateTime(today.year, today.month, today.day);
+          final todayAccounts = accounts
+              .where(
+                (account) => account.createdAt.isAfter(
+                  todayStart.subtract(const Duration(milliseconds: 1)),
+                ),
+              )
+              .toList();
+
+          if (todayAccounts.isNotEmpty) {
+            print(
+              '⚠️ WARNING: Found ${todayAccounts.length} accounts from today when yesterday filter is selected!',
+            );
+            for (final account in todayAccounts) {
+              print('   - ${account.personName}: ${account.createdAt}');
+            }
+          }
+        }
+      }
+
+      setState(() {
+        if (page == 1) {
+          salesmanAccounts = accounts;
+        } else {
+          salesmanAccounts.addAll(accounts);
+        }
+        currentAccountsPage = pagination['currentPage'] ?? 1;
+        totalAccountsPages = pagination['totalPages'] ?? 1;
+        hasMoreAccounts = currentAccountsPage < totalAccountsPages;
+        isLoadingAccounts = false;
+      });
+    } catch (e) {
+      print('❌ Error loading salesman accounts: $e');
+      setState(() {
+        isLoadingAccounts = false;
       });
     }
   }
@@ -277,7 +490,7 @@ class _EnhancedSalesmanReportsScreenState
           tabs: const [
             Tab(icon: Icon(Icons.dashboard), text: 'Overview'),
             Tab(icon: Icon(Icons.people), text: 'Performance'),
-            Tab(icon: Icon(Icons.calendar_today), text: 'Daily'),
+            // Tab(icon: Icon(Icons.calendar_today), text: 'Daily'),
           ],
         ),
       ),
@@ -296,7 +509,7 @@ class _EnhancedSalesmanReportsScreenState
                     children: [
                       _buildOverviewTab(),
                       _buildPerformanceTab(),
-                      _buildDailyTab(),
+                      // _buildDailyTab(),
                     ],
                   ),
           ),
@@ -315,7 +528,7 @@ class _EnhancedSalesmanReportsScreenState
       );
     }
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -338,9 +551,10 @@ class _EnhancedSalesmanReportsScreenState
                     labelText: 'Select Salesman',
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                      horizontal: 10,
+                      vertical: 6,
                     ),
+                    isDense: true,
                   ),
                   items: [
                     const DropdownMenuItem<String>(
@@ -360,103 +574,101 @@ class _EnhancedSalesmanReportsScreenState
                   onChanged: (value) {
                     setState(() {
                       selectedSalesmanId = value;
+                      // Reset accounts when salesman changes
+                      salesmanAccounts = [];
+                      currentAccountsPage = 1;
+                      totalAccountsPages = 1;
+                      hasMoreAccounts = false;
                     });
                     _loadReports();
                   },
                 ),
               ),
-              const SizedBox(width: 12),
-
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: _loadReports,
+                onPressed: () {
+                  // Reset accounts pagination when refreshing
+                  setState(() {
+                    salesmanAccounts = [];
+                    currentAccountsPage = 1;
+                    totalAccountsPages = 1;
+                    hasMoreAccounts = false;
+                  });
+                  _loadReports();
+                },
                 tooltip: 'Refresh',
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
-          // Period selector
+          // Period selector - Always single row, compact
           Row(
             children: [
               Expanded(
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'today', label: Text('Today')),
-                    ButtonSegment(value: 'week', label: Text('Week')),
-                    ButtonSegment(value: 'month', label: Text('Month')),
-                    ButtonSegment(value: 'custom', label: Text('Custom')),
-                  ],
-                  selected: {selectedPeriod},
-                  style: ButtonStyle(iconSize: WidgetStateProperty.all(0)),
-                  onSelectionChanged: (Set<String> newSelection) {
-                    setState(() {
-                      selectedPeriod = newSelection.first;
-                      if (selectedPeriod != 'custom') {
-                        customStartDate = null;
-                        customEndDate = null;
-                      }
-                    });
-                    if (selectedPeriod != 'custom') {
-                      _loadReports();
-                    }
-                  },
-                ),
+                child: _buildCompactPeriodButton('yesterday', 'Yesterday'),
               ),
+              const SizedBox(width: 6),
+              Expanded(child: _buildCompactPeriodButton('today', 'Today')),
+              const SizedBox(width: 6),
+              Expanded(child: _buildCompactPeriodButton('custom', 'Custom')),
             ],
           ),
 
-          // Custom date range
+          // Custom date range - Compact layout
           if (selectedPeriod == 'custom') ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: InkWell(
-                    onTap: () => _selectDate(context, true),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Start Date',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        customStartDate != null
-                            ? DateFormat(
-                                'MMM dd, yyyy',
-                              ).format(customStartDate!)
-                            : 'Select start date',
-                      ),
-                    ),
+                  child: _buildCompactDateSelector(
+                    'Start Date',
+                    customStartDate,
+                    () => _selectDate(context, true),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: InkWell(
-                    onTap: () => _selectDate(context, false),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'End Date',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        customEndDate != null
-                            ? DateFormat('MMM dd, yyyy').format(customEndDate!)
-                            : 'Select end date',
-                      ),
-                    ),
+                  child: _buildCompactDateSelector(
+                    'End Date',
+                    customEndDate,
+                    () => _selectDate(context, false),
                   ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: customStartDate != null && customEndDate != null
-                      ? _loadReports
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                  ),
-                  child: const Text('Apply'),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 36,
+              child: ElevatedButton(
+                onPressed: customStartDate != null && customEndDate != null
+                    ? () {
+                        // Reset accounts pagination when applying date range
+                        setState(() {
+                          salesmanAccounts = [];
+                          currentAccountsPage = 1;
+                          totalAccountsPages = 1;
+                          hasMoreAccounts = false;
+                        });
+                        _loadReports();
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                child: const Text(
+                  'Apply Date Range',
+                  style: TextStyle(fontSize: 14),
+                ),
+              ),
             ),
           ],
         ],
@@ -476,11 +688,216 @@ class _EnhancedSalesmanReportsScreenState
       setState(() {
         if (isStartDate) {
           customStartDate = picked;
+          // If end date is before start date, clear it
+          if (customEndDate != null && customEndDate!.isBefore(picked)) {
+            customEndDate = null;
+          }
         } else {
           customEndDate = picked;
         }
       });
     }
+  }
+
+  // Helper method to build period selection buttons
+  Widget _buildPeriodButton(String value, String label) {
+    final isSelected = selectedPeriod == value;
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          selectedPeriod = value;
+          if (value != 'custom') {
+            customStartDate = null;
+            customEndDate = null;
+          }
+          // Reset accounts pagination when period changes
+          salesmanAccounts = [];
+          currentAccountsPage = 1;
+          totalAccountsPages = 1;
+          hasMoreAccounts = false;
+        });
+        if (value != 'custom') {
+          _loadReports();
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected
+            ? primaryColor.withValues(alpha: 0.1)
+            : null,
+        side: BorderSide(
+          color: isSelected ? primaryColor : Colors.grey.withValues(alpha: 0.5),
+          width: isSelected ? 2 : 1,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? primaryColor : Colors.grey[700],
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper method to build date selector widgets
+  Widget _buildDateSelector(
+    String label,
+    DateTime? selectedDate,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedDate != null
+                        ? DateFormat('MMM dd, yyyy').format(selectedDate)
+                        : 'Select $label',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: selectedDate != null
+                          ? Colors.black87
+                          : Colors.grey[500],
+                      fontWeight: selectedDate != null
+                          ? FontWeight.w500
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Compact period button for single row layout
+  Widget _buildCompactPeriodButton(String value, String label) {
+    final isSelected = selectedPeriod == value;
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          selectedPeriod = value;
+          if (value != 'custom') {
+            customStartDate = null;
+            customEndDate = null;
+          }
+          // Reset accounts pagination when period changes
+          salesmanAccounts = [];
+          currentAccountsPage = 1;
+          totalAccountsPages = 1;
+          hasMoreAccounts = false;
+        });
+        if (value != 'custom') {
+          _loadReports();
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected
+            ? primaryColor.withValues(alpha: 0.1)
+            : null,
+        side: BorderSide(
+          color: isSelected ? primaryColor : Colors.grey.withValues(alpha: 0.5),
+          width: isSelected ? 2 : 1,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        minimumSize: const Size(0, 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? primaryColor : Colors.grey[700],
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Compact date selector for smaller layout
+  Widget _buildCompactDateSelector(
+    String label,
+    DateTime? selectedDate,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedDate != null
+                        ? DateFormat('MMM dd, yyyy').format(selectedDate)
+                        : 'Select date',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: selectedDate != null
+                          ? Colors.black87
+                          : Colors.grey[500],
+                      fontWeight: selectedDate != null
+                          ? FontWeight.w500
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorWidget() {
@@ -527,12 +944,12 @@ class _EnhancedSalesmanReportsScreenState
           ),
           const SizedBox(height: 16),
           GridView.count(
-            crossAxisCount: 2,
+            crossAxisCount: 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.4, // Increased from 1.8 to give more height
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.00,
             children: [
               _buildStatCard(
                 'Accounts Created',
@@ -540,12 +957,7 @@ class _EnhancedSalesmanReportsScreenState
                 Icons.add_business,
                 infoColor,
               ),
-              _buildStatCard(
-                'Today\'s Accounts',
-                summary['accountsCreatedToday']?.toString() ?? '0',
-                Icons.today,
-                successColor,
-              ),
+
               _buildStatCard(
                 'Approved',
                 summary['approvedAccounts']?.toString() ?? '0',
@@ -558,33 +970,186 @@ class _EnhancedSalesmanReportsScreenState
                 Icons.pending,
                 warningColor,
               ),
-              _buildStatCard(
-                'Total Visits',
-                summary['totalVisits']?.toString() ?? '0',
-                Icons.location_on,
-                primaryColor,
-              ),
-              _buildStatCard(
-                'Today\'s Visits',
-                summary['visitsToday']?.toString() ?? '0',
-                Icons.today,
-                primaryColor,
-              ),
             ],
           ),
 
           const SizedBox(height: 24),
 
-          // Recent accounts
-          if (reportsData['recentAccounts'] != null) ...[
-            const Text(
-              'Recent Accounts',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          // Accounts created by selected salesman
+          if (selectedSalesmanId != null) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Accounts Created',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        'Filter: ${_getPeriodDisplayName()}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: primaryColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (salesmanAccounts.isNotEmpty)
+                  Text(
+                    'Page $currentAccountsPage of $totalAccountsPages',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
-            ...((reportsData['recentAccounts'] as List).take(5).map((account) {
-              return _buildAccountCard(account);
-            }).toList()),
+
+            // Debug information (remove in production)
+            if (isLoadingAccounts && salesmanAccounts.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(color: primaryColor),
+                ),
+              )
+            else if (salesmanAccounts.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.business_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No accounts found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'No accounts created for ${_getPeriodDisplayName().toLowerCase()}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else ...[
+              // Display accounts
+              ...salesmanAccounts
+                  .map((account) => _buildAccountCardFromModel(account))
+                  .toList(),
+
+              // Pagination controls
+              if (totalAccountsPages > 1) ...[
+                const SizedBox(height: 16),
+                _buildPaginationControls(),
+              ],
+
+              // Load more button (alternative to pagination)
+              if (hasMoreAccounts) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: ElevatedButton.icon(
+                    onPressed: isLoadingAccounts
+                        ? null
+                        : () => _loadSalesmanAccounts(
+                            page: currentAccountsPage + 1,
+                          ),
+                    icon: isLoadingAccounts
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.expand_more),
+                    label: Text(isLoadingAccounts ? 'Loading...' : 'Load More'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ] else ...[
+            // Show message when no salesman is selected
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.person_search,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Select a Salesman',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Choose a salesman from the dropdown to view their created accounts',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -1326,53 +1891,58 @@ class _EnhancedSalesmanReportsScreenState
     String title,
     String value,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return Card(
       elevation: 2,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Icon with responsive sizing
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon with responsive sizing
+              Icon(icon, size: 32, color: color),
+              const SizedBox(height: 8),
 
-            // Value with responsive text and proper constraints
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+              // Value with responsive text and proper constraints
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              // Title with better spacing and readability
+              Flexible(
+                child: Text(
+                  title,
                   textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-
-            const SizedBox(height: 4),
-
-            // Title with better spacing and readability
-            Flexible(
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1437,6 +2007,233 @@ class _EnhancedSalesmanReportsScreenState
         trailing: account['isApproved'] == true
             ? const Icon(Icons.verified, color: successColor)
             : const Icon(Icons.pending, color: warningColor),
+      ),
+    );
+  }
+
+  Widget _buildAccountCardFromModel(Account account) {
+    final createdAt = account.createdAt;
+    final timeAgo = TimeFormattingUtils.getRelativeTime(createdAt);
+    final formattedDateTime = TimeFormattingUtils.getFormattedDateTime(
+      createdAt,
+    );
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 2,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: primaryColor,
+          child: Text(
+            (account.personName)[0].toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(
+          account.personName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (account.businessName != null &&
+                account.businessName!.isNotEmpty)
+              Text(account.businessName!, style: const TextStyle(fontSize: 14)),
+            if (account.contactNumber.isNotEmpty)
+              Text(
+                account.contactNumber,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              'Created $timeAgo',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            Text(
+              formattedDateTime,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              account.isApproved ? Icons.verified : Icons.pending,
+              color: account.isApproved ? successColor : warningColor,
+              size: 24,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              account.isApproved ? 'Approved' : 'Pending',
+              style: TextStyle(
+                fontSize: 10,
+                color: account.isApproved ? successColor : warningColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          // Navigate to account details if needed
+          // Navigator.push(context, MaterialPageRoute(builder: (context) => AccountDetailScreen(account: account)));
+        },
+      ),
+    );
+  }
+
+  // Helper method to get display name for current period
+  String _getPeriodDisplayName() {
+    switch (selectedPeriod) {
+      case 'today':
+        return 'Today (${DateFormat('MMM dd, yyyy').format(DateTime.now())})';
+      case 'yesterday':
+        final yesterday = DateTime.now().subtract(const Duration(days: 1));
+        return 'Yesterday (${DateFormat('MMM dd, yyyy').format(yesterday)})';
+      case 'custom':
+        if (customStartDate != null && customEndDate != null) {
+          if (customStartDate!.day == customEndDate!.day &&
+              customStartDate!.month == customEndDate!.month &&
+              customStartDate!.year == customEndDate!.year) {
+            return DateFormat('MMM dd, yyyy').format(customStartDate!);
+          } else {
+            return '${DateFormat('MMM dd').format(customStartDate!)} - ${DateFormat('MMM dd, yyyy').format(customEndDate!)}';
+          }
+        }
+        return 'Custom Range';
+      default:
+        return selectedPeriod.toUpperCase();
+    }
+  }
+
+  // Helper method to get debug date range information
+  String _getDebugDateRange() {
+    final now = DateTime.now();
+    DateTime? startDate;
+    DateTime? endDate;
+
+    switch (selectedPeriod) {
+      case 'today':
+        startDate = DateTime(now.year, now.month, now.day, 0, 0, 0);
+        endDate = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+        break;
+      case 'yesterday':
+        final yesterday = now.subtract(const Duration(days: 1));
+        startDate = DateTime(
+          yesterday.year,
+          yesterday.month,
+          yesterday.day,
+          0,
+          0,
+          0,
+        );
+        endDate = DateTime(
+          yesterday.year,
+          yesterday.month,
+          yesterday.day,
+          23,
+          59,
+          59,
+          999,
+        );
+        break;
+      case 'custom':
+        if (customStartDate != null) {
+          startDate = DateTime(
+            customStartDate!.year,
+            customStartDate!.month,
+            customStartDate!.day,
+            0,
+            0,
+            0,
+          );
+        }
+        if (customEndDate != null) {
+          endDate = DateTime(
+            customEndDate!.year,
+            customEndDate!.month,
+            customEndDate!.day,
+            23,
+            59,
+            59,
+            999,
+          );
+        }
+        break;
+    }
+
+    if (startDate != null && endDate != null) {
+      return '${DateFormat('MMM dd HH:mm').format(startDate)} - ${DateFormat('MMM dd HH:mm').format(endDate)}';
+    } else if (startDate != null) {
+      return 'From: ${DateFormat('MMM dd HH:mm').format(startDate)}';
+    } else if (endDate != null) {
+      return 'Until: ${DateFormat('MMM dd HH:mm').format(endDate)}';
+    } else {
+      return 'No date filter';
+    }
+  }
+
+  Widget _buildPaginationControls() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Previous button
+            ElevatedButton.icon(
+              onPressed: currentAccountsPage > 1 && !isLoadingAccounts
+                  ? () => _loadSalesmanAccounts(page: currentAccountsPage - 1)
+                  : null,
+              icon: const Icon(Icons.chevron_left),
+              label: const Text('Previous'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: currentAccountsPage > 1
+                    ? primaryColor
+                    : Colors.grey,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+
+            // Page info
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'Page $currentAccountsPage of $totalAccountsPages',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+
+            // Next button
+            ElevatedButton.icon(
+              onPressed: hasMoreAccounts && !isLoadingAccounts
+                  ? () => _loadSalesmanAccounts(page: currentAccountsPage + 1)
+                  : null,
+              icon: const Icon(Icons.chevron_right),
+              label: const Text('Next'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: hasMoreAccounts ? primaryColor : Colors.grey,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2101,6 +2898,118 @@ class _EnhancedSalesmanReportsScreenState
     );
   }
 
+  /// Test backend date filtering directly
+  Future<void> _testBackendDateFiltering() async {
+    try {
+      final token = UserService.token;
+      if (token == null) {
+        print('❌ No token available for testing');
+        return;
+      }
+
+      // Calculate date range based on selected period
+      DateTime? startDate;
+      DateTime? endDate;
+
+      final now = DateTime.now();
+
+      switch (selectedPeriod) {
+        case 'today':
+          startDate = DateTime(now.year, now.month, now.day, 0, 0, 0);
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          final yesterday = now.subtract(const Duration(days: 1));
+          startDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            0,
+            0,
+            0,
+          );
+          endDate = DateTime(
+            yesterday.year,
+            yesterday.month,
+            yesterday.day,
+            23,
+            59,
+            59,
+            999,
+          );
+          break;
+        case 'custom':
+          if (customStartDate != null) {
+            startDate = DateTime(
+              customStartDate!.year,
+              customStartDate!.month,
+              customStartDate!.day,
+              0,
+              0,
+              0,
+            );
+          }
+          if (customEndDate != null) {
+            endDate = DateTime(
+              customEndDate!.year,
+              customEndDate!.month,
+              customEndDate!.day,
+              23,
+              59,
+              59,
+              999,
+            );
+          }
+          break;
+      }
+
+      final queryParams = <String, String>{'period': selectedPeriod};
+
+      if (startDate != null) {
+        queryParams['startDate'] = startDate.toIso8601String();
+      }
+
+      if (endDate != null) {
+        queryParams['endDate'] = endDate.toIso8601String();
+      }
+
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/accounts/debug-date-filtering',
+      ).replace(queryParameters: queryParams);
+
+      print('🧪 Testing backend date filtering: $uri');
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('🧪 Backend test response: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('🧪 Backend debug data: ${jsonEncode(data['debug'])}');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Backend test completed. Check console for details.',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        print('🧪 Backend test failed: ${response.body}');
+      }
+    } catch (e) {
+      print('🧪 Backend test error: $e');
+    }
+  }
+
   /// Navigate to historical route visualization for a specific salesman
   void _viewHistoricalRoutes(Map<String, dynamic> salesman) {
     final employeeId = salesman['id'];
@@ -2124,6 +3033,55 @@ class _EnhancedSalesmanReportsScreenState
           employeeName: employeeName,
           showDatePicker: true, // Enable date picker for historical routes
         ),
+      ),
+    );
+  }
+
+  /// Show detailed accounts information based on filter type
+  void _showAccountsDetails(String filterType) {
+    final recentAccounts = reportsData['recentAccounts'] ?? [];
+    List<Map<String, dynamic>> filteredAccounts = [];
+
+    switch (filterType) {
+      case 'all':
+        filteredAccounts = List<Map<String, dynamic>>.from(recentAccounts);
+        break;
+      case 'approved':
+        filteredAccounts = recentAccounts
+            .where((account) => account['isApproved'] == true)
+            .cast<Map<String, dynamic>>()
+            .toList();
+        break;
+      case 'pending':
+        filteredAccounts = recentAccounts
+            .where((account) => account['isApproved'] != true)
+            .cast<Map<String, dynamic>>()
+            .toList();
+        break;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${filterType.toUpperCase()} Accounts'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: filteredAccounts.isEmpty
+              ? Center(child: Text('No ${filterType} accounts found'))
+              : ListView.builder(
+                  itemCount: filteredAccounts.length,
+                  itemBuilder: (context, index) {
+                    return _buildAccountCard(filteredAccounts[index]);
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }

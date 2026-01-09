@@ -790,19 +790,23 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                         ],
                       ),
                     ),
-                  Text(
-                    acc.personName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+
                   if (acc.businessName != null)
                     Text(
                       acc.businessName!,
-                      style: const TextStyle(fontSize: 18),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  const SizedBox(height: 8),
+
+                  Text(
+                    acc.personName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   Text(
                     acc.accountCode ?? '',
                     style: TextStyle(color: Colors.grey[600]),
