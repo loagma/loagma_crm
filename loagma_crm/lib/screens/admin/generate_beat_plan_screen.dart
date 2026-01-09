@@ -363,7 +363,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
       appBar: AppBar(
         title: const Text('Generate Beat Plan'),
         backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: const Color.fromARGB(179, 9, 9, 9),
       ),
       body: Form(
         key: _formKey,
