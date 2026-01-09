@@ -507,7 +507,14 @@ export const updateAccount = async (req, res) => {
 
     // Check if account exists
     const existingAccount = await prisma.account.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        createdBy: {
+          include: {
+            role: true
+          }
+        }
+      }
     });
 
     if (!existingAccount) {
@@ -515,6 +522,40 @@ export const updateAccount = async (req, res) => {
         success: false,
         message: 'Account not found'
       });
+    }
+
+    // Get current user info from request
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role?.code || req.body.userRole;
+
+    // Check if user is admin (admins can edit anytime)
+    const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN';
+
+    // If not admin, check 2-hour edit window for the creator
+    if (!isAdmin) {
+      const isCreator = existingAccount.createdById === currentUserId;
+      
+      if (isCreator) {
+        // Check if account was created within the last 2 hours
+        const createdAt = new Date(existingAccount.createdAt);
+        const now = new Date();
+        const twoHoursInMs = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+        const timeDiff = now.getTime() - createdAt.getTime();
+
+        if (timeDiff > twoHoursInMs) {
+          return res.status(403).json({
+            success: false,
+            message: 'Edit window expired. You can only edit accounts within 2 hours of creation.',
+            editWindowExpired: true
+          });
+        }
+      } else {
+        // Non-admin trying to edit someone else's account
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to edit this account'
+        });
+      }
     }
 
     // If updating contact number, check for duplicates

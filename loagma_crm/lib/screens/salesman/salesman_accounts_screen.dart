@@ -1240,7 +1240,90 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     }
   }
 
+  /// Check if the current user can edit the account
+  /// Admin can edit anytime, salesman can only edit within 2 hours of creation
+  bool _canEditAccount(Map<String, dynamic> account) {
+    final currentRole = UserService.currentRole?.toUpperCase();
+    final currentUserId = UserService.currentUserId;
+
+    // Admin can always edit
+    if (currentRole == 'ADMIN' || currentRole == 'SUPER_ADMIN') {
+      return true;
+    }
+
+    // Check if current user is the creator
+    final createdById = account['createdById']?.toString();
+    if (createdById != currentUserId) {
+      return false;
+    }
+
+    // Check 2-hour edit window
+    final createdAtStr = account['createdAt']?.toString();
+    if (createdAtStr == null) {
+      return false;
+    }
+
+    try {
+      final createdAt = DateTime.parse(createdAtStr);
+      final now = DateTime.now();
+      final difference = now.difference(createdAt);
+      final twoHours = const Duration(hours: 2);
+
+      return difference <= twoHours;
+    } catch (e) {
+      print('Error parsing createdAt: $e');
+      return false;
+    }
+  }
+
+  /// Get remaining edit time for display
+  String _getRemainingEditTime(Map<String, dynamic> account) {
+    final createdAtStr = account['createdAt']?.toString();
+    if (createdAtStr == null) return '';
+
+    try {
+      final createdAt = DateTime.parse(createdAtStr);
+      final now = DateTime.now();
+      final difference = now.difference(createdAt);
+      final twoHours = const Duration(hours: 2);
+      final remaining = twoHours - difference;
+
+      if (remaining.isNegative) {
+        return 'Edit window expired';
+      }
+
+      final hours = remaining.inHours;
+      final minutes = remaining.inMinutes % 60;
+
+      if (hours > 0) {
+        return '${hours}h ${minutes}m left to edit';
+      } else {
+        return '${minutes}m left to edit';
+      }
+    } catch (e) {
+      return '';
+    }
+  }
+
   void _editAccount(Map<String, dynamic> account) async {
+    // Check if user can edit this account
+    if (!_canEditAccount(account)) {
+      final currentRole = UserService.currentRole?.toUpperCase();
+      final isAdmin = currentRole == 'ADMIN' || currentRole == 'SUPER_ADMIN';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isAdmin
+                ? 'You do not have permission to edit this account'
+                : 'Edit window expired. You can only edit accounts within 2 hours of creation.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Navigate to existing edit account master screen
     final accountId = account['id']?.toString();
 
@@ -1295,6 +1378,12 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
     final hasPhone =
         account['contactNumber'] != null &&
         account['contactNumber'].toString().isNotEmpty;
+
+    // Check if user can edit this account
+    final canEdit = _canEditAccount(account);
+    final remainingTime = _getRemainingEditTime(account);
+    final currentRole = UserService.currentRole?.toUpperCase();
+    final isAdmin = currentRole == 'ADMIN' || currentRole == 'SUPER_ADMIN';
 
     // Professional color scheme
     const primaryGold = Color(0xFFD7BE69);
@@ -1385,28 +1474,30 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Edit Button
+                      // Edit Button - conditionally enabled
                       Container(
                         decoration: BoxDecoration(
-                          color: primaryGold,
+                          color: canEdit ? primaryGold : Colors.grey[400],
                           borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryGold.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
+                          boxShadow: canEdit
+                              ? [
+                                  BoxShadow(
+                                    color: primaryGold.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () => _editAccount(account),
                             borderRadius: BorderRadius.circular(12),
-                            child: const Padding(
-                              padding: EdgeInsets.all(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
                               child: Icon(
-                                Icons.edit,
+                                canEdit ? Icons.edit : Icons.edit_off,
                                 color: Colors.white,
                                 size: 22,
                               ),
@@ -1450,6 +1541,50 @@ class _SalesmanAccountsScreenState extends State<SalesmanAccountsScreen> {
                   ),
                 ],
               ),
+
+              // Show remaining edit time for non-admin users
+              if (!isAdmin && remainingTime.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: canEdit
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: canEdit
+                          ? Colors.green.withOpacity(0.3)
+                          : Colors.orange.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        canEdit ? Icons.timer : Icons.timer_off,
+                        size: 14,
+                        color: canEdit ? Colors.green[700] : Colors.orange[700],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        remainingTime,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: canEdit
+                              ? Colors.green[700]
+                              : Colors.orange[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 16),
 
               // Divider
