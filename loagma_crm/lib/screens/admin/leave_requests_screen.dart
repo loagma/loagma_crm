@@ -328,15 +328,18 @@ class _LeaveRequestsScreenState extends State<LeaveRequestsScreen>
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(
+              Icons.refresh,
+              color: Color.fromARGB(255, 40, 39, 39),
+            ),
             onPressed: _onRefresh,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: const Color.fromARGB(179, 9, 9, 9),
+          labelColor: const Color.fromARGB(179, 9, 9, 9),
+          unselectedLabelColor: const Color.fromARGB(179, 9, 9, 9),
           tabs: [
             Tab(
               text: 'Pending (${pendingLeaves.length})',

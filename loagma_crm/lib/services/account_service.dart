@@ -149,13 +149,11 @@ class AccountService {
         if (createdById != null) 'createdById': createdById,
         if (search != null) 'search': search,
         if (startDate != null)
-          'startDate': startDate.toIso8601String().split(
-            'T',
-          )[0], // Send only date part
+          'startDate': startDate
+              .toIso8601String(), // Send full ISO string with time
         if (endDate != null)
-          'endDate': endDate.toIso8601String().split(
-            'T',
-          )[0], // Send only date part
+          'endDate': endDate
+              .toIso8601String(), // Send full ISO string with time
       };
 
       final uri = Uri.parse(
