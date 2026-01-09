@@ -36,10 +36,82 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   bool _isFilterExpanded = false; // Filter section collapsed by default
 
   // Filter states
-  Set<String> _stageFilter = {}; // Funnel stage filter
-  Set<String> _businessTypeFilter = {}; // Business type filter
+  Set<String> _stageFilter = {}; // Business status filter
+  Set<String> _businessTypeFilter = {}; // Combined business/place type filter
+  Set<String> _ratingFilter = {}; // Rating filter
+  Set<String> _priceFilter = {}; // Price level filter
   bool _showGooglePlaces = true; // Show Google Places businesses
   bool _showSalesmanCreated = true; // Show salesman-created accounts
+
+  // Combined business types - includes both dynamic types and Google Places API types
+  static const List<Map<String, dynamic>> _predefinedBusinessTypes = [
+    {
+      'type': 'grocery_or_supermarket',
+      'name': 'Grocery Store',
+      'icon': Icons.local_grocery_store,
+      'color': Colors.green,
+    },
+    {
+      'type': 'restaurant',
+      'name': 'Restaurant',
+      'icon': Icons.restaurant,
+      'color': Colors.orange,
+    },
+    {
+      'type': 'cafe',
+      'name': 'Cafe',
+      'icon': Icons.local_cafe,
+      'color': Colors.brown,
+    },
+    {
+      'type': 'pharmacy',
+      'name': 'Pharmacy',
+      'icon': Icons.local_pharmacy,
+      'color': Colors.red,
+    },
+    {
+      'type': 'clothing_store',
+      'name': 'Clothing Store',
+      'icon': Icons.checkroom,
+      'color': Colors.purple,
+    },
+    {
+      'type': 'electronics_store',
+      'name': 'Electronics',
+      'icon': Icons.devices,
+      'color': Colors.blue,
+    },
+    {
+      'type': 'bank',
+      'name': 'Bank',
+      'icon': Icons.account_balance,
+      'color': Colors.indigo,
+    },
+    {
+      'type': 'gas_station',
+      'name': 'Gas Station',
+      'icon': Icons.local_gas_station,
+      'color': Colors.teal,
+    },
+    {
+      'type': 'bakery',
+      'name': 'Bakery',
+      'icon': Icons.bakery_dining,
+      'color': Colors.amber,
+    },
+    {
+      'type': 'beauty_salon',
+      'name': 'Beauty Salon',
+      'icon': Icons.content_cut,
+      'color': Colors.pink,
+    },
+    {
+      'type': 'hospital',
+      'name': 'Hospital',
+      'icon': Icons.local_hospital,
+      'color': Colors.redAccent,
+    },
+  ];
 
   // Place details overlay state
   PlaceInfo? _selectedPlace;
@@ -246,14 +318,42 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     // Add markers for Google Places businesses (with filters)
     if (_showGooglePlaces) {
       for (var shop in _shops) {
-        // Apply filters
+        // Apply business status filter
         if (_stageFilter.isNotEmpty &&
-            !_stageFilter.contains(shop.stage.toLowerCase())) {
+            !_stageFilter.contains(_getBusinessStatus(shop).toLowerCase())) {
           continue;
         }
-        if (_businessTypeFilter.isNotEmpty &&
-            !_businessTypeFilter.contains(shop.businessType.toLowerCase())) {
-          continue;
+
+        // Apply business type filter (includes both dynamic and predefined types)
+        if (_businessTypeFilter.isNotEmpty) {
+          bool matchesBusinessType = false;
+          for (String selectedType in _businessTypeFilter) {
+            if (shop.businessType.toLowerCase().contains(
+                  selectedType.toLowerCase(),
+                ) ||
+                selectedType.toLowerCase().contains(
+                  shop.businessType.toLowerCase(),
+                ) ||
+                _isBusinessTypeMatch(shop.businessType, selectedType)) {
+              matchesBusinessType = true;
+              break;
+            }
+          }
+          if (!matchesBusinessType) continue;
+        }
+
+        // Apply rating filter
+        if (_ratingFilter.isNotEmpty && shop.rating != null) {
+          final ratingRange = _getRatingRange(shop.rating!);
+          if (!_ratingFilter.contains(ratingRange)) {
+            continue;
+          }
+        }
+
+        // Apply price filter (if available)
+        if (_priceFilter.isNotEmpty) {
+          // This would need price_level from Google Places API
+          // For now, skip this filter for shops without price data
         }
 
         if (shop.latitude != null && shop.longitude != null) {
@@ -267,10 +367,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
               position: LatLng(shop.latitude!, shop.longitude!),
               infoWindow: InfoWindow(
                 title: shop.name,
-                snippet: '${shop.businessType} - ${shop.stage}',
+                snippet:
+                    '${shop.businessType} - ${_getBusinessStatus(shop)}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
               ),
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                _getMarkerColor(shop.stage),
+                _getMarkerColorByStatus(_getBusinessStatus(shop)),
               ),
               onTap: () => _showShopDetails(shop, false),
             ),
@@ -282,14 +383,36 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     // Add markers for salesman-created accounts (with filters)
     if (_showSalesmanCreated) {
       for (var shop in _salesmanCreatedShops) {
-        // Apply filters
+        // Apply business status filter
         if (_stageFilter.isNotEmpty &&
             !_stageFilter.contains(shop.stage.toLowerCase())) {
           continue;
         }
-        if (_businessTypeFilter.isNotEmpty &&
-            !_businessTypeFilter.contains(shop.businessType.toLowerCase())) {
-          continue;
+
+        // Apply business type filter (includes both dynamic and predefined types)
+        if (_businessTypeFilter.isNotEmpty) {
+          bool matchesBusinessType = false;
+          for (String selectedType in _businessTypeFilter) {
+            if (shop.businessType.toLowerCase().contains(
+                  selectedType.toLowerCase(),
+                ) ||
+                selectedType.toLowerCase().contains(
+                  shop.businessType.toLowerCase(),
+                ) ||
+                _isBusinessTypeMatch(shop.businessType, selectedType)) {
+              matchesBusinessType = true;
+              break;
+            }
+          }
+          if (!matchesBusinessType) continue;
+        }
+
+        // Apply rating filter
+        if (_ratingFilter.isNotEmpty && shop.rating != null) {
+          final ratingRange = _getRatingRange(shop.rating!);
+          if (!_ratingFilter.contains(ratingRange)) {
+            continue;
+          }
         }
 
         if (shop.latitude != null && shop.longitude != null) {
@@ -303,7 +426,8 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
               position: LatLng(shop.latitude!, shop.longitude!),
               infoWindow: InfoWindow(
                 title: '⭐ ${shop.name}',
-                snippet: 'Created by Salesman - ${shop.stage}',
+                snippet:
+                    'Created by Salesman - ${shop.stage}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
               ),
               icon: BitmapDescriptor.defaultMarkerWithHue(
                 BitmapDescriptor.hueViolet, // Purple for salesman-created
@@ -332,23 +456,71 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     }
   }
 
-  double _getMarkerColor(String stage) {
-    switch (stage.toLowerCase()) {
-      case 'new':
-        return BitmapDescriptor.hueYellow;
-      case 'Lead':
-        return BitmapDescriptor.hueOrange;
-      case 'Prospect':
-        return BitmapDescriptor.hueBlue;
-      case 'Customer':
-        return BitmapDescriptor.hueCyan;
-      case 'Inactive':
+  String _getBusinessStatus(Shop shop) {
+    // For Google Places, determine status based on available data
+    if (shop.rating != null && shop.rating! >= 4.0) {
+      return 'Popular';
+    } else if (shop.rating != null && shop.rating! >= 3.0) {
+      return 'Active';
+    } else if (shop.rating != null) {
+      return 'Needs Attention';
+    } else {
+      return 'New Listing';
+    }
+  }
+
+  String _getRatingRange(double rating) {
+    if (rating >= 4.5) return '4.5+ Stars';
+    if (rating >= 4.0) return '4.0+ Stars';
+    if (rating >= 3.5) return '3.5+ Stars';
+    if (rating >= 3.0) return '3.0+ Stars';
+    if (rating >= 2.0) return '2.0+ Stars';
+    return 'Below 2 Stars';
+  }
+
+  double _getMarkerColorByStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'popular':
         return BitmapDescriptor.hueGreen;
-      case 'lost':
+      case 'active':
+        return BitmapDescriptor.hueBlue;
+      case 'needs attention':
+        return BitmapDescriptor.hueOrange;
+      case 'new listing':
+        return BitmapDescriptor.hueYellow;
+      case 'lead':
+        return BitmapDescriptor.hueOrange;
+      case 'prospect':
+        return BitmapDescriptor.hueBlue;
+      case 'customer':
+        return BitmapDescriptor.hueGreen;
+      case 'inactive':
         return BitmapDescriptor.hueRed;
       default:
-        return BitmapDescriptor.hueOrange;
+        return BitmapDescriptor.hueYellow;
     }
+  }
+
+  bool _isBusinessTypeMatch(String businessType, String selectedType) {
+    // Map business types to Google Places types and common variations
+    final typeMapping = {
+      'grocery_or_supermarket': ['grocery', 'supermarket', 'kirana', 'store'],
+      'restaurant': ['restaurant', 'food', 'dining', 'eatery'],
+      'cafe': ['cafe', 'coffee', 'tea'],
+      'pharmacy': ['pharmacy', 'medical', 'drugstore', 'medicine'],
+      'clothing_store': ['clothing', 'fashion', 'apparel', 'garment'],
+      'electronics_store': ['electronics', 'mobile', 'computer', 'gadget'],
+      'bank': ['bank', 'finance', 'atm'],
+      'gas_station': ['gas', 'petrol', 'fuel', 'station'],
+      'bakery': ['bakery', 'bread', 'cake', 'pastry', 'sweet'],
+      'beauty_salon': ['beauty', 'salon', 'hair', 'spa', 'parlour'],
+      'hospital': ['hospital', 'clinic', 'medical', 'health', 'doctor'],
+    };
+
+    final mappedTypes = typeMapping[selectedType] ?? [];
+    return mappedTypes.any(
+      (type) => businessType.toLowerCase().contains(type.toLowerCase()),
+    );
   }
 
   void _showShopDetails(Shop shop, bool isSalesmanCreated) {
@@ -690,6 +862,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                             const SizedBox(width: 4),
                             if (_stageFilter.isNotEmpty ||
                                 _businessTypeFilter.isNotEmpty ||
+                                _ratingFilter.isNotEmpty ||
                                 !_showGooglePlaces ||
                                 !_showSalesmanCreated)
                               Container(
@@ -747,7 +920,87 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        FilterChip(
+                                          label: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.map,
+                                                size: 12,
+                                                color: Colors.green,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Google (${_shops.length})',
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          selected: _showGooglePlaces,
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showGooglePlaces = selected;
+                                              _createMarkers();
+                                            });
+                                          },
+                                          selectedColor: Colors.green
+                                              .withValues(alpha: 0.2),
+                                          checkmarkColor: Colors.green,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 2,
+                                          ),
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        FilterChip(
+                                          label: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.person_pin,
+                                                size: 12,
+                                                color: Colors.purple,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Salesman (${_salesmanCreatedShops.length})',
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          selected: _showSalesmanCreated,
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showSalesmanCreated = selected;
+                                              _createMarkers();
+                                            });
+                                          },
+                                          selectedColor: Colors.purple
+                                              .withValues(alpha: 0.2),
+                                          checkmarkColor: Colors.purple,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 2,
+                                          ),
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                                 if (!_showGooglePlaces || !_showSalesmanCreated)
                                   TextButton(
                                     onPressed: () {
@@ -767,85 +1020,10 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                           MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     child: const Text(
-                                      'Show All',
+                                      'All',
                                       style: TextStyle(fontSize: 10),
                                     ),
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                FilterChip(
-                                  label: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.map,
-                                        size: 12,
-                                        color: Colors.green,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Google (${_shops.length})',
-                                        style: const TextStyle(fontSize: 10),
-                                      ),
-                                    ],
-                                  ),
-                                  selected: _showGooglePlaces,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      _showGooglePlaces = selected;
-                                      _createMarkers();
-                                    });
-                                  },
-                                  selectedColor: Colors.green.withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  checkmarkColor: Colors.green,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
-                                  ),
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                FilterChip(
-                                  label: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.person_pin,
-                                        size: 12,
-                                        color: Colors.purple,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Salesman (${_salesmanCreatedShops.length})',
-                                        style: const TextStyle(fontSize: 10),
-                                      ),
-                                    ],
-                                  ),
-                                  selected: _showSalesmanCreated,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      _showSalesmanCreated = selected;
-                                      _createMarkers();
-                                    });
-                                  },
-                                  selectedColor: Colors.purple.withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  checkmarkColor: Colors.purple,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
-                                  ),
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
                               ],
                             ),
 
@@ -863,13 +1041,57 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                                 const SizedBox(width: 6),
                                 const Text(
-                                  'Funnel Stage:',
+                                  'Stage:',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        _buildStageFilterChip(
+                                          'New',
+                                          'new',
+                                          Colors.yellow,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildStageFilterChip(
+                                          'Lead',
+                                          'lead',
+                                          Colors.orange,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildStageFilterChip(
+                                          'Prospect',
+                                          'prospect',
+                                          Colors.blue,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildStageFilterChip(
+                                          'Follow-up',
+                                          'follow-up',
+                                          Colors.cyan,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildStageFilterChip(
+                                          'Converted',
+                                          'converted',
+                                          Colors.green,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildStageFilterChip(
+                                          'Lost',
+                                          'lost',
+                                          Colors.red,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                                 if (_stageFilter.isNotEmpty)
                                   TextButton(
                                     onPressed: () {
@@ -894,49 +1116,12 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                _buildStageFilterChip(
-                                  'New',
-                                  'new',
-                                  Colors.yellow,
-                                ),
-                                _buildStageFilterChip(
-                                  'Lead',
-                                  'lead',
-                                  Colors.orange,
-                                ),
-                                _buildStageFilterChip(
-                                  'Prospect',
-                                  'prospect',
-                                  Colors.blue,
-                                ),
-                                _buildStageFilterChip(
-                                  'Follow-up',
-                                  'follow-up',
-                                  Colors.cyan,
-                                ),
-                                _buildStageFilterChip(
-                                  'Converted',
-                                  'converted',
-                                  Colors.green,
-                                ),
-                                _buildStageFilterChip(
-                                  'Lost',
-                                  'lost',
-                                  Colors.red,
-                                ),
-                              ],
-                            ),
 
                             const SizedBox(height: 12),
                             const Divider(height: 1),
                             const SizedBox(height: 12),
 
-                            // Business Type Filter
+                            // Business Type Filter (Combined - Dynamic + Predefined Google Places Types)
                             Row(
                               children: [
                                 const Icon(
@@ -945,12 +1130,61 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                   color: Color(0xFFD7BE69),
                                 ),
                                 const SizedBox(width: 6),
+                                const Text(
+                                  'Business Type:',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(
-                                    'Business Type: ${_businessTypeFilter.isEmpty ? "All" : "${_businessTypeFilter.length} selected"}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        // Predefined Google Places types
+                                        ..._predefinedBusinessTypes
+                                            .asMap()
+                                            .entries
+                                            .map((entry) {
+                                              final index = entry.key;
+                                              final businessType = entry.value;
+                                              return Row(
+                                                children: [
+                                                  if (index > 0)
+                                                    const SizedBox(width: 6),
+                                                  _buildPredefinedBusinessTypeChip(
+                                                    businessType,
+                                                  ),
+                                                ],
+                                              );
+                                            }),
+                                        // Dynamic business types from data
+                                        ..._getAvailableBusinessTypes()
+                                            .where(
+                                              (type) =>
+                                                  !_predefinedBusinessTypes.any(
+                                                    (predefined) =>
+                                                        predefined['type'] ==
+                                                            type ||
+                                                        _isBusinessTypeMatch(
+                                                          type,
+                                                          predefined['type'],
+                                                        ),
+                                                  ),
+                                            )
+                                            .map(
+                                              (type) => Row(
+                                                children: [
+                                                  const SizedBox(width: 6),
+                                                  _buildDynamicBusinessTypeChip(
+                                                    type,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -978,17 +1212,6 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: _getAvailableBusinessTypes()
-                                  .map(
-                                    (type) =>
-                                        _buildBusinessTypeFilterChip(type),
-                                  )
-                                  .toList(),
-                            ),
 
                             const SizedBox(height: 12),
                             const Divider(height: 1),
@@ -1010,7 +1233,58 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        _buildLegendChip(
+                                          'New',
+                                          Colors.yellow,
+                                          _getFilteredCount('new'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Lead',
+                                          Colors.orange,
+                                          _getFilteredCount('lead'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Prospect',
+                                          Colors.blue,
+                                          _getFilteredCount('prospect'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Follow-up',
+                                          Colors.cyan,
+                                          _getFilteredCount('follow-up'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Converted',
+                                          Colors.green,
+                                          _getFilteredCount('converted'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Lost',
+                                          Colors.red,
+                                          _getFilteredCount('lost'),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _buildLegendChip(
+                                          'Salesman',
+                                          Colors.purple,
+                                          _getFilteredSalesmanCount(),
+                                          isSpecial: true,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                                 InkWell(
                                   onTap: () {
                                     setState(() {
@@ -1030,51 +1304,6 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                               ],
                             ),
-                            if (_isLegendExpanded) ...[
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  _buildLegendChip(
-                                    'New',
-                                    Colors.yellow,
-                                    _getFilteredCount('new'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Lead',
-                                    Colors.orange,
-                                    _getFilteredCount('lead'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Prospect',
-                                    Colors.blue,
-                                    _getFilteredCount('prospect'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Follow-up',
-                                    Colors.cyan,
-                                    _getFilteredCount('follow-up'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Converted',
-                                    Colors.green,
-                                    _getFilteredCount('converted'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Lost',
-                                    Colors.red,
-                                    _getFilteredCount('lost'),
-                                  ),
-                                  _buildLegendChip(
-                                    'Salesman',
-                                    Colors.purple,
-                                    _getFilteredSalesmanCount(),
-                                    isSpecial: true,
-                                  ),
-                                ],
-                              ),
-                            ],
                           ],
                         ),
                       ),
@@ -1416,7 +1645,41 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     );
   }
 
-  Widget _buildBusinessTypeFilterChip(String type) {
+  Widget _buildPredefinedBusinessTypeChip(Map<String, dynamic> businessType) {
+    final type = businessType['type'] as String;
+    final name = businessType['name'] as String;
+    final icon = businessType['icon'] as IconData;
+    final color = businessType['color'] as Color;
+    final isSelected = _businessTypeFilter.contains(type);
+
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: isSelected ? Colors.white : color),
+          const SizedBox(width: 4),
+          Text(name, style: const TextStyle(fontSize: 10)),
+        ],
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() {
+          if (selected) {
+            _businessTypeFilter.add(type);
+          } else {
+            _businessTypeFilter.remove(type);
+          }
+          _createMarkers();
+        });
+      },
+      selectedColor: color.withValues(alpha: 0.8),
+      checkmarkColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  Widget _buildDynamicBusinessTypeChip(String type) {
     final isSelected = _businessTypeFilter.contains(type.toLowerCase());
     return FilterChip(
       label: Text(
