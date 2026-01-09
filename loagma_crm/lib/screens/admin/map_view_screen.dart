@@ -12,6 +12,7 @@ import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 import '../../services/shop_service.dart';
 import '../../config/google_places_config.dart';
+import '../../utils/memory_optimizer.dart';
 
 class AdminEnhancedMapScreen extends StatefulWidget {
   const AdminEnhancedMapScreen({super.key});
@@ -27,6 +28,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   bool _isControllerDisposed = false;
   Set<Marker> _markers = {};
   bool isLoading = true;
+
+  // Marker optimization
+  static const int MAX_MARKERS = 200; // Limit total markers
+  Map<String, Marker> _markerCache = {}; // Cache markers to avoid recreation
 
   List<Map<String, dynamic>> _googlePlacesShops = [];
   bool _isLoadingGooglePlaces = false;
@@ -241,6 +246,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   @override
   void initState() {
     super.initState();
+
+    // Set conservative memory limits
+    MemoryOptimizer.setConservativeImageLimits();
+
     _filterAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -260,6 +269,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     _mapController = null;
     _filterAnimationController.dispose();
     _filterDebounceTimer?.cancel();
+    _markerCache.clear(); // Clear marker cache
     LocationService.instance.stopLocationTracking();
     super.dispose();
   }
@@ -269,6 +279,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     await _getCurrentLocation();
     await _loadAllSalesmen();
     if (_currentPosition != null) await _loadNearbyPlaces();
+
+    // Optimize memory after initial load
+    MemoryOptimizer.optimizeMemory();
+
     setState(() => isLoading = false);
   }
 
@@ -817,45 +831,60 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   }
 
   void _updateMapMarkers() {
-    if (_selectedPincodes.isNotEmpty) {
-      // If pincodes are selected, show all shops (existing + Google Places)
-      _updateMapMarkersWithAllShops();
-    } else {
-      // Default behavior - show only salesman accounts and nearby places
-      _updateMapMarkersDefault();
-    }
+    // Debounce marker updates to prevent excessive calls
+    _filterDebounceTimer?.cancel();
+    _filterDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      if (_selectedPincodes.isNotEmpty) {
+        // If pincodes are selected, show all shops (existing + Google Places)
+        _updateMapMarkersWithAllShops();
+      } else {
+        // Default behavior - show only salesman accounts and nearby places
+        _updateMapMarkersDefault();
+      }
+    });
   }
 
   void _updateMapMarkersDefault() {
     Set<Marker> markers = {};
 
-    // Add current location marker
+    // Add current location marker (cached)
     if (_currentPosition != null) {
-      markers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
+      final markerId = 'current_location';
+      if (_markerCache.containsKey(markerId)) {
+        markers.add(_markerCache[markerId]!);
+      } else {
+        final marker = Marker(
+          markerId: MarkerId(markerId),
           position: LatLng(
             _currentPosition!.latitude,
             _currentPosition!.longitude,
           ),
           infoWindow: const InfoWindow(title: 'My Location'),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        ),
-      );
+        );
+        _markerCache[markerId] = marker;
+        markers.add(marker);
+      }
     }
 
-    // Add salesman accounts - only if _showAccounts is true
+    // Add salesman accounts - only if _showAccounts is true (with limit)
     if (_showAccounts) {
-      for (var account in _getFilteredAccounts()) {
+      final filteredAccounts = _getFilteredAccounts();
+      final accountsToShow = filteredAccounts.take(MAX_MARKERS ~/ 2).toList();
+
+      for (var account in accountsToShow) {
         if (account['latitude'] != null && account['longitude'] != null) {
           try {
             final lat = double.parse(account['latitude'].toString());
             final lng = double.parse(account['longitude'].toString());
             if (!_isValidCoordinate(lat, lng)) continue;
 
-            markers.add(
-              Marker(
-                markerId: MarkerId('account_${account['id']}'),
+            final markerId = 'account_${account['id']}';
+            if (_markerCache.containsKey(markerId)) {
+              markers.add(_markerCache[markerId]!);
+            } else {
+              final marker = Marker(
+                markerId: MarkerId(markerId),
                 position: LatLng(lat, lng),
                 infoWindow: InfoWindow(
                   title: account['personName'] ?? 'Unknown',
@@ -868,8 +897,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       : BitmapDescriptor.hueOrange,
                 ),
                 onTap: () => _showAccountDetails(account),
-              ),
-            );
+              );
+              _markerCache[markerId] = marker;
+              markers.add(marker);
+            }
           } catch (e) {
             print('❌ Error adding account marker: $e');
           }
@@ -877,23 +908,32 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
     }
 
-    // Add places - prioritize single-select filtered places over multi-select nearby places
+    // Add places - prioritize single-select filtered places over multi-select nearby places (with limit)
     if (_showPlaces) {
       if (_filteredPlaces.isNotEmpty) {
         // Filter single-select filtered places using categoryMap
         final placesToShow = _selectedSinglePlaceType != null
-            ? _filteredPlaces.where((place) {
-                final placeTypes = _getShopTypes(place);
-                return _matchesCategory(placeTypes, _selectedSinglePlaceType!);
-              }).toList()
-            : _filteredPlaces;
+            ? _filteredPlaces
+                  .where((place) {
+                    final placeTypes = _getShopTypes(place);
+                    return _matchesCategory(
+                      placeTypes,
+                      _selectedSinglePlaceType!,
+                    );
+                  })
+                  .take(MAX_MARKERS ~/ 2)
+                  .toList()
+            : _filteredPlaces.take(MAX_MARKERS ~/ 2).toList();
 
         for (int i = 0; i < placesToShow.length; i++) {
           final place = placesToShow[i];
           if (place['latitude'] != null && place['longitude'] != null) {
-            markers.add(
-              Marker(
-                markerId: MarkerId(place['place_id'] ?? 'filtered_place_$i'),
+            final markerId = place['place_id'] ?? 'filtered_place_$i';
+            if (_markerCache.containsKey(markerId)) {
+              markers.add(_markerCache[markerId]!);
+            } else {
+              final marker = Marker(
+                markerId: MarkerId(markerId),
                 position: LatLng(
                   place['latitude'].toDouble(),
                   place['longitude'].toDouble(),
@@ -906,26 +946,34 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                   BitmapDescriptor.hueViolet, // Purple for filtered places
                 ),
                 onTap: () => _showFilteredPlaceDetails(place),
-              ),
-            );
+              );
+              _markerCache[markerId] = marker;
+              markers.add(marker);
+            }
           }
         }
       } else {
-        // Add regular nearby places (multi-select)
-        for (int i = 0; i < nearbyPlaces.length; i++) {
-          final place = nearbyPlaces[i];
+        // Add regular nearby places (multi-select) with limit
+        final placesToShow = nearbyPlaces.take(MAX_MARKERS ~/ 2).toList();
+        for (int i = 0; i < placesToShow.length; i++) {
+          final place = placesToShow[i];
           if (place.latitude != null && place.longitude != null) {
-            markers.add(
-              Marker(
-                markerId: MarkerId('place_$i'),
+            final markerId = 'place_$i';
+            if (_markerCache.containsKey(markerId)) {
+              markers.add(_markerCache[markerId]!);
+            } else {
+              final marker = Marker(
+                markerId: MarkerId(markerId),
                 position: LatLng(place.latitude!, place.longitude!),
                 infoWindow: InfoWindow(title: place.name),
                 icon: BitmapDescriptor.defaultMarkerWithHue(
                   BitmapDescriptor.hueRed,
                 ),
                 onTap: () => _showPlaceDetails(place),
-              ),
-            );
+              );
+              _markerCache[markerId] = marker;
+              markers.add(marker);
+            }
           }
         }
       }
@@ -2482,6 +2530,25 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  // Helper methods to check if a date is today or yesterday
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final checkDate = DateTime(date.year, date.month, date.day);
+    return checkDate == today;
+  }
+
+  bool _isYesterday(DateTime date) {
+    final now = DateTime.now();
+    final yesterday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 1));
+    final checkDate = DateTime(date.year, date.month, date.day);
+    return checkDate == yesterday;
+  }
+
   Future<void> _focusOnSelectedPincodes() async {
     print('🔍 Focusing on pincodes: $_selectedPincodes');
 
@@ -2699,6 +2766,48 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       _googlePlacesShops.clear();
     });
     _updateMapMarkers();
+  }
+
+  // Quick date filter methods
+  void _setTodayFilter() {
+    final today = DateTime.now();
+    setState(() {
+      tempSelectedFromDate = DateTime(today.year, today.month, today.day);
+      tempSelectedToDate = DateTime(
+        today.year,
+        today.month,
+        today.day,
+        23,
+        59,
+        59,
+      );
+    });
+  }
+
+  void _setYesterdayFilter() {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    setState(() {
+      tempSelectedFromDate = DateTime(
+        yesterday.year,
+        yesterday.month,
+        yesterday.day,
+      );
+      tempSelectedToDate = DateTime(
+        yesterday.year,
+        yesterday.month,
+        yesterday.day,
+        23,
+        59,
+        59,
+      );
+    });
+  }
+
+  void _clearDateFilter() {
+    setState(() {
+      tempSelectedFromDate = null;
+      tempSelectedToDate = null;
+    });
   }
 
   // Date picker methods
@@ -3095,6 +3204,28 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     );
   }
 
+  // Get popular place types for the filter
+  // Get important place types for the filter (12 most important categories)
+  List<Map<String, dynamic>> _getImportantPlaceTypes() {
+    return _placeTypes.where((placeType) {
+      final type = placeType['type'] as String;
+      return [
+        'grocery_or_supermarket',
+        'restaurant',
+        'cafe',
+        'pharmacy',
+        'bank',
+        'gas_station',
+        'clothing_store',
+        'electronics_store',
+        'bakery',
+        'beauty_salon',
+        'hospital',
+        'school',
+      ].contains(type);
+    }).toList();
+  }
+
   Widget _buildFiltersPanel() => Container(
     margin: const EdgeInsets.all(8),
     decoration: BoxDecoration(
@@ -3108,11 +3239,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Icon(Icons.tune, color: primaryColor, size: 18),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               const Text(
                 'Filters',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
@@ -3137,6 +3269,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             ],
           ),
           const Divider(),
+
+          // Toggle switches
           Row(
             children: [
               Expanded(
@@ -3189,6 +3323,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ),
             ],
           ),
+
           // Date Range Filter
           const SizedBox(height: 8),
           const Text(
@@ -3196,6 +3331,142 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
+
+          // Quick date filter buttons
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: _setTodayFilter,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          (tempSelectedFromDate != null &&
+                              tempSelectedToDate != null &&
+                              _isToday(tempSelectedFromDate!) &&
+                              _isToday(tempSelectedToDate!))
+                          ? primaryColor.withOpacity(0.2)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isToday(tempSelectedFromDate!) &&
+                                _isToday(tempSelectedToDate!))
+                            ? primaryColor
+                            : Colors.grey[300]!,
+                      ),
+                    ),
+                    child: Text(
+                      'Today',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isToday(tempSelectedFromDate!) &&
+                                _isToday(tempSelectedToDate!))
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isToday(tempSelectedFromDate!) &&
+                                _isToday(tempSelectedToDate!))
+                            ? primaryColor
+                            : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: InkWell(
+                  onTap: _setYesterdayFilter,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          (tempSelectedFromDate != null &&
+                              tempSelectedToDate != null &&
+                              _isYesterday(tempSelectedFromDate!) &&
+                              _isYesterday(tempSelectedToDate!))
+                          ? primaryColor.withOpacity(0.2)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isYesterday(tempSelectedFromDate!) &&
+                                _isYesterday(tempSelectedToDate!))
+                            ? primaryColor
+                            : Colors.grey[300]!,
+                      ),
+                    ),
+                    child: Text(
+                      'Yesterday',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isYesterday(tempSelectedFromDate!) &&
+                                _isYesterday(tempSelectedToDate!))
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color:
+                            (tempSelectedFromDate != null &&
+                                tempSelectedToDate != null &&
+                                _isYesterday(tempSelectedFromDate!) &&
+                                _isYesterday(tempSelectedToDate!))
+                            ? primaryColor
+                            : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: _clearDateFilter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 6,
+                    horizontal: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: const Text(
+                    'Clear',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Custom date range selectors
           Row(
             children: [
               // From Date
@@ -3323,8 +3594,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ),
             ],
           ),
+
+          // Shop Categories (horizontally scrollable in 2 rows)
           if (_showPlaces) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -3339,83 +3612,88 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ],
             ),
             const SizedBox(height: 4),
-            Container(
-              height: 160,
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  childAspectRatio: 1.8,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                ),
-                itemCount: _placeTypes.length,
-                itemBuilder: (context, index) {
-                  final placeType = _placeTypes[index];
-                  final isSelected = _selectedPlaceTypes.contains(
-                    placeType['type'],
-                  );
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selectedPlaceTypes.remove(placeType['type']);
-                          // Ensure at least one place type is always selected
-                          if (_selectedPlaceTypes.isEmpty) {
-                            _selectedPlaceTypes.add('grocery_or_supermarket');
+            SizedBox(
+              height: 50, // Height for single row
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _getImportantPlaceTypes().map((placeType) {
+                    final isSelected = _selectedPlaceTypes.contains(
+                      placeType['type'],
+                    );
+                    return Container(
+                      width: 70, // Fixed width for each item
+                      margin: const EdgeInsets.only(right: 8),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedPlaceTypes.remove(placeType['type']);
+                              // Ensure at least one place type is always selected
+                              if (_selectedPlaceTypes.isEmpty) {
+                                _selectedPlaceTypes.add(
+                                  'grocery_or_supermarket',
+                                );
+                              }
+                            } else {
+                              _selectedPlaceTypes.add(placeType['type']);
+                            }
+                          });
+
+                          // Reload nearby places for current location
+                          _loadNearbyPlaces();
+
+                          // If pincodes are selected, reload Google Places shops with new filter
+                          if (_selectedPincodes.isNotEmpty) {
+                            _loadAllShopsForSelectedPincodes();
                           }
-                        } else {
-                          _selectedPlaceTypes.add(placeType['type']);
-                        }
-                      });
-
-                      // Reload nearby places for current location
-                      _loadNearbyPlaces();
-
-                      // If pincodes are selected, reload Google Places shops with new filter
-                      if (_selectedPincodes.isNotEmpty) {
-                        _loadAllShopsForSelectedPincodes();
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? primaryColor.withOpacity(0.2)
-                            : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isSelected ? primaryColor : Colors.grey[300]!,
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            placeType['icon'],
-                            size: 18,
-                            color: isSelected ? primaryColor : Colors.grey[600],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            placeType['name'],
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? primaryColor.withOpacity(0.2)
+                                : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
                               color: isSelected
                                   ? primaryColor
-                                  : Colors.grey[700],
+                                  : Colors.grey[300]!,
+                              width: isSelected ? 2 : 1,
                             ),
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                placeType['icon'],
+                                size: 20,
+                                color: isSelected
+                                    ? primaryColor
+                                    : Colors.grey[600],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                placeType['name'],
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? primaryColor
+                                      : Colors.grey[700],
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  }).toList(),
+                ),
               ),
             ),
             // Quick select/deselect buttons
@@ -3425,7 +3703,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      _selectedPlaceTypes = _placeTypes
+                      _selectedPlaceTypes = _getImportantPlaceTypes()
                           .map((p) => p['type'] as String)
                           .toList();
                     });
@@ -3457,7 +3735,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               ],
             ),
           ],
-          const SizedBox(height: 8),
+
+          // Apply/Reset buttons at the bottom
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
