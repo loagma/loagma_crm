@@ -8,10 +8,10 @@ const prisma = new PrismaClient();
 
 export const getAllAccounts = async (req, res) => {
   try {
-    const { 
-      areaId, 
-      assignedToId, 
-      customerStage, 
+    const {
+      areaId,
+      assignedToId,
+      customerStage,
       funnelStage,
       isApproved,
       createdById,
@@ -23,28 +23,29 @@ export const getAllAccounts = async (req, res) => {
     } = req.query;
 
     const where = {};
-    
+
     if (areaId) where.areaId = parseInt(areaId);
     if (assignedToId) where.assignedToId = assignedToId;
     if (customerStage) where.customerStage = customerStage;
     if (funnelStage) where.funnelStage = funnelStage;
     if (isApproved !== undefined) where.isApproved = isApproved === 'true';
     if (createdById) where.createdById = createdById;
-    
+
     // Date range filtering
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) {
-        where.createdAt.gte = new Date(startDate);
+        const start = new Date(startDate);
+        where.createdAt.gte = start;
+        console.log('📅 Start date filter:', start.toISOString());
       }
       if (endDate) {
-        // Add one day to endDate to include the entire end date
-        const endOfDay = new Date(endDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        where.createdAt.lte = endOfDay;
+        const end = new Date(endDate);
+        where.createdAt.lte = end;
+        console.log('📅 End date filter:', end.toISOString());
       }
     }
-    
+
     if (search) {
       where.OR = [
         { businessName: { contains: search, mode: 'insensitive' } },
@@ -64,7 +65,8 @@ export const getAllAccounts = async (req, res) => {
       startDate,
       endDate,
       page,
-      limit
+      limit,
+      dateFilter: where.createdAt
     });
 
     const [accounts, total] = await Promise.all([
@@ -127,6 +129,11 @@ export const getAllAccounts = async (req, res) => {
     ]);
 
     console.log('✅ Found accounts:', accounts.length, 'of', total);
+    if (accounts.length > 0) {
+      console.log('📊 Account date range in results:');
+      console.log('   First account:', accounts[0].personName, 'created at:', accounts[0].createdAt);
+      console.log('   Last account:', accounts[accounts.length - 1].personName, 'created at:', accounts[accounts.length - 1].createdAt);
+    }
 
     res.json({
       success: true,
@@ -445,16 +452,16 @@ export const createAccount = async (req, res) => {
     });
 
     console.log('✅ Account created successfully:', account.accountCode);
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       message: 'Account created successfully',
-      data: account 
+      data: account
     });
   } catch (error) {
     console.error('❌ Create account error:', error.message);
     console.error('Error code:', error.code);
     console.error('Error meta:', error.meta);
-    
+
     if (error.code === 'P2002') {
       // P2002 is Prisma's unique constraint violation error
       const field = error.meta?.target?.[0] || 'field';
@@ -504,16 +511,16 @@ export const updateAccount = async (req, res) => {
     });
 
     if (!existingAccount) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Account not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found'
       });
     }
 
     // If updating contact number, check for duplicates
     if (contactNumber && contactNumber !== existingAccount.contactNumber) {
       const duplicate = await prisma.account.findFirst({
-        where: { 
+        where: {
           contactNumber,
           id: { not: id }
         }
@@ -623,7 +630,7 @@ export const updateAccount = async (req, res) => {
     }
 
     const updateData = {};
-    
+
     if (businessName !== undefined) updateData.businessName = businessName;
     if (businessType !== undefined) updateData.businessType = businessType;
     if (businessSize !== undefined) updateData.businessSize = businessSize;
@@ -689,10 +696,10 @@ export const updateAccount = async (req, res) => {
       }
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Account updated successfully',
-      data: account 
+      data: account
     });
   } catch (error) {
     console.error('Update account error:', error);
@@ -713,9 +720,9 @@ export const deleteAccount = async (req, res) => {
     });
 
     if (!existingAccount) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Account not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found'
       });
     }
 
@@ -723,9 +730,9 @@ export const deleteAccount = async (req, res) => {
       where: { id }
     });
 
-    res.json({ 
-      success: true, 
-      message: 'Account deleted successfully' 
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
     });
   } catch (error) {
     console.error('Delete account error:', error);
@@ -782,10 +789,10 @@ export const approveAccount = async (req, res) => {
       }
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Account approved successfully',
-      data: account 
+      data: account
     });
   } catch (error) {
     console.error('Approve account error:', error);
@@ -818,10 +825,10 @@ export const rejectAccount = async (req, res) => {
       }
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Account approval rejected',
-      data: account 
+      data: account
     });
   } catch (error) {
     console.error('Reject account error:', error);
@@ -839,7 +846,7 @@ async function generateAccountCode() {
   const date = new Date();
   const year = date.getFullYear().toString().slice(-2);
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  
+
   // Try up to 10 times to generate a unique code
   for (let attempt = 0; attempt < 10; attempt++) {
     // Get count of all accounts with this year-month prefix
@@ -853,7 +860,7 @@ async function generateAccountCode() {
       select: { accountCode: true },
       orderBy: { accountCode: 'desc' }
     });
-    
+
     let sequence = 1;
     if (existingAccounts.length > 0) {
       // Extract the last sequence number and increment
@@ -861,22 +868,22 @@ async function generateAccountCode() {
       const lastSequence = parseInt(lastCode.slice(-4));
       sequence = lastSequence + 1;
     }
-    
+
     const accountCode = `${prefix}${year}${month}${sequence.toString().padStart(4, '0')}`;
-    
+
     // Check if this code already exists
     const exists = await prisma.account.findUnique({
       where: { accountCode }
     });
-    
+
     if (!exists) {
       return accountCode;
     }
-    
+
     // If exists, wait a bit and try again
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  
+
   // Fallback: use timestamp to ensure uniqueness
   const timestamp = Date.now().toString().slice(-6);
   return `${prefix}${year}${month}${timestamp}`;
@@ -888,7 +895,7 @@ export const getAccountStats = async (req, res) => {
   try {
     const { assignedToId, areaId, createdById } = req.query;
     const where = {};
-    
+
     if (assignedToId) where.assignedToId = assignedToId;
     if (areaId) where.areaId = parseInt(areaId);
     if (createdById) where.createdById = createdById;
@@ -902,27 +909,27 @@ export const getAccountStats = async (req, res) => {
       recentAccounts
     ] = await Promise.all([
       prisma.account.count({ where }),
-      
-      prisma.account.count({ 
-        where: { ...where, isApproved: true } 
+
+      prisma.account.count({
+        where: { ...where, isApproved: true }
       }),
-      
-      prisma.account.count({ 
-        where: { ...where, isApproved: false } 
+
+      prisma.account.count({
+        where: { ...where, isApproved: false }
       }),
-      
+
       prisma.account.groupBy({
         by: ['customerStage'],
         where,
         _count: true
       }),
-      
+
       prisma.account.groupBy({
         by: ['funnelStage'],
         where,
         _count: true
       }),
-      
+
       prisma.account.findMany({
         where,
         take: 10,
@@ -1036,7 +1043,69 @@ export const bulkApproveAccounts = async (req, res) => {
   }
 };
 
-// ==================== CHECK CONTACT NUMBER ====================
+// ==================== DEBUG ENDPOINT (REMOVE IN PRODUCTION) ====================
+
+export const debugDateFiltering = async (req, res) => {
+  try {
+    const { startDate, endDate, period } = req.query;
+
+    console.log('🐛 DEBUG: Date filtering test');
+    console.log('   Raw startDate:', startDate);
+    console.log('   Raw endDate:', endDate);
+    console.log('   Period:', period);
+
+    const where = {};
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        where.createdAt.gte = start;
+        console.log('   Parsed startDate:', start.toISOString());
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        where.createdAt.lte = end;
+        console.log('   Parsed endDate:', end.toISOString());
+      }
+    }
+
+    const accounts = await prisma.account.findMany({
+      where,
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        personName: true,
+        createdAt: true
+      }
+    });
+
+    console.log('   Found accounts:', accounts.length);
+    accounts.forEach(account => {
+      console.log(`     - ${account.personName}: ${account.createdAt.toISOString()}`);
+    });
+
+    res.json({
+      success: true,
+      debug: {
+        rawStartDate: startDate,
+        rawEndDate: endDate,
+        parsedStartDate: startDate ? new Date(startDate).toISOString() : null,
+        parsedEndDate: endDate ? new Date(endDate).toISOString() : null,
+        whereClause: where,
+        accountsFound: accounts.length,
+        accounts: accounts.map(a => ({
+          name: a.personName,
+          createdAt: a.createdAt.toISOString()
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Debug date filtering error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 export const checkContactNumber = async (req, res) => {
   try {

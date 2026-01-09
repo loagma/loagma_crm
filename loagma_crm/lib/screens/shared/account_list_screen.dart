@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
 import '../../services/network_service.dart';
-import '../../widgets/connectivity_banner.dart';
 import 'edit_account_master_screen.dart';
 
 class AccountListScreen extends StatefulWidget {
@@ -28,6 +28,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
   String? _filterSalesmanId;
+  String? _filterDatePreset; // 'today', 'yesterday', 'custom'
   List<Map<String, dynamic>> _salesmen = [];
   bool _hasNetworkError = false;
   String? _lastErrorMessage;
@@ -109,6 +110,78 @@ class _AccountListScreenState extends State<AccountListScreen> {
       _lastErrorMessage = null;
     });
     await _refreshAccounts();
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    try {
+      // Clean the phone number more thoroughly
+      String cleanNumber = phoneNumber.trim();
+
+      // Remove all non-digit characters except + at the beginning
+      cleanNumber = cleanNumber.replaceAll(RegExp(r'[^\d+]'), '');
+
+      // Ensure the number starts with + for international format
+      if (!cleanNumber.startsWith('+')) {
+        // If it's an Indian number (10 digits), add +91
+        if (cleanNumber.length == 10) {
+          cleanNumber = '+91$cleanNumber';
+        }
+        // If it's already 12 digits starting with 91, add +
+        else if (cleanNumber.length == 12 && cleanNumber.startsWith('91')) {
+          cleanNumber = '+$cleanNumber';
+        }
+        // For other cases, just add +
+        else if (cleanNumber.isNotEmpty && !cleanNumber.startsWith('+')) {
+          cleanNumber = '+$cleanNumber';
+        }
+      }
+
+      print('📞 Attempting to call: $cleanNumber (original: $phoneNumber)');
+
+      final Uri phoneUri = Uri(scheme: 'tel', path: cleanNumber);
+
+      // Try to launch the URL with different modes
+      bool launched = false;
+
+      // Try external application mode first
+      try {
+        launched = await launchUrl(
+          phoneUri,
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (e) {
+        print('External app launch failed: $e');
+      }
+
+      // If external app failed, try platform default
+      if (!launched) {
+        try {
+          launched = await launchUrl(phoneUri);
+        } catch (e) {
+          print('Platform default launch failed: $e');
+        }
+      }
+
+      if (!launched) {
+        // Fallback: try with original number
+        final Uri fallbackUri = Uri(scheme: 'tel', path: phoneNumber);
+        launched = await launchUrl(
+          fallbackUri,
+          mode: LaunchMode.externalApplication,
+        );
+
+        if (!launched) {
+          _showError(
+            'Unable to open phone dialer. Please check if a dialer app is installed.',
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Phone call error: $e');
+      _showError(
+        'Error making phone call. Please try calling manually: $phoneNumber',
+      );
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -317,9 +390,42 @@ class _AccountListScreenState extends State<AccountListScreen> {
         DateTime? tmpStartDate = _filterStartDate;
         DateTime? tmpEndDate = _filterEndDate;
         String? tmpSalesmanId = _filterSalesmanId;
+        String? tmpDatePreset = _filterDatePreset;
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            // Helper function to apply date preset
+            void applyDatePreset(String preset) {
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final yesterday = today.subtract(Duration(days: 1));
+
+              setDialogState(() {
+                tmpDatePreset = preset;
+                switch (preset) {
+                  case 'today':
+                    tmpStartDate = today;
+                    tmpEndDate = today
+                        .add(Duration(days: 1))
+                        .subtract(Duration(milliseconds: 1));
+                    break;
+                  case 'yesterday':
+                    tmpStartDate = yesterday;
+                    tmpEndDate = yesterday
+                        .add(Duration(days: 1))
+                        .subtract(Duration(milliseconds: 1));
+                    break;
+                  case 'custom':
+                    // Keep existing dates or clear them
+                    if (tmpDatePreset != 'custom') {
+                      tmpStartDate = null;
+                      tmpEndDate = null;
+                    }
+                    break;
+                }
+              });
+            }
+
             return AlertDialog(
               title: Row(
                 children: [
@@ -399,62 +505,216 @@ class _AccountListScreenState extends State<AccountListScreen> {
                         onChanged: (value) =>
                             setDialogState(() => tmpSalesmanId = value),
                       ),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 20),
+
+                      // Date Filter Section
+                      Text(
+                        'Date Filter',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFD7BE69),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Quick Date Presets
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
-                              decoration: const InputDecoration(
-                                labelText: 'Start Date',
-                                suffixIcon: Icon(Icons.calendar_today),
+                            child: OutlinedButton(
+                              onPressed: () => applyDatePreset('today'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                ),
+                                minimumSize: const Size(0, 32),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: tmpDatePreset == 'today'
+                                    ? Color(0xFFD7BE69).withValues(alpha: 0.1)
+                                    : null,
+                                side: BorderSide(
+                                  color: tmpDatePreset == 'today'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey,
+                                ),
                               ),
-                              readOnly: true,
-                              controller: TextEditingController(
-                                text: tmpStartDate != null
-                                    ? '${tmpStartDate!.day}/${tmpStartDate!.month}/${tmpStartDate!.year}'
-                                    : '',
+                              child: Text(
+                                'Today',
+                                style: TextStyle(
+                                  color: tmpDatePreset == 'today'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey[700],
+                                  fontSize: 12,
+                                ),
                               ),
-                              onTap: () async {
-                                final date = await showDatePicker(
-                                  context: context,
-                                  initialDate: tmpStartDate ?? DateTime.now(),
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime.now(),
-                                );
-                                if (date != null) {
-                                  setDialogState(() => tmpStartDate = date);
-                                }
-                              },
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: TextFormField(
-                              decoration: const InputDecoration(
-                                labelText: 'End Date',
-                                suffixIcon: Icon(Icons.calendar_today),
+                            child: OutlinedButton(
+                              onPressed: () => applyDatePreset('yesterday'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                ), // 🔥 reduce height
+                                minimumSize: const Size(
+                                  0,
+                                  32,
+                                ), // 🔥 compact button
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: tmpDatePreset == 'yesterday'
+                                    ? Color(0xFFD7BE69).withValues(alpha: 0.1)
+                                    : null,
+                                side: BorderSide(
+                                  color: tmpDatePreset == 'yesterday'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey,
+                                ),
                               ),
-                              readOnly: true,
-                              controller: TextEditingController(
-                                text: tmpEndDate != null
-                                    ? '${tmpEndDate!.day}/${tmpEndDate!.month}/${tmpEndDate!.year}'
-                                    : '',
+                              child: Text(
+                                'Yesterday',
+                                style: TextStyle(
+                                  color: tmpDatePreset == 'yesterday'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey[700],
+                                  fontSize: 12,
+                                ),
                               ),
-                              onTap: () async {
-                                final date = await showDatePicker(
-                                  context: context,
-                                  initialDate: tmpEndDate ?? DateTime.now(),
-                                  firstDate: tmpStartDate ?? DateTime(2020),
-                                  lastDate: DateTime.now(),
-                                );
-                                if (date != null) {
-                                  setDialogState(() => tmpEndDate = date);
-                                }
-                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => applyDatePreset('custom'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                ), // 🔥 reduce height
+                                minimumSize: const Size(
+                                  0,
+                                  32,
+                                ), // 🔥 compact button
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: tmpDatePreset == 'custom'
+                                    ? Color(0xFFD7BE69).withValues(alpha: 0.1)
+                                    : null,
+                                side: BorderSide(
+                                  color: tmpDatePreset == 'custom'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey,
+                                ),
+                              ),
+                              child: Text(
+                                'Custom',
+                                style: TextStyle(
+                                  color: tmpDatePreset == 'custom'
+                                      ? Color(0xFFD7BE69)
+                                      : Colors.grey[700],
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
+
+                      // Custom Date Range (only show when custom is selected)
+                      if (tmpDatePreset == 'custom') ...[
+                        const SizedBox(height: 15),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Start Date',
+                                  suffixIcon: Icon(Icons.calendar_today),
+                                ),
+                                readOnly: true,
+                                controller: TextEditingController(
+                                  text: tmpStartDate != null
+                                      ? '${tmpStartDate!.day}/${tmpStartDate!.month}/${tmpStartDate!.year}'
+                                      : '',
+                                ),
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate: tmpStartDate ?? DateTime.now(),
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime.now(),
+                                  );
+                                  if (date != null) {
+                                    setDialogState(() => tmpStartDate = date);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                decoration: const InputDecoration(
+                                  labelText: 'End Date',
+                                  suffixIcon: Icon(Icons.calendar_today),
+                                ),
+                                readOnly: true,
+                                controller: TextEditingController(
+                                  text: tmpEndDate != null
+                                      ? '${tmpEndDate!.day}/${tmpEndDate!.month}/${tmpEndDate!.year}'
+                                      : '',
+                                ),
+                                onTap: () async {
+                                  final date = await showDatePicker(
+                                    context: context,
+                                    initialDate: tmpEndDate ?? DateTime.now(),
+                                    firstDate: tmpStartDate ?? DateTime(2020),
+                                    lastDate: DateTime.now(),
+                                  );
+                                  if (date != null) {
+                                    setDialogState(() => tmpEndDate = date);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      // Show selected date range for presets
+                      if (tmpDatePreset != null &&
+                          tmpDatePreset != 'custom' &&
+                          tmpStartDate != null) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFD7BE69).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Color(0xFFD7BE69).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.date_range,
+                                size: 16,
+                                color: Color(0xFFD7BE69),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                tmpDatePreset == 'today'
+                                    ? 'Today (${tmpStartDate!.day}/${tmpStartDate!.month}/${tmpStartDate!.year})'
+                                    : 'Yesterday (${tmpStartDate!.day}/${tmpStartDate!.month}/${tmpStartDate!.year})',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFFD7BE69),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -468,6 +728,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       _filterStartDate = null;
                       _filterEndDate = null;
                       _filterSalesmanId = null;
+                      _filterDatePreset = null;
                     });
                     Navigator.pop(context);
                     _refreshAccounts();
@@ -485,6 +746,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       _filterStartDate = tmpStartDate;
                       _filterEndDate = tmpEndDate;
                       _filterSalesmanId = tmpSalesmanId;
+                      _filterDatePreset = tmpDatePreset;
                     });
                     Navigator.pop(context);
                     _refreshAccounts();
@@ -508,7 +770,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
         _filterIsApproved != null ||
         _filterStartDate != null ||
         _filterEndDate != null ||
-        _filterSalesmanId != null;
+        _filterSalesmanId != null ||
+        _filterDatePreset != null;
   }
 
   String _getActiveFiltersText() {
@@ -527,19 +790,31 @@ class _AccountListScreenState extends State<AccountListScreen> {
       );
       activeFilters.add('By: ${salesman['name'] ?? 'Unknown'}');
     }
-    if (_filterStartDate != null || _filterEndDate != null) {
-      String dateRange = 'Date: ';
-      if (_filterStartDate != null && _filterEndDate != null) {
-        dateRange +=
-            '${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year} - ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
-      } else if (_filterStartDate != null) {
-        dateRange +=
-            'From ${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year}';
-      } else if (_filterEndDate != null) {
-        dateRange +=
-            'Until ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
+    if (_filterDatePreset != null) {
+      switch (_filterDatePreset) {
+        case 'today':
+          activeFilters.add('Today');
+          break;
+        case 'yesterday':
+          activeFilters.add('Yesterday');
+          break;
+        case 'custom':
+          if (_filterStartDate != null || _filterEndDate != null) {
+            String dateRange = 'Date: ';
+            if (_filterStartDate != null && _filterEndDate != null) {
+              dateRange +=
+                  '${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year} - ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
+            } else if (_filterStartDate != null) {
+              dateRange +=
+                  'From ${_filterStartDate!.day}/${_filterStartDate!.month}/${_filterStartDate!.year}';
+            } else if (_filterEndDate != null) {
+              dateRange +=
+                  'Until ${_filterEndDate!.day}/${_filterEndDate!.month}/${_filterEndDate!.year}';
+            }
+            activeFilters.add(dateRange);
+          }
+          break;
       }
-      activeFilters.add(dateRange);
     }
 
     return activeFilters.join(', ');
@@ -875,12 +1150,17 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          account.personName,
+                          account.businessName ?? account.personName,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (account.businessName != null)
+                          Text(
+                            account.personName,
+                            style: const TextStyle(fontSize: 15),
+                          ),
                         const SizedBox(height: 5),
                         Text(
                           account.accountCode,
@@ -950,9 +1230,24 @@ class _AccountListScreenState extends State<AccountListScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  ///
                   TextButton.icon(
-                    icon: const Icon(Icons.edit, size: 18),
-                    label: const Text('Edit'),
+                    icon: const Icon(Icons.call, size: 20),
+                    label: const Text(''),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                    onPressed: () => _makePhoneCall(account.contactNumber),
+                  ),
+
+                  ///
+                  TextButton.icon(
+                    icon: const Icon(Icons.edit, size: 20),
+                    label: const Text(''),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -969,11 +1264,14 @@ class _AccountListScreenState extends State<AccountListScreen> {
                       });
                     },
                   ),
-                  const SizedBox(width: 8),
+
                   TextButton.icon(
-                    icon: const Icon(Icons.delete, size: 18),
-                    label: const Text('Delete'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    icon: const Icon(Icons.delete, size: 20),
+                    label: const Text(''),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
                     onPressed: () => _deleteAccount(account),
                   ),
                 ],
