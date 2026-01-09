@@ -146,7 +146,7 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
       appBar: AppBar(
         title: const Text('Beat Plan Management'),
         backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: const Color.fromARGB(179, 9, 9, 9),
         elevation: 0,
         actions: [
           IconButton(
@@ -156,7 +156,7 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -170,8 +170,9 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
           }
         },
         backgroundColor: primaryColor,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Plan', style: TextStyle(color: Colors.white)),
+        elevation: 2,
+        mini: true, // 👈 smaller size
+        child: const Icon(Icons.add, color: Colors.white, size: 20),
       ),
     );
   }
