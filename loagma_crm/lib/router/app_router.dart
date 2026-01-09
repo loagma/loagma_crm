@@ -53,6 +53,11 @@ import '../screens/salesman/todays_beat_plan_screen.dart';
 // Telecaller screens
 import '../screens/telecaller/verify_account_master_screen.dart';
 
+// Edit Account Master Screen
+import '../screens/shared/edit_account_master_screen.dart';
+import '../services/account_service.dart';
+import '../models/account_model.dart';
+
 // Guards & Services
 import 'auth_guard.dart';
 import 'role_guard.dart';
@@ -80,6 +85,24 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/otp', builder: (_, __) => const OtpScreen()),
     GoRoute(path: '/no-role', builder: (_, __) => const NoRoleScreen()),
+
+    // ACCOUNT DETAIL (accessible from anywhere)
+    GoRoute(
+      path: '/account/:id',
+      builder: (context, state) {
+        final accountId = state.pathParameters['id']!;
+        return AccountDetailScreen(accountId: accountId);
+      },
+    ),
+
+    // ACCOUNT EDIT (accessible from anywhere)
+    GoRoute(
+      path: '/account/edit/:id',
+      builder: (context, state) {
+        final accountId = state.pathParameters['id']!;
+        return _EditAccountWrapper(accountId: accountId);
+      },
+    ),
 
     // DASHBOARD WITH CHILD ROUTES
     GoRoute(
@@ -271,3 +294,129 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
+
+// Wrapper widget to load account data for editing
+class _EditAccountWrapper extends StatefulWidget {
+  final String accountId;
+
+  const _EditAccountWrapper({required this.accountId});
+
+  @override
+  State<_EditAccountWrapper> createState() => _EditAccountWrapperState();
+}
+
+class _EditAccountWrapperState extends State<_EditAccountWrapper> {
+  Account? account;
+  bool isLoading = true;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccount();
+  }
+
+  Future<void> _loadAccount() async {
+    try {
+      final loadedAccount = await AccountService.fetchAccountById(
+        widget.accountId,
+      );
+      if (mounted) {
+        setState(() {
+          account = loadedAccount;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Loading Account...'),
+          backgroundColor: const Color(0xFFD7BE69),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
+        ),
+      );
+    }
+
+    if (error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Error'),
+          backgroundColor: const Color(0xFFD7BE69),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                'Failed to load account',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                error!,
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7BE69),
+                ),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (account == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Account Not Found'),
+          backgroundColor: const Color(0xFFD7BE69),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.search_off, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                'Account not found',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7BE69),
+                ),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return EditAccountMasterScreen(account: account!);
+  }
+}

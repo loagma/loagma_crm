@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/pincode_service.dart';
 import '../../services/account_service.dart';
-import '../../services/user_service.dart';
 import '../../models/account_model.dart';
 import '../../utils/custom_toast.dart';
 
@@ -559,10 +558,9 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
         // Wait for 5 seconds to show the toast
         await Future.delayed(const Duration(seconds: 5));
 
-        // Navigate back to dashboard smoothly
+        // Navigate back with success result
         if (mounted) {
-          final role = UserService.currentRole?.toLowerCase() ?? 'salesman';
-          context.go('/dashboard/$role');
+          context.pop(true);
         }
       } catch (e) {
         _showError('Failed to update account: $e');
