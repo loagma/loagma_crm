@@ -32,8 +32,8 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
   PolylineAnnotationManager? _polylineAnnotationManager;
   
   // Mapbox annotations
-  Map<String, PointAnnotation> _markerAnnotations = {};
-  Map<String, PolylineAnnotation> _polylineAnnotations = {};
+  final Map<String, PointAnnotation> _markerAnnotations = {};
+  final Map<String, PolylineAnnotation> _polylineAnnotations = {};
   
   bool _isLoading = true;
   String? _error;

@@ -434,7 +434,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   Text('Filter Accounts'),
                 ],
               ),
-              content: Container(
+              content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
                   child: Column(

@@ -42,7 +42,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   Map<String, List<String>> _selectedAreasByPincode = {};
   Set<String> _selectedBusinessTypes = {};
   Set<String> _mapBusinessTypeFilter = {};
-  Set<String> _mapStageFilter = {};
+  final Set<String> _mapStageFilter = {};
   bool _isLoading = false;
   bool _isFetchingBusinesses = false;
 
@@ -52,14 +52,14 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   PointAnnotationManager? _pointAnnotationManager;
   
   // Mapbox annotations
-  Map<String, PointAnnotation> _markerAnnotations = {};
+  final Map<String, PointAnnotation> _markerAnnotations = {};
   
   List<Shop> _shops = [];
   Position _initialPosition = Position(78.9629, 20.5937); // India center (lng, lat)
 
   bool _mapHelpShown = false;
   bool _isFilterExpanded = true; // Add filter collapse state
-  Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
+  final Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
 
   // Place details overlay state (for Google Maps-like interface)
   PlaceInfo? _selectedPlace;
@@ -296,12 +296,14 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       if (shop.latitude == null || shop.longitude == null) return false;
 
       if (_mapBusinessTypeFilter.isNotEmpty &&
-          !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase()))
+          !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase())) {
         return false;
+      }
 
       if (_mapStageFilter.isNotEmpty &&
-          !_mapStageFilter.contains(shop.stage.toLowerCase()))
+          !_mapStageFilter.contains(shop.stage.toLowerCase())) {
         return false;
+      }
 
       return true;
     }).toList();
@@ -441,8 +443,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       }
 
       // If no Google Places data, create a PlaceInfo from Shop data
-      if (placeInfo == null) {
-        placeInfo = PlaceInfo(
+      placeInfo ??= PlaceInfo(
           placeId: shop.placeId ?? shop.id,
           name: shop.name,
           address: shop.address ?? 'Address not available',
@@ -457,7 +458,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           photoUrls: shop.photos ?? [],
           reviews: [],
         );
-      }
 
       setState(() => _isLoading = false);
 
@@ -652,7 +652,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     // Clear markers
     if (_pointAnnotationManager != null) {
       for (var marker in _markerAnnotations.values) {
-        await _pointAnnotationManager!.delete(marker);
+        await pointAnnotationManager!.delete(marker);
       }
       _markerAnnotations.clear();
     }
@@ -1404,7 +1404,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ] else
             Card(
               color: Colors.blue[50],
@@ -1710,7 +1710,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   ),
                 ),
               );
-            }).toList(),
+            }),
           ],
         ],
       ),
@@ -2692,7 +2692,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                     ],
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ),
         );

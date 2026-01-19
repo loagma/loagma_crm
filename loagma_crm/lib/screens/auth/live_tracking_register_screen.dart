@@ -214,7 +214,7 @@ class _LiveTrackingRegisterScreenState
 
                     // Role Selection
                     DropdownButtonFormField<UserRole>(
-                      value: _selectedRole,
+                      initialValue: _selectedRole,
                       decoration: const InputDecoration(
                         labelText: 'Role',
                         prefixIcon: Icon(Icons.work_outlined),

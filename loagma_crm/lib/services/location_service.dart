@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Location service for continuous GPS tracking

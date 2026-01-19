@@ -215,7 +215,7 @@ class AdminLiveTrackingSocket {
       );
 
       debugPrint(
-        '📍 ${isHomeLocation ? "HOME " : ""}Location: $salesmanId | ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} | ${totalDistanceKm.toStringAsFixed(2)} km | ${totalPoints} pts',
+        '📍 ${isHomeLocation ? "HOME " : ""}Location: $salesmanId | ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} | ${totalDistanceKm.toStringAsFixed(2)} km | $totalPoints pts',
       );
     } catch (e) {
       debugPrint('❌ Error processing location update: $e');
