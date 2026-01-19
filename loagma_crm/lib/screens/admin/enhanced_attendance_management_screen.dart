@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../services/user_service.dart';
 import '../../services/api_config.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/mapbox_config.dart';
 import 'live_tracking_screen.dart';
 
 class EnhancedAttendanceManagementScreen extends StatefulWidget {
@@ -20,8 +22,13 @@ class _EnhancedAttendanceManagementScreenState
     extends State<EnhancedAttendanceManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
+  MapboxMap? _mapboxMap;
+  final MapboxService _mapboxService = MapboxService();
+
+  // Annotation managers for markers
+  PointAnnotationManager? _pointAnnotationManager;
+  Map<String, PointAnnotation> _markerAnnotations = {};
+
   Timer? _refreshTimer;
 
   // Data
@@ -63,6 +70,8 @@ class _EnhancedAttendanceManagementScreenState
     _refreshTimer?.cancel();
     _searchController.dispose();
     _dateController.dispose();
+    _mapboxService.dispose();
+    _mapboxMap = null;
     super.dispose();
   }
 
@@ -268,58 +277,61 @@ class _EnhancedAttendanceManagementScreenState
     setState(() => filteredRecords = filtered);
   }
 
-  void _updateMapMarkers() {
-    Set<Marker> newMarkers = {};
+  Future<void> _updateMapMarkers() async {
+    if (_pointAnnotationManager == null) return;
+
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      await _pointAnnotationManager!.delete(marker);
+    }
+    _markerAnnotations.clear();
 
     for (var attendance in attendanceRecords) {
       // Punch In Marker
-      newMarkers.add(
-        Marker(
-          markerId: MarkerId('${attendance.id}_in'),
-          position: LatLng(
-            attendance.punchInLatitude,
+      final punchInId = '${attendance.id}_in';
+      final punchInOptions = PointAnnotationOptions(
+        geometry: Point(
+          coordinates: Position(
             attendance.punchInLongitude,
+            attendance.punchInLatitude,
           ),
-          infoWindow: InfoWindow(
-            title: attendance.employeeName,
-            snippet:
-                'In: ${DateFormat('HH:mm').format(attendance.punchInTime)}',
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            attendance.isPunchedOut
-                ? BitmapDescriptor.hueGreen
-                : BitmapDescriptor.hueBlue,
-          ),
-          onTap: () => _showEmployeeDetails(attendance),
         ),
+        iconSize: 1.0,
+        textField:
+            '${attendance.employeeName}\nIn: ${DateFormat('HH:mm').format(attendance.punchInTime)}',
+        textOffset: [0.0, -2.0],
+        textSize: 12.0,
       );
+
+      final punchInMarker = await _pointAnnotationManager!.create(
+        punchInOptions,
+      );
+      _markerAnnotations[punchInId] = punchInMarker;
 
       // Punch Out Marker
       if (attendance.punchOutLatitude != null &&
           attendance.punchOutLongitude != null) {
-        newMarkers.add(
-          Marker(
-            markerId: MarkerId('${attendance.id}_out'),
-            position: LatLng(
-              attendance.punchOutLatitude!,
+        final punchOutId = '${attendance.id}_out';
+        final punchOutOptions = PointAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(
               attendance.punchOutLongitude!,
+              attendance.punchOutLatitude!,
             ),
-            infoWindow: InfoWindow(
-              title: '${attendance.employeeName} - Out',
-              snippet: attendance.punchOutTime != null
-                  ? 'Out: ${DateFormat('HH:mm').format(attendance.punchOutTime!)}'
-                  : 'Active',
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
-            ),
-            onTap: () => _showEmployeeDetails(attendance),
           ),
+          iconSize: 1.0,
+          textField:
+              '${attendance.employeeName} - Out\n${attendance.punchOutTime != null ? 'Out: ${DateFormat('HH:mm').format(attendance.punchOutTime!)}' : 'Active'}',
+          textOffset: [0.0, -2.0],
+          textSize: 12.0,
         );
+
+        final punchOutMarker = await _pointAnnotationManager!.create(
+          punchOutOptions,
+        );
+        _markerAnnotations[punchOutId] = punchOutMarker;
       }
     }
-
-    setState(() => _markers = newMarkers);
   }
 
   void _showEmployeeDetails(AttendanceModel attendance) {
@@ -1310,14 +1322,33 @@ class _EnhancedAttendanceManagementScreenState
     _tabController.animateTo(2); // Switch to Live Tracking tab
 
     // Focus on the employee's location
-    if (_mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(attendance.punchInLatitude, attendance.punchInLongitude),
-          15,
+    if (_mapboxMap != null) {
+      _mapboxService.animateCamera(
+        center: Point(
+          coordinates: Position(
+            attendance.punchInLongitude,
+            attendance.punchInLatitude,
+          ),
         ),
+        zoom: 15.0,
       );
     }
+  }
+
+  Future<void> _onMapCreated(MapboxMap map) async {
+    _mapboxMap = map;
+    _mapboxService.initialize(map);
+
+    // Create annotation manager
+    _pointAnnotationManager = await map.annotations
+        .createPointAnnotationManager();
+
+    // Load initial markers
+    if (attendanceRecords.isNotEmpty) {
+      await _updateMapMarkers();
+    }
+
+    print('✅ Mapbox map created successfully in attendance screen!');
   }
 
   Widget _buildLiveTrackingTab() {
@@ -1378,18 +1409,16 @@ class _EnhancedAttendanceManagementScreenState
         // Map
         Expanded(
           flex: isMapExpanded ? 4 : 2,
-          child: GoogleMap(
-            onMapCreated: (GoogleMapController controller) {
-              _mapController = controller;
-            },
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(20.5937, 78.9629),
-              zoom: 5,
+          child: MapWidget(
+            key: const ValueKey("attendanceMapWidget"),
+            cameraOptions: CameraOptions(
+              center: Point(
+                coordinates: Position(78.9629, 20.5937),
+              ), // India center
+              zoom: 5.0,
             ),
-            markers: _markers,
-            mapType: MapType.normal,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: true,
+            styleUri: MapboxConfig.defaultMapStyle,
+            onMapCreated: _onMapCreated,
           ),
         ),
 

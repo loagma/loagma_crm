@@ -51,5 +51,18 @@
 	<string>This app needs access to your location to capture employee location for attendance and field tracking.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app needs access to your location to capture employee location for attendance and field tracking.</string>
+	
+	<!-- Background modes for location tracking -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>background-fetch</string>
+		<string>background-processing</string>
+	</array>
+	
+	<!-- Mapbox Configuration -->
+	<!-- Mapbox access token configured for Live Salesman Tracking System -->
+	<key>MBXAccessToken</key>
+	<string>pk.eyJ1IjoibG9hZ21hY3JtMTIzIiwiYSI6ImNta2YzZHBrYTBmZHkzZ3F2MGVudjB3NGQifQ.xa5ojP6rByCK2U6Xs0OZyA</string>
 </dict>
 </plist>

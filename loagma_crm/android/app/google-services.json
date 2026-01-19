@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "287066847706",
+    "firebase_url": "https://loagmacrm-a60ba-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "loagmacrm-a60ba",
+    "storage_bucket": "loagmacrm-a60ba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:287066847706:android:0e4d119f9cb40544f168e3",
+        "android_client_info": {
+          "package_name": "com.example.loagma_crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzVcsntunSmyUzKVh8FrvDd2BQtNzEEHA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,90 @@
+{
+    "mapbox_styles": {
+        "description": "Available Mapbox map styles for Live Salesman Tracking System",
+        "default_style": "streets",
+        "styles": {
+            "streets": {
+                "id": "mapbox://styles/mapbox/streets-v12",
+                "name": "Streets",
+                "description": "A complete base map with roads, labels, and points of interest. Recommended for business applications.",
+                "use_case": "General purpose, business tracking, navigation",
+                "recommended": true
+            },
+            "satellite": {
+                "id": "mapbox://styles/mapbox/satellite-v9",
+                "name": "Satellite",
+                "description": "High-resolution satellite imagery without labels or roads.",
+                "use_case": "Aerial view, terrain analysis, outdoor operations",
+                "recommended": false
+            },
+            "satellite_streets": {
+                "id": "mapbox://styles/mapbox/satellite-streets-v12",
+                "name": "Satellite Streets",
+                "description": "Satellite imagery with roads and labels overlay.",
+                "use_case": "Hybrid view combining satellite imagery with navigation elements",
+                "recommended": true
+            },
+            "outdoors": {
+                "id": "mapbox://styles/mapbox/outdoors-v12",
+                "name": "Outdoors",
+                "description": "A map style for outdoor activities with topographic features.",
+                "use_case": "Field operations, rural areas, outdoor sales territories",
+                "recommended": false
+            },
+            "light": {
+                "id": "mapbox://styles/mapbox/light-v11",
+                "name": "Light",
+                "description": "A subtle, light-colored base map with minimal visual noise.",
+                "use_case": "Data visualization, clean interface, minimal distraction",
+                "recommended": false
+            },
+            "dark": {
+                "id": "mapbox://styles/mapbox/dark-v11",
+                "name": "Dark",
+                "description": "A dark base map for low-light environments or dark themes.",
+                "use_case": "Night mode, dark UI themes, reduced eye strain",
+                "recommended": false
+            },
+            "navigation_day": {
+                "id": "mapbox://styles/mapbox/navigation-day-v1",
+                "name": "Navigation Day",
+                "description": "Optimized for turn-by-turn navigation during daytime.",
+                "use_case": "Route guidance, navigation applications",
+                "recommended": false
+            },
+            "navigation_night": {
+                "id": "mapbox://styles/mapbox/navigation-night-v1",
+                "name": "Navigation Night",
+                "description": "Optimized for turn-by-turn navigation during nighttime.",
+                "use_case": "Night navigation, low-light conditions",
+                "recommended": false
+            }
+        }
+    },
+    "style_selection_guide": {
+        "business_tracking": "streets",
+        "field_operations": "outdoors",
+        "urban_areas": "streets",
+        "rural_areas": "satellite_streets",
+        "night_operations": "dark",
+        "data_overlay": "light",
+        "navigation": "navigation_day"
+    },
+    "customization_options": {
+        "custom_colors": {
+            "description": "Customize map colors to match your brand",
+            "supported": true,
+            "requires": "Mapbox Studio account"
+        },
+        "custom_fonts": {
+            "description": "Use custom fonts for map labels",
+            "supported": true,
+            "requires": "Mapbox Studio account"
+        },
+        "custom_icons": {
+            "description": "Add custom icons and markers",
+            "supported": true,
+            "requires": "Sprite sheet configuration"
+        }
+    }
+}

@@ -55,9 +55,32 @@ class _EnhancedSalesmanReportsScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _validateAndResetFutureDates(); // Validate dates on init
     _loadSalesmenList();
     _loadReports();
     _startAutoRefresh();
+  }
+
+  /// Validate and reset any future dates to today
+  void _validateAndResetFutureDates() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    bool needsReset = false;
+
+    if (customStartDate != null && customStartDate!.isAfter(today)) {
+      customStartDate = today;
+      needsReset = true;
+    }
+
+    if (customEndDate != null && customEndDate!.isAfter(today)) {
+      customEndDate = today;
+      needsReset = true;
+    }
+
+    if (needsReset) {
+      print('⚠️ Future dates detected and reset to today');
+    }
   }
 
   void _startAutoRefresh() {
@@ -527,6 +550,14 @@ class _EnhancedSalesmanReportsScreenState
         '🎨 First salesman: ${salesmenList.first['name']} (${salesmenList.first['id']})',
       );
     }
+
+    // Check for future dates
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final hasFutureDates =
+        (customStartDate != null && customStartDate!.isAfter(today)) ||
+        (customEndDate != null && customEndDate!.isAfter(today));
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -541,6 +572,35 @@ class _EnhancedSalesmanReportsScreenState
       ),
       child: Column(
         children: [
+          // Warning banner for future dates
+          if (hasFutureDates) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: warningColor.withValues(alpha: 0.1),
+                border: Border.all(color: warningColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning, color: warningColor, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Future dates detected! Dates have been reset to today. Please select valid dates.',
+                      style: TextStyle(
+                        color: warningColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Salesman selector
           Row(
             children: [
@@ -677,14 +737,31 @@ class _EnhancedSalesmanReportsScreenState
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: today,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: today,
     );
 
     if (picked != null) {
+      // Additional validation: Ensure picked date is not in the future
+      if (picked.isAfter(today)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot select future dates'),
+              backgroundColor: errorColor,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
       setState(() {
         if (isStartDate) {
           customStartDate = picked;
@@ -1508,14 +1585,33 @@ class _EnhancedSalesmanReportsScreenState
   }
 
   Future<void> _selectDailyReportDate(BuildContext context) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: customStartDate ?? DateTime.now(),
+      initialDate: customStartDate != null && customStartDate!.isBefore(today)
+          ? customStartDate!
+          : today,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: today,
     );
 
     if (picked != null) {
+      // Additional validation: Ensure picked date is not in the future
+      if (picked.isAfter(today)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot select future dates'),
+              backgroundColor: errorColor,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
       setState(() {
         customStartDate = picked;
       });

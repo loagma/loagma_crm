@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/mapbox_config.dart';
 import '../../utils/time_formatting_utils.dart';
 import 'enhanced_salesman_reports_screen.dart';
 
@@ -30,6 +32,12 @@ class _ReportsScreenState extends State<ReportsScreen>
   String selectedPeriod = 'today'; // today, week, month, all
   DateTime? startDate;
   DateTime? endDate;
+  
+  // Mapbox map state
+  MapboxMap? _mapboxMap;
+  final MapboxService _mapboxService = MapboxService();
+  PointAnnotationManager? _pointAnnotationManager;
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   @override
   void initState() {
@@ -41,6 +49,8 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _mapboxService.dispose();
+    _mapboxMap = null;
     super.dispose();
   }
 
@@ -522,32 +532,9 @@ class _ReportsScreenState extends State<ReportsScreen>
         ) /
         accountsWithLocation.length;
 
-    Set<Marker> markers = accountsWithLocation.map((account) {
-      return Marker(
-        markerId: MarkerId(account['id']),
-        position: LatLng(
-          (account['latitude'] as num).toDouble(),
-          (account['longitude'] as num).toDouble(),
-        ),
-        infoWindow: InfoWindow(
-          title: account['personName'] ?? 'Unknown',
-          snippet: account['businessName'] ?? '',
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
-      );
-    }).toSet();
-
     return Stack(
       children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: LatLng(avgLat, avgLng),
-            zoom: 12,
-          ),
-          markers: markers,
-          myLocationButtonEnabled: true,
-          zoomControlsEnabled: true,
-        ),
+        _buildMapboxMap(avgLat, avgLng, accountsWithLocation),
         Positioned(
           top: 16,
           left: 16,
@@ -772,5 +759,90 @@ class _ReportsScreenState extends State<ReportsScreen>
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
+  }
+  
+  // Mapbox map builder
+  Widget _buildMapboxMap(double avgLat, double avgLng, List<Map<String, dynamic>> accountsWithLocation) {
+    return MapWidget(
+      key: ValueKey("reports_map_${accountsWithLocation.length}"),
+      cameraOptions: CameraOptions(
+        center: Point(coordinates: Position(avgLng, avgLat)),
+        zoom: 12.0,
+      ),
+      styleUri: MapboxConfig.defaultMapStyle,
+      onMapCreated: (map) => _onMapCreated(map, accountsWithLocation),
+    );
+  }
+  
+  Future<void> _onMapCreated(MapboxMap map, List<Map<String, dynamic>> accountsWithLocation) async {
+    try {
+      _mapboxMap = map;
+      _mapboxService.initialize(map);
+      
+      // Create annotation manager
+      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
+      
+      // Clear existing markers
+      for (var marker in _markerAnnotations.values) {
+        await _pointAnnotationManager!.delete(marker);
+      }
+      _markerAnnotations.clear();
+      
+      // Add markers for all accounts
+      for (var account in accountsWithLocation) {
+        final lat = (account['latitude'] as num).toDouble();
+        final lng = (account['longitude'] as num).toDouble();
+        final personName = account['personName'] ?? 'Unknown';
+        final businessName = account['businessName'] ?? '';
+        final accountId = account['id'] ?? '';
+        
+        final options = PointAnnotationOptions(
+          geometry: Point(coordinates: Position(lng, lat)),
+          textField: personName,
+          textOffset: [0.0, -2.0],
+          textSize: 12.0,
+          iconSize: 1.0,
+        );
+        
+        final marker = await _pointAnnotationManager!.create(options);
+        _markerAnnotations[accountId] = marker;
+      }
+      
+      // Fit camera to show all markers
+      if (accountsWithLocation.isNotEmpty) {
+        double minLat = accountsWithLocation.first['latitude'] as double;
+        double maxLat = accountsWithLocation.first['latitude'] as double;
+        double minLng = accountsWithLocation.first['longitude'] as double;
+        double maxLng = accountsWithLocation.first['longitude'] as double;
+        
+        for (var account in accountsWithLocation) {
+          final lat = (account['latitude'] as num).toDouble();
+          final lng = (account['longitude'] as num).toDouble();
+          minLat = minLat < lat ? minLat : lat;
+          maxLat = maxLat > lat ? maxLat : lat;
+          minLng = minLng < lng ? minLng : lng;
+          maxLng = maxLng > lng ? maxLng : lng;
+        }
+        
+        final latPadding = (maxLat - minLat) * 0.1;
+        final lngPadding = (maxLng - minLng) * 0.1;
+        
+        await _mapboxService.fitBounds(
+          bounds: CoordinateBounds(
+            southwest: Point(
+              coordinates: Position(minLng - lngPadding, minLat - latPadding),
+            ),
+            northeast: Point(
+              coordinates: Position(maxLng + lngPadding, maxLat + latPadding),
+            ),
+            infiniteBounds: false,
+          ),
+        );
+      }
+      
+      print('✅ Mapbox map created with ${accountsWithLocation.length} markers');
+    } catch (e) {
+      print('❌ Error creating Mapbox map: $e');
+    }
   }
 }

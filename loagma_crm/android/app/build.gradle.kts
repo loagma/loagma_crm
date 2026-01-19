@@ -3,8 +3,10 @@ import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+
+    // Firebase Google Services plugin
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -22,23 +24,23 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.loagma_crm"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // Mapbox configuration - inject access token into manifest
+        manifestPlaceholders["MAPBOX_ACCESS_TOKEN"] = project.findProperty("MAPBOX_ACCESS_TOKEN") as String? ?: ""
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // APK rename (optional but valid)
     applicationVariants.all {
         outputs.forEach { output ->
             val appName = "loagmaCRM"
@@ -46,7 +48,6 @@ android {
             val versionName = versionName ?: "1.0"
 
             val apkName = "$appName-$buildType-v$versionName.apk"
-
             (output as BaseVariantOutputImpl).outputFileName = apkName
         }
     }

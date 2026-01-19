@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/mapbox_config.dart';
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
@@ -25,12 +27,18 @@ class AssignmentMapViewScreen extends StatefulWidget {
 
 class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   final _service = MapTaskAssignmentService();
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
+  MapboxMap? _mapboxMap;
+  final MapboxService _mapboxService = MapboxService();
+  PointAnnotationManager? _pointAnnotationManager;
+  
+  // Mapbox annotations
+  Map<String, PointAnnotation> _markerAnnotations = {};
+  
   List<Shop> _shops = [];
   List<Shop> _salesmanCreatedShops = []; // Shops created by salesman
+  List<Shop> _filteredShops = []; // Shops after filtering
   bool _isLoading = true;
-  LatLng _centerPosition = const LatLng(20.5937, 78.9629);
+  Position _centerPosition = Position(78.9629, 20.5937); // India center (lng, lat)
   bool _isLegendExpanded = false; // Legend collapsed by default
   bool _isInfoExpanded = false; // Info card collapsed by default
   bool _isFilterExpanded = false; // Filter section collapsed by default
@@ -125,8 +133,10 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   @override
+  @override
   void dispose() {
-    _mapController?.dispose();
+    _mapboxService.dispose();
+    _mapboxMap = null;
     super.dispose();
   }
 
@@ -299,9 +309,16 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       setState(() {
         _shops = allShops;
         _salesmanCreatedShops = salesmanShops;
-        _createMarkers();
-        _isLoading = false;
       });
+      
+      // Create markers after state is set
+      await _createMarkers();
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       print('Error loading businesses: $e');
       if (!mounted) return;
@@ -309,11 +326,19 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     }
   }
 
-  void _createMarkers() {
-    final markers = <Marker>{};
+  Future<void> _createMarkers() async {
+    if (_pointAnnotationManager == null) return;
+    
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      await _pointAnnotationManager!.delete(marker);
+    }
+    _markerAnnotations.clear();
+    
     double totalLat = 0;
     double totalLng = 0;
     int validLocations = 0;
+    List<Shop> filteredShops = [];
 
     // Add markers for Google Places businesses (with filters)
     if (_showGooglePlaces) {
@@ -360,22 +385,23 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           totalLat += shop.latitude!;
           totalLng += shop.longitude!;
           validLocations++;
-
-          markers.add(
-            Marker(
-              markerId: MarkerId('google_${shop.placeId ?? shop.name}'),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: shop.name,
-                snippet:
-                    '${shop.businessType} - ${_getBusinessStatus(shop)}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                _getMarkerColorByStatus(_getBusinessStatus(shop)),
-              ),
-              onTap: () => _showShopDetails(shop, false),
-            ),
-          );
+          filteredShops.add(shop);
+          
+          try {
+            final markerId = 'google_${shop.placeId ?? shop.name}';
+            final options = PointAnnotationOptions(
+              geometry: Point(coordinates: Position(shop.longitude!, shop.latitude!)),
+              textField: '${shop.name}\n${shop.businessType} - ${_getBusinessStatus(shop)}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
+              textOffset: [0.0, -2.0],
+              textSize: 11.0,
+              iconSize: 1.0,
+            );
+            
+            final marker = await _pointAnnotationManager!.create(options);
+            _markerAnnotations[markerId] = marker;
+          } catch (e) {
+            print('Error creating marker for ${shop.name}: $e');
+          }
         }
       }
     }
@@ -419,39 +445,41 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           totalLat += shop.latitude!;
           totalLng += shop.longitude!;
           validLocations++;
-
-          markers.add(
-            Marker(
-              markerId: MarkerId('salesman_${shop.placeId ?? shop.name}'),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: '⭐ ${shop.name}',
-                snippet:
-                    'Created by Salesman - ${shop.stage}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet, // Purple for salesman-created
-              ),
-              onTap: () => _showShopDetails(shop, true),
-            ),
-          );
+          filteredShops.add(shop);
+          
+          try {
+            final markerId = 'salesman_${shop.placeId ?? shop.name}';
+            final options = PointAnnotationOptions(
+              geometry: Point(coordinates: Position(shop.longitude!, shop.latitude!)),
+              textField: '⭐ ${shop.name}\nCreated by Salesman - ${shop.stage}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
+              textOffset: [0.0, -2.0],
+              textSize: 11.0,
+              iconSize: 1.1,
+            );
+            
+            final marker = await _pointAnnotationManager!.create(options);
+            _markerAnnotations[markerId] = marker;
+          } catch (e) {
+            print('Error creating marker for ${shop.name}: $e');
+          }
         }
       }
     }
 
     if (validLocations > 0) {
-      _centerPosition = LatLng(
-        totalLat / validLocations,
+      _centerPosition = Position(
         totalLng / validLocations,
+        totalLat / validLocations,
       );
     }
 
-    setState(() => _markers = markers);
+    setState(() => _filteredShops = filteredShops);
 
-    // Move camera to center (only if we have a controller)
-    if (_mapController != null && validLocations > 0) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(_centerPosition, 12),
+    // Move camera to center (only if we have a map)
+    if (_mapboxMap != null && validLocations > 0 && _mapboxService.map != null) {
+      await _mapboxService.animateCamera(
+        center: Point(coordinates: _centerPosition),
+        zoom: 12.0,
       );
     }
   }
@@ -782,33 +810,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
                 )
-              : GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _centerPosition,
-                    zoom: 12,
-                  ),
-                  markers: _markers,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    if (_shops.isNotEmpty || _salesmanCreatedShops.isNotEmpty) {
-                      controller.animateCamera(
-                        CameraUpdate.newLatLngZoom(_centerPosition, 12),
-                      );
-                    }
-                  },
-
-                  // Fixed gesture recognizers - each type only once
-                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                    Factory<EagerGestureRecognizer>(
-                      () => EagerGestureRecognizer(),
-                    ),
-                  },
-
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  zoomControlsEnabled: true,
-                  mapToolbarEnabled: true,
-                ),
+              : _buildMapboxMap(),
 
           // Filters & Legend at top
           if (!_isLoading)
@@ -853,7 +855,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '${_markers.length} shown',
+                              '${_markerAnnotations.length} shown',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey[600],
@@ -945,11 +947,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                             ],
                                           ),
                                           selected: _showGooglePlaces,
-                                          onSelected: (selected) {
+                                          onSelected: (selected) async {
                                             setState(() {
                                               _showGooglePlaces = selected;
-                                              _createMarkers();
                                             });
+                                            await _createMarkers();
                                           },
                                           selectedColor: Colors.green
                                               .withValues(alpha: 0.2),
@@ -981,11 +983,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                             ],
                                           ),
                                           selected: _showSalesmanCreated,
-                                          onSelected: (selected) {
+                                          onSelected: (selected) async {
                                             setState(() {
                                               _showSalesmanCreated = selected;
-                                              _createMarkers();
                                             });
+                                            await _createMarkers();
                                           },
                                           selectedColor: Colors.purple
                                               .withValues(alpha: 0.2),
@@ -1003,12 +1005,12 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                                 if (!_showGooglePlaces || !_showSalesmanCreated)
                                   TextButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       setState(() {
                                         _showGooglePlaces = true;
                                         _showSalesmanCreated = true;
-                                        _createMarkers();
                                       });
+                                      await _createMarkers();
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1097,8 +1099,8 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                     onPressed: () {
                                       setState(() {
                                         _stageFilter.clear();
-                                        _createMarkers();
                                       });
+                                      await _createMarkers();
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1190,11 +1192,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                                 if (_businessTypeFilter.isNotEmpty)
                                   TextButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       setState(() {
                                         _businessTypeFilter.clear();
-                                        _createMarkers();
                                       });
+                                      await _createMarkers();
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1628,15 +1630,15 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         ],
       ),
       selected: isSelected,
-      onSelected: (selected) {
+      onSelected: (selected) async {
         setState(() {
           if (selected) {
             _stageFilter.add(value);
           } else {
             _stageFilter.remove(value);
           }
-          _createMarkers();
         });
+        await _createMarkers();
       },
       selectedColor: color.withValues(alpha: 0.2),
       checkmarkColor: color,
@@ -1662,15 +1664,15 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         ],
       ),
       selected: isSelected,
-      onSelected: (selected) {
+      onSelected: (selected) async {
         setState(() {
           if (selected) {
             _businessTypeFilter.add(type);
           } else {
             _businessTypeFilter.remove(type);
           }
-          _createMarkers();
         });
+        await _createMarkers();
       },
       selectedColor: color.withValues(alpha: 0.8),
       checkmarkColor: Colors.white,
@@ -1687,15 +1689,15 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         style: const TextStyle(fontSize: 10),
       ),
       selected: isSelected,
-      onSelected: (selected) {
+      onSelected: (selected) async {
         setState(() {
           if (selected) {
             _businessTypeFilter.add(type.toLowerCase());
           } else {
             _businessTypeFilter.remove(type.toLowerCase());
           }
-          _createMarkers();
         });
+        await _createMarkers();
       },
       selectedColor: const Color(0xFFD7BE69).withValues(alpha: 0.2),
       checkmarkColor: const Color(0xFFD7BE69),
@@ -1751,5 +1753,37 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       }
       return true;
     }).length;
+  }
+  
+  // Build Mapbox map widget
+  Widget _buildMapboxMap() {
+    return MapWidget(
+      key: const ValueKey("assignment_map"),
+      cameraOptions: CameraOptions(
+        center: Point(coordinates: _centerPosition),
+        zoom: 12.0,
+      ),
+      styleUri: MapboxConfig.defaultMapStyle,
+      onMapCreated: _onMapCreated,
+    );
+  }
+  
+  Future<void> _onMapCreated(MapboxMap map) async {
+    try {
+      _mapboxMap = map;
+      _mapboxService.initialize(map);
+      
+      // Create annotation manager
+      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
+      
+      // Create markers if shops are already loaded
+      if (_shops.isNotEmpty || _salesmanCreatedShops.isNotEmpty) {
+        await _createMarkers();
+      }
+      
+      print('✅ Mapbox map created for assignment');
+    } catch (e) {
+      print('❌ Error creating Mapbox map: $e');
+    }
   }
 }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyC8UI7Iko1HaIKA92rJcIsEHsAYx9gcOIc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>287066847706</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.loagmaCrm</string>
+	<key>PROJECT_ID</key>
+	<string>loagmacrm-a60ba</string>
+	<key>STORAGE_BUCKET</key>
+	<string>loagmacrm-a60ba.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:287066847706:ios:86ce12092c92da9ff168e3</string>
+	<key>DATABASE_URL</key>
+	<string>https://loagmacrm-a60ba-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+</dict>
+</plist>

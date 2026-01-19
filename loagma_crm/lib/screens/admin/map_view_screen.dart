@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -8,6 +8,8 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/location_service.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/mapbox_config.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 import '../../services/shop_service.dart';
@@ -23,15 +25,18 @@ class AdminEnhancedMapScreen extends StatefulWidget {
 
 class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     with TickerProviderStateMixin {
-  GoogleMapController? _mapController;
+  MapboxMap? _mapboxMap;
+  final MapboxService _mapboxService = MapboxService();
+  PointAnnotationManager? _pointAnnotationManager;
+  
+  // Mapbox annotations
+  Map<String, PointAnnotation> _markerAnnotations = {};
   bool _isMapReady = false;
-  bool _isControllerDisposed = false;
-  Set<Marker> _markers = {};
   bool isLoading = true;
 
   // Marker optimization
   static const int MAX_MARKERS = 200; // Limit total markers
-  Map<String, Marker> _markerCache = {}; // Cache markers to avoid recreation
+  Map<String, PointAnnotation> _markerCache = {}; // Cache markers to avoid recreation
 
   List<Map<String, dynamic>> _googlePlacesShops = [];
   bool _isLoadingGooglePlaces = false;
@@ -215,7 +220,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   late Animation<double> _filterAnimation;
 
   static const Color primaryColor = Color(0xFFD7BE69);
-  static const LatLng _defaultLocation = LatLng(28.6139, 77.2090);
+  static const Position _defaultLocation = Position(77.2090, 28.6139); // Delhi (lng, lat)
 
   static const List<String> allFunnelStages = [
     "Awareness",
@@ -264,7 +269,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
   @override
   void dispose() {
-    _isControllerDisposed = true;
+    _isMapReady = false;
+    _mapboxService.dispose();
+    _mapboxMap = null;
     _isMapReady = false;
     _mapController = null;
     _filterAnimationController.dispose();
@@ -405,9 +412,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
       _extractFilterOptions();
       await _loadAssignedPincodes();
-      _updateMapMarkers();
-      if (salesmanAccounts.isNotEmpty && _mapController != null)
-        _focusOnAccountsArea();
+      await _updateMapMarkers();
+      if (salesmanAccounts.isNotEmpty && _mapboxMap != null)
+        await _focusOnAccountsArea();
     } catch (e) {
       print('❌ Error: $e');
     } finally {
@@ -619,14 +626,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       final unique = <String, PlaceInfo>{};
       for (final p in allPlaces) unique[p.placeId] = p;
       setState(() => nearbyPlaces = unique.values.toList());
-      _updateMapMarkers();
+      await _updateMapMarkers();
     } catch (e) {
       print('Error: $e');
     }
   }
 
   /// Fetch places by single type using Google Places Nearby Search API
-  /// Integrates with existing map without rebuilding GoogleMap widget
+  /// Integrates with existing map without rebuilding Mapbox MapWidget
   Future<void> fetchPlacesByType(String? selectedPlaceType) async {
     // Clear existing filtered places if no type selected
     if (selectedPlaceType == null || selectedPlaceType.isEmpty) {
@@ -650,51 +657,38 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     print('🎯 Requested place type: $placeType');
 
     // Get current location - use map center if available, fallback to user location
-    LatLng? searchLocation;
+    double? searchLat;
+    double? searchLng;
 
-    if (_mapController != null && _isMapReady) {
+    if (_mapboxMap != null && _isMapReady) {
       try {
-        final visibleRegion = await _mapController!.getVisibleRegion();
-        final center = LatLng(
-          (visibleRegion.northeast.latitude +
-                  visibleRegion.southwest.latitude) /
-              2,
-          (visibleRegion.northeast.longitude +
-                  visibleRegion.southwest.longitude) /
-              2,
-        );
-        searchLocation = center;
-        print('📍 Using map center: ${center.latitude}, ${center.longitude}');
+        final cameraState = await _mapboxMap!.getCameraState();
+        final centerPoint = cameraState.center;
+        searchLat = centerPoint.coordinates.latitude;
+        searchLng = centerPoint.coordinates.longitude;
+        print('📍 Using map center: $searchLat, $searchLng');
       } catch (e) {
         // Fallback to user location
         if (_currentPosition != null) {
-          searchLocation = LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          );
-          print(
-            '📍 Using user location: ${searchLocation!.latitude}, ${searchLocation!.longitude}',
-          );
+          searchLat = _currentPosition!.latitude;
+          searchLng = _currentPosition!.longitude;
+          print('📍 Using user location: $searchLat, $searchLng');
         }
       }
     } else if (_currentPosition != null) {
-      searchLocation = LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
-      print(
-        '📍 Using user location (fallback): ${searchLocation!.latitude}, ${searchLocation!.longitude}',
-      );
+      searchLat = _currentPosition!.latitude;
+      searchLng = _currentPosition!.longitude;
+      print('📍 Using user location (fallback): $searchLat, $searchLng');
     }
 
-    if (searchLocation == null) {
+    if (searchLat == null || searchLng == null) {
       print('❌ No location available for place search');
       return;
     }
 
     // Create cache key
     final cacheKey =
-        '${placeType}_${searchLocation.latitude.toStringAsFixed(4)}_${searchLocation.longitude.toStringAsFixed(4)}';
+        '${placeType}_${searchLat.toStringAsFixed(4)}_${searchLng.toStringAsFixed(4)}';
 
     // Check cache first
     if (_placeCache.containsKey(cacheKey)) {
@@ -703,7 +697,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         _selectedSinglePlaceType = placeType;
         _filteredPlaces = _placeCache[cacheKey]!;
       });
-      _updateMapMarkers();
+      await _updateMapMarkers();
       return;
     }
 
@@ -711,7 +705,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       // Call Google Places Nearby Search API - SINGLE TYPE ONLY
       final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
-        '?location=${searchLocation.latitude},${searchLocation.longitude}'
+        '?location=$searchLat,$searchLng'
         '&radius=5000'
         '&type=$placeType'
         '&key=${GooglePlacesConfig.apiKey}',
@@ -807,7 +801,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             _filteredPlaces = places;
           });
 
-          _updateMapMarkers();
+          await _updateMapMarkers();
 
           print('✅ Loaded ${places.length} places for type: $placeType');
         } else {
@@ -830,40 +824,50 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
   }
 
-  void _updateMapMarkers() {
+  Future<void> _updateMapMarkers() async {
     // Debounce marker updates to prevent excessive calls
     _filterDebounceTimer?.cancel();
     _filterDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       if (_selectedPincodes.isNotEmpty) {
         // If pincodes are selected, show all shops (existing + Google Places)
-        _updateMapMarkersWithAllShops();
+        await _updateMapMarkersWithAllShops();
       } else {
         // Default behavior - show only salesman accounts and nearby places
-        _updateMapMarkersDefault();
+        await _updateMapMarkersDefault();
       }
     });
   }
 
-  void _updateMapMarkersDefault() {
-    Set<Marker> markers = {};
+  Future<void> _updateMapMarkersDefault() async {
+    if (_pointAnnotationManager == null) return;
+    
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      try {
+        await _pointAnnotationManager!.delete(marker);
+      } catch (e) {
+        print('Error deleting marker: $e');
+      }
+    }
+    _markerAnnotations.clear();
+    _markerCache.clear();
 
-    // Add current location marker (cached)
+    // Add current location marker
     if (_currentPosition != null) {
       final markerId = 'current_location';
-      if (_markerCache.containsKey(markerId)) {
-        markers.add(_markerCache[markerId]!);
-      } else {
-        final marker = Marker(
-          markerId: MarkerId(markerId),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+      try {
+        final options = PointAnnotationOptions(
+          geometry: Point(coordinates: Position(_currentPosition!.longitude, _currentPosition!.latitude)),
+          textField: '📍 My Location',
+          textOffset: [0.0, -2.0],
+          textSize: 12.0,
+          iconSize: 1.2,
         );
+        final marker = await _pointAnnotationManager!.create(options);
+        _markerAnnotations[markerId] = marker;
         _markerCache[markerId] = marker;
-        markers.add(marker);
+      } catch (e) {
+        print('Error creating current location marker: $e');
       }
     }
 
@@ -880,26 +884,21 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (!_isValidCoordinate(lat, lng)) continue;
 
             final markerId = 'account_${account['id']}';
-            if (_markerCache.containsKey(markerId)) {
-              markers.add(_markerCache[markerId]!);
-            } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: account['personName'] ?? 'Unknown',
-                  snippet:
-                      '${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''}',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  account['isApproved'] == true
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
-                ),
-                onTap: () => _showAccountDetails(account),
-              );
-              _markerCache[markerId] = marker;
-              markers.add(marker);
+            if (!_markerCache.containsKey(markerId)) {
+              try {
+                final options = PointAnnotationOptions(
+                  geometry: Point(coordinates: Position(lng, lat)),
+                  textField: '${account['personName'] ?? 'Unknown'}\n${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''}',
+                  textOffset: [0.0, -2.0],
+                  textSize: 11.0,
+                  iconSize: account['isApproved'] == true ? 1.2 : 1.0,
+                );
+                final marker = await _pointAnnotationManager!.create(options);
+                _markerAnnotations[markerId] = marker;
+                _markerCache[markerId] = marker;
+              } catch (e) {
+                print('Error creating account marker: $e');
+              }
             }
           } catch (e) {
             print('❌ Error adding account marker: $e');
@@ -929,26 +928,24 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           final place = placesToShow[i];
           if (place['latitude'] != null && place['longitude'] != null) {
             final markerId = place['place_id'] ?? 'filtered_place_$i';
-            if (_markerCache.containsKey(markerId)) {
-              markers.add(_markerCache[markerId]!);
-            } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(
-                  place['latitude'].toDouble(),
-                  place['longitude'].toDouble(),
-                ),
-                infoWindow: InfoWindow(
-                  title: place['name'] ?? 'Unknown Place',
-                  snippet: place['vicinity'] ?? '',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueViolet, // Purple for filtered places
-                ),
-                onTap: () => _showFilteredPlaceDetails(place),
-              );
-              _markerCache[markerId] = marker;
-              markers.add(marker);
+            if (!_markerCache.containsKey(markerId)) {
+              try {
+                final options = PointAnnotationOptions(
+                  geometry: Point(coordinates: Position(
+                    place['longitude'].toDouble(),
+                    place['latitude'].toDouble(),
+                  )),
+                  textField: '${place['name'] ?? 'Unknown Place'}\n${place['vicinity'] ?? ''}',
+                  textOffset: [0.0, -2.0],
+                  textSize: 11.0,
+                  iconSize: 1.0,
+                );
+                final marker = await _pointAnnotationManager!.create(options);
+                _markerAnnotations[markerId] = marker;
+                _markerCache[markerId] = marker;
+              } catch (e) {
+                print('Error creating filtered place marker: $e');
+              }
             }
           }
         }
@@ -959,27 +956,26 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           final place = placesToShow[i];
           if (place.latitude != null && place.longitude != null) {
             final markerId = 'place_$i';
-            if (_markerCache.containsKey(markerId)) {
-              markers.add(_markerCache[markerId]!);
-            } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(place.latitude!, place.longitude!),
-                infoWindow: InfoWindow(title: place.name),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed,
-                ),
-                onTap: () => _showPlaceDetails(place),
-              );
-              _markerCache[markerId] = marker;
-              markers.add(marker);
+            if (!_markerCache.containsKey(markerId)) {
+              try {
+                final options = PointAnnotationOptions(
+                  geometry: Point(coordinates: Position(place.longitude!, place.latitude!)),
+                  textField: place.name,
+                  textOffset: [0.0, -2.0],
+                  textSize: 11.0,
+                  iconSize: 1.0,
+                );
+                final marker = await _pointAnnotationManager!.create(options);
+                _markerAnnotations[markerId] = marker;
+                _markerCache[markerId] = marker;
+              } catch (e) {
+                print('Error creating place marker: $e');
+              }
             }
           }
         }
       }
     }
-
-    setState(() => _markers = markers);
   }
 
   bool _isValidCoordinate(double lat, double lng) =>
@@ -1124,15 +1120,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               child: ElevatedButton.icon(
                 onPressed: () async {
                   Navigator.pop(context);
-                  if (_mapController != null && _isMapReady) {
+                  if (_mapboxMap != null && _isMapReady && _mapboxService.map != null) {
                     await _safeAnimateCamera(
-                      CameraUpdate.newLatLngZoom(
-                        LatLng(
-                          place['latitude'].toDouble(),
-                          place['longitude'].toDouble(),
-                        ),
-                        16,
-                      ),
+                      Point(coordinates: Position(
+                        place['longitude'].toDouble(),
+                        place['latitude'].toDouble(),
+                      )),
+                      16.0,
                     );
                   }
                 },
@@ -1300,26 +1294,26 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           maxLng = lng > maxLng ? lng : maxLng;
         }
       }
-      if (minLat != double.infinity) {
-        final bounds = LatLngBounds(
-          southwest: LatLng(minLat - 0.01, minLng - 0.01),
-          northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+      if (minLat != double.infinity && _mapboxService.map != null) {
+        await _mapboxService.fitBounds(
+          bounds: CoordinateBounds(
+            southwest: Point(coordinates: Position(minLng - 0.01, minLat - 0.01)),
+            northeast: Point(coordinates: Position(maxLng + 0.01, maxLat + 0.01)),
+            infiniteBounds: false,
+          ),
+          padding: 100.0,
         );
-        await _safeAnimateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
       }
     } catch (e) {}
   }
 
   bool _isMapInValidState() =>
-      mounted &&
-      !_isControllerDisposed &&
-      _isMapReady &&
-      _mapController != null;
+      mounted && _isMapReady && _mapboxMap != null && _mapboxService.map != null;
 
-  Future<bool> _safeAnimateCamera(CameraUpdate update) async {
+  Future<bool> _safeAnimateCamera(Point center, double zoom) async {
     if (!_isMapInValidState()) return false;
     try {
-      await _mapController!.animateCamera(update);
+      await _mapboxService.animateCamera(center: center, zoom: zoom);
       return true;
     } catch (e) {
       return false;
@@ -1350,7 +1344,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       tempSelectedFromDate = null;
       tempSelectedToDate = null;
     });
-    _updateMapMarkers();
+    Future.microtask(() => _updateMapMarkers());
   }
 
   void _applyFilters() {
@@ -1363,7 +1357,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       selectedFromDate = tempSelectedFromDate;
       selectedToDate = tempSelectedToDate;
     });
-    _updateMapMarkers();
+    Future.microtask(() => _updateMapMarkers());
   }
 
   bool get _hasFilterChanges =>
@@ -1409,14 +1403,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
     });
 
-    print('📊 Updated selected pincodes: $_selectedPincodes');
+      print('📊 Updated selected pincodes: $_selectedPincodes');
 
     if (_selectedPincodes.isNotEmpty) {
       print('🔄 Loading all shops for selected pincodes...');
       _loadAllShopsForSelectedPincodes();
     } else {
       print('🔄 No pincodes selected, updating markers normally...');
-      _updateMapMarkers();
+      await _updateMapMarkers();
     }
   }
 
@@ -1455,7 +1449,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       print('📊 Sample Google Places data: ${allGoogleShops.take(2).toList()}');
 
       // Update markers to show both types
-      _updateMapMarkersWithAllShops();
+      await _updateMapMarkersWithAllShops();
     } catch (e) {
       print('❌ Error loading all shops: $e');
       _showError('Failed to load shops from Google Places');
@@ -1577,7 +1571,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
   }
 
-  void _updateMapMarkersWithAllShops() {
+  Future<void> _updateMapMarkersWithAllShops() async {
+    if (_pointAnnotationManager == null) return;
+    
     print('=== _updateMapMarkersWithAllShops called ===');
     print('Google Places shops count: ${_googlePlacesShops.length}');
     print(
@@ -1585,21 +1581,32 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     );
     print('Show Accounts: $_showAccounts, Show Places: $_showPlaces');
 
-    Set<Marker> markers = {};
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      try {
+        await _pointAnnotationManager!.delete(marker);
+      } catch (e) {
+        print('Error deleting marker: $e');
+      }
+    }
+    _markerAnnotations.clear();
+    _markerCache.clear();
 
     // Add current location marker
     if (_currentPosition != null) {
-      markers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        ),
-      );
+      try {
+        final options = PointAnnotationOptions(
+          geometry: Point(coordinates: Position(_currentPosition!.longitude, _currentPosition!.latitude)),
+          textField: '📍 My Location',
+          textOffset: [0.0, -2.0],
+          textSize: 12.0,
+          iconSize: 1.2,
+        );
+        final marker = await _pointAnnotationManager!.create(options);
+        _markerAnnotations['current_location'] = marker;
+      } catch (e) {
+        print('Error creating current location marker: $e');
+      }
     }
 
     // Add salesman-created accounts (existing shops) - only if _showAccounts is true
@@ -1614,25 +1621,22 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             final lng = double.parse(account['longitude'].toString());
             if (!_isValidCoordinate(lat, lng)) continue;
 
-            markers.add(
-              Marker(
-                markerId: MarkerId('salesman_account_${account['id']}'),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: account['personName'] ?? 'Unknown',
-                  snippet:
-                      '${account['businessName'] ?? ''} - SR: ${account['salesmanName'] ?? ''} - EXISTING',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  account['isApproved'] == true
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
-                ),
-                onTap: () => _showAccountDetails(account),
-              ),
-            );
+            try {
+              final markerId = 'salesman_account_${account['id']}';
+              final options = PointAnnotationOptions(
+                geometry: Point(coordinates: Position(lng, lat)),
+                textField: '${account['personName'] ?? 'Unknown'}\n${account['businessName'] ?? ''} - SR: ${account['salesmanName'] ?? ''} - EXISTING',
+                textOffset: [0.0, -2.0],
+                textSize: 11.0,
+                iconSize: account['isApproved'] == true ? 1.2 : 1.0,
+              );
+              final marker = await _pointAnnotationManager!.create(options);
+              _markerAnnotations[markerId] = marker;
+            } catch (e) {
+              print('Error adding salesman account marker: $e');
+            }
           } catch (e) {
-            print('Error adding salesman account marker: $e');
+            print('Error processing account: $e');
           }
         }
       }
@@ -1677,25 +1681,25 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (lat == null || lng == null || !_isValidCoordinate(lat, lng))
               continue;
 
-            markers.add(
-              Marker(
-                markerId: MarkerId('google_shop_${shop['id']}'),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: shop['name'] ?? 'Unknown Shop',
-                  snippet: _formatBusinessType(shop['businessType']),
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueViolet, // Purple for Google Places shops
-                ),
-                onTap: () => _showGooglePlaceDetails(shop),
-              ),
-            );
-            googleMarkersAdded++;
+            try {
+              final markerId = 'google_shop_${shop['id']}';
+              final options = PointAnnotationOptions(
+                geometry: Point(coordinates: Position(lng, lat)),
+                textField: '${shop['name'] ?? 'Unknown Shop'}\n${_formatBusinessType(shop['businessType'])}',
+                textOffset: [0.0, -2.0],
+                textSize: 11.0,
+                iconSize: 1.0,
+              );
+              final marker = await _pointAnnotationManager!.create(options);
+              _markerAnnotations[markerId] = marker;
+              googleMarkersAdded++;
+            } catch (e) {
+              print(
+                '❌ Error adding Google Places marker for ${shop['name']}: $e',
+              );
+            }
           } catch (e) {
-            print(
-              '❌ Error adding Google Places marker for ${shop['name']}: $e',
-            );
+            print('Error processing shop: $e');
           }
         }
       }
@@ -1708,20 +1712,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       for (int i = 0; i < nearbyPlaces.length; i++) {
         final place = nearbyPlaces[i];
         if (place.latitude != null && place.longitude != null) {
-          markers.add(
-            Marker(
-              markerId: MarkerId('nearby_place_$i'),
-              position: LatLng(place.latitude!, place.longitude!),
-              infoWindow: InfoWindow(
-                title: place.name,
-                snippet: 'NEARBY PLACE',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueRed, // Red for general nearby places
-              ),
-              onTap: () => _showPlaceDetails(place),
-            ),
-          );
+          try {
+            final markerId = 'nearby_place_$i';
+            final options = PointAnnotationOptions(
+              geometry: Point(coordinates: Position(place.longitude!, place.latitude!)),
+              textField: '${place.name}\nNEARBY PLACE',
+              textOffset: [0.0, -2.0],
+              textSize: 11.0,
+              iconSize: 1.0,
+            );
+            final marker = await _pointAnnotationManager!.create(options);
+            _markerAnnotations[markerId] = marker;
+          } catch (e) {
+            print('Error creating nearby place marker: $e');
+          }
         }
       }
     } else {
@@ -1730,8 +1734,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
     }
 
-    setState(() => _markers = markers);
-    print('=== Updated map with ${markers.length} total markers ===');
+    print('=== Updated map with ${_markerAnnotations.length} total markers ===');
   }
 
   /// Get shop types as List<String> from shop data
@@ -2562,7 +2565,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }).toList();
 
     print('📊 Found ${pincodeAccounts.length} accounts with GPS');
-    _updateMapMarkersForSelectedPincodes();
+    await _updateMapMarkersForSelectedPincodes();
 
     // Focus on accounts if they have valid coordinates
     if (pincodeAccounts.isNotEmpty) {
@@ -2590,14 +2593,20 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         print('✅ Focusing on $validCount accounts');
         if (validCount == 1) {
           await _safeAnimateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(minLat, minLng), 15),
+            Point(coordinates: Position(minLng, minLat)),
+            15.0,
           );
         } else {
-          final bounds = LatLngBounds(
-            southwest: LatLng(minLat - 0.01, minLng - 0.01),
-            northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
-          );
-          await _safeAnimateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+          if (_mapboxService.map != null) {
+            await _mapboxService.fitBounds(
+              bounds: CoordinateBounds(
+                southwest: Point(coordinates: Position(minLng - 0.01, minLat - 0.01)),
+                northeast: Point(coordinates: Position(maxLng + 0.01, maxLat + 0.01)),
+                infiniteBounds: false,
+              ),
+              padding: 100.0,
+            );
+          }
         }
         return;
       }
@@ -2639,7 +2648,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           print('📍 Geocoded: ($lat, $lng)');
 
           final success = await _safeAnimateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(lat, lng), 13),
+            Point(coordinates: Position(lng, lat)),
+            13.0,
           );
           if (success && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2665,20 +2675,35 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
   }
 
-  void _updateMapMarkersForSelectedPincodes() {
-    Set<Marker> markers = {};
+  Future<void> _updateMapMarkersForSelectedPincodes() async {
+    if (_pointAnnotationManager == null) return;
+    
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      try {
+        await _pointAnnotationManager!.delete(marker);
+      } catch (e) {
+        print('Error deleting marker: $e');
+      }
+    }
+    _markerAnnotations.clear();
+    _markerCache.clear();
+    
+    // Add current location marker
     if (_currentPosition != null) {
-      markers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        ),
-      );
+      try {
+        final options = PointAnnotationOptions(
+          geometry: Point(coordinates: Position(_currentPosition!.longitude, _currentPosition!.latitude)),
+          textField: '📍 My Location',
+          textOffset: [0.0, -2.0],
+          textSize: 12.0,
+          iconSize: 1.2,
+        );
+        final marker = await _pointAnnotationManager!.create(options);
+        _markerAnnotations['current_location'] = marker;
+      } catch (e) {
+        print('Error creating current location marker: $e');
+      }
     }
 
     // Only add account markers if _showAccounts is true
@@ -2726,28 +2751,27 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             final lat = double.parse(account['latitude'].toString());
             final lng = double.parse(account['longitude'].toString());
             if (_isValidCoordinate(lat, lng)) {
-              markers.add(
-                Marker(
-                  markerId: MarkerId('account_${account['id']}'),
-                  position: LatLng(lat, lng),
-                  infoWindow: InfoWindow(
-                    title: account['personName'] ?? 'Unknown',
-                    snippet: account['businessName'] ?? '',
-                  ),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    account['isApproved'] == true
-                        ? BitmapDescriptor.hueGreen
-                        : BitmapDescriptor.hueOrange,
-                  ),
-                  onTap: () => _showAccountDetails(account),
-                ),
-              );
+              try {
+                final markerId = 'account_${account['id']}';
+                final options = PointAnnotationOptions(
+                  geometry: Point(coordinates: Position(lng, lat)),
+                  textField: '${account['personName'] ?? 'Unknown'}\n${account['businessName'] ?? ''}',
+                  textOffset: [0.0, -2.0],
+                  textSize: 11.0,
+                  iconSize: account['isApproved'] == true ? 1.2 : 1.0,
+                );
+                final marker = await _pointAnnotationManager!.create(options);
+                _markerAnnotations[markerId] = marker;
+              } catch (e) {
+                print('Error creating account marker: $e');
+              }
             }
-          } catch (e) {}
+          } catch (e) {
+            print('Error processing account: $e');
+          }
         }
       }
     }
-    setState(() => _markers = markers);
   }
 
   void _selectAllPincodes() {
@@ -2765,7 +2789,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       _selectedPincodes.clear();
       _googlePlacesShops.clear();
     });
-    _updateMapMarkers();
+    await _updateMapMarkers();
   }
 
   // Quick date filter methods
@@ -2952,30 +2976,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           ? _buildAccountsList()
           : Stack(
               children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition != null
-                        ? LatLng(
-                            _currentPosition!.latitude,
-                            _currentPosition!.longitude,
-                          )
-                        : _defaultLocation,
-                    zoom: 12,
-                  ),
-                  markers: _markers,
-                  onMapCreated: (controller) async {
-                    if (!mounted || _isControllerDisposed) return;
-                    _mapController = controller;
-                    _isMapReady = true;
-                    _isControllerDisposed = false;
-                    await Future.delayed(const Duration(milliseconds: 500));
-                    if (salesmanAccounts.isNotEmpty)
-                      await _focusOnAccountsArea();
-                  },
-                  myLocationEnabled: _locationPermissionGranted,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: true,
-                ),
+                _buildMapboxMap(),
                 if (_showFilters)
                   Positioned(
                     top: 0,
@@ -3014,13 +3015,8 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               onPressed: () async {
                 if (_currentPosition != null && _isMapInValidState())
                   await _safeAnimateCamera(
-                    CameraUpdate.newLatLngZoom(
-                      LatLng(
-                        _currentPosition!.latitude,
-                        _currentPosition!.longitude,
-                      ),
-                      15,
-                    ),
+                    Point(coordinates: Position(_currentPosition!.longitude, _currentPosition!.latitude)),
+                    15.0,
                   );
               },
               child: const Icon(Icons.my_location),
@@ -3287,10 +3283,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                     Future.microtask(() {
                       if (_selectedPincodes.isNotEmpty) {
                         print('Calling _updateMapMarkersWithAllShops');
-                        _updateMapMarkersWithAllShops();
+                        await _updateMapMarkersWithAllShops();
                       } else {
                         print('Calling _updateMapMarkersDefault');
-                        _updateMapMarkersDefault();
+                        await _updateMapMarkersDefault();
                       }
                     });
                   },
@@ -3311,10 +3307,10 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                     Future.microtask(() {
                       if (_selectedPincodes.isNotEmpty) {
                         print('Calling _updateMapMarkersWithAllShops');
-                        _updateMapMarkersWithAllShops();
+                        await _updateMapMarkersWithAllShops();
                       } else {
                         print('Calling _updateMapMarkersDefault');
-                        _updateMapMarkersDefault();
+                        await _updateMapMarkersDefault();
                       }
                     });
                   },
@@ -4061,5 +4057,46 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         ),
       ),
     );
+  }
+  
+  // Build Mapbox map widget
+  Widget _buildMapboxMap() {
+    final initialPoint = _currentPosition != null
+        ? Position(_currentPosition!.longitude, _currentPosition!.latitude)
+        : _defaultLocation;
+    
+    return MapWidget(
+      key: const ValueKey("admin_enhanced_map"),
+      cameraOptions: CameraOptions(
+        center: Point(coordinates: initialPoint),
+        zoom: 12.0,
+      ),
+      styleUri: MapboxConfig.defaultMapStyle,
+      onMapCreated: _onMapCreated,
+    );
+  }
+  
+  Future<void> _onMapCreated(MapboxMap map) async {
+    try {
+      _mapboxMap = map;
+      _mapboxService.initialize(map);
+      
+      // Create annotation manager
+      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
+      
+      _isMapReady = true;
+      
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (salesmanAccounts.isNotEmpty) {
+        await _focusOnAccountsArea();
+      }
+      
+      // Update markers after map is ready
+      await _updateMapMarkers();
+      
+      print('✅ Mapbox map created for admin enhanced map');
+    } catch (e) {
+      print('❌ Error creating Mapbox map: $e');
+    }
   }
 }

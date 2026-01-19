@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/mapbox_config.dart';
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
@@ -45,10 +47,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   bool _isFetchingBusinesses = false;
 
   // Map data
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
+  MapboxMap? _mapboxMap;
+  final MapboxService _mapboxService = MapboxService();
+  PointAnnotationManager? _pointAnnotationManager;
+  
+  // Mapbox annotations
+  Map<String, PointAnnotation> _markerAnnotations = {};
+  
   List<Shop> _shops = [];
-  LatLng _initialPosition = const LatLng(20.5937, 78.9629);
+  Position _initialPosition = Position(78.9629, 20.5937); // India center (lng, lat)
 
   bool _mapHelpShown = false;
   bool _isFilterExpanded = true; // Add filter collapse state
@@ -86,7 +93,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     _pincodeController.dispose();
     _salesmanSearchController.dispose();
     _pageController.dispose();
-    _mapController?.dispose();
+    _mapboxService.dispose();
+    _mapboxMap = null;
     super.dispose();
   }
 
@@ -263,18 +271,25 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   // Simple clustering: group shops when zoomed out
   Future<void> _updateMapMarkers() async {
-    if (_mapController == null) {
+    if (_pointAnnotationManager == null) {
       return;
     }
 
-    double zoom;
-    try {
-      zoom = await _mapController!.getZoomLevel();
-    } catch (_) {
-      zoom = 12;
+    // Clear existing markers
+    for (var marker in _markerAnnotations.values) {
+      await _pointAnnotationManager!.delete(marker);
     }
+    _markerAnnotations.clear();
 
-    final markers = <Marker>{};
+    double zoom = 12.0;
+    try {
+      if (_mapboxMap != null) {
+        final cameraState = await _mapboxMap!.getCameraState();
+        zoom = cameraState.zoom;
+      }
+    } catch (_) {
+      zoom = 12.0;
+    }
 
     // filter shops first
     final filteredShops = _shops.where((shop) {
@@ -311,20 +326,20 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         if (shopsInBucket.isEmpty) return;
         if (shopsInBucket.length == 1) {
           final shop = shopsInBucket.first;
-          markers.add(
-            Marker(
-              markerId: MarkerId(shop.placeId ?? shop.name),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: shop.name,
-                snippet: '${shop.businessType} - ${shop.stage}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                _getMarkerColor(shop.stage),
-              ),
-              onTap: () => _showShopDetails(shop),
-            ),
-          );
+          try {
+            final markerId = shop.placeId ?? shop.name;
+            final options = PointAnnotationOptions(
+              geometry: Point(coordinates: Position(shop.longitude!, shop.latitude!)),
+              textField: '${shop.name}\n${shop.businessType} - ${shop.stage}',
+              textOffset: [0.0, -2.0],
+              textSize: 11.0,
+              iconSize: 1.0,
+            );
+            final marker = await _pointAnnotationManager!.create(options);
+            _markerAnnotations[markerId] = marker;
+          } catch (e) {
+            print('Error creating marker: $e');
+          }
         } else {
           final avgLat =
               shopsInBucket.map((s) => s.latitude!).reduce((a, b) => a + b) /
@@ -334,53 +349,54 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
               shopsInBucket.length;
           final count = shopsInBucket.length;
 
-          markers.add(
-            Marker(
-              markerId: MarkerId('cluster_$key'),
-              position: LatLng(avgLat, avgLng),
-              infoWindow: InfoWindow(
-                title: '$count businesses',
-                snippet: 'Zoom in to see individual shops',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet,
-              ),
-            ),
-          );
+          try {
+            final markerId = 'cluster_$key';
+            final options = PointAnnotationOptions(
+              geometry: Point(coordinates: Position(avgLng, avgLat)),
+              textField: '$count businesses\nZoom in to see individual shops',
+              textOffset: [0.0, -2.0],
+              textSize: 11.0,
+              iconSize: 1.2,
+            );
+            final marker = await _pointAnnotationManager!.create(options);
+            _markerAnnotations[markerId] = marker;
+          } catch (e) {
+            print('Error creating cluster marker: $e');
+          }
         }
       });
     } else {
       // show all individually
       for (var shop in filteredShops) {
-        markers.add(
-          Marker(
-            markerId: MarkerId(shop.placeId ?? shop.name),
-            position: LatLng(shop.latitude!, shop.longitude!),
-            infoWindow: InfoWindow(
-              title: shop.name,
-              snippet: '${shop.businessType} - ${shop.stage}',
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              _getMarkerColor(shop.stage),
-            ),
-            onTap: () => _showShopDetails(shop),
-          ),
-        );
+        try {
+          final markerId = shop.placeId ?? shop.name;
+          final options = PointAnnotationOptions(
+            geometry: Point(coordinates: Position(shop.longitude!, shop.latitude!)),
+            textField: '${shop.name}\n${shop.businessType} - ${shop.stage}',
+            textOffset: [0.0, -2.0],
+            textSize: 11.0,
+            iconSize: 1.0,
+          );
+          final marker = await _pointAnnotationManager!.create(options);
+          _markerAnnotations[markerId] = marker;
+        } catch (e) {
+          print('Error creating marker for ${shop.name}: $e');
+        }
       }
     }
 
-    setState(() {
-      _markers = markers;
-      if (filteredShops.isNotEmpty && filteredShops.first.latitude != null) {
-        _initialPosition = LatLng(
-          filteredShops.first.latitude!,
-          filteredShops.first.longitude!,
-        );
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_initialPosition, zoom),
+    if (filteredShops.isNotEmpty && filteredShops.first.latitude != null) {
+      _initialPosition = Position(
+        filteredShops.first.longitude!,
+        filteredShops.first.latitude!,
+      );
+      if (_mapboxMap != null && _mapboxService.map != null) {
+        await _mapboxService.animateCamera(
+          center: Point(coordinates: _initialPosition),
+          zoom: zoom,
         );
       }
-    });
+    }
   }
 
   double _getMarkerColor(String stage) {
@@ -631,8 +647,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       _selectedAreasByPincode = {};
       _selectedBusinessTypes = {};
       _shops = [];
-      _markers = {};
     });
+    
+    // Clear markers
+    if (_pointAnnotationManager != null) {
+      for (var marker in _markerAnnotations.values) {
+        await _pointAnnotationManager!.delete(marker);
+      }
+      _markerAnnotations.clear();
+    }
     _pageController.jumpToPage(0);
     // Switch to assignments tab to show the new assignment
     _tabController.animateTo(1);
@@ -1794,31 +1817,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
     return Stack(
       children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: _initialPosition,
-            zoom: 12,
-          ),
-          markers: _markers,
-          onMapCreated: (controller) {
-            _mapController = controller;
-            _updateMapMarkers();
-          },
-
-          // Fixed gesture recognizers - each type only once
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-
-          myLocationEnabled: true,
-          myLocationButtonEnabled: true,
-          mapType: MapType.normal,
-          zoomGesturesEnabled: true,
-          scrollGesturesEnabled: true,
-          tiltGesturesEnabled: true,
-          rotateGesturesEnabled: true,
-          zoomControlsEnabled: false,
-          onTap: (_) {
+        GestureDetector(
+          onTap: () {
             // Close place details overlay when tapping on map
             if (_showPlaceDetailsOverlay) {
               setState(() {
@@ -1827,6 +1827,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
               });
             }
           },
+          child: _buildMapboxMap(),
         ),
         // Filters
         Positioned(
@@ -1875,8 +1876,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                               setState(() {
                                 _mapBusinessTypeFilter.clear();
                                 _mapStageFilter.clear();
-                                _updateMapMarkers();
                               });
+                              await _updateMapMarkers();
                             },
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
@@ -2024,15 +2025,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                                 style: const TextStyle(fontSize: 11),
                               ),
                               selected: isSelected,
-                              onSelected: (selected) {
+                              onSelected: (selected) async {
                                 setState(() {
                                   if (selected) {
                                     _mapBusinessTypeFilter.add(type);
                                   } else {
                                     _mapBusinessTypeFilter.remove(type);
                                   }
-                                  _updateMapMarkers();
                                 });
+                                await _updateMapMarkers();
                               },
                               selectedColor: primaryColor.withOpacity(0.3),
                               checkmarkColor: primaryColor,
@@ -2210,15 +2211,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         ],
       ),
       selected: isSelected,
-      onSelected: (selected) {
+      onSelected: (selected) async {
         setState(() {
           if (selected) {
             _mapStageFilter.add(value);
           } else {
             _mapStageFilter.remove(value);
           }
-          _updateMapMarkers();
         });
+        await _updateMapMarkers();
       },
       selectedColor: color.withOpacity(0.3),
       checkmarkColor: color,
@@ -2761,6 +2762,38 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         ),
       ],
     );
+  }
+  
+  // Build Mapbox map widget
+  Widget _buildMapboxMap() {
+    return MapWidget(
+      key: const ValueKey("modern_task_assignment_map"),
+      cameraOptions: CameraOptions(
+        center: Point(coordinates: _initialPosition),
+        zoom: 12.0,
+      ),
+      styleUri: MapboxConfig.defaultMapStyle,
+      onMapCreated: _onMapCreated,
+    );
+  }
+  
+  Future<void> _onMapCreated(MapboxMap map) async {
+    try {
+      _mapboxMap = map;
+      _mapboxService.initialize(map);
+      
+      // Create annotation manager
+      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
+      
+      // Create markers if shops are already loaded
+      if (_shops.isNotEmpty) {
+        await _updateMapMarkers();
+      }
+      
+      print('✅ Mapbox map created for modern task assignment');
+    } catch (e) {
+      print('❌ Error creating Mapbox map: $e');
+    }
   }
 }
 
