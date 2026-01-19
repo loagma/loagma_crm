@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import {
     getCurrentISTTime,
     convertUTCToIST,
@@ -14,8 +14,6 @@ import NotificationService from '../services/notificationService.js';
 
 // kiranastore hostel caterers sweets 
 //  date filter in list of aaccoumts
-
-const prisma = new PrismaClient();
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -990,18 +988,22 @@ export const getLiveAttendanceDashboard = async (req, res) => {
         const { startOfDay, endOfDay } = getISTDateRange();
 
         // Get today's attendance records with enhanced data
-        const todayAttendances = await prisma.attendance.findMany({
-            where: {
-                punchInTime: {
-                    gte: startOfDay,
-                    lt: endOfDay
-                }
-            },
-            orderBy: { punchInTime: 'desc' }
-        });
+        let todayAttendances;
+        let allEmployees;
+        
+        try {
+            todayAttendances = await prisma.attendance.findMany({
+                where: {
+                    punchInTime: {
+                        gte: startOfDay,
+                        lt: endOfDay
+                    }
+                },
+                orderBy: { punchInTime: 'desc' }
+            });
 
-        // Get all employees for comparison
-        const allEmployees = await prisma.user.findMany({
+            // Get all employees for comparison
+            allEmployees = await prisma.user.findMany({
             where: {
                 isActive: true,
                 roles: {
@@ -1021,6 +1023,22 @@ export const getLiveAttendanceDashboard = async (req, res) => {
                 }
             }
         });
+        } catch (dbError) {
+            // Handle database connection errors
+            const errorMessage = dbError.message || dbError.toString();
+            if (errorMessage.includes("Can't reach database server") || 
+                errorMessage.includes("P1001") ||
+                errorMessage.includes("ECONNREFUSED")) {
+                console.error('Get live dashboard error: Database connection failed');
+                return res.status(503).json({
+                    success: false,
+                    message: 'Database connection unavailable. Please check database server status.',
+                    error: 'Database connection error',
+                    retryAfter: 30 // Suggest retry after 30 seconds
+                });
+            }
+            throw dbError; // Re-throw if it's a different error
+        }
 
         // Group attendances by employee to handle multiple sessions
         const employeeAttendanceMap = {};
@@ -1106,10 +1124,24 @@ export const getLiveAttendanceDashboard = async (req, res) => {
         });
     } catch (error) {
         console.error('Get live dashboard error:', error);
+        const errorMessage = error.message || error.toString();
+        
+        // Check if it's a database connection error
+        if (errorMessage.includes("Can't reach database server") || 
+            errorMessage.includes("P1001") ||
+            errorMessage.includes("ECONNREFUSED")) {
+            return res.status(503).json({
+                success: false,
+                message: 'Database connection unavailable. Please check database server status.',
+                error: 'Database connection error',
+                retryAfter: 30
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch live dashboard data',
-            error: error.message
+            error: errorMessage
         });
     }
 };

@@ -237,14 +237,9 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     // ignore stale or clearing results
     if (!mounted ||
         _isClearingForm ||
-<<<<<<< HEAD
         _contactNumberController.text != requestedNumber) {
       return;
     }
-=======
-        _contactNumberController.text != requestedNumber)
-      return;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
     if (result['exists'] == true && result['data'] != null) {
       setState(() {

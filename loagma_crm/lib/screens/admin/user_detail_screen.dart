@@ -1,19 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../services/api_config.dart';
 import '../../../services/mapbox_service.dart';
 import '../../../config/mapbox_config.dart';
-=======
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../../services/api_config.dart';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import 'edit_user_screen.dart';
 
 class UserDetailScreen extends StatefulWidget {
@@ -33,22 +26,18 @@ class UserDetailScreen extends StatefulWidget {
 class _UserDetailScreenState extends State<UserDetailScreen> {
   Map<String, dynamic>? workingHours;
   bool isLoadingWorkingHours = false;
-<<<<<<< HEAD
   
   // Mapbox map state
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
   final Map<String, PointAnnotation> _markerAnnotations = {};
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   @override
   void initState() {
     super.initState();
     _loadWorkingHours();
   }
-<<<<<<< HEAD
   
   @override
   void dispose() {
@@ -56,8 +45,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     _mapboxMap = null;
     super.dispose();
   }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   Future<void> _loadWorkingHours() async {
     setState(() => isLoadingWorkingHours = true);
@@ -362,34 +349,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-<<<<<<< HEAD
                     child: _buildMapboxMap(),
-=======
-                    child: GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(
-                          _parseCoordinate(widget.user['latitude']),
-                          _parseCoordinate(widget.user['longitude']),
-                        ),
-                        zoom: 15,
-                      ),
-                      markers: {
-                        Marker(
-                          markerId: const MarkerId('employee_location'),
-                          position: LatLng(
-                            _parseCoordinate(widget.user['latitude']),
-                            _parseCoordinate(widget.user['longitude']),
-                          ),
-                          infoWindow: InfoWindow(
-                            title: widget.user['name'] ?? 'Employee Location',
-                          ),
-                        ),
-                      },
-                      myLocationButtonEnabled: false,
-                      zoomControlsEnabled: true,
-                      mapToolbarEnabled: false,
-                    ),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                   ),
                 ),
               ]),
@@ -847,7 +807,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     final value = _parseCoordinate(coord);
     return value.toStringAsFixed(6);
   }
-<<<<<<< HEAD
   
   // Mapbox map builder
   Widget _buildMapboxMap() {
@@ -894,6 +853,4 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       print('❌ Error creating Mapbox map: $e');
     }
   }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 }

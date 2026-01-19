@@ -537,17 +537,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                   onPressed: () => context.go(
                     '/dashboard/${UserService.currentRole ?? 'dashboard'}',
                   ),
-<<<<<<< HEAD
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD7BE69),
                   ),
                   child: const Text('Back to Dashboard'),
-=======
-                  child: const Text('Back to Dashboard'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD7BE69),
-                  ),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                 ),
               ],
             ),
@@ -663,14 +656,9 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                                                       loadingProgress,
                                                     ) {
                                                       if (loadingProgress ==
-<<<<<<< HEAD
                                                           null) {
                                                         return child;
                                                       }
-=======
-                                                          null)
-                                                        return child;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                                       return const Center(
                                                         child:
                                                             CircularProgressIndicator(),
@@ -763,14 +751,9 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                                                       loadingProgress,
                                                     ) {
                                                       if (loadingProgress ==
-<<<<<<< HEAD
                                                           null) {
                                                         return child;
                                                       }
-=======
-                                                          null)
-                                                        return child;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                                       return const Center(
                                                         child:
                                                             CircularProgressIndicator(),
@@ -1111,11 +1094,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                             },
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
-<<<<<<< HEAD
                               return SizedBox(
-=======
-                              return Container(
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                 height: 200,
                                 child: Center(
                                   child: CircularProgressIndicator(

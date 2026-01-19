@@ -1,19 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
-=======
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import '../../services/map_task_assignment_service.dart';
-import '../../services/google_places_service.dart';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
@@ -49,16 +42,11 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   Map<String, List<String>> _selectedAreasByPincode = {};
   Set<String> _selectedBusinessTypes = {};
   Set<String> _mapBusinessTypeFilter = {};
-<<<<<<< HEAD
   final Set<String> _mapStageFilter = {};
-=======
-  Set<String> _mapStageFilter = {};
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   bool _isLoading = false;
   bool _isFetchingBusinesses = false;
 
   // Map data
-<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
@@ -72,16 +60,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   bool _mapHelpShown = false;
   bool _isFilterExpanded = true; // Add filter collapse state
   final Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
-=======
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
-  List<Shop> _shops = [];
-  LatLng _initialPosition = const LatLng(20.5937, 78.9629);
-
-  bool _mapHelpShown = false;
-  bool _isFilterExpanded = true; // Add filter collapse state
-  Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // Place details overlay state (for Google Maps-like interface)
   PlaceInfo? _selectedPlace;
@@ -115,12 +93,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     _pincodeController.dispose();
     _salesmanSearchController.dispose();
     _pageController.dispose();
-<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
-=======
-    _mapController?.dispose();
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -297,7 +271,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   // Simple clustering: group shops when zoomed out
   Future<void> _updateMapMarkers() async {
-<<<<<<< HEAD
     if (_pointAnnotationManager == null) {
       return;
     }
@@ -318,27 +291,11 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       zoom = 12.0;
     }
 
-=======
-    if (_mapController == null) {
-      return;
-    }
-
-    double zoom;
-    try {
-      zoom = await _mapController!.getZoomLevel();
-    } catch (_) {
-      zoom = 12;
-    }
-
-    final markers = <Marker>{};
-
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     // filter shops first
     final filteredShops = _shops.where((shop) {
       if (shop.latitude == null || shop.longitude == null) return false;
 
       if (_mapBusinessTypeFilter.isNotEmpty &&
-<<<<<<< HEAD
           !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase())) {
         return false;
       }
@@ -347,14 +304,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           !_mapStageFilter.contains(shop.stage.toLowerCase())) {
         return false;
       }
-=======
-          !_mapBusinessTypeFilter.contains(shop.businessType.toLowerCase()))
-        return false;
-
-      if (_mapStageFilter.isNotEmpty &&
-          !_mapStageFilter.contains(shop.stage.toLowerCase()))
-        return false;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       return true;
     }).toList();
@@ -379,7 +328,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         if (shopsInBucket.isEmpty) return;
         if (shopsInBucket.length == 1) {
           final shop = shopsInBucket.first;
-<<<<<<< HEAD
           try {
             final markerId = shop.placeId ?? shop.name;
             final options = PointAnnotationOptions(
@@ -394,22 +342,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           } catch (e) {
             print('Error creating marker: $e');
           }
-=======
-          markers.add(
-            Marker(
-              markerId: MarkerId(shop.placeId ?? shop.name),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: shop.name,
-                snippet: '${shop.businessType} - ${shop.stage}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                _getMarkerColor(shop.stage),
-              ),
-              onTap: () => _showShopDetails(shop),
-            ),
-          );
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         } else {
           final avgLat =
               shopsInBucket.map((s) => s.latitude!).reduce((a, b) => a + b) /
@@ -419,7 +351,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
               shopsInBucket.length;
           final count = shopsInBucket.length;
 
-<<<<<<< HEAD
           try {
             final markerId = 'cluster_$key';
             final options = PointAnnotationOptions(
@@ -434,27 +365,11 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           } catch (e) {
             print('Error creating cluster marker: $e');
           }
-=======
-          markers.add(
-            Marker(
-              markerId: MarkerId('cluster_$key'),
-              position: LatLng(avgLat, avgLng),
-              infoWindow: InfoWindow(
-                title: '$count businesses',
-                snippet: 'Zoom in to see individual shops',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet,
-              ),
-            ),
-          );
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         }
       });
     } else {
       // show all individually
       for (var shop in filteredShops) {
-<<<<<<< HEAD
         try {
           final markerId = shop.placeId ?? shop.name;
           final options = PointAnnotationOptions(
@@ -484,37 +399,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         );
       }
     }
-=======
-        markers.add(
-          Marker(
-            markerId: MarkerId(shop.placeId ?? shop.name),
-            position: LatLng(shop.latitude!, shop.longitude!),
-            infoWindow: InfoWindow(
-              title: shop.name,
-              snippet: '${shop.businessType} - ${shop.stage}',
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              _getMarkerColor(shop.stage),
-            ),
-            onTap: () => _showShopDetails(shop),
-          ),
-        );
-      }
-    }
-
-    setState(() {
-      _markers = markers;
-      if (filteredShops.isNotEmpty && filteredShops.first.latitude != null) {
-        _initialPosition = LatLng(
-          filteredShops.first.latitude!,
-          filteredShops.first.longitude!,
-        );
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_initialPosition, zoom),
-        );
-      }
-    });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   }
 
   double _getMarkerColor(String stage) {
@@ -559,12 +443,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       }
 
       // If no Google Places data, create a PlaceInfo from Shop data
-<<<<<<< HEAD
       placeInfo ??= PlaceInfo(
-=======
-      if (placeInfo == null) {
-        placeInfo = PlaceInfo(
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           placeId: shop.placeId ?? shop.id,
           name: shop.name,
           address: shop.address ?? 'Address not available',
@@ -579,10 +458,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           photoUrls: shop.photos ?? [],
           reviews: [],
         );
-<<<<<<< HEAD
-=======
-      }
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       setState(() => _isLoading = false);
 
@@ -772,7 +647,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       _selectedAreasByPincode = {};
       _selectedBusinessTypes = {};
       _shops = [];
-<<<<<<< HEAD
     });
     
     // Clear markers
@@ -782,10 +656,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       }
       _markerAnnotations.clear();
     }
-=======
-      _markers = {};
-    });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     _pageController.jumpToPage(0);
     // Switch to assignments tab to show the new assignment
     _tabController.animateTo(1);
@@ -1534,11 +1404,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   ],
                 ),
               );
-<<<<<<< HEAD
             }),
-=======
-            }).toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           ] else
             Card(
               color: Colors.blue[50],
@@ -1844,11 +1710,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   ),
                 ),
               );
-<<<<<<< HEAD
             }),
-=======
-            }).toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           ],
         ],
       ),
@@ -1955,36 +1817,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
     return Stack(
       children: [
-<<<<<<< HEAD
         GestureDetector(
           onTap: () {
-=======
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: _initialPosition,
-            zoom: 12,
-          ),
-          markers: _markers,
-          onMapCreated: (controller) {
-            _mapController = controller;
-            _updateMapMarkers();
-          },
-
-          // Fixed gesture recognizers - each type only once
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-
-          myLocationEnabled: true,
-          myLocationButtonEnabled: true,
-          mapType: MapType.normal,
-          zoomGesturesEnabled: true,
-          scrollGesturesEnabled: true,
-          tiltGesturesEnabled: true,
-          rotateGesturesEnabled: true,
-          zoomControlsEnabled: false,
-          onTap: (_) {
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
             // Close place details overlay when tapping on map
             if (_showPlaceDetailsOverlay) {
               setState(() {
@@ -1993,10 +1827,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
               });
             }
           },
-<<<<<<< HEAD
           child: _buildMapboxMap(),
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         ),
         // Filters
         Positioned(
@@ -2045,13 +1876,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                               setState(() {
                                 _mapBusinessTypeFilter.clear();
                                 _mapStageFilter.clear();
-<<<<<<< HEAD
                               });
                               await _updateMapMarkers();
-=======
-                                _updateMapMarkers();
-                              });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                             },
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
@@ -2199,24 +2025,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                                 style: const TextStyle(fontSize: 11),
                               ),
                               selected: isSelected,
-<<<<<<< HEAD
                               onSelected: (selected) async {
-=======
-                              onSelected: (selected) {
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                 setState(() {
                                   if (selected) {
                                     _mapBusinessTypeFilter.add(type);
                                   } else {
                                     _mapBusinessTypeFilter.remove(type);
                                   }
-<<<<<<< HEAD
                                 });
                                 await _updateMapMarkers();
-=======
-                                  _updateMapMarkers();
-                                });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                               },
                               selectedColor: primaryColor.withOpacity(0.3),
                               checkmarkColor: primaryColor,
@@ -2394,24 +2211,15 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         ],
       ),
       selected: isSelected,
-<<<<<<< HEAD
       onSelected: (selected) async {
-=======
-      onSelected: (selected) {
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         setState(() {
           if (selected) {
             _mapStageFilter.add(value);
           } else {
             _mapStageFilter.remove(value);
           }
-<<<<<<< HEAD
         });
         await _updateMapMarkers();
-=======
-          _updateMapMarkers();
-        });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       },
       selectedColor: color.withOpacity(0.3),
       checkmarkColor: color,
@@ -2884,11 +2692,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                     ],
                   ),
                 );
-<<<<<<< HEAD
               }),
-=======
-              }).toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
             ],
           ),
         );
@@ -2959,7 +2763,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       ],
     );
   }
-<<<<<<< HEAD
   
   // Build Mapbox map widget
   Widget _buildMapboxMap() {
@@ -2992,8 +2795,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       print('❌ Error creating Mapbox map: $e');
     }
   }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 }
 
 // Enhanced Shop Details Dialog Widget

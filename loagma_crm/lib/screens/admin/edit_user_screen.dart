@@ -8,18 +8,12 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
 import '../../config/google_places_config.dart';
-=======
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../services/api_config.dart';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import '../../utils/custom_toast.dart';
 
 class EditUserScreen extends StatefulWidget {
@@ -76,14 +70,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
   double? _latitude;
   double? _longitude;
   bool isLoadingGeolocation = false;
-<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
   final Map<String, PointAnnotation> _markerAnnotations = {};
-=======
-  GoogleMapController? _mapController;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // Data lists
   List<Map<String, dynamic>> roles = [];
@@ -200,11 +190,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
   @override
   @override
   void dispose() {
-<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -221,11 +208,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _notesController.dispose();
     _salaryController.dispose();
     _locationSearchController.dispose();
-<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
   
@@ -360,14 +344,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
       if (response.statusCode == 200 && data['success'] == true) {
         if (kDebugMode) print('✅ Working hours saved successfully');
       } else {
-<<<<<<< HEAD
         if (kDebugMode) {
           print('❌ Failed to save working hours: ${data['message']}');
         }
-=======
-        if (kDebugMode)
-          print('❌ Failed to save working hours: ${data['message']}');
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error saving working hours: $e');
@@ -384,14 +363,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
   Future<void> fetchDepartments() async {
     try {
-<<<<<<< HEAD
       if (kDebugMode) {
         print('🔄 Fetching departments from: ${ApiConfig.baseUrl}/departments');
       }
-=======
-      if (kDebugMode)
-        print('🔄 Fetching departments from: ${ApiConfig.baseUrl}/departments');
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       final url = Uri.parse('${ApiConfig.baseUrl}/departments');
       final response = await http.get(url).timeout(const Duration(seconds: 30));
@@ -428,18 +402,11 @@ class _EditUserScreenState extends State<EditUserScreen> {
           );
         }
       } else {
-<<<<<<< HEAD
         if (kDebugMode) {
           print(
             '❌ Departments API failed: ${data['message'] ?? 'Unknown error'}',
           );
         }
-=======
-        if (kDebugMode)
-          print(
-            '❌ Departments API failed: ${data['message'] ?? 'Unknown error'}',
-          );
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
         // Try alternative endpoint
         await _tryAlternativeDepartmentEndpoint();
@@ -499,18 +466,11 @@ class _EditUserScreenState extends State<EditUserScreen> {
             }
 
             if (departmentsList.isNotEmpty) {
-<<<<<<< HEAD
               if (kDebugMode) {
                 print(
                   '✅ Found departments via alternative endpoint: ${departmentsList.length}',
                 );
               }
-=======
-              if (kDebugMode)
-                print(
-                  '✅ Found departments via alternative endpoint: ${departmentsList.length}',
-                );
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
               setState(() {
                 departments = List<Map<String, dynamic>>.from(departmentsList);
@@ -530,14 +490,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
       }
 
       // If all endpoints fail, create mock departments for testing
-<<<<<<< HEAD
       if (kDebugMode) {
         print('⚠️ All department endpoints failed, using mock data');
       }
-=======
-      if (kDebugMode)
-        print('⚠️ All department endpoints failed, using mock data');
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       setState(() {
         departments = [
@@ -805,7 +760,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
         _latitude = position.latitude;
         _longitude = position.longitude;
       });
-<<<<<<< HEAD
       
       // Update marker and camera
       await _updateLocationMarker(position.latitude, position.longitude);
@@ -815,8 +769,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
           zoom: 15.0,
         );
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       Fluttertoast.showToast(
         msg:
@@ -834,10 +786,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   Future<void> _openInGoogleMaps() async {
     if (_latitude == null || _longitude == null) return;
 
-<<<<<<< HEAD
     // Open in external map app (Google Maps or default)
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     final url =
         'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
     final uri = Uri.parse(url);
@@ -846,7 +795,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-<<<<<<< HEAD
         Fluttertoast.showToast(msg: 'Could not open map application');
       }
     } catch (e) {
@@ -879,12 +827,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
       _markerAnnotations['selected_location'] = marker;
     } catch (e) {
       print('Error updating location marker: $e');
-=======
-        Fluttertoast.showToast(msg: 'Could not open Google Maps');
-      }
-    } catch (e) {
-      Fluttertoast.showToast(msg: 'Error opening Google Maps: $e');
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     }
   }
 
@@ -946,19 +888,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
       }
 
       // Move map camera to the location with smooth animation
-<<<<<<< HEAD
       if (_mapboxMap != null && foundLocation && _mapboxService.map != null) {
         await _mapboxService.animateCamera(
           center: Point(coordinates: Position(lng, lat)),
           zoom: _getAppropriateZoomLevel(locationName, query),
-=======
-      if (_mapController != null && foundLocation) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(lat, lng),
-            _getAppropriateZoomLevel(locationName, query),
-          ),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         );
       }
 
@@ -966,14 +899,11 @@ class _EditUserScreenState extends State<EditUserScreen> {
         _latitude = lat;
         _longitude = lng;
       });
-<<<<<<< HEAD
       
       // Update marker on map
       if (_latitude != null && _longitude != null) {
         await _updateLocationMarker(_latitude!, _longitude!);
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       if (foundLocation) {
         Fluttertoast.showToast(
@@ -1816,7 +1746,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
                               borderRadius: BorderRadius.circular(8),
                               child: Stack(
                                 children: [
-<<<<<<< HEAD
                                   GestureDetector(
                                     onTapUp: (details) async {
                                       // Handle map tap to select location
@@ -1846,75 +1775,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                       }
                                     },
                                     child: _buildMapboxMap(),
-=======
-                                  GoogleMap(
-                                    onMapCreated:
-                                        (GoogleMapController controller) {
-                                          _mapController = controller;
-                                        },
-                                    initialCameraPosition: CameraPosition(
-                                      target:
-                                          _latitude != null &&
-                                              _longitude != null
-                                          ? LatLng(_latitude!, _longitude!)
-                                          : const LatLng(
-                                              20.5937,
-                                              78.9629,
-                                            ), // India center
-                                      zoom: _latitude != null ? 15 : 5,
-                                    ),
-                                    markers:
-                                        _latitude != null && _longitude != null
-                                        ? {
-                                            Marker(
-                                              markerId: const MarkerId(
-                                                'selected_location',
-                                              ),
-                                              position: LatLng(
-                                                _latitude!,
-                                                _longitude!,
-                                              ),
-                                              infoWindow: const InfoWindow(
-                                                title: 'Employee Location',
-                                                snippet:
-                                                    'Tap to change location',
-                                              ),
-                                            ),
-                                          }
-                                        : {},
-                                    onTap: (LatLng position) {
-                                      setState(() {
-                                        _latitude = position.latitude;
-                                        _longitude = position.longitude;
-                                      });
-                                      Fluttertoast.showToast(
-                                        msg:
-                                            'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-                                      );
-                                    },
-
-                                    // Fixed gesture recognizers - each type only once
-                                    gestureRecognizers:
-                                        <Factory<OneSequenceGestureRecognizer>>{
-                                          Factory<EagerGestureRecognizer>(
-                                            () => EagerGestureRecognizer(),
-                                          ),
-                                        },
-
-                                    myLocationButtonEnabled: false,
-                                    zoomControlsEnabled: true,
-                                    mapToolbarEnabled: false,
-                                    zoomGesturesEnabled: true,
-                                    scrollGesturesEnabled: true,
-                                    tiltGesturesEnabled: false,
-                                    rotateGesturesEnabled: false,
-                                    compassEnabled: false,
-                                    indoorViewEnabled: false,
-                                    trafficEnabled: false,
-                                    buildingsEnabled: false,
-                                    liteModeEnabled: false,
-                                    mapType: MapType.normal,
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                   ),
 
                                   // Search overlay

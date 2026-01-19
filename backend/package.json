@@ -11,12 +11,8 @@
     "check-env": "node scripts/check-env.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
-    "db:db:seed:locations": "node prisma/seedLocations.js",
-    "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset",
+    "db:seed:locations": "node prisma/seedLocations.js",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"
   },

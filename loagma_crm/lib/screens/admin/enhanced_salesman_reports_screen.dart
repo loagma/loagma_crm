@@ -55,16 +55,12 @@ class _EnhancedSalesmanReportsScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-<<<<<<< HEAD
     _validateAndResetFutureDates(); // Validate dates on init
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     _loadSalesmenList();
     _loadReports();
     _startAutoRefresh();
   }
 
-<<<<<<< HEAD
   /// Validate and reset any future dates to today
   void _validateAndResetFutureDates() {
     final now = DateTime.now();
@@ -87,8 +83,6 @@ class _EnhancedSalesmanReportsScreenState
     }
   }
 
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   void _startAutoRefresh() {
     // Refresh every 60 seconds to update time displays
     _refreshTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
@@ -556,7 +550,6 @@ class _EnhancedSalesmanReportsScreenState
         '🎨 First salesman: ${salesmenList.first['name']} (${salesmenList.first['id']})',
       );
     }
-<<<<<<< HEAD
 
     // Check for future dates
     final now = DateTime.now();
@@ -565,8 +558,6 @@ class _EnhancedSalesmanReportsScreenState
         (customStartDate != null && customStartDate!.isAfter(today)) ||
         (customEndDate != null && customEndDate!.isAfter(today));
 
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -581,7 +572,6 @@ class _EnhancedSalesmanReportsScreenState
       ),
       child: Column(
         children: [
-<<<<<<< HEAD
           // Warning banner for future dates
           if (hasFutureDates) ...[
             Container(
@@ -611,18 +601,12 @@ class _EnhancedSalesmanReportsScreenState
             ),
           ],
 
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           // Salesman selector
           Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-<<<<<<< HEAD
                   initialValue: selectedSalesmanId,
-=======
-                  value: selectedSalesmanId,
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                   decoration: const InputDecoration(
                     labelText: 'Select Salesman',
                     border: OutlineInputBorder(),
@@ -645,11 +629,7 @@ class _EnhancedSalesmanReportsScreenState
                         value: id.isNotEmpty ? id : null,
                         child: Text(name),
                       );
-<<<<<<< HEAD
                     }),
-=======
-                    }).toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -757,7 +737,6 @@ class _EnhancedSalesmanReportsScreenState
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-<<<<<<< HEAD
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -783,16 +762,6 @@ class _EnhancedSalesmanReportsScreenState
         return;
       }
 
-=======
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-
-    if (picked != null) {
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       setState(() {
         if (isStartDate) {
           customStartDate = picked;
@@ -1181,11 +1150,7 @@ class _EnhancedSalesmanReportsScreenState
               // Display accounts
               ...salesmanAccounts
                   .map((account) => _buildAccountCardFromModel(account))
-<<<<<<< HEAD
                   ,
-=======
-                  .toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
               // Pagination controls
               if (totalAccountsPages > 1) ...[
@@ -1620,7 +1585,6 @@ class _EnhancedSalesmanReportsScreenState
   }
 
   Future<void> _selectDailyReportDate(BuildContext context) async {
-<<<<<<< HEAD
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -1648,16 +1612,6 @@ class _EnhancedSalesmanReportsScreenState
         return;
       }
 
-=======
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: customStartDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-
-    if (picked != null) {
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       setState(() {
         customStartDate = picked;
       });
@@ -3210,11 +3164,7 @@ class _EnhancedSalesmanReportsScreenState
           width: double.maxFinite,
           height: 400,
           child: filteredAccounts.isEmpty
-<<<<<<< HEAD
               ? Center(child: Text('No $filterType accounts found'))
-=======
-              ? Center(child: Text('No ${filterType} accounts found'))
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
               : ListView.builder(
                   itemCount: filteredAccounts.length,
                   itemBuilder: (context, index) {

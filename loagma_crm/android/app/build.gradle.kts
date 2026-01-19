@@ -48,10 +48,6 @@ android {
             val versionName = versionName ?: "1.0"
 
             val apkName = "$appName-$buildType-v$versionName.apk"
-<<<<<<< HEAD
-=======
-
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
             (output as BaseVariantOutputImpl).outputFileName = apkName
         }
     }

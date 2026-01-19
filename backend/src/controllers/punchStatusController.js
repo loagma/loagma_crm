@@ -38,7 +38,7 @@ import {
     convertUTCToIST
 } from '../utils/timezone.js';
 
-const prisma = new PrismaClient();
+// Using shared prisma instance from db.js
 
 // Approval expiry duration in minutes
 const APPROVAL_EXPIRY_MINUTES = 30;
@@ -762,7 +762,9 @@ export const expireStaleApprovals = async () => {
         const currentTime = new Date();
 
         // Expire late punch-in approvals
-        const expiredLate = await prisma.latePunchApproval.updateMany({
+        let expiredLate;
+        try {
+            expiredLate = await prisma.latePunchApproval.updateMany({
             where: {
                 status: 'PENDING',
                 OR: [
@@ -774,44 +776,65 @@ export const expireStaleApprovals = async () => {
                 ]
             },
             data: { status: 'EXPIRED' }
-        });
+            });
+        } catch (dbError) {
+            const errorMessage = dbError.message || dbError.toString();
+            if (errorMessage.includes("Can't reach database server") || 
+                errorMessage.includes("P1001")) {
+                console.error('❌ Expire stale approvals error: Database connection unavailable');
+                return; // Silently fail - will retry on next run
+            }
+            throw dbError;
+        }
+
+        } catch (dbError) {
+            const errorMessage = dbError.message || dbError.toString();
+            if (errorMessage.includes("Can't reach database server") || 
+                errorMessage.includes("P1001")) {
+                console.error('❌ Expire stale approvals error: Database connection unavailable');
+                return { success: false, error: 'Database connection unavailable' };
+            }
+            throw dbError;
+        }
 
         // Expire early punch-out approvals
-        const expiredEarly = await prisma.earlyPunchOutApproval.updateMany({
-            where: {
-                status: 'PENDING',
-                OR: [
-                    { codeExpiresAt: { lt: currentTime } },
-                    {
-                        codeExpiresAt: null,
-                        createdAt: { lt: new Date(currentTime.getTime() - APPROVAL_EXPIRY_MINUTES * 60 * 1000) }
-                    }
-                ]
-            },
-            data: { status: 'EXPIRED' }
-        });
+        let expiredEarly;
+        try {
+            expiredEarly = await prisma.earlyPunchOutApproval.updateMany({
+                where: {
+                    status: 'PENDING',
+                    OR: [
+                        { codeExpiresAt: { lt: currentTime } },
+                        {
+                            codeExpiresAt: null,
+                            createdAt: { lt: new Date(currentTime.getTime() - APPROVAL_EXPIRY_MINUTES * 60 * 1000) }
+                        }
+                    ]
+                },
+                data: { status: 'EXPIRED' }
+            });
 
-        // Also expire approved but unused codes
-        const expiredLateApproved = await prisma.latePunchApproval.updateMany({
-            where: {
-                status: 'APPROVED',
-                codeUsed: false,
-                codeExpiresAt: { lt: currentTime }
-            },
-            data: { status: 'EXPIRED' }
-        });
+            // Also expire approved but unused codes
+            const expiredLateApproved = await prisma.latePunchApproval.updateMany({
+                where: {
+                    status: 'APPROVED',
+                    codeUsed: false,
+                    codeExpiresAt: { lt: currentTime }
+                },
+                data: { status: 'EXPIRED' }
+            });
 
-        const expiredEarlyApproved = await prisma.earlyPunchOutApproval.updateMany({
-            where: {
-                status: 'APPROVED',
-                codeUsed: false,
-                codeExpiresAt: { lt: currentTime }
-            },
-            data: { status: 'EXPIRED' }
-        });
+            const expiredEarlyApproved = await prisma.earlyPunchOutApproval.updateMany({
+                where: {
+                    status: 'APPROVED',
+                    codeUsed: false,
+                    codeExpiresAt: { lt: currentTime }
+                },
+                data: { status: 'EXPIRED' }
+            });
 
-        const totalExpired = expiredLate.count + expiredEarly.count +
-            expiredLateApproved.count + expiredEarlyApproved.count;
+            const totalExpired = (expiredLate?.count || 0) + (expiredEarly?.count || 0) +
+                (expiredLateApproved?.count || 0) + (expiredEarlyApproved?.count || 0);
 
         if (totalExpired > 0) {
             console.log(`🕐 Expired ${totalExpired} stale approval requests`);

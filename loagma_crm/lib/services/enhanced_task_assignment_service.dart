@@ -39,28 +39,18 @@ class EnhancedTaskAssignmentService {
             if (user['roleId'] == 'R002') return true;
 
             // Check role.name = 'salesman'
-<<<<<<< HEAD
             if (user['role'] != null && user['role']['name'] == 'salesman') {
               return true;
             }
-=======
-            if (user['role'] != null && user['role']['name'] == 'salesman')
-              return true;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
             // Check roles array contains 'salesman' or 'R002'
             if (user['roles'] != null && user['roles'] is List) {
               final roles = (user['roles'] as List)
                   .map((r) => r.toString().toLowerCase())
                   .toList();
-<<<<<<< HEAD
               if (roles.contains('salesman') || roles.contains('r002')) {
                 return true;
               }
-=======
-              if (roles.contains('salesman') || roles.contains('r002'))
-                return true;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
             }
 
             return false;

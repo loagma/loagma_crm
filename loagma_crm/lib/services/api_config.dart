@@ -51,11 +51,7 @@ class ApiConfig {
   /// 1. Wait 30-60 seconds and retry
   /// 2. Set useProduction = false to use local backend
   /// 3. Make sure your local backend is running on port 5000
-<<<<<<< HEAD
   static const bool useProduction = false; // Using production backend on Render
-=======
-  static const bool useProduction = true; // Using production backend on Render
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   static String get baseUrl {
     if (useProduction) {

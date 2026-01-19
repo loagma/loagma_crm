@@ -41,11 +41,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
   bool _showPlaces = true;
   bool _showAccounts = true;
   bool _showAccountsList = false;
-<<<<<<< HEAD
   final List<String> _selectedPlaceTypes = ['store'];
-=======
-  List<String> _selectedPlaceTypes = ['store'];
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   int _searchRadius = 1500;
   PlaceInfo? _selectedPlace;
   bool _showPlaceDetailsOverlay = false;
@@ -679,7 +675,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
     return salesmanAccounts.where((account) {
       // Multi-select filter logic
       if (selectedCustomerStages.isNotEmpty &&
-<<<<<<< HEAD
           !selectedCustomerStages.contains(account['customerStage'])) {
         return false;
       }
@@ -695,19 +690,6 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
           !selectedPincodes.contains(account['pincode'])) {
         return false;
       }
-=======
-          !selectedCustomerStages.contains(account['customerStage']))
-        return false;
-      if (selectedBusinessTypes.isNotEmpty &&
-          !selectedBusinessTypes.contains(account['businessType']))
-        return false;
-      if (selectedFunnelStages.isNotEmpty &&
-          !selectedFunnelStages.contains(account['funnelStage']))
-        return false;
-      if (selectedPincodes.isNotEmpty &&
-          !selectedPincodes.contains(account['pincode']))
-        return false;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       if (selectedAssignedAreas.isNotEmpty) {
         // Check if account is in any of the selected assigned areas
         bool isInAssignedArea = areaAssignments.any(
@@ -718,14 +700,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         if (!isInAssignedArea) return false;
       }
       if (selectedApprovalStatus != null &&
-<<<<<<< HEAD
           account['isApproved'] != selectedApprovalStatus) {
         return false;
       }
-=======
-          account['isApproved'] != selectedApprovalStatus)
-        return false;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       return true;
     }).toList();
   }
@@ -937,14 +914,9 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
     try {
       final accountsWithLocation = salesmanAccounts.where((account) {
-<<<<<<< HEAD
         if (account['latitude'] == null || account['longitude'] == null) {
           return false;
         }
-=======
-        if (account['latitude'] == null || account['longitude'] == null)
-          return false;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         try {
           final lat = double.parse(account['latitude'].toString());
           final lng = double.parse(account['longitude'].toString());
@@ -2873,11 +2845,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
                 // Show all assigned pincodes with checkboxes
                 ..._assignedPincodes
                     .map((pincode) => _buildPincodeItem(pincode))
-<<<<<<< HEAD
                     ,
-=======
-                    .toList(),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                 // Add refresh button to reload pincodes
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -3304,11 +3272,7 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
         ),
         const SizedBox(height: 2),
         DropdownButtonFormField<bool?>(
-<<<<<<< HEAD
           initialValue: tempSelectedApprovalStatus,
-=======
-          value: tempSelectedApprovalStatus,
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),

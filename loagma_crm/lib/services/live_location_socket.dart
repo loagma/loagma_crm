@@ -31,11 +31,7 @@ class LiveLocationSocket {
 
   // Distance tracking
   double _totalDistanceKm = 0.0;
-<<<<<<< HEAD
   final List<Position> _routePoints = [];
-=======
-  List<Position> _routePoints = [];
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // Configuration - optimized for accuracy and battery
   static const int _sendIntervalSeconds = 10; // Send every 10 seconds

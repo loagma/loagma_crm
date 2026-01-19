@@ -13,17 +13,11 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../services/api_config.dart';
 import '../../services/pincode_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
-=======
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../services/api_config.dart';
-import '../../services/pincode_service.dart';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import '../../utils/custom_toast.dart';
 import 'user_detail_screen.dart';
 import 'edit_user_screen.dart';
@@ -85,13 +79,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   double? _latitude;
   double? _longitude;
   bool isLoadingGeolocation = false;
-<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
   final Map<String, PointAnnotation> _markerAnnotations = {};
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // ---------------- Data from API ----------------
   List<Map<String, dynamic>> roles = [];
@@ -145,11 +136,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     _country.dispose();
     _district.dispose();
     _locationSearch.dispose();
-<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -258,14 +246,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-<<<<<<< HEAD
         if (kDebugMode) {
           print("📦 Response data: ${data.toString().substring(0, 200)}...");
         }
-=======
-        if (kDebugMode)
-          print("📦 Response data: ${data.toString().substring(0, 200)}...");
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
         if (data["success"] == true && data["users"] != null) {
           final users = List<Map<String, dynamic>>.from(data["users"]);
@@ -284,14 +267,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           }).toList();
 
           if (matchingUsers.isNotEmpty) {
-<<<<<<< HEAD
             if (kDebugMode) {
               print("✅ Found existing user: ${matchingUsers[0]['name']}");
             }
-=======
-            if (kDebugMode)
-              print("✅ Found existing user: ${matchingUsers[0]['name']}");
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
             setState(() => existingUser = matchingUsers[0]);
           } else {
             if (kDebugMode) print("✅ No existing user found");
@@ -436,16 +414,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       final lng = result['lng'];
 
       // Move map camera to the location
-<<<<<<< HEAD
       if (_mapboxMap != null && _mapboxService.map != null) {
         await _mapboxService.animateCamera(
           center: Point(coordinates: Position(lng, lat)),
           zoom: 12.0,
-=======
-      if (_mapController != null) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         );
       }
 
@@ -453,14 +425,11 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         _latitude = lat;
         _longitude = lng;
       });
-<<<<<<< HEAD
       
       // Update marker
       if (_latitude != null && _longitude != null) {
         await _updateLocationMarker(_latitude!, _longitude!);
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       Fluttertoast.showToast(
         msg: 'Map updated to $cityName',
@@ -483,16 +452,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       final lng = result['lng'];
 
       // Move map camera to the area location with higher zoom
-<<<<<<< HEAD
       if (_mapboxMap != null && _mapboxService.map != null) {
         await _mapboxService.animateCamera(
           center: Point(coordinates: Position(lng, lat)),
           zoom: 15.0,
-=======
-      if (_mapController != null) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         );
       }
 
@@ -500,14 +463,11 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         _latitude = lat;
         _longitude = lng;
       });
-<<<<<<< HEAD
       
       // Update marker
       if (_latitude != null && _longitude != null) {
         await _updateLocationMarker(_latitude!, _longitude!);
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       Fluttertoast.showToast(
         msg: 'Map updated to $areaName',
@@ -558,7 +518,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         _latitude = position.latitude;
         _longitude = position.longitude;
       });
-<<<<<<< HEAD
       
       // Update marker and camera
       await _updateLocationMarker(position.latitude, position.longitude);
@@ -568,8 +527,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           zoom: 15.0,
         );
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       Fluttertoast.showToast(
         msg:
@@ -584,12 +541,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     }
   }
 
-<<<<<<< HEAD
   // Mapbox map controller (removed Google Map Controller)
-=======
-  // Google Map Controller
-  GoogleMapController? _mapController;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   Future<void> _searchAndMoveToLocation(String query) async {
     setState(() => isLoadingGeolocation = true);
@@ -640,19 +592,10 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       }
 
       // Move map camera to the location with smooth animation
-<<<<<<< HEAD
       if (_mapboxMap != null && foundLocation && _mapboxService.map != null) {
         await _mapboxService.animateCamera(
           center: Point(coordinates: Position(lng, lat)),
           zoom: _getAppropriateZoomLevel(locationName, query),
-=======
-      if (_mapController != null && foundLocation) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(lat, lng),
-            _getAppropriateZoomLevel(locationName, query),
-          ),
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         );
       }
 
@@ -660,14 +603,11 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         _latitude = lat;
         _longitude = lng;
       });
-<<<<<<< HEAD
       
       // Update marker
       if (_latitude != null && _longitude != null) {
         await _updateLocationMarker(_latitude!, _longitude!);
       }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       if (foundLocation) {
         Fluttertoast.showToast(
@@ -927,14 +867,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (response.statusCode == 200 && data['success'] == true) {
         if (kDebugMode) print('✅ Working hours saved successfully');
       } else {
-<<<<<<< HEAD
         if (kDebugMode) {
           print('❌ Failed to save working hours: ${data['message']}');
         }
-=======
-        if (kDebugMode)
-          print('❌ Failed to save working hours: ${data['message']}');
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error saving working hours: $e');
@@ -1017,14 +952,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
     try {
       if (kDebugMode) print("📤 Sending create user request...");
-<<<<<<< HEAD
       if (kDebugMode) {
         print("📦 Request body: ${jsonEncode(body).substring(0, 200)}...");
       }
-=======
-      if (kDebugMode)
-        print("📦 Request body: ${jsonEncode(body).substring(0, 200)}...");
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       final response = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/admin/users"),
@@ -1036,14 +966,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       final data = jsonDecode(response.body);
 
-<<<<<<< HEAD
       if (kDebugMode) {
         print("📦 Response: ${data.toString().substring(0, 200)}...");
       }
-=======
-      if (kDebugMode)
-        print("📦 Response: ${data.toString().substring(0, 200)}...");
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
       if (data["success"] == true) {
         // Save working hours for the new employee
@@ -1204,14 +1129,9 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 validator: (v) {
                   if (v?.isEmpty ?? true) return 'Contact number is required';
                   if (v!.length != 10) return 'Must be 10 digits';
-<<<<<<< HEAD
                   if (existingUser != null) {
                     return 'Contact number already exists';
                   }
-=======
-                  if (existingUser != null)
-                    return 'Contact number already exists';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                   return null;
                 },
               ),
@@ -1763,7 +1683,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: Stack(
                             children: [
-<<<<<<< HEAD
                               GestureDetector(
                                 onTapUp: (details) async {
                                   // Handle map tap to select location
@@ -1792,57 +1711,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                   }
                                 },
                                 child: _buildMapboxMap(),
-=======
-                              GoogleMap(
-                                onMapCreated: (GoogleMapController controller) {
-                                  _mapController = controller;
-                                },
-                                initialCameraPosition: CameraPosition(
-                                  target:
-                                      _latitude != null && _longitude != null
-                                      ? LatLng(_latitude!, _longitude!)
-                                      : const LatLng(
-                                          20.5937,
-                                          78.9629,
-                                        ), // India center
-                                  zoom: _latitude != null ? 15 : 5,
-                                ),
-                                markers: _latitude != null && _longitude != null
-                                    ? {
-                                        Marker(
-                                          markerId: const MarkerId(
-                                            'selected_location',
-                                          ),
-                                          position: LatLng(
-                                            _latitude!,
-                                            _longitude!,
-                                          ),
-                                        ),
-                                      }
-                                    : {},
-                                onTap: (LatLng position) {
-                                  setState(() {
-                                    _latitude = position.latitude;
-                                    _longitude = position.longitude;
-                                  });
-                                },
-
-                                // Fixed gesture recognizers - each type only once
-                                gestureRecognizers:
-                                    <Factory<OneSequenceGestureRecognizer>>{
-                                      Factory<EagerGestureRecognizer>(
-                                        () => EagerGestureRecognizer(),
-                                      ),
-                                    },
-
-                                myLocationButtonEnabled: false,
-                                zoomControlsEnabled: true,
-                                mapToolbarEnabled: false,
-                                zoomGesturesEnabled: true,
-                                scrollGesturesEnabled: true,
-                                tiltGesturesEnabled: false,
-                                rotateGesturesEnabled: false,
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                               ),
 
                               // Search overlay
@@ -2430,7 +2298,6 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
-<<<<<<< HEAD
   
   // Build Mapbox map widget
   Widget _buildMapboxMap() {
@@ -2495,6 +2362,4 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       print('Error updating location marker: $e');
     }
   }
-=======
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 }

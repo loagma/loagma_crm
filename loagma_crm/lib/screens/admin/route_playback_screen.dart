@@ -1,17 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/route_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
-=======
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:intl/intl.dart';
-import '../../services/route_service.dart';
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
 /// Full-featured route playback screen with animation controls
 /// Allows admin to replay salesman's route with play/pause/speed controls
@@ -33,7 +27,6 @@ class RoutePlaybackScreen extends StatefulWidget {
 
 class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     with TickerProviderStateMixin {
-<<<<<<< HEAD
   // Mapbox map controller
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
@@ -43,10 +36,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   // Mapbox annotations
   final Map<String, PointAnnotation> _markerAnnotations = {};
   final Map<String, PolylineAnnotation> _polylineAnnotations = {};
-=======
-  // Map controller
-  GoogleMapController? _mapController;
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // Animation state
   bool isPlaying = false;
@@ -62,15 +51,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   List<Map<String, dynamic>> idlePeriods = [];
   List<Map<String, dynamic>> movementTimeline = [];
 
-<<<<<<< HEAD
   // Map polylines (traveled path)
   List<Position> traveledPath = [];
-=======
-  // Map markers and polylines
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
-  List<LatLng> traveledPath = [];
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   // Colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -86,12 +68,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   @override
   void dispose() {
     _playbackTimer?.cancel();
-<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
-=======
-    _mapController?.dispose();
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -131,7 +109,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     }
   }
 
-<<<<<<< HEAD
   Future<void> _initializeMap() async {
     // Wait for map to be ready
     if (playbackPoints.isEmpty) return;
@@ -314,158 +291,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     }
   }
 
-=======
-  void _initializeMap() {
-    if (playbackPoints.isEmpty) return;
-
-    // Add start marker
-    final startPoint = playbackPoints.first;
-    _markers.add(
-      Marker(
-        markerId: const MarkerId('start'),
-        position: LatLng(startPoint['latitude'], startPoint['longitude']),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        infoWindow: InfoWindow(
-          title: 'Start',
-          snippet: DateFormat(
-            'hh:mm a',
-          ).format(DateTime.parse(startPoint['timestamp'])),
-        ),
-      ),
-    );
-
-    // Add end marker
-    final endPoint = playbackPoints.last;
-    _markers.add(
-      Marker(
-        markerId: const MarkerId('end'),
-        position: LatLng(endPoint['latitude'], endPoint['longitude']),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(
-          title: 'End',
-          snippet: DateFormat(
-            'hh:mm a',
-          ).format(DateTime.parse(endPoint['timestamp'])),
-        ),
-      ),
-    );
-
-    // Add idle period markers
-    for (int i = 0; i < idlePeriods.length; i++) {
-      final idle = idlePeriods[i];
-      _markers.add(
-        Marker(
-          markerId: MarkerId('idle_$i'),
-          position: LatLng(idle['latitude'], idle['longitude']),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueViolet,
-          ),
-          infoWindow: InfoWindow(
-            title: 'Idle Period',
-            snippet: '${idle['durationMinutes']} minutes',
-          ),
-        ),
-      );
-    }
-
-    // Add full route polyline (faded)
-    final fullRoute = playbackPoints
-        .map((p) => LatLng(p['latitude'], p['longitude']))
-        .toList();
-    _polylines.add(
-      Polyline(
-        polylineId: const PolylineId('full_route'),
-        points: fullRoute,
-        color: Colors.grey.withOpacity(0.3),
-        width: 3,
-      ),
-    );
-
-    // Add current position marker
-    _updateCurrentPositionMarker();
-
-    setState(() {});
-
-    // Focus camera on route
-    _focusCameraOnRoute();
-  }
-
-  void _updateCurrentPositionMarker() {
-    if (playbackPoints.isEmpty || currentPointIndex >= playbackPoints.length) {
-      return;
-    }
-
-    final currentPoint = playbackPoints[currentPointIndex];
-    final currentLatLng = LatLng(
-      currentPoint['latitude'],
-      currentPoint['longitude'],
-    );
-
-    // Remove old current marker
-    _markers.removeWhere((m) => m.markerId.value == 'current');
-
-    // Add new current marker
-    _markers.add(
-      Marker(
-        markerId: const MarkerId('current'),
-        position: currentLatLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: InfoWindow(
-          title: widget.employeeName,
-          snippet:
-              '${currentPoint['cumulativeDistanceKm']?.toStringAsFixed(2) ?? '0'} km',
-        ),
-      ),
-    );
-
-    // Update traveled path polyline
-    traveledPath = playbackPoints
-        .take(currentPointIndex + 1)
-        .map((p) => LatLng(p['latitude'], p['longitude']))
-        .toList();
-
-    _polylines.removeWhere((p) => p.polylineId.value == 'traveled');
-    if (traveledPath.length > 1) {
-      _polylines.add(
-        Polyline(
-          polylineId: const PolylineId('traveled'),
-          points: traveledPath,
-          color: successColor,
-          width: 5,
-        ),
-      );
-    }
-  }
-
-  void _focusCameraOnRoute() {
-    if (_mapController == null || playbackPoints.isEmpty) return;
-
-    final bounds = _calculateBounds();
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
-  }
-
-  LatLngBounds _calculateBounds() {
-    double minLat = double.infinity;
-    double maxLat = -double.infinity;
-    double minLng = double.infinity;
-    double maxLng = -double.infinity;
-
-    for (var point in playbackPoints) {
-      final lat = point['latitude'] as double;
-      final lng = point['longitude'] as double;
-      minLat = math.min(minLat, lat);
-      maxLat = math.max(maxLat, lat);
-      minLng = math.min(minLng, lng);
-      maxLng = math.max(maxLng, lng);
-    }
-
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
-  }
-
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   void _play() {
     if (playbackPoints.isEmpty) return;
 
@@ -480,7 +305,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
       if (currentPointIndex < playbackPoints.length - 1) {
         setState(() {
           currentPointIndex++;
-<<<<<<< HEAD
         });
         
         // Update marker and polyline asynchronously
@@ -499,18 +323,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
             );
           }
         });
-=======
-          _updateCurrentPositionMarker();
-        });
-
-        // Animate camera to follow
-        final currentPoint = playbackPoints[currentPointIndex];
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(
-            LatLng(currentPoint['latitude'], currentPoint['longitude']),
-          ),
-        );
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       } else {
         _pause();
       }
@@ -539,13 +351,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
           currentPointIndex + 10,
           playbackPoints.length - 1,
         );
-<<<<<<< HEAD
       });
       _updateCurrentPositionMarker();
-=======
-        _updateCurrentPositionMarker();
-      });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     }
   }
 
@@ -553,13 +360,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     if (currentPointIndex > 0) {
       setState(() {
         currentPointIndex = math.max(currentPointIndex - 10, 0);
-<<<<<<< HEAD
       });
       _updateCurrentPositionMarker();
-=======
-        _updateCurrentPositionMarker();
-      });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     }
   }
 
@@ -575,13 +377,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     final index = (value * (playbackPoints.length - 1)).round();
     setState(() {
       currentPointIndex = index;
-<<<<<<< HEAD
     });
     _updateCurrentPositionMarker();
-=======
-      _updateCurrentPositionMarker();
-    });
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   }
 
   void _showAnalyticsDialog() {
@@ -715,7 +512,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   }
 
   Widget _buildMap() {
-<<<<<<< HEAD
     final initialPoint = playbackPoints.isNotEmpty
         ? Position(
             playbackPoints.first['longitude'] as double,
@@ -751,29 +547,6 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
       print('❌ Error creating Mapbox map: $e');
     }
   }
-=======
-    return GoogleMap(
-      onMapCreated: (controller) {
-        _mapController = controller;
-        _focusCameraOnRoute();
-      },
-      initialCameraPosition: CameraPosition(
-        target: playbackPoints.isNotEmpty
-            ? LatLng(
-                playbackPoints.first['latitude'],
-                playbackPoints.first['longitude'],
-              )
-            : const LatLng(28.6139, 77.2090),
-        zoom: 14,
-      ),
-      markers: _markers,
-      polylines: _polylines,
-      myLocationEnabled: false,
-      zoomControlsEnabled: true,
-      mapToolbarEnabled: false,
-    );
-  }
->>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   Widget _buildProgressInfo() {
     if (playbackPoints.isEmpty) return const SizedBox.shrink();
