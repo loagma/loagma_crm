@@ -606,7 +606,7 @@ class _EnhancedSalesmanReportsScreenState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: selectedSalesmanId,
+                  value: selectedSalesmanId,
                   decoration: const InputDecoration(
                     labelText: 'Select Salesman',
                     border: OutlineInputBorder(),
@@ -629,7 +629,7 @@ class _EnhancedSalesmanReportsScreenState
                         value: id.isNotEmpty ? id : null,
                         child: Text(name),
                       );
-                    }),
+                    }).toList(),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -1150,7 +1150,7 @@ class _EnhancedSalesmanReportsScreenState
               // Display accounts
               ...salesmanAccounts
                   .map((account) => _buildAccountCardFromModel(account))
-                  ,
+                  .toList(),
 
               // Pagination controls
               if (totalAccountsPages > 1) ...[
@@ -3164,7 +3164,7 @@ class _EnhancedSalesmanReportsScreenState
           width: double.maxFinite,
           height: 400,
           child: filteredAccounts.isEmpty
-              ? Center(child: Text('No $filterType accounts found'))
+              ? Center(child: Text('No ${filterType} accounts found'))
               : ListView.builder(
                   itemCount: filteredAccounts.length,
                   itemBuilder: (context, index) {

@@ -52,7 +52,7 @@ class MapboxConfig {
     // In production, read from environment variables or secure storage
     // For development, you can use the constant above
     const String? envToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
-    return envToken.isNotEmpty == true ? envToken : accessToken;
+    return envToken?.isNotEmpty == true ? envToken! : accessToken;
   }
 }
 

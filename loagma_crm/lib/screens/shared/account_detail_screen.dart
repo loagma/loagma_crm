@@ -537,10 +537,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                   onPressed: () => context.go(
                     '/dashboard/${UserService.currentRole ?? 'dashboard'}',
                   ),
+                  child: const Text('Back to Dashboard'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD7BE69),
                   ),
-                  child: const Text('Back to Dashboard'),
                 ),
               ],
             ),
@@ -656,9 +656,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                                                       loadingProgress,
                                                     ) {
                                                       if (loadingProgress ==
-                                                          null) {
+                                                          null)
                                                         return child;
-                                                      }
                                                       return const Center(
                                                         child:
                                                             CircularProgressIndicator(),
@@ -751,9 +750,8 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                                                       loadingProgress,
                                                     ) {
                                                       if (loadingProgress ==
-                                                          null) {
+                                                          null)
                                                         return child;
-                                                      }
                                                       return const Center(
                                                         child:
                                                             CircularProgressIndicator(),
@@ -1094,7 +1092,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                             },
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
-                              return SizedBox(
+                              return Container(
                                 height: 200,
                                 child: Center(
                                   child: CircularProgressIndicator(

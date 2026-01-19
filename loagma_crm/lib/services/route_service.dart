@@ -136,9 +136,8 @@ class RouteService {
       final queryParams = <String, String>{'limit': limit.toString()};
 
       if (employeeId != null) queryParams['employeeId'] = employeeId;
-      if (startDate != null) {
+      if (startDate != null)
         queryParams['startDate'] = startDate.toIso8601String();
-      }
       if (endDate != null) queryParams['endDate'] = endDate.toIso8601String();
 
       final url = Uri.parse(

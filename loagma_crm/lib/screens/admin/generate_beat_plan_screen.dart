@@ -419,7 +419,7 @@ class _GenerateBeatPlanScreenState extends State<GenerateBeatPlanScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: _selectedSalesmanId,
+              value: _selectedSalesmanId,
               decoration: const InputDecoration(
                 labelText: 'Salesman',
                 border: OutlineInputBorder(),

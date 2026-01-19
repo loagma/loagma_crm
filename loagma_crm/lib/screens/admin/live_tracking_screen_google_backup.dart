@@ -680,9 +680,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   /// Focus camera on selected employee
   void _focusOnSelectedEmployee() {
-    if (!mounted || selectedEmployeeId == null || _mapController == null) {
+    if (!mounted || selectedEmployeeId == null || _mapController == null)
       return;
-    }
 
     try {
       final selectedEmployee = activeEmployees.firstWhere(
@@ -961,7 +960,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: selectedSalesmanId,
+                      value: selectedSalesmanId,
                       decoration: const InputDecoration(
                         labelText: 'Select Employee',
                         border: OutlineInputBorder(),
@@ -1755,9 +1754,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
     final minutesAgo = DateTime.now().difference(lastUpdate).inMinutes;
     if (minutesAgo < 2) return Icons.signal_wifi_4_bar;
-    if (minutesAgo < 5) {
+    if (minutesAgo < 5)
       return Icons.signal_wifi_statusbar_connected_no_internet_4;
-    }
     if (minutesAgo < 15) return Icons.signal_wifi_bad;
     return Icons.signal_wifi_off;
   }

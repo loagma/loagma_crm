@@ -82,7 +82,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   // ---------------- Data from API ----------------
   List<Map<String, dynamic>> roles = [];
@@ -246,9 +246,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (kDebugMode) {
+        if (kDebugMode)
           print("📦 Response data: ${data.toString().substring(0, 200)}...");
-        }
 
         if (data["success"] == true && data["users"] != null) {
           final users = List<Map<String, dynamic>>.from(data["users"]);
@@ -267,9 +266,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
           }).toList();
 
           if (matchingUsers.isNotEmpty) {
-            if (kDebugMode) {
+            if (kDebugMode)
               print("✅ Found existing user: ${matchingUsers[0]['name']}");
-            }
             setState(() => existingUser = matchingUsers[0]);
           } else {
             if (kDebugMode) print("✅ No existing user found");
@@ -867,9 +865,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       if (response.statusCode == 200 && data['success'] == true) {
         if (kDebugMode) print('✅ Working hours saved successfully');
       } else {
-        if (kDebugMode) {
+        if (kDebugMode)
           print('❌ Failed to save working hours: ${data['message']}');
-        }
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error saving working hours: $e');
@@ -952,9 +949,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
     try {
       if (kDebugMode) print("📤 Sending create user request...");
-      if (kDebugMode) {
+      if (kDebugMode)
         print("📦 Request body: ${jsonEncode(body).substring(0, 200)}...");
-      }
 
       final response = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/admin/users"),
@@ -966,9 +962,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
       final data = jsonDecode(response.body);
 
-      if (kDebugMode) {
+      if (kDebugMode)
         print("📦 Response: ${data.toString().substring(0, 200)}...");
-      }
 
       if (data["success"] == true) {
         // Save working hours for the new employee
@@ -1129,9 +1124,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                 validator: (v) {
                   if (v?.isEmpty ?? true) return 'Contact number is required';
                   if (v!.length != 10) return 'Must be 10 digits';
-                  if (existingUser != null) {
+                  if (existingUser != null)
                     return 'Contact number already exists';
-                  }
                   return null;
                 },
               ),

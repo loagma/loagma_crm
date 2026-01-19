@@ -73,7 +73,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   // Data lists
   List<Map<String, dynamic>> roles = [];
@@ -344,9 +344,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
       if (response.statusCode == 200 && data['success'] == true) {
         if (kDebugMode) print('✅ Working hours saved successfully');
       } else {
-        if (kDebugMode) {
+        if (kDebugMode)
           print('❌ Failed to save working hours: ${data['message']}');
-        }
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error saving working hours: $e');
@@ -363,9 +362,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
   Future<void> fetchDepartments() async {
     try {
-      if (kDebugMode) {
+      if (kDebugMode)
         print('🔄 Fetching departments from: ${ApiConfig.baseUrl}/departments');
-      }
 
       final url = Uri.parse('${ApiConfig.baseUrl}/departments');
       final response = await http.get(url).timeout(const Duration(seconds: 30));
@@ -402,11 +400,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
           );
         }
       } else {
-        if (kDebugMode) {
+        if (kDebugMode)
           print(
             '❌ Departments API failed: ${data['message'] ?? 'Unknown error'}',
           );
-        }
 
         // Try alternative endpoint
         await _tryAlternativeDepartmentEndpoint();
@@ -466,11 +463,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
             }
 
             if (departmentsList.isNotEmpty) {
-              if (kDebugMode) {
+              if (kDebugMode)
                 print(
                   '✅ Found departments via alternative endpoint: ${departmentsList.length}',
                 );
-              }
 
               setState(() {
                 departments = List<Map<String, dynamic>>.from(departmentsList);
@@ -490,9 +486,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
       }
 
       // If all endpoints fail, create mock departments for testing
-      if (kDebugMode) {
+      if (kDebugMode)
         print('⚠️ All department endpoints failed, using mock data');
-      }
 
       setState(() {
         departments = [

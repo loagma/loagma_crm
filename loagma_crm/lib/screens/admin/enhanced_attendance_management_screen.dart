@@ -27,7 +27,7 @@ class _EnhancedAttendanceManagementScreenState
 
   // Annotation managers for markers
   PointAnnotationManager? _pointAnnotationManager;
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   Timer? _refreshTimer;
 
@@ -630,7 +630,7 @@ class _EnhancedAttendanceManagementScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '$presentEmployees Present ',
+                    '${presentEmployees} Present ',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: isLiveTrackingEnabled ? Colors.green : Colors.grey,
@@ -838,7 +838,7 @@ class _EnhancedAttendanceManagementScreenState
 
                         // Employee Filter
                         DropdownButtonFormField<String>(
-                          initialValue: selectedEmployeeId,
+                          value: selectedEmployeeId,
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: isLoadingEmployees
@@ -973,7 +973,7 @@ class _EnhancedAttendanceManagementScreenState
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedEmployeeId,
+                            value: selectedEmployeeId,
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: isLoadingEmployees
@@ -1386,7 +1386,7 @@ class _EnhancedAttendanceManagementScreenState
 
               // Route Tracking Button
               const SizedBox(height: 12),
-              SizedBox(
+              Container(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _navigateToRouteTracking(),

@@ -304,10 +304,10 @@ class LeaveCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ...[
-          Icon(icon, size: 14, color: textColor),
-          const SizedBox(width: 4),
-        ],
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: textColor),
+            const SizedBox(width: 4),
+          ],
           Text(
             status,
             style: TextStyle(

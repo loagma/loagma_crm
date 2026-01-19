@@ -31,7 +31,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   @override
   void initState() {

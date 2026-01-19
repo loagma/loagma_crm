@@ -33,8 +33,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   PolylineAnnotationManager? _polylineAnnotationManager;
 
   // Store annotations by ID for updates
-  final Map<String, PointAnnotation> _markerAnnotations = {};
-  final Map<String, PolylineAnnotation> _polylineAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PolylineAnnotation> _polylineAnnotations = {};
 
   bool isLoading = true;
   String? errorMessage;
@@ -293,8 +293,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         // Check if this point is too close to the last historical point
         if (lastHistoricalLat != null && lastHistoricalLng != null) {
           final distance = _calculateDistance(
-            lastHistoricalLat,
-            lastHistoricalLng,
+            lastHistoricalLat!,
+            lastHistoricalLng!,
             latLng.latitude,
             latLng.longitude,
           );

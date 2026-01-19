@@ -37,7 +37,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
 
   @override
   void initState() {
@@ -168,12 +168,10 @@ class _ReportsScreenState extends State<ReportsScreen>
       }
 
       salesmenMap[salesmanId]!['totalAccounts']++;
-      if (account['isActive'] == true) {
+      if (account['isActive'] == true)
         salesmenMap[salesmanId]!['activeAccounts']++;
-      }
-      if (account['isApproved'] == true) {
+      if (account['isApproved'] == true)
         salesmenMap[salesmanId]!['approvedAccounts']++;
-      }
       salesmenMap[salesmanId]!['accounts'].add(account);
     }
 

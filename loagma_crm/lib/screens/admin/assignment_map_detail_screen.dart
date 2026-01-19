@@ -32,7 +32,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   PointAnnotationManager? _pointAnnotationManager;
   
   // Mapbox annotations
-  final Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
   
   List<Shop> _shops = [];
   List<Shop> _salesmanCreatedShops = []; // Shops created by salesman
@@ -44,10 +44,10 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   bool _isFilterExpanded = false; // Filter section collapsed by default
 
   // Filter states
-  final Set<String> _stageFilter = {}; // Business status filter
-  final Set<String> _businessTypeFilter = {}; // Combined business/place type filter
-  final Set<String> _ratingFilter = {}; // Rating filter
-  final Set<String> _priceFilter = {}; // Price level filter
+  Set<String> _stageFilter = {}; // Business status filter
+  Set<String> _businessTypeFilter = {}; // Combined business/place type filter
+  Set<String> _ratingFilter = {}; // Rating filter
+  Set<String> _priceFilter = {}; // Price level filter
   bool _showGooglePlaces = true; // Show Google Places businesses
   bool _showSalesmanCreated = true; // Show salesman-created accounts
 

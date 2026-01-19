@@ -147,33 +147,26 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
   void _applyFilters() {
     accounts = allAccounts.where((account) {
       if (selectedCustomerStage != null &&
-          account['customerStage'] != selectedCustomerStage) {
+          account['customerStage'] != selectedCustomerStage)
         return false;
-      }
       if (selectedBusinessType != null &&
-          account['businessType'] != selectedBusinessType) {
+          account['businessType'] != selectedBusinessType)
         return false;
-      }
       if (selectedBusinessSize != null &&
-          account['businessSize'] != selectedBusinessSize) {
+          account['businessSize'] != selectedBusinessSize)
         return false;
-      }
       if (selectedFunnelStage != null &&
-          account['funnelStage'] != selectedFunnelStage) {
+          account['funnelStage'] != selectedFunnelStage)
         return false;
-      }
       if (selectedCity != null && account['city'] != selectedCity) return false;
-      if (selectedPincode != null && account['pincode'] != selectedPincode) {
+      if (selectedPincode != null && account['pincode'] != selectedPincode)
         return false;
-      }
       if (selectedApprovalStatus != null &&
-          account['isApproved'] != selectedApprovalStatus) {
+          account['isApproved'] != selectedApprovalStatus)
         return false;
-      }
       if (selectedActiveStatus != null &&
-          account['isActive'] != selectedActiveStatus) {
+          account['isActive'] != selectedActiveStatus)
         return false;
-      }
       if (selectedHasLocation != null) {
         final hasLocation =
             account['latitude'] != null && account['longitude'] != null;
@@ -365,7 +358,7 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
             ),
           );
           accountMarkersAdded++;
-          print('✅ Added marker for $personName at $lat, $lng');
+          print('✅ Added marker for ${personName} at $lat, $lng');
         } catch (e) {
           print('❌ Error parsing coordinates for account ${account['id']}: $e');
         }
@@ -377,7 +370,7 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     }
 
     print(
-      '📊 Total markers created: ${markers.length} ($accountMarkersAdded accounts + ${_currentPosition != null ? 1 : 0} current location)',
+      '📊 Total markers created: ${markers.length} (${accountMarkersAdded} accounts + ${_currentPosition != null ? 1 : 0} current location)',
     );
 
     setState(() {
@@ -1657,12 +1650,10 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     for (var marker in _markers) {
       if (marker.position.latitude < minLat) minLat = marker.position.latitude;
       if (marker.position.latitude > maxLat) maxLat = marker.position.latitude;
-      if (marker.position.longitude < minLng) {
+      if (marker.position.longitude < minLng)
         minLng = marker.position.longitude;
-      }
-      if (marker.position.longitude > maxLng) {
+      if (marker.position.longitude > maxLng)
         maxLng = marker.position.longitude;
-      }
     }
 
     print('📊 Bounds: SW($minLat, $minLng) to NE($maxLat, $maxLng)');

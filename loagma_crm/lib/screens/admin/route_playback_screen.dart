@@ -34,8 +34,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   PolylineAnnotationManager? _polylineAnnotationManager;
   
   // Mapbox annotations
-  final Map<String, PointAnnotation> _markerAnnotations = {};
-  final Map<String, PolylineAnnotation> _polylineAnnotations = {};
+  Map<String, PointAnnotation> _markerAnnotations = {};
+  Map<String, PolylineAnnotation> _polylineAnnotations = {};
 
   // Animation state
   bool isPlaying = false;
