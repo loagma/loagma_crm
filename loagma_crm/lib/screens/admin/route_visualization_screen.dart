@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/route_service.dart';
-import '../../services/mapbox_service.dart';
-import '../../config/mapbox_config.dart';
 
 /// Enhanced route visualization with home location marking and date picker
 class RouteVisualizationScreen extends StatefulWidget {
@@ -26,21 +24,13 @@ class RouteVisualizationScreen extends StatefulWidget {
 }
 
 class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
-  MapboxMap? _mapboxMap;
-  final MapboxService _mapboxService = MapboxService();
-  PointAnnotationManager? _pointAnnotationManager;
-  PolylineAnnotationManager? _polylineAnnotationManager;
-  
-  // Mapbox annotations
-  Map<String, PointAnnotation> _markerAnnotations = {};
-  Map<String, PolylineAnnotation> _polylineAnnotations = {};
-  
+  GoogleMapController? _mapController;
   bool _isLoading = true;
   String? _error;
 
   // Route data
-  List<Position> _routePoints = [];
-  List<Map<String, double>> _routeCoordinates = []; // Store lat/lng for calculations
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
   double _totalDistance = 0.0;
   int _totalPoints = 0;
 
@@ -57,13 +47,6 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     } else if (widget.attendanceId != null) {
       _loadRoute();
     }
-  }
-  
-  @override
-  void dispose() {
-    _mapboxService.dispose();
-    _mapboxMap = null;
-    super.dispose();
   }
 
   Future<void> _loadAvailableDates() async {
@@ -174,20 +157,24 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       return;
     }
 
-    // Create route polyline from GPS points (Mapbox uses Position with lng, lat order)
-    List<Position> points = [];
-    List<Map<String, double>> coordinates = [];
+    // Create route polyline from GPS points
+    List<LatLng> points = [];
     if (routePoints.isNotEmpty) {
-      for (var point in routePoints) {
-        try {
-          final lat = point['latitude'].toDouble();
-          final lng = point['longitude'].toDouble();
-          points.add(Position(lng, lat));
-          coordinates.add({'latitude': lat, 'longitude': lng});
-        } catch (e) {
-          print('Error parsing route point: $point, error: $e');
-        }
-      }
+      points = routePoints
+          .map((point) {
+            try {
+              return LatLng(
+                point['latitude'].toDouble(),
+                point['longitude'].toDouble(),
+              );
+            } catch (e) {
+              print('Error parsing route point: $point, error: $e');
+              return null;
+            }
+          })
+          .where((point) => point != null)
+          .cast<LatLng>()
+          .toList();
     }
 
     // Use distance from API response if available, otherwise calculate locally
@@ -195,142 +182,118 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     if (summary != null && summary['totalDistanceKm'] != null) {
       distance = (summary['totalDistanceKm'] as num).toDouble();
     } else {
-      // Fallback to local calculation using original routePoints
-      if (routePoints.length > 1) {
-        for (int i = 1; i < routePoints.length; i++) {
-          try {
-            final prevPoint = routePoints[i - 1];
-            final currPoint = routePoints[i];
-            distance += RouteService.calculateDistance(
-              prevPoint['latitude'].toDouble(),
-              prevPoint['longitude'].toDouble(),
-              currPoint['latitude'].toDouble(),
-              currPoint['longitude'].toDouble(),
-            );
-          } catch (e) {
-            print('Error calculating distance: $e');
-          }
-        }
+      // Fallback to local calculation
+      for (int i = 1; i < points.length; i++) {
+        distance += RouteService.calculateDistance(
+          points[i - 1].latitude,
+          points[i - 1].longitude,
+          points[i].latitude,
+          points[i].longitude,
+        );
       }
     }
 
     setState(() {
       _totalDistance = distance;
       _totalPoints = points.length;
-      _routePoints = points;
-      _routeCoordinates = coordinates;
 
-    });
-    
-    // Update Mapbox annotations after state is set
-    _updateMapboxAnnotations(points, homeLocation, startLocation, endLocation);
-  }
-  
-  // Update Mapbox annotations for route, home, start, and end markers
-  Future<void> _updateMapboxAnnotations(
-    List<Position> points,
-    Map<String, dynamic>? homeLocation,
-    Map<String, dynamic>? startLocation,
-    Map<String, dynamic>? endLocation,
-  ) async {
-    if (_pointAnnotationManager == null || _polylineAnnotationManager == null) {
-      return;
-    }
-    
-    try {
-      // Clear existing annotations
-      for (var marker in _markerAnnotations.values) {
-        await _pointAnnotationManager!.delete(marker);
-      }
-      _markerAnnotations.clear();
-      
-      for (var polyline in _polylineAnnotations.values) {
-        await _polylineAnnotationManager!.delete(polyline);
-      }
-      _polylineAnnotations.clear();
-      
-      // Create route polyline
+      // Create polyline with golden theme color
+      _polylines = {};
       if (points.length > 1) {
-        final polylineOptions = PolylineAnnotationOptions(
-          geometry: LineString(coordinates: points),
-          lineColor: const Color(0xFFD7BE69).value, // Golden theme color
-          lineWidth: 4.0,
-          lineOpacity: 0.8,
+        _polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: points,
+            color: const Color(0xFFD7BE69), // Golden theme color
+            width: 4,
+          ),
         );
-        final polyline = await _polylineAnnotationManager!.create(polylineOptions);
-        _polylineAnnotations['route'] = polyline;
       }
-      
+
+      // Create markers
+      _markers = {};
+
       // Home location marker (most important - where salesman started working)
       if (homeLocation != null) {
         try {
-          final homePos = Position(
-            homeLocation['longitude'].toDouble(),
+          final homeLatLng = LatLng(
             homeLocation['latitude'].toDouble(),
+            homeLocation['longitude'].toDouble(),
           );
-          final options = PointAnnotationOptions(
-            geometry: Point(coordinates: homePos),
-            textField: '🏠 Home Location\nStarted at ${_formatTime(homeLocation['time'])}',
-            textOffset: [0.0, -2.0],
-            textSize: 12.0,
-            iconSize: 1.2,
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('home'),
+              position: homeLatLng,
+              infoWindow: InfoWindow(
+                title: '🏠 Home Location',
+                snippet:
+                    'Started working here at ${_formatTime(homeLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueBlue, // Blue for home
+              ),
+            ),
           );
-          final marker = await _pointAnnotationManager!.create(options);
-          _markerAnnotations['home'] = marker;
         } catch (e) {
           print('Error creating home marker: $e');
         }
       }
-      
+
       // Start location marker (punch-in location)
       if (startLocation != null) {
         try {
-          final startPos = Position(
-            startLocation['longitude'].toDouble(),
+          final startLatLng = LatLng(
             startLocation['latitude'].toDouble(),
+            startLocation['longitude'].toDouble(),
           );
-          final options = PointAnnotationOptions(
-            geometry: Point(coordinates: startPos),
-            textField: '🟢 Punch In\nStarted at ${_formatTime(startLocation['time'])}',
-            textOffset: [0.0, -2.0],
-            textSize: 12.0,
-            iconSize: 1.2,
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('start'),
+              position: startLatLng,
+              infoWindow: InfoWindow(
+                title: '🟢 Punch In',
+                snippet: 'Started at ${_formatTime(startLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen, // Green for start
+              ),
+            ),
           );
-          final marker = await _pointAnnotationManager!.create(options);
-          _markerAnnotations['start'] = marker;
         } catch (e) {
           print('Error creating start marker: $e');
         }
       }
-      
+
       // End location marker (punch-out location)
       if (endLocation != null) {
         try {
-          final endPos = Position(
-            endLocation['longitude'].toDouble(),
+          final endLatLng = LatLng(
             endLocation['latitude'].toDouble(),
+            endLocation['longitude'].toDouble(),
           );
-          final options = PointAnnotationOptions(
-            geometry: Point(coordinates: endPos),
-            textField: '🔴 Punch Out\nEnded at ${_formatTime(endLocation['time'])}',
-            textOffset: [0.0, -2.0],
-            textSize: 12.0,
-            iconSize: 1.2,
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('end'),
+              position: endLatLng,
+              infoWindow: InfoWindow(
+                title: '🔴 Punch Out',
+                snippet: 'Ended at ${_formatTime(endLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueRed, // Red for end
+              ),
+            ),
           );
-          final marker = await _pointAnnotationManager!.create(options);
-          _markerAnnotations['end'] = marker;
         } catch (e) {
           print('Error creating end marker: $e');
         }
       }
-      
+
       // Fit map to show all markers
-      if (_markerAnnotations.isNotEmpty && _mapboxMap != null) {
+      if (_markers.isNotEmpty && _mapController != null) {
         _fitMapToMarkers();
       }
-    } catch (e) {
-      print('Error updating Mapbox annotations: $e');
-    }
+    });
   }
 
   String _formatTime(dynamic timeData) {
@@ -342,41 +305,33 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     }
   }
 
-  Future<void> _fitMapToMarkers() async {
-    if (_markerAnnotations.isEmpty && _routeCoordinates.isEmpty) return;
+  void _fitMapToMarkers() {
+    if (_markers.isEmpty) return;
 
     double minLat = double.infinity;
     double maxLat = -double.infinity;
     double minLng = double.infinity;
     double maxLng = -double.infinity;
 
-    // Calculate bounds from route coordinates
-    for (final coord in _routeCoordinates) {
-      final lat = coord['latitude']!;
-      final lng = coord['longitude']!;
+    for (final marker in _markers) {
+      final lat = marker.position.latitude;
+      final lng = marker.position.longitude;
+
       minLat = lat < minLat ? lat : minLat;
       maxLat = lat > maxLat ? lat : maxLat;
       minLng = lng < minLng ? lng : minLng;
       maxLng = lng > maxLng ? lng : maxLng;
     }
 
-    if (minLat != double.infinity && _mapboxMap != null && _mapboxService.map != null) {
-      final latPadding = (maxLat - minLat) * 0.1;
-      final lngPadding = (maxLng - minLng) * 0.1;
-      
-      await _mapboxService.fitBounds(
-        bounds: CoordinateBounds(
-          southwest: Point(
-            coordinates: Position(minLng - lngPadding, minLat - latPadding),
-          ),
-          northeast: Point(
-            coordinates: Position(maxLng + lngPadding, maxLat + latPadding),
-          ),
-          infiniteBounds: false,
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
         ),
-        padding: 100.0,
-      );
-    }
+        100.0, // padding
+      ),
+    );
   }
 
   @override
@@ -549,36 +504,26 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
   }
 
   Widget _buildMap() {
-    return MapWidget(
-      key: const ValueKey("route_visualization_map"),
-      cameraOptions: CameraOptions(
-        center: Point(coordinates: Position(77.2090, 28.6139)), // Default to Delhi
-        zoom: 12.0,
+    return GoogleMap(
+      onMapCreated: (GoogleMapController controller) {
+        _mapController = controller;
+        if (_markers.isNotEmpty) {
+          _fitMapToMarkers();
+        }
+      },
+      initialCameraPosition: const CameraPosition(
+        target: LatLng(28.6139, 77.2090), // Default to Delhi
+        zoom: 12,
       ),
-      styleUri: MapboxConfig.defaultMapStyle,
-      onMapCreated: _onMapCreated,
+      markers: _markers,
+      polylines: _polylines,
+      mapType: MapType.normal,
+      myLocationEnabled: false,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: true,
+      compassEnabled: true,
+      mapToolbarEnabled: false,
     );
-  }
-  
-  Future<void> _onMapCreated(MapboxMap map) async {
-    try {
-      _mapboxMap = map;
-      _mapboxService.initialize(map);
-      
-      // Create annotation managers
-      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
-      _polylineAnnotationManager = await map.annotations.createPolylineAnnotationManager();
-      
-      // If route data is already loaded, update annotations
-      if (_routePoints.isNotEmpty) {
-        // Rebuild annotations with current data
-        await _updateMapboxAnnotations(_routePoints, null, null, null);
-      }
-      
-      print('✅ Mapbox map created for route visualization');
-    } catch (e) {
-      print('❌ Error creating Mapbox map: $e');
-    }
   }
 
   Future<void> _showDatePicker() async {

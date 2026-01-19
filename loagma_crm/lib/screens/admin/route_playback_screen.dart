@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/route_service.dart';
-import '../../services/mapbox_service.dart';
-import '../../config/mapbox_config.dart';
 
 /// Full-featured route playback screen with animation controls
 /// Allows admin to replay salesman's route with play/pause/speed controls
@@ -27,15 +25,8 @@ class RoutePlaybackScreen extends StatefulWidget {
 
 class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     with TickerProviderStateMixin {
-  // Mapbox map controller
-  MapboxMap? _mapboxMap;
-  final MapboxService _mapboxService = MapboxService();
-  PointAnnotationManager? _pointAnnotationManager;
-  PolylineAnnotationManager? _polylineAnnotationManager;
-  
-  // Mapbox annotations
-  Map<String, PointAnnotation> _markerAnnotations = {};
-  Map<String, PolylineAnnotation> _polylineAnnotations = {};
+  // Map controller
+  GoogleMapController? _mapController;
 
   // Animation state
   bool isPlaying = false;
@@ -51,8 +42,10 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   List<Map<String, dynamic>> idlePeriods = [];
   List<Map<String, dynamic>> movementTimeline = [];
 
-  // Map polylines (traveled path)
-  List<Position> traveledPath = [];
+  // Map markers and polylines
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
+  List<LatLng> traveledPath = [];
 
   // Colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -68,8 +61,7 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   @override
   void dispose() {
     _playbackTimer?.cancel();
-    _mapboxService.dispose();
-    _mapboxMap = null;
+    _mapController?.dispose();
     super.dispose();
   }
 
@@ -109,186 +101,154 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     }
   }
 
-  Future<void> _initializeMap() async {
-    // Wait for map to be ready
+  void _initializeMap() {
     if (playbackPoints.isEmpty) return;
-    if (_pointAnnotationManager == null || _polylineAnnotationManager == null) {
-      // Annotation managers not ready yet, will be called from _onMapCreated
+
+    // Add start marker
+    final startPoint = playbackPoints.first;
+    _markers.add(
+      Marker(
+        markerId: const MarkerId('start'),
+        position: LatLng(startPoint['latitude'], startPoint['longitude']),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(
+          title: 'Start',
+          snippet: DateFormat(
+            'hh:mm a',
+          ).format(DateTime.parse(startPoint['timestamp'])),
+        ),
+      ),
+    );
+
+    // Add end marker
+    final endPoint = playbackPoints.last;
+    _markers.add(
+      Marker(
+        markerId: const MarkerId('end'),
+        position: LatLng(endPoint['latitude'], endPoint['longitude']),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(
+          title: 'End',
+          snippet: DateFormat(
+            'hh:mm a',
+          ).format(DateTime.parse(endPoint['timestamp'])),
+        ),
+      ),
+    );
+
+    // Add idle period markers
+    for (int i = 0; i < idlePeriods.length; i++) {
+      final idle = idlePeriods[i];
+      _markers.add(
+        Marker(
+          markerId: MarkerId('idle_$i'),
+          position: LatLng(idle['latitude'], idle['longitude']),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueViolet,
+          ),
+          infoWindow: InfoWindow(
+            title: 'Idle Period',
+            snippet: '${idle['durationMinutes']} minutes',
+          ),
+        ),
+      );
+    }
+
+    // Add full route polyline (faded)
+    final fullRoute = playbackPoints
+        .map((p) => LatLng(p['latitude'], p['longitude']))
+        .toList();
+    _polylines.add(
+      Polyline(
+        polylineId: const PolylineId('full_route'),
+        points: fullRoute,
+        color: Colors.grey.withOpacity(0.3),
+        width: 3,
+      ),
+    );
+
+    // Add current position marker
+    _updateCurrentPositionMarker();
+
+    setState(() {});
+
+    // Focus camera on route
+    _focusCameraOnRoute();
+  }
+
+  void _updateCurrentPositionMarker() {
+    if (playbackPoints.isEmpty || currentPointIndex >= playbackPoints.length) {
       return;
     }
 
-    try {
-      // Add start marker
-      final startPoint = playbackPoints.first;
-      final startPos = Position(
-        startPoint['longitude'] as double,
-        startPoint['latitude'] as double,
-      );
-      final startOptions = PointAnnotationOptions(
-        geometry: Point(coordinates: startPos),
-        textField: '🟢 Start\n${DateFormat('hh:mm a').format(DateTime.parse(startPoint['timestamp']))}',
-        textOffset: [0.0, -2.0],
-        textSize: 12.0,
-        iconSize: 1.2,
-      );
-      final startMarker = await _pointAnnotationManager!.create(startOptions);
-      _markerAnnotations['start'] = startMarker;
+    final currentPoint = playbackPoints[currentPointIndex];
+    final currentLatLng = LatLng(
+      currentPoint['latitude'],
+      currentPoint['longitude'],
+    );
 
-      // Add end marker
-      final endPoint = playbackPoints.last;
-      final endPos = Position(
-        endPoint['longitude'] as double,
-        endPoint['latitude'] as double,
-      );
-      final endOptions = PointAnnotationOptions(
-        geometry: Point(coordinates: endPos),
-        textField: '🔴 End\n${DateFormat('hh:mm a').format(DateTime.parse(endPoint['timestamp']))}',
-        textOffset: [0.0, -2.0],
-        textSize: 12.0,
-        iconSize: 1.2,
-      );
-      final endMarker = await _pointAnnotationManager!.create(endOptions);
-      _markerAnnotations['end'] = endMarker;
+    // Remove old current marker
+    _markers.removeWhere((m) => m.markerId.value == 'current');
 
-      // Add idle period markers
-      for (int i = 0; i < idlePeriods.length; i++) {
-        final idle = idlePeriods[i];
-        final idlePos = Position(
-          idle['longitude'] as double,
-          idle['latitude'] as double,
-        );
-        final idleOptions = PointAnnotationOptions(
-          geometry: Point(coordinates: idlePos),
-          textField: '⏸ Idle Period',
-          textOffset: [0.0, -2.0],
-          textSize: 11.0,
-          iconSize: 1.0,
-        );
-        final idleMarker = await _pointAnnotationManager!.create(idleOptions);
-        _markerAnnotations['idle_$i'] = idleMarker;
-      }
-
-      // Add full route polyline (faded) - shows the complete route
-      final fullRoute = playbackPoints
-          .map((p) => Position(p['longitude'] as double, p['latitude'] as double))
-          .toList();
-      
-      if (fullRoute.length > 1) {
-        final fullRouteOptions = PolylineAnnotationOptions(
-          geometry: LineString(coordinates: fullRoute),
-          lineColor: Colors.grey.value,
-          lineWidth: 3.0,
-          lineOpacity: 0.3,
-        );
-        final fullRoutePolyline = await _polylineAnnotationManager!.create(fullRouteOptions);
-        _polylineAnnotations['full_route'] = fullRoutePolyline;
-      }
-
-      // Set initial position marker (will be updated when map is ready)
-      if (currentPointIndex < playbackPoints.length) {
-        await _updateCurrentPositionMarker();
-      }
-      
-      // Focus camera on route
-      _focusCameraOnRoute();
-    } catch (e) {
-      print('Error initializing map markers: $e');
-    }
-  }
-  
-  Future<void> _updateCurrentPositionMarker() async {
-    if (playbackPoints.isEmpty || currentPointIndex >= playbackPoints.length) return;
-    if (_pointAnnotationManager == null || _polylineAnnotationManager == null) return;
-
-    try {
-      final currentPoint = playbackPoints[currentPointIndex];
-      final currentLat = currentPoint['latitude'] as double;
-      final currentLng = currentPoint['longitude'] as double;
-      final currentPos = Position(currentLng, currentLat);
-
-      // Remove old current marker
-      final oldCurrentMarker = _markerAnnotations['current'];
-      if (oldCurrentMarker != null) {
-        await _pointAnnotationManager!.delete(oldCurrentMarker);
-        _markerAnnotations.remove('current');
-      }
-
-      // Add new current marker
-      final currentOptions = PointAnnotationOptions(
-        geometry: Point(coordinates: currentPos),
-        textField: '📍 ${widget.employeeName}\n${(currentPoint['cumulativeDistanceKm'] ?? 0.0).toStringAsFixed(2)} km',
-        textOffset: [0.0, -2.0],
-        textSize: 12.0,
-        iconSize: 1.5,
-      );
-      final currentMarker = await _pointAnnotationManager!.create(currentOptions);
-      _markerAnnotations['current'] = currentMarker;
-
-      // Update traveled path polyline
-      traveledPath = playbackPoints
-          .take(currentPointIndex + 1)
-          .map((p) => Position(p['longitude'] as double, p['latitude'] as double))
-          .toList();
-
-      // Remove old traveled polyline
-      final oldTraveledPolyline = _polylineAnnotations['traveled'];
-      if (oldTraveledPolyline != null) {
-        await _polylineAnnotationManager!.delete(oldTraveledPolyline);
-        _polylineAnnotations.remove('traveled');
-      }
-
-      // Add new traveled polyline
-      if (traveledPath.length > 1) {
-        final traveledOptions = PolylineAnnotationOptions(
-          geometry: LineString(coordinates: traveledPath),
-          lineColor: successColor.value,
-          lineWidth: 5.0,
-          lineOpacity: 0.8,
-        );
-        final traveledPolyline = await _polylineAnnotationManager!.create(traveledOptions);
-        _polylineAnnotations['traveled'] = traveledPolyline;
-      }
-    } catch (e) {
-      print('Error updating current position marker: $e');
-    }
-  }
-
-  Future<void> _focusCameraOnRoute() async {
-    if (_mapboxMap == null || playbackPoints.isEmpty) return;
-
-    try {
-      double minLat = double.infinity;
-      double maxLat = -double.infinity;
-      double minLng = double.infinity;
-      double maxLng = -double.infinity;
-
-      for (var point in playbackPoints) {
-        final lat = point['latitude'] as double;
-        final lng = point['longitude'] as double;
-        minLat = math.min(minLat, lat);
-        maxLat = math.max(maxLat, lat);
-        minLng = math.min(minLng, lng);
-        maxLng = math.max(maxLng, lng);
-      }
-
-      final latPadding = (maxLat - minLat) * 0.1;
-      final lngPadding = (maxLng - minLng) * 0.1;
-
-      await _mapboxService.fitBounds(
-        bounds: CoordinateBounds(
-          southwest: Point(
-            coordinates: Position(minLng - lngPadding, minLat - latPadding),
-          ),
-          northeast: Point(
-            coordinates: Position(maxLng + lngPadding, maxLat + latPadding),
-          ),
-          infiniteBounds: false,
+    // Add new current marker
+    _markers.add(
+      Marker(
+        markerId: const MarkerId('current'),
+        position: currentLatLng,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(
+          title: widget.employeeName,
+          snippet:
+              '${currentPoint['cumulativeDistanceKm']?.toStringAsFixed(2) ?? '0'} km',
         ),
-        padding: 50.0,
+      ),
+    );
+
+    // Update traveled path polyline
+    traveledPath = playbackPoints
+        .take(currentPointIndex + 1)
+        .map((p) => LatLng(p['latitude'], p['longitude']))
+        .toList();
+
+    _polylines.removeWhere((p) => p.polylineId.value == 'traveled');
+    if (traveledPath.length > 1) {
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('traveled'),
+          points: traveledPath,
+          color: successColor,
+          width: 5,
+        ),
       );
-    } catch (e) {
-      print('Error focusing camera on route: $e');
     }
+  }
+
+  void _focusCameraOnRoute() {
+    if (_mapController == null || playbackPoints.isEmpty) return;
+
+    final bounds = _calculateBounds();
+    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+  }
+
+  LatLngBounds _calculateBounds() {
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+
+    for (var point in playbackPoints) {
+      final lat = point['latitude'] as double;
+      final lng = point['longitude'] as double;
+      minLat = math.min(minLat, lat);
+      maxLat = math.max(maxLat, lat);
+      minLng = math.min(minLng, lng);
+      maxLng = math.max(maxLng, lng);
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
   }
 
   void _play() {
@@ -305,24 +265,16 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
       if (currentPointIndex < playbackPoints.length - 1) {
         setState(() {
           currentPointIndex++;
+          _updateCurrentPositionMarker();
         });
-        
-        // Update marker and polyline asynchronously
-        _updateCurrentPositionMarker().then((_) {
-          // Animate camera to follow
-          final currentPoint = playbackPoints[currentPointIndex];
-          if (_mapboxMap != null && _mapboxService.map != null) {
-            _mapboxService.animateCamera(
-              center: Point(
-                coordinates: Position(
-                  currentPoint['longitude'] as double,
-                  currentPoint['latitude'] as double,
-                ),
-              ),
-              zoom: 15.0,
-            );
-          }
-        });
+
+        // Animate camera to follow
+        final currentPoint = playbackPoints[currentPointIndex];
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(
+            LatLng(currentPoint['latitude'], currentPoint['longitude']),
+          ),
+        );
       } else {
         _pause();
       }
@@ -351,8 +303,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
           currentPointIndex + 10,
           playbackPoints.length - 1,
         );
+        _updateCurrentPositionMarker();
       });
-      _updateCurrentPositionMarker();
     }
   }
 
@@ -360,8 +312,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     if (currentPointIndex > 0) {
       setState(() {
         currentPointIndex = math.max(currentPointIndex - 10, 0);
+        _updateCurrentPositionMarker();
       });
-      _updateCurrentPositionMarker();
     }
   }
 
@@ -377,8 +329,8 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
     final index = (value * (playbackPoints.length - 1)).round();
     setState(() {
       currentPointIndex = index;
+      _updateCurrentPositionMarker();
     });
-    _updateCurrentPositionMarker();
   }
 
   void _showAnalyticsDialog() {
@@ -512,40 +464,26 @@ class _RoutePlaybackScreenState extends State<RoutePlaybackScreen>
   }
 
   Widget _buildMap() {
-    final initialPoint = playbackPoints.isNotEmpty
-        ? Position(
-            playbackPoints.first['longitude'] as double,
-            playbackPoints.first['latitude'] as double,
-          )
-        : Position(77.2090, 28.6139); // Default to Delhi
-    
-    return MapWidget(
-      key: const ValueKey("route_playback_map"),
-      cameraOptions: CameraOptions(
-        center: Point(coordinates: initialPoint),
-        zoom: 14.0,
+    return GoogleMap(
+      onMapCreated: (controller) {
+        _mapController = controller;
+        _focusCameraOnRoute();
+      },
+      initialCameraPosition: CameraPosition(
+        target: playbackPoints.isNotEmpty
+            ? LatLng(
+                playbackPoints.first['latitude'],
+                playbackPoints.first['longitude'],
+              )
+            : const LatLng(28.6139, 77.2090),
+        zoom: 14,
       ),
-      styleUri: MapboxConfig.defaultMapStyle,
-      onMapCreated: _onMapCreated,
+      markers: _markers,
+      polylines: _polylines,
+      myLocationEnabled: false,
+      zoomControlsEnabled: true,
+      mapToolbarEnabled: false,
     );
-  }
-  
-  Future<void> _onMapCreated(MapboxMap map) async {
-    try {
-      _mapboxMap = map;
-      _mapboxService.initialize(map);
-      
-      // Create annotation managers
-      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
-      _polylineAnnotationManager = await map.annotations.createPolylineAnnotationManager();
-      
-      // Initialize map with markers and routes
-      await _initializeMap();
-      
-      print('✅ Mapbox map created for route playback');
-    } catch (e) {
-      print('❌ Error creating Mapbox map: $e');
-    }
   }
 
   Widget _buildProgressInfo() {

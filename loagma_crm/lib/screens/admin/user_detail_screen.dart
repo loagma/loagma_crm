@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../services/api_config.dart';
-import '../../../services/mapbox_service.dart';
-import '../../../config/mapbox_config.dart';
 import 'edit_user_screen.dart';
 
 class UserDetailScreen extends StatefulWidget {
@@ -26,24 +24,11 @@ class UserDetailScreen extends StatefulWidget {
 class _UserDetailScreenState extends State<UserDetailScreen> {
   Map<String, dynamic>? workingHours;
   bool isLoadingWorkingHours = false;
-  
-  // Mapbox map state
-  MapboxMap? _mapboxMap;
-  final MapboxService _mapboxService = MapboxService();
-  PointAnnotationManager? _pointAnnotationManager;
-  Map<String, PointAnnotation> _markerAnnotations = {};
 
   @override
   void initState() {
     super.initState();
     _loadWorkingHours();
-  }
-  
-  @override
-  void dispose() {
-    _mapboxService.dispose();
-    _mapboxMap = null;
-    super.dispose();
   }
 
   Future<void> _loadWorkingHours() async {
@@ -349,7 +334,30 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: _buildMapboxMap(),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(
+                          _parseCoordinate(widget.user['latitude']),
+                          _parseCoordinate(widget.user['longitude']),
+                        ),
+                        zoom: 15,
+                      ),
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId('employee_location'),
+                          position: LatLng(
+                            _parseCoordinate(widget.user['latitude']),
+                            _parseCoordinate(widget.user['longitude']),
+                          ),
+                          infoWindow: InfoWindow(
+                            title: widget.user['name'] ?? 'Employee Location',
+                          ),
+                        ),
+                      },
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: true,
+                      mapToolbarEnabled: false,
+                    ),
                   ),
                 ),
               ]),
@@ -806,51 +814,5 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   String _formatCoordinate(dynamic coord) {
     final value = _parseCoordinate(coord);
     return value.toStringAsFixed(6);
-  }
-  
-  // Mapbox map builder
-  Widget _buildMapboxMap() {
-    final lat = _parseCoordinate(widget.user['latitude']);
-    final lng = _parseCoordinate(widget.user['longitude']);
-    
-    return MapWidget(
-      key: const ValueKey("user_location_map"),
-      cameraOptions: CameraOptions(
-        center: Point(coordinates: Position(lng, lat)),
-        zoom: 15.0,
-      ),
-      styleUri: MapboxConfig.defaultMapStyle,
-      onMapCreated: _onMapCreated,
-    );
-  }
-  
-  Future<void> _onMapCreated(MapboxMap map) async {
-    try {
-      _mapboxMap = map;
-      _mapboxService.initialize(map);
-      
-      // Create annotation manager
-      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
-      
-      // Add marker for employee location
-      final lat = _parseCoordinate(widget.user['latitude']);
-      final lng = _parseCoordinate(widget.user['longitude']);
-      final employeeName = widget.user['name'] ?? 'Employee Location';
-      
-      final options = PointAnnotationOptions(
-        geometry: Point(coordinates: Position(lng, lat)),
-        textField: employeeName,
-        textOffset: [0.0, -2.0],
-        textSize: 12.0,
-        iconSize: 1.0,
-      );
-      
-      final marker = await _pointAnnotationManager!.create(options);
-      _markerAnnotations['employee_location'] = marker;
-      
-      print('✅ Mapbox map created for user location');
-    } catch (e) {
-      print('❌ Error creating Mapbox map: $e');
-    }
   }
 }

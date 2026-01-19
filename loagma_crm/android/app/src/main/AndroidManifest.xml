@@ -82,11 +82,6 @@ package="com.example.loagma_crm">
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDWHsbHNwwhNNiQJFDE2BIXMVYv6ZpDOrI" />
             
-        <!-- Mapbox access token -->
-        <meta-data
-            android:name="MAPBOX_ACCESS_TOKEN"
-            android:value="${MAPBOX_ACCESS_TOKEN}" />
-            
         <!-- Foreground service for location tracking -->
         <service
             android:name="io.flutter.plugins.geolocator.GeolocatorLocationService"

@@ -8,12 +8,9 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
-import '../../services/mapbox_service.dart';
-import '../../config/mapbox_config.dart';
-import '../../config/google_places_config.dart';
 import '../../utils/custom_toast.dart';
 
 class EditUserScreen extends StatefulWidget {
@@ -70,10 +67,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   double? _latitude;
   double? _longitude;
   bool isLoadingGeolocation = false;
-  MapboxMap? _mapboxMap;
-  final MapboxService _mapboxService = MapboxService();
-  PointAnnotationManager? _pointAnnotationManager;
-  Map<String, PointAnnotation> _markerAnnotations = {};
+  GoogleMapController? _mapController;
 
   // Data lists
   List<Map<String, dynamic>> roles = [];
@@ -188,10 +182,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   }
 
   @override
-  @override
   void dispose() {
-    _mapboxService.dispose();
-    _mapboxMap = null;
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -208,45 +199,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _notesController.dispose();
     _salaryController.dispose();
     _locationSearchController.dispose();
-    _mapboxService.dispose();
-    _mapboxMap = null;
     super.dispose();
-  }
-  
-  // Build Mapbox map widget
-  Widget _buildMapboxMap() {
-    final initialPoint = _latitude != null && _longitude != null
-        ? Position(_longitude!, _latitude!)
-        : Position(78.9629, 20.5937); // India center
-    
-    return MapWidget(
-      key: const ValueKey("edit_user_location_map"),
-      cameraOptions: CameraOptions(
-        center: Point(coordinates: initialPoint),
-        zoom: _latitude != null ? 15.0 : 5.0,
-      ),
-      styleUri: MapboxConfig.defaultMapStyle,
-      onMapCreated: _onMapCreated,
-    );
-  }
-  
-  Future<void> _onMapCreated(MapboxMap map) async {
-    try {
-      _mapboxMap = map;
-      _mapboxService.initialize(map);
-      
-      // Create annotation manager
-      _pointAnnotationManager = await map.annotations.createPointAnnotationManager();
-      
-      // Add marker if location is already set
-      if (_latitude != null && _longitude != null) {
-        await _updateLocationMarker(_latitude!, _longitude!);
-      }
-      
-      print('✅ Mapbox map created for edit user location');
-    } catch (e) {
-      print('❌ Error creating Mapbox map: $e');
-    }
   }
 
   Future<void> fetchRoles() async {
@@ -755,15 +708,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
         _latitude = position.latitude;
         _longitude = position.longitude;
       });
-      
-      // Update marker and camera
-      await _updateLocationMarker(position.latitude, position.longitude);
-      if (_mapboxMap != null && _mapboxService.map != null) {
-        await _mapboxService.animateCamera(
-          center: Point(coordinates: Position(position.longitude, position.latitude)),
-          zoom: 15.0,
-        );
-      }
 
       Fluttertoast.showToast(
         msg:
@@ -781,7 +725,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
   Future<void> _openInGoogleMaps() async {
     if (_latitude == null || _longitude == null) return;
 
-    // Open in external map app (Google Maps or default)
     final url =
         'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude';
     final uri = Uri.parse(url);
@@ -790,38 +733,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        Fluttertoast.showToast(msg: 'Could not open map application');
+        Fluttertoast.showToast(msg: 'Could not open Google Maps');
       }
     } catch (e) {
-      Fluttertoast.showToast(msg: 'Error opening map: $e');
-    }
-  }
-  
-  // Update location marker on Mapbox map
-  Future<void> _updateLocationMarker(double lat, double lng) async {
-    if (_pointAnnotationManager == null) return;
-    
-    try {
-      // Remove old marker
-      final oldMarker = _markerAnnotations['selected_location'];
-      if (oldMarker != null) {
-        await _pointAnnotationManager!.delete(oldMarker);
-        _markerAnnotations.remove('selected_location');
-      }
-      
-      // Add new marker
-      final options = PointAnnotationOptions(
-        geometry: Point(coordinates: Position(lng, lat)),
-        textField: 'Employee Location\nTap to change location',
-        textOffset: [0.0, -2.0],
-        textSize: 12.0,
-        iconSize: 1.2,
-      );
-      
-      final marker = await _pointAnnotationManager!.create(options);
-      _markerAnnotations['selected_location'] = marker;
-    } catch (e) {
-      print('Error updating location marker: $e');
+      Fluttertoast.showToast(msg: 'Error opening Google Maps: $e');
     }
   }
 
@@ -883,10 +798,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
       }
 
       // Move map camera to the location with smooth animation
-      if (_mapboxMap != null && foundLocation && _mapboxService.map != null) {
-        await _mapboxService.animateCamera(
-          center: Point(coordinates: Position(lng, lat)),
-          zoom: _getAppropriateZoomLevel(locationName, query),
+      if (_mapController != null && foundLocation) {
+        await _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(lat, lng),
+            _getAppropriateZoomLevel(locationName, query),
+          ),
         );
       }
 
@@ -894,11 +811,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
         _latitude = lat;
         _longitude = lng;
       });
-      
-      // Update marker on map
-      if (_latitude != null && _longitude != null) {
-        await _updateLocationMarker(_latitude!, _longitude!);
-      }
 
       if (foundLocation) {
         Fluttertoast.showToast(
@@ -1741,35 +1653,73 @@ class _EditUserScreenState extends State<EditUserScreen> {
                               borderRadius: BorderRadius.circular(8),
                               child: Stack(
                                 children: [
-                                  GestureDetector(
-                                    onTapUp: (details) async {
-                                      // Handle map tap to select location
-                                      // Note: Mapbox requires getting coordinates from screen point
-                                      if (_mapboxMap != null) {
-                                        try {
-                                          final screenCoordinate = ScreenCoordinate(
-                                            x: details.localPosition.dx,
-                                            y: details.localPosition.dy,
-                                          );
-                                          final coordinate = await _mapboxMap!.coordinateForPixel(screenCoordinate);
-                                          
-                                          setState(() {
-                                            _latitude = coordinate.latitude;
-                                            _longitude = coordinate.longitude;
-                                          });
-                                          
-                                          await _updateLocationMarker(_latitude!, _longitude!);
-                                          
-                                          Fluttertoast.showToast(
-                                            msg:
-                                                'Location selected: ${_latitude!.toStringAsFixed(6)}, ${_longitude!.toStringAsFixed(6)}',
-                                          );
-                                        } catch (e) {
-                                          print('Error handling map tap: $e');
-                                        }
-                                      }
+                                  GoogleMap(
+                                    onMapCreated:
+                                        (GoogleMapController controller) {
+                                          _mapController = controller;
+                                        },
+                                    initialCameraPosition: CameraPosition(
+                                      target:
+                                          _latitude != null &&
+                                              _longitude != null
+                                          ? LatLng(_latitude!, _longitude!)
+                                          : const LatLng(
+                                              20.5937,
+                                              78.9629,
+                                            ), // India center
+                                      zoom: _latitude != null ? 15 : 5,
+                                    ),
+                                    markers:
+                                        _latitude != null && _longitude != null
+                                        ? {
+                                            Marker(
+                                              markerId: const MarkerId(
+                                                'selected_location',
+                                              ),
+                                              position: LatLng(
+                                                _latitude!,
+                                                _longitude!,
+                                              ),
+                                              infoWindow: const InfoWindow(
+                                                title: 'Employee Location',
+                                                snippet:
+                                                    'Tap to change location',
+                                              ),
+                                            ),
+                                          }
+                                        : {},
+                                    onTap: (LatLng position) {
+                                      setState(() {
+                                        _latitude = position.latitude;
+                                        _longitude = position.longitude;
+                                      });
+                                      Fluttertoast.showToast(
+                                        msg:
+                                            'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+                                      );
                                     },
-                                    child: _buildMapboxMap(),
+
+                                    // Fixed gesture recognizers - each type only once
+                                    gestureRecognizers:
+                                        <Factory<OneSequenceGestureRecognizer>>{
+                                          Factory<EagerGestureRecognizer>(
+                                            () => EagerGestureRecognizer(),
+                                          ),
+                                        },
+
+                                    myLocationButtonEnabled: false,
+                                    zoomControlsEnabled: true,
+                                    mapToolbarEnabled: false,
+                                    zoomGesturesEnabled: true,
+                                    scrollGesturesEnabled: true,
+                                    tiltGesturesEnabled: false,
+                                    rotateGesturesEnabled: false,
+                                    compassEnabled: false,
+                                    indoorViewEnabled: false,
+                                    trafficEnabled: false,
+                                    buildingsEnabled: false,
+                                    liteModeEnabled: false,
+                                    mapType: MapType.normal,
                                   ),
 
                                   // Search overlay

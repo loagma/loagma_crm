@@ -8,7 +8,6 @@
     "postinstall": "prisma generate",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "check-env": "node scripts/check-env.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
