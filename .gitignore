@@ -1,0 +1,314 @@
+# =============================================================================
+# SENSITIVE FILES AND CREDENTIALS - NEVER COMMIT THESE
+# =============================================================================
+
+# Service Account Credentials (Google Cloud, Firebase, etc.)
+*.json
+service_account*.json
+*-service-account.json
+google-credentials*.json
+firebase-adminsdk-*.json
+gcp-service-account*.json
+
+# Environment Files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+.env.test
+
+# API Keys and Secrets
+api-keys.txt
+secrets.txt
+credentials.txt
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Firebase Configuration (when containing sensitive data)
+firebase-config.json
+.firebaserc.local
+
+# =============================================================================
+# DEVELOPMENT AND BUILD FILES
+# =============================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+/build/
+/dist/
+/out/
+/.next/
+/.nuxt/
+/coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# =============================================================================
+# OPERATING SYSTEM FILES
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# IDE AND EDITOR FILES
+# =============================================================================
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.history/
+*.vsix
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# TEMPORARY AND CACHE FILES
+# =============================================================================
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# =============================================================================
+# PLATFORM-SPECIFIC PATTERNS
+# =============================================================================
+
+# Flutter/Dart (for mobile app)
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+local.properties
+.gradle/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# iOS
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+project.xcworkspace
+
+# =============================================================================
+# BACKUP AND ARCHIVE FILES
+# =============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*.tmp
+
+# Archive files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# =============================================================================
+# DATABASE FILES
+# =============================================================================
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Other databases
+*.mdb
+*.accdb
+
+# =============================================================================
+# CUSTOM PROJECT EXCLUSIONS
+# =============================================================================
+
+# Add any project-specific files that should be ignored
+# Example:
+# /custom-config/
+# /private-docs/
