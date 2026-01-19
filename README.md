@@ -126,23 +126,7 @@ flutter run -d chrome --web-port 3000
 
 ---
 
-##  Environment Variables & Credentials
-
-### 🚨 Security Notice
-
-**NEVER commit sensitive credentials to version control!** This project includes comprehensive security measures to prevent accidental exposure of sensitive data.
-
-### Quick Setup
-
-1. **Copy the environment template:**
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Set up credentials following our security guide:**
-   - See [docs/CREDENTIAL_SETUP.md](docs/CREDENTIAL_SETUP.md) for detailed instructions
-   - Use environment variables for all sensitive data
-   - Never commit `.env` files or service account JSON files
+##  Environment Variables
 
 ### Backend (.env)
 
@@ -158,29 +142,10 @@ DATABASE_URL=postgresql://username:password@localhost:5432/loagma_crm
 # JWT Configuration
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 
-# Google Cloud / Firebase Authentication (choose one method)
-# Method 1: Service account JSON content (recommended for production)
-GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"your-project",...}'
-
-# Method 2: Service account file path (recommended for development)
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account.json
-
-# Firebase Configuration
-FIREBASE_PROJECT_ID=your-firebase-project-id
-FIREBASE_API_KEY=your-firebase-api-key
-
 # SMS Service (Optional)
 SMS_API_KEY=your-sms-api-key
 SMS_SENDER_ID=your-sender-id
-
-# Environment Configuration
-ENVIRONMENT=development
-DEBUG_MODE=true
 ```
-
-### Credential Setup
-
-For detailed credential setup instructions, see [docs/CREDENTIAL_SETUP.md](docs/CREDENTIAL_SETUP.md).
 
 ### Frontend (api_config.dart)
 
