@@ -173,7 +173,11 @@ class _ViewTasksScreenState extends State<ViewTasksScreen> {
                 ],
               ),
             );
+<<<<<<< HEAD
           }),
+=======
+          }).toList(),
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         ],
       ),
     );

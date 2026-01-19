@@ -337,7 +337,11 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+<<<<<<< HEAD
                       initialValue: selectedLeaveType,
+=======
+                      value: selectedLeaveType,
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                       decoration: InputDecoration(
                         hintText: 'Select leave type',
                         border: OutlineInputBorder(

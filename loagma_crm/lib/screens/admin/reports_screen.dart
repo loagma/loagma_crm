@@ -1,11 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
+=======
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:intl/intl.dart';
+import '../../services/api_config.dart';
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import '../../utils/time_formatting_utils.dart';
 import 'enhanced_salesman_reports_screen.dart';
 
@@ -32,12 +38,15 @@ class _ReportsScreenState extends State<ReportsScreen>
   String selectedPeriod = 'today'; // today, week, month, all
   DateTime? startDate;
   DateTime? endDate;
+<<<<<<< HEAD
   
   // Mapbox map state
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
   final Map<String, PointAnnotation> _markerAnnotations = {};
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   @override
   void initState() {
@@ -49,8 +58,11 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   void dispose() {
     _tabController.dispose();
+<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -168,12 +180,19 @@ class _ReportsScreenState extends State<ReportsScreen>
       }
 
       salesmenMap[salesmanId]!['totalAccounts']++;
+<<<<<<< HEAD
       if (account['isActive'] == true) {
         salesmenMap[salesmanId]!['activeAccounts']++;
       }
       if (account['isApproved'] == true) {
         salesmenMap[salesmanId]!['approvedAccounts']++;
       }
+=======
+      if (account['isActive'] == true)
+        salesmenMap[salesmanId]!['activeAccounts']++;
+      if (account['isApproved'] == true)
+        salesmenMap[salesmanId]!['approvedAccounts']++;
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       salesmenMap[salesmanId]!['accounts'].add(account);
     }
 
@@ -534,9 +553,38 @@ class _ReportsScreenState extends State<ReportsScreen>
         ) /
         accountsWithLocation.length;
 
+<<<<<<< HEAD
     return Stack(
       children: [
         _buildMapboxMap(avgLat, avgLng, accountsWithLocation),
+=======
+    Set<Marker> markers = accountsWithLocation.map((account) {
+      return Marker(
+        markerId: MarkerId(account['id']),
+        position: LatLng(
+          (account['latitude'] as num).toDouble(),
+          (account['longitude'] as num).toDouble(),
+        ),
+        infoWindow: InfoWindow(
+          title: account['personName'] ?? 'Unknown',
+          snippet: account['businessName'] ?? '',
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
+      );
+    }).toSet();
+
+    return Stack(
+      children: [
+        GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: LatLng(avgLat, avgLng),
+            zoom: 12,
+          ),
+          markers: markers,
+          myLocationButtonEnabled: true,
+          zoomControlsEnabled: true,
+        ),
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         Positioned(
           top: 16,
           left: 16,
@@ -762,6 +810,7 @@ class _ReportsScreenState extends State<ReportsScreen>
       ],
     );
   }
+<<<<<<< HEAD
   
   // Mapbox map builder
   Widget _buildMapboxMap(double avgLat, double avgLng, List<Map<String, dynamic>> accountsWithLocation) {
@@ -847,4 +896,6 @@ class _ReportsScreenState extends State<ReportsScreen>
       print('❌ Error creating Mapbox map: $e');
     }
   }
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 }

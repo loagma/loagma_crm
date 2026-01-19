@@ -1,11 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
-import '../../services/mapbox_service.dart';
-import '../../config/mapbox_config.dart';
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
@@ -27,6 +25,7 @@ class AssignmentMapViewScreen extends StatefulWidget {
 
 class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   final _service = MapTaskAssignmentService();
+<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
@@ -39,15 +38,30 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   List<Shop> _filteredShops = []; // Shops after filtering
   bool _isLoading = true;
   Position _centerPosition = Position(78.9629, 20.5937); // India center (lng, lat)
+=======
+  GoogleMapController? _mapController;
+  Set<Marker> _markers = {};
+  List<Shop> _shops = [];
+  List<Shop> _salesmanCreatedShops = []; // Shops created by salesman
+  bool _isLoading = true;
+  LatLng _centerPosition = const LatLng(20.5937, 78.9629);
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   bool _isLegendExpanded = false; // Legend collapsed by default
   bool _isInfoExpanded = false; // Info card collapsed by default
   bool _isFilterExpanded = false; // Filter section collapsed by default
 
   // Filter states
+<<<<<<< HEAD
   final Set<String> _stageFilter = {}; // Business status filter
   final Set<String> _businessTypeFilter = {}; // Combined business/place type filter
   final Set<String> _ratingFilter = {}; // Rating filter
   final Set<String> _priceFilter = {}; // Price level filter
+=======
+  Set<String> _stageFilter = {}; // Business status filter
+  Set<String> _businessTypeFilter = {}; // Combined business/place type filter
+  Set<String> _ratingFilter = {}; // Rating filter
+  Set<String> _priceFilter = {}; // Price level filter
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   bool _showGooglePlaces = true; // Show Google Places businesses
   bool _showSalesmanCreated = true; // Show salesman-created accounts
 
@@ -133,10 +147,15 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   @override
+<<<<<<< HEAD
   @override
   void dispose() {
     _mapboxService.dispose();
     _mapboxMap = null;
+=======
+  void dispose() {
+    _mapController?.dispose();
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -309,6 +328,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       setState(() {
         _shops = allShops;
         _salesmanCreatedShops = salesmanShops;
+<<<<<<< HEAD
       });
       
       // Create markers after state is set
@@ -319,6 +339,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           _isLoading = false;
         });
       }
+=======
+        _createMarkers();
+        _isLoading = false;
+      });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     } catch (e) {
       print('Error loading businesses: $e');
       if (!mounted) return;
@@ -326,6 +351,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     }
   }
 
+<<<<<<< HEAD
   Future<void> _createMarkers() async {
     if (_pointAnnotationManager == null) return;
     
@@ -339,6 +365,13 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     double totalLng = 0;
     int validLocations = 0;
     List<Shop> filteredShops = [];
+=======
+  void _createMarkers() {
+    final markers = <Marker>{};
+    double totalLat = 0;
+    double totalLng = 0;
+    int validLocations = 0;
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
     // Add markers for Google Places businesses (with filters)
     if (_showGooglePlaces) {
@@ -385,6 +418,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           totalLat += shop.latitude!;
           totalLng += shop.longitude!;
           validLocations++;
+<<<<<<< HEAD
           filteredShops.add(shop);
           
           try {
@@ -402,6 +436,24 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           } catch (e) {
             print('Error creating marker for ${shop.name}: $e');
           }
+=======
+
+          markers.add(
+            Marker(
+              markerId: MarkerId('google_${shop.placeId ?? shop.name}'),
+              position: LatLng(shop.latitude!, shop.longitude!),
+              infoWindow: InfoWindow(
+                title: shop.name,
+                snippet:
+                    '${shop.businessType} - ${_getBusinessStatus(shop)}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                _getMarkerColorByStatus(_getBusinessStatus(shop)),
+              ),
+              onTap: () => _showShopDetails(shop, false),
+            ),
+          );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         }
       }
     }
@@ -445,6 +497,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           totalLat += shop.latitude!;
           totalLng += shop.longitude!;
           validLocations++;
+<<<<<<< HEAD
           filteredShops.add(shop);
           
           try {
@@ -462,11 +515,30 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           } catch (e) {
             print('Error creating marker for ${shop.name}: $e');
           }
+=======
+
+          markers.add(
+            Marker(
+              markerId: MarkerId('salesman_${shop.placeId ?? shop.name}'),
+              position: LatLng(shop.latitude!, shop.longitude!),
+              infoWindow: InfoWindow(
+                title: '⭐ ${shop.name}',
+                snippet:
+                    'Created by Salesman - ${shop.stage}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueViolet, // Purple for salesman-created
+              ),
+              onTap: () => _showShopDetails(shop, true),
+            ),
+          );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         }
       }
     }
 
     if (validLocations > 0) {
+<<<<<<< HEAD
       _centerPosition = Position(
         totalLng / validLocations,
         totalLat / validLocations,
@@ -480,6 +552,20 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       await _mapboxService.animateCamera(
         center: Point(coordinates: _centerPosition),
         zoom: 12.0,
+=======
+      _centerPosition = LatLng(
+        totalLat / validLocations,
+        totalLng / validLocations,
+      );
+    }
+
+    setState(() => _markers = markers);
+
+    // Move camera to center (only if we have a controller)
+    if (_mapController != null && validLocations > 0) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_centerPosition, 12),
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       );
     }
   }
@@ -810,7 +896,37 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
                 )
+<<<<<<< HEAD
               : _buildMapboxMap(),
+=======
+              : GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: _centerPosition,
+                    zoom: 12,
+                  ),
+                  markers: _markers,
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                    if (_shops.isNotEmpty || _salesmanCreatedShops.isNotEmpty) {
+                      controller.animateCamera(
+                        CameraUpdate.newLatLngZoom(_centerPosition, 12),
+                      );
+                    }
+                  },
+
+                  // Fixed gesture recognizers - each type only once
+                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<EagerGestureRecognizer>(
+                      () => EagerGestureRecognizer(),
+                    ),
+                  },
+
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  zoomControlsEnabled: true,
+                  mapToolbarEnabled: true,
+                ),
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
           // Filters & Legend at top
           if (!_isLoading)
@@ -855,7 +971,11 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                             ),
                             const Spacer(),
                             Text(
+<<<<<<< HEAD
                               '${_markerAnnotations.length} shown',
+=======
+                              '${_markers.length} shown',
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey[600],
@@ -947,11 +1067,19 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                             ],
                                           ),
                                           selected: _showGooglePlaces,
+<<<<<<< HEAD
                                           onSelected: (selected) async {
                                             setState(() {
                                               _showGooglePlaces = selected;
                                             });
                                             await _createMarkers();
+=======
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showGooglePlaces = selected;
+                                              _createMarkers();
+                                            });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                           },
                                           selectedColor: Colors.green
                                               .withValues(alpha: 0.2),
@@ -983,11 +1111,19 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                             ],
                                           ),
                                           selected: _showSalesmanCreated,
+<<<<<<< HEAD
                                           onSelected: (selected) async {
                                             setState(() {
                                               _showSalesmanCreated = selected;
                                             });
                                             await _createMarkers();
+=======
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showSalesmanCreated = selected;
+                                              _createMarkers();
+                                            });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                           },
                                           selectedColor: Colors.purple
                                               .withValues(alpha: 0.2),
@@ -1005,12 +1141,21 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                                 if (!_showGooglePlaces || !_showSalesmanCreated)
                                   TextButton(
+<<<<<<< HEAD
                                     onPressed: () async {
                                       setState(() {
                                         _showGooglePlaces = true;
                                         _showSalesmanCreated = true;
                                       });
                                       await _createMarkers();
+=======
+                                    onPressed: () {
+                                      setState(() {
+                                        _showGooglePlaces = true;
+                                        _showSalesmanCreated = true;
+                                        _createMarkers();
+                                      });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1099,8 +1244,13 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                     onPressed: () {
                                       setState(() {
                                         _stageFilter.clear();
+<<<<<<< HEAD
                                       });
                                       await _createMarkers();
+=======
+                                        _createMarkers();
+                                      });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1192,11 +1342,19 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
                                 ),
                                 if (_businessTypeFilter.isNotEmpty)
                                   TextButton(
+<<<<<<< HEAD
                                     onPressed: () async {
                                       setState(() {
                                         _businessTypeFilter.clear();
                                       });
                                       await _createMarkers();
+=======
+                                    onPressed: () {
+                                      setState(() {
+                                        _businessTypeFilter.clear();
+                                        _createMarkers();
+                                      });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                                     },
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
@@ -1630,15 +1788,24 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         ],
       ),
       selected: isSelected,
+<<<<<<< HEAD
       onSelected: (selected) async {
+=======
+      onSelected: (selected) {
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         setState(() {
           if (selected) {
             _stageFilter.add(value);
           } else {
             _stageFilter.remove(value);
           }
+<<<<<<< HEAD
         });
         await _createMarkers();
+=======
+          _createMarkers();
+        });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       },
       selectedColor: color.withValues(alpha: 0.2),
       checkmarkColor: color,
@@ -1664,15 +1831,24 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         ],
       ),
       selected: isSelected,
+<<<<<<< HEAD
       onSelected: (selected) async {
+=======
+      onSelected: (selected) {
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         setState(() {
           if (selected) {
             _businessTypeFilter.add(type);
           } else {
             _businessTypeFilter.remove(type);
           }
+<<<<<<< HEAD
         });
         await _createMarkers();
+=======
+          _createMarkers();
+        });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       },
       selectedColor: color.withValues(alpha: 0.8),
       checkmarkColor: Colors.white,
@@ -1689,15 +1865,24 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
         style: const TextStyle(fontSize: 10),
       ),
       selected: isSelected,
+<<<<<<< HEAD
       onSelected: (selected) async {
+=======
+      onSelected: (selected) {
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         setState(() {
           if (selected) {
             _businessTypeFilter.add(type.toLowerCase());
           } else {
             _businessTypeFilter.remove(type.toLowerCase());
           }
+<<<<<<< HEAD
         });
         await _createMarkers();
+=======
+          _createMarkers();
+        });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       },
       selectedColor: const Color(0xFFD7BE69).withValues(alpha: 0.2),
       checkmarkColor: const Color(0xFFD7BE69),
@@ -1754,6 +1939,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       return true;
     }).length;
   }
+<<<<<<< HEAD
   
   // Build Mapbox map widget
   Widget _buildMapboxMap() {
@@ -1786,4 +1972,6 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
       print('❌ Error creating Mapbox map: $e');
     }
   }
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 }

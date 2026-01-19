@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+=======
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import 'dart:async';
 import '../../services/attendance_service.dart';
 import '../../models/attendance_model.dart';
 import '../../services/user_service.dart';
 import '../../services/api_config.dart';
+<<<<<<< HEAD
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 import 'live_tracking_screen.dart';
 
 class EnhancedAttendanceManagementScreen extends StatefulWidget {
@@ -22,6 +29,7 @@ class _EnhancedAttendanceManagementScreenState
     extends State<EnhancedAttendanceManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
 
@@ -29,6 +37,10 @@ class _EnhancedAttendanceManagementScreenState
   PointAnnotationManager? _pointAnnotationManager;
   final Map<String, PointAnnotation> _markerAnnotations = {};
 
+=======
+  GoogleMapController? _mapController;
+  Set<Marker> _markers = {};
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   Timer? _refreshTimer;
 
   // Data
@@ -70,8 +82,11 @@ class _EnhancedAttendanceManagementScreenState
     _refreshTimer?.cancel();
     _searchController.dispose();
     _dateController.dispose();
+<<<<<<< HEAD
     _mapboxService.dispose();
     _mapboxMap = null;
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     super.dispose();
   }
 
@@ -277,6 +292,7 @@ class _EnhancedAttendanceManagementScreenState
     setState(() => filteredRecords = filtered);
   }
 
+<<<<<<< HEAD
   Future<void> _updateMapMarkers() async {
     if (_pointAnnotationManager == null) return;
 
@@ -332,6 +348,60 @@ class _EnhancedAttendanceManagementScreenState
         _markerAnnotations[punchOutId] = punchOutMarker;
       }
     }
+=======
+  void _updateMapMarkers() {
+    Set<Marker> newMarkers = {};
+
+    for (var attendance in attendanceRecords) {
+      // Punch In Marker
+      newMarkers.add(
+        Marker(
+          markerId: MarkerId('${attendance.id}_in'),
+          position: LatLng(
+            attendance.punchInLatitude,
+            attendance.punchInLongitude,
+          ),
+          infoWindow: InfoWindow(
+            title: attendance.employeeName,
+            snippet:
+                'In: ${DateFormat('HH:mm').format(attendance.punchInTime)}',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            attendance.isPunchedOut
+                ? BitmapDescriptor.hueGreen
+                : BitmapDescriptor.hueBlue,
+          ),
+          onTap: () => _showEmployeeDetails(attendance),
+        ),
+      );
+
+      // Punch Out Marker
+      if (attendance.punchOutLatitude != null &&
+          attendance.punchOutLongitude != null) {
+        newMarkers.add(
+          Marker(
+            markerId: MarkerId('${attendance.id}_out'),
+            position: LatLng(
+              attendance.punchOutLatitude!,
+              attendance.punchOutLongitude!,
+            ),
+            infoWindow: InfoWindow(
+              title: '${attendance.employeeName} - Out',
+              snippet: attendance.punchOutTime != null
+                  ? 'Out: ${DateFormat('HH:mm').format(attendance.punchOutTime!)}'
+                  : 'Active',
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+            onTap: () => _showEmployeeDetails(attendance),
+          ),
+        );
+      }
+    }
+
+    setState(() => _markers = newMarkers);
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   }
 
   void _showEmployeeDetails(AttendanceModel attendance) {
@@ -630,7 +700,11 @@ class _EnhancedAttendanceManagementScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
+<<<<<<< HEAD
                     '$presentEmployees Present ',
+=======
+                    '${presentEmployees} Present ',
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: isLiveTrackingEnabled ? Colors.green : Colors.grey,
@@ -838,7 +912,11 @@ class _EnhancedAttendanceManagementScreenState
 
                         // Employee Filter
                         DropdownButtonFormField<String>(
+<<<<<<< HEAD
                           initialValue: selectedEmployeeId,
+=======
+                          value: selectedEmployeeId,
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: isLoadingEmployees
@@ -973,7 +1051,11 @@ class _EnhancedAttendanceManagementScreenState
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
+<<<<<<< HEAD
                             initialValue: selectedEmployeeId,
+=======
+                            value: selectedEmployeeId,
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: isLoadingEmployees
@@ -1322,6 +1404,7 @@ class _EnhancedAttendanceManagementScreenState
     _tabController.animateTo(2); // Switch to Live Tracking tab
 
     // Focus on the employee's location
+<<<<<<< HEAD
     if (_mapboxMap != null) {
       _mapboxService.animateCamera(
         center: Point(
@@ -1331,10 +1414,19 @@ class _EnhancedAttendanceManagementScreenState
           ),
         ),
         zoom: 15.0,
+=======
+    if (_mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(attendance.punchInLatitude, attendance.punchInLongitude),
+          15,
+        ),
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       );
     }
   }
 
+<<<<<<< HEAD
   Future<void> _onMapCreated(MapboxMap map) async {
     _mapboxMap = map;
     _mapboxService.initialize(map);
@@ -1351,6 +1443,8 @@ class _EnhancedAttendanceManagementScreenState
     print('✅ Mapbox map created successfully in attendance screen!');
   }
 
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   Widget _buildLiveTrackingTab() {
     return Column(
       children: [
@@ -1386,7 +1480,11 @@ class _EnhancedAttendanceManagementScreenState
 
               // Route Tracking Button
               const SizedBox(height: 12),
+<<<<<<< HEAD
               SizedBox(
+=======
+              Container(
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _navigateToRouteTracking(),
@@ -1409,6 +1507,7 @@ class _EnhancedAttendanceManagementScreenState
         // Map
         Expanded(
           flex: isMapExpanded ? 4 : 2,
+<<<<<<< HEAD
           child: MapWidget(
             key: const ValueKey("attendanceMapWidget"),
             cameraOptions: CameraOptions(
@@ -1419,6 +1518,20 @@ class _EnhancedAttendanceManagementScreenState
             ),
             styleUri: MapboxConfig.defaultMapStyle,
             onMapCreated: _onMapCreated,
+=======
+          child: GoogleMap(
+            onMapCreated: (GoogleMapController controller) {
+              _mapController = controller;
+            },
+            initialCameraPosition: const CameraPosition(
+              target: LatLng(20.5937, 78.9629),
+              zoom: 5,
+            ),
+            markers: _markers,
+            mapType: MapType.normal,
+            myLocationEnabled: false,
+            myLocationButtonEnabled: true,
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
           ),
         ),
 

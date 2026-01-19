@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../services/route_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/mapbox_config.dart';
+=======
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:intl/intl.dart';
+import '../../services/route_service.dart';
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
 /// Enhanced route visualization with home location marking and date picker
 class RouteVisualizationScreen extends StatefulWidget {
@@ -26,6 +32,7 @@ class RouteVisualizationScreen extends StatefulWidget {
 }
 
 class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
+<<<<<<< HEAD
   MapboxMap? _mapboxMap;
   final MapboxService _mapboxService = MapboxService();
   PointAnnotationManager? _pointAnnotationManager;
@@ -35,12 +42,20 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
   final Map<String, PointAnnotation> _markerAnnotations = {};
   final Map<String, PolylineAnnotation> _polylineAnnotations = {};
   
+=======
+  GoogleMapController? _mapController;
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   bool _isLoading = true;
   String? _error;
 
   // Route data
+<<<<<<< HEAD
   List<Position> _routePoints = [];
   List<Map<String, double>> _routeCoordinates = []; // Store lat/lng for calculations
+=======
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   double _totalDistance = 0.0;
   int _totalPoints = 0;
 
@@ -58,6 +73,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       _loadRoute();
     }
   }
+<<<<<<< HEAD
   
   @override
   void dispose() {
@@ -65,6 +81,8 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     _mapboxMap = null;
     super.dispose();
   }
+=======
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   Future<void> _loadAvailableDates() async {
     try {
@@ -174,6 +192,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       return;
     }
 
+<<<<<<< HEAD
     // Create route polyline from GPS points (Mapbox uses Position with lng, lat order)
     List<Position> points = [];
     List<Map<String, double>> coordinates = [];
@@ -188,6 +207,26 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           print('Error parsing route point: $point, error: $e');
         }
       }
+=======
+    // Create route polyline from GPS points
+    List<LatLng> points = [];
+    if (routePoints.isNotEmpty) {
+      points = routePoints
+          .map((point) {
+            try {
+              return LatLng(
+                point['latitude'].toDouble(),
+                point['longitude'].toDouble(),
+              );
+            } catch (e) {
+              print('Error parsing route point: $point, error: $e');
+              return null;
+            }
+          })
+          .where((point) => point != null)
+          .cast<LatLng>()
+          .toList();
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
     }
 
     // Use distance from API response if available, otherwise calculate locally
@@ -195,6 +234,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     if (summary != null && summary['totalDistanceKm'] != null) {
       distance = (summary['totalDistanceKm'] as num).toDouble();
     } else {
+<<<<<<< HEAD
       // Fallback to local calculation using original routePoints
       if (routePoints.length > 1) {
         for (int i = 1; i < routePoints.length; i++) {
@@ -211,12 +251,23 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
             print('Error calculating distance: $e');
           }
         }
+=======
+      // Fallback to local calculation
+      for (int i = 1; i < points.length; i++) {
+        distance += RouteService.calculateDistance(
+          points[i - 1].latitude,
+          points[i - 1].longitude,
+          points[i].latitude,
+          points[i].longitude,
+        );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       }
     }
 
     setState(() {
       _totalDistance = distance;
       _totalPoints = points.length;
+<<<<<<< HEAD
       _routePoints = points;
       _routeCoordinates = coordinates;
 
@@ -277,10 +328,51 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           );
           final marker = await _pointAnnotationManager!.create(options);
           _markerAnnotations['home'] = marker;
+=======
+
+      // Create polyline with golden theme color
+      _polylines = {};
+      if (points.length > 1) {
+        _polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: points,
+            color: const Color(0xFFD7BE69), // Golden theme color
+            width: 4,
+          ),
+        );
+      }
+
+      // Create markers
+      _markers = {};
+
+      // Home location marker (most important - where salesman started working)
+      if (homeLocation != null) {
+        try {
+          final homeLatLng = LatLng(
+            homeLocation['latitude'].toDouble(),
+            homeLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('home'),
+              position: homeLatLng,
+              infoWindow: InfoWindow(
+                title: '🏠 Home Location',
+                snippet:
+                    'Started working here at ${_formatTime(homeLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueBlue, // Blue for home
+              ),
+            ),
+          );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         } catch (e) {
           print('Error creating home marker: $e');
         }
       }
+<<<<<<< HEAD
       
       // Start location marker (punch-in location)
       if (startLocation != null) {
@@ -298,10 +390,34 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           );
           final marker = await _pointAnnotationManager!.create(options);
           _markerAnnotations['start'] = marker;
+=======
+
+      // Start location marker (punch-in location)
+      if (startLocation != null) {
+        try {
+          final startLatLng = LatLng(
+            startLocation['latitude'].toDouble(),
+            startLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('start'),
+              position: startLatLng,
+              infoWindow: InfoWindow(
+                title: '🟢 Punch In',
+                snippet: 'Started at ${_formatTime(startLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueGreen, // Green for start
+              ),
+            ),
+          );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         } catch (e) {
           print('Error creating start marker: $e');
         }
       }
+<<<<<<< HEAD
       
       // End location marker (punch-out location)
       if (endLocation != null) {
@@ -319,10 +435,34 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
           );
           final marker = await _pointAnnotationManager!.create(options);
           _markerAnnotations['end'] = marker;
+=======
+
+      // End location marker (punch-out location)
+      if (endLocation != null) {
+        try {
+          final endLatLng = LatLng(
+            endLocation['latitude'].toDouble(),
+            endLocation['longitude'].toDouble(),
+          );
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('end'),
+              position: endLatLng,
+              infoWindow: InfoWindow(
+                title: '🔴 Punch Out',
+                snippet: 'Ended at ${_formatTime(endLocation['time'])}',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueRed, // Red for end
+              ),
+            ),
+          );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
         } catch (e) {
           print('Error creating end marker: $e');
         }
       }
+<<<<<<< HEAD
       
       // Fit map to show all markers
       if (_markerAnnotations.isNotEmpty && _mapboxMap != null) {
@@ -331,6 +471,14 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     } catch (e) {
       print('Error updating Mapbox annotations: $e');
     }
+=======
+
+      // Fit map to show all markers
+      if (_markers.isNotEmpty && _mapController != null) {
+        _fitMapToMarkers();
+      }
+    });
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   }
 
   String _formatTime(dynamic timeData) {
@@ -342,24 +490,37 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
     }
   }
 
+<<<<<<< HEAD
   Future<void> _fitMapToMarkers() async {
     if (_markerAnnotations.isEmpty && _routeCoordinates.isEmpty) return;
+=======
+  void _fitMapToMarkers() {
+    if (_markers.isEmpty) return;
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
     double minLat = double.infinity;
     double maxLat = -double.infinity;
     double minLng = double.infinity;
     double maxLng = -double.infinity;
 
+<<<<<<< HEAD
     // Calculate bounds from route coordinates
     for (final coord in _routeCoordinates) {
       final lat = coord['latitude']!;
       final lng = coord['longitude']!;
+=======
+    for (final marker in _markers) {
+      final lat = marker.position.latitude;
+      final lng = marker.position.longitude;
+
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
       minLat = lat < minLat ? lat : minLat;
       maxLat = lat > maxLat ? lat : maxLat;
       minLng = lng < minLng ? lng : minLng;
       maxLng = lng > maxLng ? lng : maxLng;
     }
 
+<<<<<<< HEAD
     if (minLat != double.infinity && _mapboxMap != null && _mapboxService.map != null) {
       final latPadding = (maxLat - minLat) * 0.1;
       final lngPadding = (maxLng - minLng) * 0.1;
@@ -377,6 +538,17 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
         padding: 100.0,
       );
     }
+=======
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        100.0, // padding
+      ),
+    );
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
   }
 
   @override
@@ -549,6 +721,7 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
   }
 
   Widget _buildMap() {
+<<<<<<< HEAD
     return MapWidget(
       key: const ValueKey("route_visualization_map"),
       cameraOptions: CameraOptions(
@@ -580,6 +753,29 @@ class _RouteVisualizationScreenState extends State<RouteVisualizationScreen> {
       print('❌ Error creating Mapbox map: $e');
     }
   }
+=======
+    return GoogleMap(
+      onMapCreated: (GoogleMapController controller) {
+        _mapController = controller;
+        if (_markers.isNotEmpty) {
+          _fitMapToMarkers();
+        }
+      },
+      initialCameraPosition: const CameraPosition(
+        target: LatLng(28.6139, 77.2090), // Default to Delhi
+        zoom: 12,
+      ),
+      markers: _markers,
+      polylines: _polylines,
+      mapType: MapType.normal,
+      myLocationEnabled: false,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: true,
+      compassEnabled: true,
+      mapToolbarEnabled: false,
+    );
+  }
+>>>>>>> f4afc93f9441ec54221a2ce0ab45a5b4a3028517
 
   Future<void> _showDatePicker() async {
     if (_availableDates.isEmpty) return;
