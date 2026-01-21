@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/account_model.dart';
@@ -940,26 +941,33 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                   borderRadius: BorderRadius.circular(8),
                   child: Stack(
                     children: [
-                      GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target: LatLng(acc.latitude!, acc.longitude!),
+                      FlutterMap(
+                        options: MapOptions(
+                          center: LatLng(acc.latitude!, acc.longitude!),
                           zoom: 15,
+                          onTap: (_, __) =>
+                              _openInGoogleMaps(acc.latitude!, acc.longitude!),
                         ),
-                        markers: {
-                          Marker(
-                            markerId: const MarkerId('account_location'),
-                            position: LatLng(acc.latitude!, acc.longitude!),
-                            infoWindow: InfoWindow(
-                              title: acc.personName,
-                              snippet: acc.businessName,
-                            ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.loagma.crm',
                           ),
-                        },
-                        myLocationButtonEnabled: false,
-                        zoomControlsEnabled: false,
-                        mapToolbarEnabled: false,
-                        onTap: (_) =>
-                            _openInGoogleMaps(acc.latitude!, acc.longitude!),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(acc.latitude!, acc.longitude!),
+                                width: 40,
+                                height: 40,
+                                builder: (context) => const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       Positioned(
                         bottom: 10,

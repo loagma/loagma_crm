@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kDebugMode, Factory;
-import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_config.dart';
 import '../../utils/custom_toast.dart';
@@ -67,7 +67,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   double? _latitude;
   double? _longitude;
   bool isLoadingGeolocation = false;
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
 
   // Data lists
   List<Map<String, dynamic>> roles = [];
@@ -797,13 +797,11 @@ class _EditUserScreenState extends State<EditUserScreen> {
         }
       }
 
-      // Move map camera to the location with smooth animation
-      if (_mapController != null && foundLocation) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(lat, lng),
-            _getAppropriateZoomLevel(locationName, query),
-          ),
+      // Move map camera to the location
+      if (foundLocation) {
+        _mapController.move(
+          LatLng(lat, lng),
+          _getAppropriateZoomLevel(locationName, query),
         );
       }
 
@@ -1653,80 +1651,53 @@ class _EditUserScreenState extends State<EditUserScreen> {
                               borderRadius: BorderRadius.circular(8),
                               child: Stack(
                                 children: [
-                                  GoogleMap(
-                                    onMapCreated:
-                                        (GoogleMapController controller) {
-                                          _mapController = controller;
-                                        },
-                                    initialCameraPosition: CameraPosition(
-                                      target:
-                                          _latitude != null &&
+                                  FlutterMap(
+                                    mapController: _mapController,
+                                    options: MapOptions(
+                                      center: _latitude != null &&
                                               _longitude != null
                                           ? LatLng(_latitude!, _longitude!)
-                                          : const LatLng(
-                                              20.5937,
-                                              78.9629,
-                                            ), // India center
+                                          : LatLng(20.5937, 78.9629), // India center
                                       zoom: _latitude != null ? 15 : 5,
+                                      onTap: (tapPosition, point) {
+                                        setState(() {
+                                          _latitude = point.latitude;
+                                          _longitude = point.longitude;
+                                        });
+                                        Fluttertoast.showToast(
+                                          msg:
+                                              'Location selected: ${point.latitude.toStringAsFixed(6)}, ${point.longitude.toStringAsFixed(6)}',
+                                        );
+                                      },
                                     ),
-                                    markers:
-                                        _latitude != null && _longitude != null
-                                        ? {
+                                    children: [
+                                      TileLayer(
+                                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                        userAgentPackageName: 'com.loagma.crm',
+                                      ),
+                                      if (_latitude != null && _longitude != null)
+                                        MarkerLayer(
+                                          markers: [
                                             Marker(
-                                              markerId: const MarkerId(
-                                                'selected_location',
-                                              ),
-                                              position: LatLng(
-                                                _latitude!,
-                                                _longitude!,
-                                              ),
-                                              infoWindow: const InfoWindow(
-                                                title: 'Employee Location',
-                                                snippet:
-                                                    'Tap to change location',
+                                              point: LatLng(_latitude!, _longitude!),
+                                              width: 40,
+                                              height: 40,
+                                              builder: (context) => const Icon(
+                                                Icons.location_on,
+                                                color: Colors.red,
+                                                size: 40,
                                               ),
                                             ),
-                                          }
-                                        : {},
-                                    onTap: (LatLng position) {
-                                      setState(() {
-                                        _latitude = position.latitude;
-                                        _longitude = position.longitude;
-                                      });
-                                      Fluttertoast.showToast(
-                                        msg:
-                                            'Location selected: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-                                      );
-                                    },
-
-                                    // Fixed gesture recognizers - each type only once
-                                    gestureRecognizers:
-                                        <Factory<OneSequenceGestureRecognizer>>{
-                                          Factory<EagerGestureRecognizer>(
-                                            () => EagerGestureRecognizer(),
-                                          ),
-                                        },
-
-                                    myLocationButtonEnabled: false,
-                                    zoomControlsEnabled: true,
-                                    mapToolbarEnabled: false,
-                                    zoomGesturesEnabled: true,
-                                    scrollGesturesEnabled: true,
-                                    tiltGesturesEnabled: false,
-                                    rotateGesturesEnabled: false,
-                                    compassEnabled: false,
-                                    indoorViewEnabled: false,
-                                    trafficEnabled: false,
-                                    buildingsEnabled: false,
-                                    liteModeEnabled: false,
-                                    mapType: MapType.normal,
+                                          ],
+                                        ),
+                                    ],
                                   ),
 
                                   // Search overlay
                                   Positioned(
                                     top: 10,
                                     left: 10,
-                                    right: 60, // Leave space for zoom controls
+                                    right: 10,
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: Colors.white,

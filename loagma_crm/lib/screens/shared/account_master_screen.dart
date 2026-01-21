@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/pincode_service.dart';
@@ -1257,7 +1258,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                   onPressed: isLoadingGeolocation ? null : _getCurrentLocation,
                 ),
 
-                // Google Map Display
+                // Map Display
                 if (_latitude != null && _longitude != null) ...[
                   const SizedBox(height: 20),
                   Container(
@@ -1273,24 +1274,32 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                       borderRadius: BorderRadius.circular(8),
                       child: Stack(
                         children: [
-                          GoogleMap(
-                            initialCameraPosition: CameraPosition(
-                              target: LatLng(_latitude!, _longitude!),
+                          FlutterMap(
+                            options: MapOptions(
+                              center: LatLng(_latitude!, _longitude!),
                               zoom: 15,
+                              onTap: (_, __) => _openInGoogleMaps(),
                             ),
-                            markers: {
-                              Marker(
-                                markerId: const MarkerId('current_location'),
-                                position: LatLng(_latitude!, _longitude!),
-                                infoWindow: const InfoWindow(
-                                  title: 'Current Location',
-                                ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.loagma.crm',
                               ),
-                            },
-                            myLocationButtonEnabled: false,
-                            zoomControlsEnabled: false,
-                            mapToolbarEnabled: false,
-                            onTap: (_) => _openInGoogleMaps(),
+                              MarkerLayer(
+                                markers: [
+                                  Marker(
+                                    point: LatLng(_latitude!, _longitude!),
+                                    width: 40,
+                                    height: 40,
+                                    builder: (context) => const Icon(
+                                      Icons.location_on,
+                                      color: Colors.red,
+                                      size: 40,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                           Positioned(
                             bottom: 10,
@@ -1312,11 +1321,11 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
                                 child: InkWell(
                                   onTap: _openInGoogleMaps,
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8.0),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
+                                      children: [
                                         Icon(
                                           Icons.open_in_new,
                                           size: 18,

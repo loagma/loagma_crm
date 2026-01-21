@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../services/api_config.dart';
@@ -334,29 +335,37 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(
+                    child: FlutterMap(
+                      options: MapOptions(
+                        center: LatLng(
                           _parseCoordinate(widget.user['latitude']),
                           _parseCoordinate(widget.user['longitude']),
                         ),
                         zoom: 15,
                       ),
-                      markers: {
-                        Marker(
-                          markerId: const MarkerId('employee_location'),
-                          position: LatLng(
-                            _parseCoordinate(widget.user['latitude']),
-                            _parseCoordinate(widget.user['longitude']),
-                          ),
-                          infoWindow: InfoWindow(
-                            title: widget.user['name'] ?? 'Employee Location',
-                          ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.loagma.crm',
                         ),
-                      },
-                      myLocationButtonEnabled: false,
-                      zoomControlsEnabled: true,
-                      mapToolbarEnabled: false,
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(
+                                _parseCoordinate(widget.user['latitude']),
+                                _parseCoordinate(widget.user['longitude']),
+                              ),
+                              width: 40,
+                              height: 40,
+                              builder: (context) => const Icon(
+                                Icons.location_on,
+                                color: Colors.red,
+                                size: 40,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),

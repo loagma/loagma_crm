@@ -7,13 +7,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../services/api_config.dart';
 import '../../services/pincode_service.dart';
 import '../../utils/custom_toast.dart';
@@ -404,11 +404,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       final lng = result['lng'];
 
       // Move map camera to the location
-      if (_mapController != null) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 12),
-        );
-      }
+      _mapController.move(LatLng(lat, lng), 12);
 
       setState(() {
         _latitude = lat;
@@ -436,11 +432,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       final lng = result['lng'];
 
       // Move map camera to the area location with higher zoom
-      if (_mapController != null) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
-        );
-      }
+      _mapController.move(LatLng(lat, lng), 15);
 
       setState(() {
         _latitude = lat;
@@ -510,8 +502,8 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
     }
   }
 
-  // Google Map Controller
-  GoogleMapController? _mapController;
+  // Flutter Map Controller
+  final MapController _mapController = MapController();
 
   Future<void> _searchAndMoveToLocation(String query) async {
     setState(() => isLoadingGeolocation = true);
@@ -561,13 +553,11 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         }
       }
 
-      // Move map camera to the location with smooth animation
-      if (_mapController != null && foundLocation) {
-        await _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(lat, lng),
-            _getAppropriateZoomLevel(locationName, query),
-          ),
+      // Move map camera to the location
+      if (foundLocation) {
+        _mapController.move(
+          LatLng(lat, lng),
+          _getAppropriateZoomLevel(locationName, query),
         );
       }
 
@@ -1646,62 +1636,48 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: Stack(
                             children: [
-                              GoogleMap(
-                                onMapCreated: (GoogleMapController controller) {
-                                  _mapController = controller;
-                                },
-                                initialCameraPosition: CameraPosition(
-                                  target:
-                                      _latitude != null && _longitude != null
+                              FlutterMap(
+                                mapController: _mapController,
+                                options: MapOptions(
+                                  center: _latitude != null && _longitude != null
                                       ? LatLng(_latitude!, _longitude!)
-                                      : const LatLng(
-                                          20.5937,
-                                          78.9629,
-                                        ), // India center
+                                      : LatLng(20.5937, 78.9629), // India center
                                   zoom: _latitude != null ? 15 : 5,
+                                  onTap: (tapPosition, point) {
+                                    setState(() {
+                                      _latitude = point.latitude;
+                                      _longitude = point.longitude;
+                                    });
+                                  },
                                 ),
-                                markers: _latitude != null && _longitude != null
-                                    ? {
+                                children: [
+                                  TileLayer(
+                                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName: 'com.loagma.crm',
+                                  ),
+                                  if (_latitude != null && _longitude != null)
+                                    MarkerLayer(
+                                      markers: [
                                         Marker(
-                                          markerId: const MarkerId(
-                                            'selected_location',
-                                          ),
-                                          position: LatLng(
-                                            _latitude!,
-                                            _longitude!,
+                                          point: LatLng(_latitude!, _longitude!),
+                                          width: 40,
+                                          height: 40,
+                                          builder: (context) => const Icon(
+                                            Icons.location_on,
+                                            color: Colors.red,
+                                            size: 40,
                                           ),
                                         ),
-                                      }
-                                    : {},
-                                onTap: (LatLng position) {
-                                  setState(() {
-                                    _latitude = position.latitude;
-                                    _longitude = position.longitude;
-                                  });
-                                },
-
-                                // Fixed gesture recognizers - each type only once
-                                gestureRecognizers:
-                                    <Factory<OneSequenceGestureRecognizer>>{
-                                      Factory<EagerGestureRecognizer>(
-                                        () => EagerGestureRecognizer(),
-                                      ),
-                                    },
-
-                                myLocationButtonEnabled: false,
-                                zoomControlsEnabled: true,
-                                mapToolbarEnabled: false,
-                                zoomGesturesEnabled: true,
-                                scrollGesturesEnabled: true,
-                                tiltGesturesEnabled: false,
-                                rotateGesturesEnabled: false,
+                                      ],
+                                    ),
+                                ],
                               ),
 
                               // Search overlay
                               Positioned(
                                 top: 10,
                                 left: 10,
-                                right: 60, // Leave space for zoom controls
+                                right: 10,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.white,
