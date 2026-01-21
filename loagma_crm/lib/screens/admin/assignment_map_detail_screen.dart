@@ -1,12 +1,39 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:latlong2/latlong.dart';
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
+
+// Marker data model for flutter_map
+class _ShopMarker {
+  final String id;
+  final double latitude;
+  final double longitude;
+  final String name;
+  final String? businessType;
+  final String? stage;
+  final double? rating;
+  final bool isSalesmanCreated;
+  final Color color;
+  final VoidCallback? onTap;
+
+  _ShopMarker({
+    required this.id,
+    required this.latitude,
+    required this.longitude,
+    required this.name,
+    this.businessType,
+    this.stage,
+    this.rating,
+    this.isSalesmanCreated = false,
+    required this.color,
+    this.onTap,
+  });
+}
 
 class AssignmentMapViewScreen extends StatefulWidget {
   final Map<String, dynamic> assignment;
@@ -25,12 +52,13 @@ class AssignmentMapViewScreen extends StatefulWidget {
 
 class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   final _service = MapTaskAssignmentService();
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
+  late final MapController _mapController;
+  List<_ShopMarker> _markers = [];
   List<Shop> _shops = [];
   List<Shop> _salesmanCreatedShops = []; // Shops created by salesman
   bool _isLoading = true;
-  LatLng _centerPosition = const LatLng(20.5937, 78.9629);
+  bool _isMapReady = false;
+  LatLng _centerPosition = LatLng(20.5937, 78.9629);
   bool _isLegendExpanded = false; // Legend collapsed by default
   bool _isInfoExpanded = false; // Info card collapsed by default
   bool _isFilterExpanded = false; // Filter section collapsed by default
@@ -120,13 +148,13 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   @override
   void initState() {
     super.initState();
-    // GooglePlacesService uses static methods, no initialization needed
+    _mapController = MapController();
     _loadAssignmentBusinesses();
   }
 
   @override
   void dispose() {
-    _mapController?.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -310,7 +338,7 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
   }
 
   void _createMarkers() {
-    final markers = <Marker>{};
+    final markers = <_ShopMarker>[];
     double totalLat = 0;
     double totalLng = 0;
     int validLocations = 0;
@@ -362,17 +390,16 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           validLocations++;
 
           markers.add(
-            Marker(
-              markerId: MarkerId('google_${shop.placeId ?? shop.name}'),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: shop.name,
-                snippet:
-                    '${shop.businessType} - ${_getBusinessStatus(shop)}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                _getMarkerColorByStatus(_getBusinessStatus(shop)),
-              ),
+            _ShopMarker(
+              id: 'google_${shop.placeId ?? shop.name}',
+              latitude: shop.latitude!,
+              longitude: shop.longitude!,
+              name: shop.name,
+              businessType: shop.businessType,
+              stage: _getBusinessStatus(shop),
+              rating: shop.rating,
+              isSalesmanCreated: false,
+              color: _getMarkerColorByStatusColor(_getBusinessStatus(shop)),
               onTap: () => _showShopDetails(shop, false),
             ),
           );
@@ -421,17 +448,16 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
           validLocations++;
 
           markers.add(
-            Marker(
-              markerId: MarkerId('salesman_${shop.placeId ?? shop.name}'),
-              position: LatLng(shop.latitude!, shop.longitude!),
-              infoWindow: InfoWindow(
-                title: '⭐ ${shop.name}',
-                snippet:
-                    'Created by Salesman - ${shop.stage}${shop.rating != null ? " • ${shop.rating}⭐" : ""}',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet, // Purple for salesman-created
-              ),
+            _ShopMarker(
+              id: 'salesman_${shop.placeId ?? shop.name}',
+              latitude: shop.latitude!,
+              longitude: shop.longitude!,
+              name: shop.name,
+              businessType: shop.businessType,
+              stage: shop.stage,
+              rating: shop.rating,
+              isSalesmanCreated: true,
+              color: Colors.purple, // Purple for salesman-created
               onTap: () => _showShopDetails(shop, true),
             ),
           );
@@ -448,12 +474,66 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
 
     setState(() => _markers = markers);
 
-    // Move camera to center (only if we have a controller)
-    if (_mapController != null && validLocations > 0) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(_centerPosition, 12),
-      );
+    // Move camera to center
+    if (_isMapReady && validLocations > 0) {
+      _mapController.move(_centerPosition, 12);
     }
+  }
+  
+  // Get marker color as Color instead of hue
+  Color _getMarkerColorByStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'popular':
+        return Colors.green;
+      case 'active':
+        return Colors.blue;
+      case 'needs attention':
+        return Colors.orange;
+      case 'new listing':
+        return Colors.yellow.shade700;
+      default:
+        return Colors.red;
+    }
+  }
+
+  // Build flutter_map markers from _ShopMarker data
+  List<Marker> _buildFlutterMapMarkers() {
+    return _markers.map((shopMarker) {
+      return Marker(
+        point: LatLng(shopMarker.latitude, shopMarker.longitude),
+        width: 40,
+        height: 40,
+        builder: (context) => GestureDetector(
+          onTap: shopMarker.onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              color: shopMarker.isSalesmanCreated 
+                  ? Colors.purple 
+                  : shopMarker.color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white,
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              shopMarker.isSalesmanCreated 
+                  ? Icons.star 
+                  : Icons.location_on,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   String _getBusinessStatus(Shop shop) {
@@ -476,29 +556,6 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
     if (rating >= 3.0) return '3.0+ Stars';
     if (rating >= 2.0) return '2.0+ Stars';
     return 'Below 2 Stars';
-  }
-
-  double _getMarkerColorByStatus(String status) {
-    switch (status.toLowerCase()) {
-      case 'popular':
-        return BitmapDescriptor.hueGreen;
-      case 'active':
-        return BitmapDescriptor.hueBlue;
-      case 'needs attention':
-        return BitmapDescriptor.hueOrange;
-      case 'new listing':
-        return BitmapDescriptor.hueYellow;
-      case 'lead':
-        return BitmapDescriptor.hueOrange;
-      case 'prospect':
-        return BitmapDescriptor.hueBlue;
-      case 'customer':
-        return BitmapDescriptor.hueGreen;
-      case 'inactive':
-        return BitmapDescriptor.hueRed;
-      default:
-        return BitmapDescriptor.hueYellow;
-    }
   }
 
   bool _isBusinessTypeMatch(String businessType, String selectedType) {
@@ -782,32 +839,80 @@ class _AssignmentMapViewScreenState extends State<AssignmentMapViewScreen> {
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
                 )
-              : GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _centerPosition,
+              : FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    center: _centerPosition,
                     zoom: 12,
+                    onMapReady: () {
+                      _isMapReady = true;
+                      if (_shops.isNotEmpty || _salesmanCreatedShops.isNotEmpty) {
+                        _mapController.move(_centerPosition, 12);
+                      }
+                    },
+                    onTap: (_, __) {
+                      // Close place details overlay when tapping on map
+                      if (_showPlaceDetailsOverlay) {
+                        setState(() {
+                          _showPlaceDetailsOverlay = false;
+                          _selectedPlace = null;
+                        });
+                      }
+                    },
                   ),
-                  markers: _markers,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    if (_shops.isNotEmpty || _salesmanCreatedShops.isNotEmpty) {
-                      controller.animateCamera(
-                        CameraUpdate.newLatLngZoom(_centerPosition, 12),
-                      );
-                    }
-                  },
-
-                  // Fixed gesture recognizers - each type only once
-                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                    Factory<EagerGestureRecognizer>(
-                      () => EagerGestureRecognizer(),
+                  children: [
+                    // Base map tiles
+                    TileLayer(
+                      urlTemplate:
+                          'https://cartodb-basemaps-a.global.ssl.fastly.net/light_nolabels/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.loagma_crm',
+                      maxZoom: 19,
                     ),
-                  },
-
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  zoomControlsEnabled: true,
-                  mapToolbarEnabled: true,
+                    // Labels layer
+                    TileLayer(
+                      urlTemplate:
+                          'https://cartodb-basemaps-a.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.loagma_crm',
+                      maxZoom: 19,
+                      backgroundColor: Colors.transparent,
+                    ),
+                    // Marker cluster layer
+                    MarkerClusterLayerWidget(
+                      options: MarkerClusterLayerOptions(
+                        markers: _buildFlutterMapMarkers(),
+                        maxClusterRadius: 40,
+                        disableClusteringAtZoom: 15,
+                        showPolygon: false,
+                        size: const Size(40, 40),
+                        anchor: AnchorPos.align(AnchorAlign.center),
+                        builder: (context, cluster) {
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD7BE69),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              cluster.length.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
 
           // Filters & Legend at top

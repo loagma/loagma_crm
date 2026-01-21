@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -23,15 +25,17 @@ class AdminEnhancedMapScreen extends StatefulWidget {
 
 class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     with TickerProviderStateMixin {
-  GoogleMapController? _mapController;
+  late final MapController _mapController;
   bool _isMapReady = false;
   bool _isControllerDisposed = false;
-  Set<Marker> _markers = {};
+  List<_MapMarker> _markers = [];
   bool isLoading = true;
+  Map<String, dynamic>? _pendingFocusAccount;
 
   // Marker optimization
   static const int MAX_MARKERS = 200; // Limit total markers
-  Map<String, Marker> _markerCache = {}; // Cache markers to avoid recreation
+  Map<String, _MapMarker> _markerCache =
+      {}; // Cache markers to avoid recreation
 
   List<Map<String, dynamic>> _googlePlacesShops = [];
   bool _isLoadingGooglePlaces = false;
@@ -40,7 +44,6 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   List<PlaceInfo> nearbyPlaces = [];
   List<Map<String, dynamic>> areaAssignments = [];
   Position? _currentPosition;
-  bool _locationPermissionGranted = false;
 
   // Single place type filtering
   String? _selectedSinglePlaceType;
@@ -215,7 +218,9 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   late Animation<double> _filterAnimation;
 
   static const Color primaryColor = Color(0xFFD7BE69);
-  static const LatLng _defaultLocation = LatLng(28.6139, 77.2090);
+  static const double _defaultLat = 28.6139;
+  static const double _defaultLng = 77.2090;
+  LatLng? _lastMapCenter;
 
   static const List<String> allFunnelStages = [
     "Awareness",
@@ -249,6 +254,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
 
     // Set conservative memory limits
     MemoryOptimizer.setConservativeImageLimits();
+    _lastMapCenter = LatLng(_defaultLat, _defaultLng);
 
     _filterAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -258,6 +264,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       parent: _filterAnimationController,
       curve: Curves.easeInOut,
     );
+    _mapController = MapController();
     _resetTempFilters();
     _initializeMap();
   }
@@ -266,7 +273,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   void dispose() {
     _isControllerDisposed = true;
     _isMapReady = false;
-    _mapController = null;
+    _mapController.dispose();
     _filterAnimationController.dispose();
     _filterDebounceTimer?.cancel();
     _markerCache.clear(); // Clear marker cache
@@ -403,11 +410,19 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         '✅ Loaded ${salesmanAccounts.length} accounts, ${areaAssignments.length} assignments',
       );
 
+      // Debug: Print first account to see its structure
+      if (allAccounts.isNotEmpty) {
+        final sample = allAccounts.first;
+        print('📋 Sample account keys: ${sample.keys.toList()}');
+        print(
+          '📋 Sample lat: ${sample['latitude']}, lng: ${sample['longitude']}',
+        );
+      }
+
       _extractFilterOptions();
       await _loadAssignedPincodes();
       _updateMapMarkers();
-      if (salesmanAccounts.isNotEmpty && _mapController != null)
-        _focusOnAccountsArea();
+      if (salesmanAccounts.isNotEmpty) _focusOnAccountsArea();
     } catch (e) {
       print('❌ Error: $e');
     } finally {
@@ -535,7 +550,6 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       );
       setState(() {
         _currentPosition = position;
-        _locationPermissionGranted = true;
       });
     } catch (e) {
       print('Error getting location: $e');
@@ -649,41 +663,21 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     print('🔍 === _performPlaceSearch called ===');
     print('🎯 Requested place type: $placeType');
 
-    // Get current location - use map center if available, fallback to user location
+    // Get current location - use last map center if available, fallback to user location
     LatLng? searchLocation;
 
-    if (_mapController != null && _isMapReady) {
-      try {
-        final visibleRegion = await _mapController!.getVisibleRegion();
-        final center = LatLng(
-          (visibleRegion.northeast.latitude +
-                  visibleRegion.southwest.latitude) /
-              2,
-          (visibleRegion.northeast.longitude +
-                  visibleRegion.southwest.longitude) /
-              2,
-        );
-        searchLocation = center;
-        print('📍 Using map center: ${center.latitude}, ${center.longitude}');
-      } catch (e) {
-        // Fallback to user location
-        if (_currentPosition != null) {
-          searchLocation = LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          );
-          print(
-            '📍 Using user location: ${searchLocation!.latitude}, ${searchLocation!.longitude}',
-          );
-        }
-      }
+    if (_isMapReady && _lastMapCenter != null) {
+      searchLocation = _lastMapCenter!;
+      print(
+        '📍 Using map center: ${searchLocation.latitude}, ${searchLocation.longitude}',
+      );
     } else if (_currentPosition != null) {
       searchLocation = LatLng(
         _currentPosition!.latitude,
         _currentPosition!.longitude,
       );
       print(
-        '📍 Using user location (fallback): ${searchLocation!.latitude}, ${searchLocation!.longitude}',
+        '📍 Using user location (fallback): ${searchLocation.latitude}, ${searchLocation.longitude}',
       );
     }
 
@@ -845,7 +839,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   }
 
   void _updateMapMarkersDefault() {
-    Set<Marker> markers = {};
+    List<_MapMarker> markers = [];
 
     // Add current location marker (cached)
     if (_currentPosition != null) {
@@ -853,14 +847,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       if (_markerCache.containsKey(markerId)) {
         markers.add(_markerCache[markerId]!);
       } else {
-        final marker = Marker(
-          markerId: MarkerId(markerId),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        final marker = _MapMarker(
+          id: markerId,
+          latitude: _currentPosition!.latitude,
+          longitude: _currentPosition!.longitude,
+          type: _MarkerType.currentLocation,
+          title: 'My Location',
         );
         _markerCache[markerId] = marker;
         markers.add(marker);
@@ -883,19 +875,17 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (_markerCache.containsKey(markerId)) {
               markers.add(_markerCache[markerId]!);
             } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: account['personName'] ?? 'Unknown',
-                  snippet:
-                      '${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''}',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  account['isApproved'] == true
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
-                ),
+              final marker = _MapMarker(
+                id: markerId,
+                latitude: lat,
+                longitude: lng,
+                type: account['isApproved'] == true
+                    ? _MarkerType.approvedShop
+                    : _MarkerType.pendingShop,
+                title: account['personName'] ?? 'Unknown',
+                subtitle:
+                    '${account['businessName'] ?? ''} • SR: ${account['salesmanName'] ?? ''}',
+                data: account,
                 onTap: () => _showAccountDetails(account),
               );
               _markerCache[markerId] = marker;
@@ -932,19 +922,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (_markerCache.containsKey(markerId)) {
               markers.add(_markerCache[markerId]!);
             } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(
-                  place['latitude'].toDouble(),
-                  place['longitude'].toDouble(),
-                ),
-                infoWindow: InfoWindow(
-                  title: place['name'] ?? 'Unknown Place',
-                  snippet: place['vicinity'] ?? '',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueViolet, // Purple for filtered places
-                ),
+              final marker = _MapMarker(
+                id: markerId,
+                latitude: place['latitude'].toDouble(),
+                longitude: place['longitude'].toDouble(),
+                type: _MarkerType.googlePlace,
+                title: place['name'] ?? 'Unknown Place',
+                subtitle: place['vicinity'] ?? '',
+                data: place,
                 onTap: () => _showFilteredPlaceDetails(place),
               );
               _markerCache[markerId] = marker;
@@ -962,13 +947,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (_markerCache.containsKey(markerId)) {
               markers.add(_markerCache[markerId]!);
             } else {
-              final marker = Marker(
-                markerId: MarkerId(markerId),
-                position: LatLng(place.latitude!, place.longitude!),
-                infoWindow: InfoWindow(title: place.name),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed,
-                ),
+              final marker = _MapMarker(
+                id: markerId,
+                latitude: place.latitude!,
+                longitude: place.longitude!,
+                type: _MarkerType.nearbyPlace,
+                title: place.name,
+                data: place,
                 onTap: () => _showPlaceDetails(place),
               );
               _markerCache[markerId] = marker;
@@ -980,6 +965,43 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     }
 
     setState(() => _markers = markers);
+  }
+
+  List<Marker> _buildLeafletMarkers() {
+    return _markers
+        .map(
+          (marker) => Marker(
+            point: LatLng(marker.latitude, marker.longitude),
+            width: 40,
+            height: 40,
+            builder: (context) => GestureDetector(
+              onTap: marker.onTap,
+              child: Icon(
+                marker.type == _MarkerType.currentLocation
+                    ? Icons.my_location
+                    : Icons.location_on,
+                color: _markerColor(marker.type),
+                size: 34,
+              ),
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  Color _markerColor(_MarkerType type) {
+    switch (type) {
+      case _MarkerType.currentLocation:
+        return Colors.blue;
+      case _MarkerType.approvedShop:
+        return Colors.green;
+      case _MarkerType.pendingShop:
+        return Colors.orange;
+      case _MarkerType.googlePlace:
+        return Colors.purple;
+      case _MarkerType.nearbyPlace:
+        return Colors.red;
+    }
   }
 
   bool _isValidCoordinate(double lat, double lng) =>
@@ -1124,15 +1146,11 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               child: ElevatedButton.icon(
                 onPressed: () async {
                   Navigator.pop(context);
-                  if (_mapController != null && _isMapReady) {
-                    await _safeAnimateCamera(
-                      CameraUpdate.newLatLngZoom(
-                        LatLng(
-                          place['latitude'].toDouble(),
-                          place['longitude'].toDouble(),
-                        ),
-                        16,
-                      ),
+                  if (_isMapReady) {
+                    await _safeSetCamera(
+                      place['latitude'].toDouble(),
+                      place['longitude'].toDouble(),
+                      16,
                     );
                   }
                 },
@@ -1272,15 +1290,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     try {
       final lat = double.parse(account['latitude'].toString());
       final lng = double.parse(account['longitude'].toString());
-      if (_isValidCoordinate(lat, lng))
-        await _safeAnimateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16),
-        );
+      if (_isValidCoordinate(lat, lng)) await _safeSetCamera(lat, lng, 16);
     } catch (e) {}
   }
 
   Future<void> _focusOnAccountsArea() async {
-    if (!mounted || !_isMapReady || _mapController == null) return;
+    if (!mounted || !_isMapReady) return;
     final accountsWithLocation = salesmanAccounts
         .where((a) => a['latitude'] != null && a['longitude'] != null)
         .toList();
@@ -1302,24 +1317,124 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       }
       if (minLat != double.infinity) {
         final bounds = LatLngBounds(
-          southwest: LatLng(minLat - 0.01, minLng - 0.01),
-          northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+          LatLng(minLat - 0.01, minLng - 0.01),
+          LatLng(maxLat + 0.01, maxLng + 0.01),
         );
-        await _safeAnimateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+        await _safeFitBounds(bounds, padding: 100);
       }
     } catch (e) {}
   }
 
-  bool _isMapInValidState() =>
-      mounted &&
-      !_isControllerDisposed &&
-      _isMapReady &&
-      _mapController != null;
+  Future<void> _forceFocusOnAccount(Map<String, dynamic> account) async {
+    if (!mounted) return;
 
-  Future<bool> _safeAnimateCamera(CameraUpdate update) async {
+    // Get account name for display
+    final accountName =
+        account['personName'] ??
+        account['businessName'] ??
+        account['name'] ??
+        'Account';
+
+    print('🎯🎯🎯 FOCUS ON: $accountName');
+
+    if (account['latitude'] == null || account['longitude'] == null) {
+      print('❌ No GPS for: $accountName');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No GPS location for $accountName'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final lat = double.parse(account['latitude'].toString());
+      final lng = double.parse(account['longitude'].toString());
+
+      print('📍 Coordinates: $lat, $lng');
+
+      if (!_isValidCoordinate(lat, lng)) {
+        print('❌ Invalid coordinates');
+        return;
+      }
+
+      final targetLocation = LatLng(lat, lng);
+
+      // Store target location
+      _lastMapCenter = targetLocation;
+
+      // Use moveAndRotate for more reliable movement
+      _mapController.moveAndRotate(targetLocation, 18.0, 0);
+
+      print('✅ Map move called');
+
+      // Show visual confirmation
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.location_on, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(accountName)),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Focus error: $e');
+    }
+  }
+
+  Future<void> _showAccountOnMap(Map<String, dynamic> account) async {
+    if (!mounted) return;
+
+    print('📍📍📍 SHOW ACCOUNT ON MAP CALLED');
+    print('Account data: ${account['personName'] ?? account['businessName']}');
+    print('Lat: ${account['latitude']}, Lng: ${account['longitude']}');
+
+    // Hide list first
+    setState(() => _showAccountsList = false);
+
+    // Wait for list to close and map to be visible
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) return;
+
+    // Now focus on the account
+    await _forceFocusOnAccount(account);
+  }
+
+  bool _isMapInValidState() => mounted && !_isControllerDisposed && _isMapReady;
+
+  Future<bool> _safeSetCamera(double lat, double lng, double zoom) async {
     if (!_isMapInValidState()) return false;
     try {
-      await _mapController!.animateCamera(update);
+      _mapController.move(LatLng(lat, lng), zoom);
+      _lastMapCenter = LatLng(lat, lng);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _safeFitBounds(
+    LatLngBounds bounds, {
+    double padding = 80,
+  }) async {
+    if (!_isMapInValidState()) return false;
+    try {
+      _mapController.fitBounds(
+        bounds,
+        options: FitBoundsOptions(padding: EdgeInsets.all(padding)),
+      );
+      _lastMapCenter = bounds.center;
       return true;
     } catch (e) {
       return false;
@@ -1585,19 +1700,17 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     );
     print('Show Accounts: $_showAccounts, Show Places: $_showPlaces');
 
-    Set<Marker> markers = {};
+    List<_MapMarker> markers = [];
 
     // Add current location marker
     if (_currentPosition != null) {
       markers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        _MapMarker(
+          id: 'current_location',
+          latitude: _currentPosition!.latitude,
+          longitude: _currentPosition!.longitude,
+          type: _MarkerType.currentLocation,
+          title: 'My Location',
         ),
       );
     }
@@ -1615,19 +1728,17 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             if (!_isValidCoordinate(lat, lng)) continue;
 
             markers.add(
-              Marker(
-                markerId: MarkerId('salesman_account_${account['id']}'),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: account['personName'] ?? 'Unknown',
-                  snippet:
-                      '${account['businessName'] ?? ''} - SR: ${account['salesmanName'] ?? ''} - EXISTING',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  account['isApproved'] == true
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
-                ),
+              _MapMarker(
+                id: 'salesman_account_${account['id']}',
+                latitude: lat,
+                longitude: lng,
+                type: account['isApproved'] == true
+                    ? _MarkerType.approvedShop
+                    : _MarkerType.pendingShop,
+                title: account['personName'] ?? 'Unknown',
+                subtitle:
+                    '${account['businessName'] ?? ''} - SR: ${account['salesmanName'] ?? ''} - EXISTING',
+                data: account,
                 onTap: () => _showAccountDetails(account),
               ),
             );
@@ -1678,16 +1789,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               continue;
 
             markers.add(
-              Marker(
-                markerId: MarkerId('google_shop_${shop['id']}'),
-                position: LatLng(lat, lng),
-                infoWindow: InfoWindow(
-                  title: shop['name'] ?? 'Unknown Shop',
-                  snippet: _formatBusinessType(shop['businessType']),
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueViolet, // Purple for Google Places shops
-                ),
+              _MapMarker(
+                id: 'google_shop_${shop['id']}',
+                latitude: lat,
+                longitude: lng,
+                type: _MarkerType.googlePlace,
+                title: shop['name'] ?? 'Unknown Shop',
+                subtitle: _formatBusinessType(shop['businessType']),
+                data: shop,
                 onTap: () => _showGooglePlaceDetails(shop),
               ),
             );
@@ -1709,16 +1818,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
         final place = nearbyPlaces[i];
         if (place.latitude != null && place.longitude != null) {
           markers.add(
-            Marker(
-              markerId: MarkerId('nearby_place_$i'),
-              position: LatLng(place.latitude!, place.longitude!),
-              infoWindow: InfoWindow(
-                title: place.name,
-                snippet: 'NEARBY PLACE',
-              ),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueRed, // Red for general nearby places
-              ),
+            _MapMarker(
+              id: 'nearby_place_$i',
+              latitude: place.latitude!,
+              longitude: place.longitude!,
+              type: _MarkerType.nearbyPlace,
+              title: place.name,
+              subtitle: 'NEARBY PLACE',
+              data: place,
               onTap: () => _showPlaceDetails(place),
             ),
           );
@@ -2589,15 +2696,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       if (validCount > 0) {
         print('✅ Focusing on $validCount accounts');
         if (validCount == 1) {
-          await _safeAnimateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(minLat, minLng), 15),
-          );
+          await _safeSetCamera(minLat, minLng, 15);
         } else {
           final bounds = LatLngBounds(
-            southwest: LatLng(minLat - 0.01, minLng - 0.01),
-            northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+            LatLng(minLat - 0.01, minLng - 0.01),
+            LatLng(maxLat + 0.01, maxLng + 0.01),
           );
-          await _safeAnimateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+          await _safeFitBounds(bounds, padding: 100);
         }
         return;
       }
@@ -2638,9 +2743,7 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
           final lng = (location['lng'] as num).toDouble();
           print('📍 Geocoded: ($lat, $lng)');
 
-          final success = await _safeAnimateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(lat, lng), 13),
-          );
+          final success = await _safeSetCamera(lat, lng, 13);
           if (success && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -2666,17 +2769,15 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
   }
 
   void _updateMapMarkersForSelectedPincodes() {
-    Set<Marker> markers = {};
+    List<_MapMarker> markers = [];
     if (_currentPosition != null) {
       markers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
-          position: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          infoWindow: const InfoWindow(title: 'My Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        _MapMarker(
+          id: 'current_location',
+          latitude: _currentPosition!.latitude,
+          longitude: _currentPosition!.longitude,
+          type: _MarkerType.currentLocation,
+          title: 'My Location',
         ),
       );
     }
@@ -2727,18 +2828,16 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             final lng = double.parse(account['longitude'].toString());
             if (_isValidCoordinate(lat, lng)) {
               markers.add(
-                Marker(
-                  markerId: MarkerId('account_${account['id']}'),
-                  position: LatLng(lat, lng),
-                  infoWindow: InfoWindow(
-                    title: account['personName'] ?? 'Unknown',
-                    snippet: account['businessName'] ?? '',
-                  ),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    account['isApproved'] == true
-                        ? BitmapDescriptor.hueGreen
-                        : BitmapDescriptor.hueOrange,
-                  ),
+                _MapMarker(
+                  id: 'account_${account['id']}',
+                  latitude: lat,
+                  longitude: lng,
+                  type: account['isApproved'] == true
+                      ? _MarkerType.approvedShop
+                      : _MarkerType.pendingShop,
+                  title: account['personName'] ?? 'Unknown',
+                  subtitle: account['businessName'] ?? '',
+                  data: account,
                   onTap: () => _showAccountDetails(account),
                 ),
               );
@@ -2948,34 +3047,100 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
             )
           : _selectedSalesmenIds.isEmpty
           ? _buildNoSalesmanSelected()
-          : _showAccountsList
-          ? _buildAccountsList()
           : Stack(
               children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition != null
+                // Map is ALWAYS mounted (never removed from tree)
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    center: _currentPosition != null
                         ? LatLng(
                             _currentPosition!.latitude,
                             _currentPosition!.longitude,
                           )
-                        : _defaultLocation,
+                        : LatLng(_defaultLat, _defaultLng),
                     zoom: 12,
+                    onMapReady: () async {
+                      if (!mounted || _isControllerDisposed) return;
+                      _isMapReady = true;
+                      _isControllerDisposed = false;
+
+                      // Check for pending focus FIRST - if user clicked an account, focus on it
+                      if (_pendingFocusAccount != null) {
+                        debugPrint(
+                          '📍 onMapReady: Found pending focus account',
+                        );
+                        final account = _pendingFocusAccount!;
+                        _pendingFocusAccount = null;
+                        await Future.delayed(const Duration(milliseconds: 100));
+                        await _forceFocusOnAccount(account);
+                        return; // Don't focus on all accounts
+                      }
+
+                      // Only focus on all accounts if no specific account was requested
+                      await Future.delayed(const Duration(milliseconds: 500));
+                      if (salesmanAccounts.isNotEmpty)
+                        await _focusOnAccountsArea();
+                    },
+                    onPositionChanged: (position, _) {
+                      _lastMapCenter = position.center;
+                    },
                   ),
-                  markers: _markers,
-                  onMapCreated: (controller) async {
-                    if (!mounted || _isControllerDisposed) return;
-                    _mapController = controller;
-                    _isMapReady = true;
-                    _isControllerDisposed = false;
-                    await Future.delayed(const Duration(milliseconds: 500));
-                    if (salesmanAccounts.isNotEmpty)
-                      await _focusOnAccountsArea();
-                  },
-                  myLocationEnabled: _locationPermissionGranted,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: true,
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://cartodb-basemaps-a.global.ssl.fastly.net/light_nolabels/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.loagma_crm',
+                      maxZoom: 19,
+                    ),
+                    TileLayer(
+                      urlTemplate:
+                          'https://cartodb-basemaps-a.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.loagma_crm',
+                      maxZoom: 19,
+                      backgroundColor: Colors.transparent,
+                    ),
+                    MarkerClusterLayerWidget(
+                      options: MarkerClusterLayerOptions(
+                        markers: _buildLeafletMarkers(),
+                        maxClusterRadius:
+                            30, // Reduced - less aggressive clustering
+                        disableClusteringAtZoom:
+                            14, // Show individual markers at zoom 14+
+                        showPolygon: false,
+                        size: const Size(40, 40),
+                        anchor: AnchorPos.align(AnchorAlign.center),
+                        builder: (context, cluster) {
+                          // Color based on marker types in cluster
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade700,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              cluster.length.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
+                // Filters panel overlay
                 if (_showFilters)
                   Positioned(
                     top: 0,
@@ -2989,8 +3154,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       child: _buildFiltersPanel(),
                     ),
                   ),
-                Positioned(bottom: 16, left: 16, child: _buildLegendCard()),
-                Positioned(bottom: 16, left: 160, child: _buildPincodeCard()),
+                // Legend and pincode cards (only when not showing list)
+                if (!_showAccountsList) ...[
+                  Positioned(bottom: 16, left: 16, child: _buildLegendCard()),
+                  Positioned(bottom: 16, left: 160, child: _buildPincodeCard()),
+                ],
+                // Place details overlay
                 if (_showPlaceDetailsOverlay && _selectedPlace != null)
                   Positioned(
                     bottom: 0,
@@ -3004,6 +3173,14 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                       }),
                     ),
                   ),
+                // Accounts list overlay (covers map when visible)
+                if (_showAccountsList)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.grey[100],
+                      child: _buildAccountsList(),
+                    ),
+                  ),
               ],
             ),
       floatingActionButton: _showAccountsList || _selectedSalesmenIds.isEmpty
@@ -3012,16 +3189,13 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
               mini: true,
               backgroundColor: primaryColor,
               onPressed: () async {
-                if (_currentPosition != null && _isMapInValidState())
-                  await _safeAnimateCamera(
-                    CameraUpdate.newLatLngZoom(
-                      LatLng(
-                        _currentPosition!.latitude,
-                        _currentPosition!.longitude,
-                      ),
-                      15,
-                    ),
+                if (_currentPosition != null && _isMapInValidState()) {
+                  await _safeSetCamera(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                    15,
                   );
+                }
               },
               child: const Icon(Icons.my_location),
             ),
@@ -3181,20 +3355,16 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
                                   color: primaryColor,
                                 ),
                                 onPressed: () async {
-                                  // Switch to map view first
-                                  setState(() => _showAccountsList = false);
-                                  // Wait for map to be ready then focus
-                                  await Future.delayed(
-                                    const Duration(milliseconds: 300),
-                                  );
-                                  _focusOnAccount(account);
+                                  await _showAccountOnMap(account);
                                 },
                               )
                             : const Text(
                                 'No GPS',
                                 style: TextStyle(fontSize: 10),
                               ),
-                        onTap: () => _showAccountDetails(account),
+                        onTap: () async {
+                          await _showAccountOnMap(account);
+                        },
                       ),
                     );
                   },
@@ -4062,4 +4232,34 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
       ),
     );
   }
+}
+
+enum _MarkerType {
+  currentLocation,
+  approvedShop,
+  pendingShop,
+  googlePlace,
+  nearbyPlace,
+}
+
+class _MapMarker {
+  final String id;
+  final double latitude;
+  final double longitude;
+  final _MarkerType type;
+  final String title;
+  final String? subtitle;
+  final dynamic data;
+  final VoidCallback? onTap;
+
+  const _MapMarker({
+    required this.id,
+    required this.latitude,
+    required this.longitude,
+    required this.type,
+    required this.title,
+    this.subtitle,
+    this.data,
+    this.onTap,
+  });
 }
