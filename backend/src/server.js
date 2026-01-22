@@ -20,7 +20,6 @@ import salaryRoutes from './routes/salaryRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import areaAssignmentRoutes from './routes/areaAssignmentRoutes.js';
 import salesmanReportsRoutes from './routes/salesmanReportsRoutes.js';
-import routeRoutes from './routes/routeRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import latePunchApprovalRoutes from './routes/latePunchApprovalRoutes.js';
 import earlyPunchOutApprovalRoutes from './routes/earlyPunchOutApprovalRoutes.js';
@@ -83,7 +82,6 @@ app.use('/salary', salaryRoutes);
 app.use('/attendance', attendanceRoutes);
 app.use('/area-assignments', areaAssignmentRoutes);
 app.use('/salesman-reports', salesmanReportsRoutes);
-app.use('/api/routes', routeRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/late-punch-approval', latePunchApprovalRoutes);
 app.use('/early-punch-out-approval', earlyPunchOutApprovalRoutes);
@@ -113,10 +111,9 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server with WebSocket support
+// Start server
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-const WS_PORT = process.env.WS_PORT || 8081;
 
 // Auto-migrate beat planning tables in production
 if (process.env.NODE_ENV === 'production') {
@@ -131,13 +128,6 @@ const server = app.listen(PORT, HOST, () => {
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Initialize WebSocket server for live tracking
-import LiveTrackingServer from './ws/liveTrackingServer.js';
-const liveTrackingServer = new LiveTrackingServer();
-
-// Always use the same HTTP server for WebSocket (both production and development)
-liveTrackingServer.initialize(PORT, server);
-console.log(`🔗 WebSocket server attached to HTTP server on port ${PORT}`);
 
 // Start background jobs
 startExpiryJob();
@@ -146,7 +136,6 @@ startExpiryJob();
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully');
     stopExpiryJob();
-    liveTrackingServer.shutdown();
     server.close(() => {
         console.log('✅ Server closed');
         process.exit(0);
@@ -156,7 +145,6 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
     stopExpiryJob();
-    liveTrackingServer.shutdown();
     server.close(() => {
         console.log('✅ Server closed');
         process.exit(0);

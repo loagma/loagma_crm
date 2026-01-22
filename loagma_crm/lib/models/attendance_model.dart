@@ -27,14 +27,6 @@ class AttendanceModel {
   final double? totalDistanceKm;
   final String status;
 
-  // Live Tracking Fields (mutable for real-time updates)
-  double? currentLatitude;
-  double? currentLongitude;
-  double? currentDistanceKm;
-  bool? isMoving;
-  double? speed;
-  DateTime? lastPositionUpdate;
-
   // Metadata
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -59,13 +51,6 @@ class AttendanceModel {
     this.totalWorkHours,
     this.totalDistanceKm,
     required this.status,
-    // Live tracking fields
-    this.currentLatitude,
-    this.currentLongitude,
-    this.currentDistanceKm,
-    this.isMoving,
-    this.speed,
-    this.lastPositionUpdate,
     required this.createdAt,
     required this.updatedAt,
   });

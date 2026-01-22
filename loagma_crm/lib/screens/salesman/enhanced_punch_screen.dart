@@ -9,7 +9,6 @@ import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
-import '../../services/live_location_socket.dart';
 import '../../services/employee_working_hours_service.dart';
 import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
@@ -83,7 +82,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _stopLiveLocationTracking(); // Stop WebSocket tracking on dispose
     LocationService.instance.stopLocationTracking();
     super.dispose();
   }
@@ -397,9 +395,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = attendance?.punchInTime;
           hasLatePunchApproval = false; // Clear approval after use
         });
-
-        // Start WebSocket live location tracking
-        _startLiveLocationTracking();
 
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
@@ -854,48 +849,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     return EmployeeWorkingHoursService.getTimeUntilLatePunchInCutoff(
       employeeWorkingHours!,
     );
-  }
-
-  /// Get formatted work start time (e.g., "9:00 AM")
-  String _getFormattedWorkStartTime() {
-    if (employeeWorkingHours == null) return '9:00 AM';
-
-    final workStartTimeStr = employeeWorkingHours!['workStartTime'] as String?;
-    if (workStartTimeStr == null) return '9:00 AM';
-
-    try {
-      final parts = workStartTimeStr.split(':');
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
-
-      final period = hour >= 12 ? 'PM' : 'AM';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-
-      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
-    } catch (e) {
-      return '9:00 AM';
-    }
-  }
-
-  /// Get formatted work end time (e.g., "6:00 PM")
-  String _getFormattedWorkEndTime() {
-    if (employeeWorkingHours == null) return '6:00 PM';
-
-    final workEndTimeStr = employeeWorkingHours!['workEndTime'] as String?;
-    if (workEndTimeStr == null) return '6:00 PM';
-
-    try {
-      final parts = workEndTimeStr.split(':');
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
-
-      final period = hour >= 12 ? 'PM' : 'AM';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-
-      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
-    } catch (e) {
-      return '6:00 PM';
-    }
   }
 
   @override
@@ -1688,9 +1641,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           hasEarlyPunchOutApproval = false; // Clear approval after use
         });
 
-        // Stop WebSocket live location tracking
-        _stopLiveLocationTracking();
-
         CustomToast.showSuccess(context, 'Punched out successfully!');
       } else {
         // Check if it's an early punch-out error that requires approval
@@ -2149,27 +2099,4 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
     );
   }
 
-  /// Start WebSocket live location tracking
-  Future<void> _startLiveLocationTracking() async {
-    try {
-      final started = await LiveLocationSocket.instance.startTracking();
-      if (started) {
-        print('✅ WebSocket live location tracking started');
-      } else {
-        print('⚠️ Failed to start WebSocket live location tracking');
-      }
-    } catch (e) {
-      print('❌ Error starting WebSocket live location tracking: $e');
-    }
-  }
-
-  /// Stop WebSocket live location tracking
-  void _stopLiveLocationTracking() {
-    try {
-      LiveLocationSocket.instance.stopTracking();
-      print('🛑 WebSocket live location tracking stopped');
-    } catch (e) {
-      print('❌ Error stopping WebSocket live location tracking: $e');
-    }
-  }
 }

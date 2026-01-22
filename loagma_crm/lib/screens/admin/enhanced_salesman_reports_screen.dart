@@ -9,7 +9,6 @@ import '../../services/user_service.dart';
 import '../../services/account_service.dart';
 import '../../utils/time_formatting_utils.dart';
 import '../../models/account_model.dart';
-import 'route_visualization_screen.dart';
 
 class EnhancedSalesmanReportsScreen extends StatefulWidget {
   const EnhancedSalesmanReportsScreen({super.key});
@@ -2311,24 +2310,6 @@ class _EnhancedSalesmanReportsScreenState
                     ), // Empty space for balance
                   ],
                 ),
-                const SizedBox(height: 16),
-                // Add Historical Route Viewing Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _viewHistoricalRoutes(salesman),
-                    icon: const Icon(Icons.route, size: 20),
-                    label: const Text('View Historical Routes'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -3008,33 +2989,6 @@ class _EnhancedSalesmanReportsScreenState
     } catch (e) {
       print('🧪 Backend test error: $e');
     }
-  }
-
-  /// Navigate to historical route visualization for a specific salesman
-  void _viewHistoricalRoutes(Map<String, dynamic> salesman) {
-    final employeeId = salesman['id'];
-    final employeeName = salesman['name'] ?? 'Unknown';
-
-    if (employeeId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to load routes: Employee ID not found'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RouteVisualizationScreen(
-          employeeId: employeeId,
-          employeeName: employeeName,
-          showDatePicker: true, // Enable date picker for historical routes
-        ),
-      ),
-    );
   }
 
   /// Show detailed accounts information based on filter type

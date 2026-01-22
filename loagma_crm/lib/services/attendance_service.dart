@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import '../models/attendance_model.dart';
 import 'api_config.dart';
 import 'user_service.dart';
-import 'route_tracking_service.dart';
 
 class AttendanceService {
   static String get baseUrl => '${ApiConfig.baseUrl}/attendance';
@@ -102,23 +101,6 @@ class AttendanceService {
               : null,
         };
 
-        // Start route tracking for the new attendance session
-        // This extends existing functionality without modifying punch-in logic
-        if (result['data'] != null) {
-          final attendanceModel = result['data'] as AttendanceModel;
-          try {
-            await RouteTrackingService.instance.startRouteTracking(
-              attendanceModel.id,
-            );
-            print(
-              '✅ Route tracking started for attendance: ${attendanceModel.id}',
-            );
-          } catch (e) {
-            print('⚠️ Route tracking failed to start: $e');
-            // Don't fail punch-in if route tracking fails
-          }
-        }
-
         return result;
       } else {
         return {
@@ -209,16 +191,6 @@ class AttendanceService {
               ? AttendanceModel.fromJson(data['data'])
               : null,
         };
-
-        // Stop route tracking when punch-out completes
-        // This extends existing functionality without modifying punch-out logic
-        try {
-          RouteTrackingService.instance.stopRouteTracking();
-          print('✅ Route tracking stopped for attendance: $attendanceId');
-        } catch (e) {
-          print('⚠️ Route tracking failed to stop: $e');
-          // Don't fail punch-out if route tracking fails
-        }
 
         return result;
       } else {
@@ -417,41 +389,6 @@ class AttendanceService {
     }
   }
 
-  // Admin: Get Live Attendance Dashboard
-  static Future<Map<String, dynamic>> getLiveAttendanceDashboard() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/admin/dashboard'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        final attendances = (data['data']['attendances'] as List)
-            .map((json) => AttendanceModel.fromJson(json))
-            .toList();
-
-        return {
-          'success': true,
-          'data': {
-            'statistics': data['data']['statistics'],
-            'attendances': attendances,
-            'absentEmployees': data['data']['absentEmployees'],
-            'date': data['data']['date'],
-          },
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch dashboard data',
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
-    }
-  }
-
   // Admin: Get Attendance Analytics
   static Future<Map<String, dynamic>> getAttendanceAnalytics({
     String? startDate,
@@ -535,29 +472,6 @@ class AttendanceService {
       }
     } catch (e) {
       return {'success': false, 'message': 'Error: $e', 'data': []};
-    }
-  }
-
-  // Admin: Get Current Positions of Active Employees (Live Tracking)
-  static Future<Map<String, dynamic>> getCurrentPositions() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/admin/current-positions'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return {'success': true, 'data': data['data']};
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Failed to fetch current positions',
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Error: $e'};
     }
   }
 
