@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
@@ -13,21 +14,35 @@ class TrackingService {
   static TrackingService get instance => _instance ??= TrackingService._();
   TrackingService._();
 
-  static const Duration _minSendInterval = Duration(seconds: 20);
+  static const Duration _minSendInterval = Duration(seconds: 5);
+  static const Duration _heartbeatInterval = Duration(seconds: 5);
+  static const Duration _statusCheckInterval = Duration(seconds: 10);
   static const double _minDistanceMeters = 25;
-  static const double _maxAccuracyMeters = 50;
+  // Removed accuracy filter to allow tracking even with lower accuracy
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   StreamSubscription<Position>? _positionSubscription;
+  Timer? _heartbeatTimer;
+  Timer? _statusMonitorTimer;
   DateTime? _lastSentAt;
   Position? _lastSentPosition;
   bool _isTracking = false;
   String? _attendanceId;
   String? _employeeId;
   String? _employeeName;
+  BuildContext? _context; // For showing alerts
+  bool _locationServiceEnabled = true;
+  bool _networkConnected = true;
+  bool _hasShownLocationAlert = false;
+  bool _hasShownNetworkAlert = false;
 
   bool get isTracking => _isTracking;
+  
+  // Set context for showing alerts (should be called from UI)
+  void setContext(BuildContext? context) {
+    _context = context;
+  }
 
   Future<bool> startTracking({
     required String attendanceId,
@@ -69,11 +84,22 @@ class TrackingService {
       cancelOnError: false, // Keep listening even on errors
     );
 
+    // Start heartbeat to force updates every 5 seconds
+    _startHeartbeat();
+    
+    // Start status monitoring
+    _startStatusMonitoring();
+
     _isTracking = true;
+    print('✅ Tracking started for employee: $employeeId');
     return true;
   }
 
   Future<void> stopTracking() async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _statusMonitorTimer?.cancel();
+    _statusMonitorTimer = null;
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     _isTracking = false;
@@ -82,6 +108,9 @@ class TrackingService {
     _employeeName = null;
     _lastSentAt = null;
     _lastSentPosition = null;
+    _hasShownLocationAlert = false;
+    _hasShownNetworkAlert = false;
+    print('🛑 Tracking stopped');
   }
 
   void _handlePositionUpdate(Position position) {
@@ -89,10 +118,8 @@ class TrackingService {
       return;
     }
 
-    if (position.accuracy > _maxAccuracyMeters) {
-      return;
-    }
-
+    // Removed accuracy filter - accept all positions to keep tracking active
+    // Only filter by time/distance to avoid excessive updates
     final now = DateTime.now();
     if (_lastSentAt != null &&
         now.difference(_lastSentAt!) < _minSendInterval) {
@@ -104,6 +131,7 @@ class TrackingService {
               position.latitude,
               position.longitude,
             );
+      // If less than 5 seconds passed, only send if moved 25+ meters
       if (distance < _minDistanceMeters) {
         return;
       }
@@ -114,6 +142,156 @@ class TrackingService {
 
     _sendToFirebase(position);
     _sendToBackend(position);
+  }
+
+  // Heartbeat mechanism to force updates every 5 seconds
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
+      if (!_isTracking) {
+        timer.cancel();
+        return;
+      }
+
+      // Force send update even if location hasn't changed
+      if (_lastSentPosition != null) {
+        print('💓 Heartbeat: Forcing location update');
+        // Update timestamp to keep status LIVE
+        _sendToFirebase(_lastSentPosition!);
+        _sendToBackend(_lastSentPosition!);
+      } else {
+        // If no position yet, try to get current location
+        LocationService.instance.getCurrentLocation(forceRefresh: true).then((position) {
+          if (position != null && _isTracking) {
+            _lastSentPosition = position;
+            _lastSentAt = DateTime.now();
+            _sendToFirebase(position);
+            _sendToBackend(position);
+          }
+        });
+      }
+    });
+  }
+
+  // Monitor location service and network status
+  void _startStatusMonitoring() {
+    _statusMonitorTimer?.cancel();
+    _statusMonitorTimer = Timer.periodic(_statusCheckInterval, (timer) async {
+      if (!_isTracking) {
+        timer.cancel();
+        return;
+      }
+
+      // Check location service status
+      final locationEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!locationEnabled && !_hasShownLocationAlert) {
+        _locationServiceEnabled = false;
+        _hasShownLocationAlert = true;
+        _showLocationDisabledAlert();
+      } else if (locationEnabled && !_locationServiceEnabled) {
+        _locationServiceEnabled = true;
+        _hasShownLocationAlert = false;
+        print('✅ Location service re-enabled');
+      }
+
+      // Check network connectivity
+      final networkConnected = await NetworkService.checkConnectivity();
+      if (!networkConnected && !_hasShownNetworkAlert) {
+        _networkConnected = false;
+        _hasShownNetworkAlert = true;
+        _showNetworkDisabledAlert();
+      } else if (networkConnected && !_networkConnected) {
+        _networkConnected = true;
+        _hasShownNetworkAlert = false;
+        print('✅ Network reconnected');
+        // Retry sending any pending updates
+        if (_lastSentPosition != null) {
+          _sendToFirebase(_lastSentPosition!);
+          _sendToBackend(_lastSentPosition!);
+        }
+      }
+    });
+  }
+
+  void _showLocationDisabledAlert() {
+    print('⚠️ Location service disabled - showing alert');
+    if (_context != null && _context!.mounted) {
+      showDialog(
+        context: _context!,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.location_off, color: Colors.red, size: 28),
+              SizedBox(width: 12),
+              Expanded(child: Text('Location Service Disabled')),
+            ],
+          ),
+          content: const Text(
+            'Location tracking requires GPS to be enabled.\n\n'
+            'Please enable Location Services in your device settings to continue tracking.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openLocationSettings();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _showNetworkDisabledAlert() {
+    print('⚠️ Network disconnected - showing alert');
+    if (_context != null && _context!.mounted) {
+      showDialog(
+        context: _context!,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.red, size: 28),
+              SizedBox(width: 12),
+              Expanded(child: Text('No Internet Connection')),
+            ],
+          ),
+          content: const Text(
+            'Location tracking requires internet connection.\n\n'
+            'Please check your network connection and ensure Wi-Fi or mobile data is enabled.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Retry connectivity check
+                NetworkService.checkConnectivity();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _sendToFirebase(Position position) async {
@@ -151,10 +329,13 @@ class TrackingService {
       };
 
       // Update live tracking (this keeps the employee "online")
+      // Use employeeId as document ID to ensure each salesman has unique document
       await _firestore
           .collection('tracking_live')
-          .doc(employeeId)
+          .doc(employeeId.toString()) // Ensure string conversion
           .set(payload, SetOptions(merge: true));
+      
+      print('📡 Firebase update sent for employeeId: $employeeId');
 
       // Store historical tracking points
       await _firestore

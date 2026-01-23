@@ -378,11 +378,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         }
 
         final docs = snapshot.data?.docs ?? [];
+        print('📊 Firebase returned ${docs.length} documents from tracking_live collection');
+        
         final livePoints = docs
-            .map((doc) => _LivePoint.fromDoc(doc, _employeeNameMap))
+            .map((doc) {
+              print('   📄 Processing document: ${doc.id}, data: ${doc.data()}');
+              return _LivePoint.fromDoc(doc, _employeeNameMap);
+            })
             .where((point) => point != null)
             .cast<_LivePoint>()
             .toList();
+
+        print('✅ Parsed ${livePoints.length} live tracking points');
+        for (var point in livePoints) {
+          print('   👤 Employee: ${point.employeeName} (${point.employeeId}) at ${point.latLng.latitude}, ${point.latLng.longitude}');
+        }
 
         if (livePoints.isEmpty) {
           return _buildEmptyState();
@@ -1442,47 +1452,60 @@ class _LivePoint {
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
     Map<String, String> employeeNameMap,
   ) {
-    final data = doc.data();
-    final lat = data['latitude'];
-    final lng = data['longitude'];
-    if (lat == null || lng == null) return null;
-
-    final employeeId = data['employeeId']?.toString() ?? doc.id;
-    final firebaseName = data['employeeName']?.toString() ?? '';
-
-    // Use Firebase name if available, otherwise fallback to backend map
-    final employeeName = firebaseName.isNotEmpty
-        ? firebaseName
-        : (employeeNameMap[employeeId] ?? '');
-
-    // Parse timestamps
-    DateTime? recordedAt;
-    DateTime? updatedAt;
-
-    if (data['recordedAt'] != null) {
-      final timestamp = data['recordedAt'];
-      if (timestamp is Timestamp) {
-        recordedAt = timestamp.toDate();
+    try {
+      final data = doc.data();
+      final lat = data['latitude'];
+      final lng = data['longitude'];
+      
+      if (lat == null || lng == null) {
+        print('⚠️ Document ${doc.id} missing lat/lng: lat=$lat, lng=$lng');
+        return null;
       }
-    }
 
-    if (data['updatedAt'] != null) {
-      final timestamp = data['updatedAt'];
-      if (timestamp is Timestamp) {
-        updatedAt = timestamp.toDate();
+      final employeeId = data['employeeId']?.toString() ?? doc.id;
+      final firebaseName = data['employeeName']?.toString() ?? '';
+
+      // Use Firebase name if available, otherwise fallback to backend map
+      final employeeName = firebaseName.isNotEmpty
+          ? firebaseName
+          : (employeeNameMap[employeeId] ?? employeeId); // Fallback to employeeId if no name found
+
+      // Parse timestamps
+      DateTime? recordedAt;
+      DateTime? updatedAt;
+
+      if (data['recordedAt'] != null) {
+        final timestamp = data['recordedAt'];
+        if (timestamp is Timestamp) {
+          recordedAt = timestamp.toDate();
+        } else if (timestamp is DateTime) {
+          recordedAt = timestamp;
+        }
       }
+
+      if (data['updatedAt'] != null) {
+        final timestamp = data['updatedAt'];
+        if (timestamp is Timestamp) {
+          updatedAt = timestamp.toDate();
+        } else if (timestamp is DateTime) {
+          updatedAt = timestamp;
+        }
+      }
+
+      final attendanceId = data['attendanceId']?.toString();
+
+      return _LivePoint(
+        employeeId: employeeId,
+        employeeName: employeeName,
+        latLng: LatLng((lat as num).toDouble(), (lng as num).toDouble()),
+        recordedAt: recordedAt,
+        updatedAt: updatedAt,
+        attendanceId: attendanceId,
+      );
+    } catch (e) {
+      print('❌ Error parsing document ${doc.id}: $e');
+      return null;
     }
-
-    final attendanceId = data['attendanceId']?.toString();
-
-    return _LivePoint(
-      employeeId: employeeId,
-      employeeName: employeeName,
-      latLng: LatLng((lat as num).toDouble(), (lng as num).toDouble()),
-      recordedAt: recordedAt,
-      updatedAt: updatedAt,
-      attendanceId: attendanceId,
-    );
   }
 
   static _LivePoint fallback() => _LivePoint(

@@ -85,6 +85,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
           final employeeId = UserService.currentUserId;
           final employeeName = UserService.name;
           if (employeeId != null && employeeName != null) {
+            // Set context for showing alerts
+            TrackingService.instance.setContext(context);
             TrackingService.instance.startTracking(
               attendanceId: attendance.id,
               employeeId: employeeId,
@@ -134,6 +136,24 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
         // Trigger rebuild to update duration display when punched in
         if (isPunchedIn) {
           setState(() {});
+        }
+        
+        // Periodic check to restart tracking if it stops unexpectedly
+        if (isPunchedIn && !TrackingService.instance.isTracking) {
+          print('⚠️ Tracking stopped unexpectedly - attempting to restart');
+          final attendance = currentAttendance;
+          if (attendance != null) {
+            final employeeId = UserService.currentUserId;
+            final employeeName = UserService.name;
+            if (employeeId != null && employeeName != null) {
+              TrackingService.instance.setContext(context);
+              TrackingService.instance.startTracking(
+                attendanceId: attendance.id,
+                employeeId: employeeId,
+                employeeName: employeeName,
+              );
+            }
+          }
         }
       }
     });
@@ -363,6 +383,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
           final employeeId = UserService.currentUserId;
           final employeeName = UserService.name;
           if (employeeId != null && employeeName != null) {
+            // Set context for showing alerts
+            TrackingService.instance.setContext(context);
             await TrackingService.instance.startTracking(
               attendanceId: attendance.id,
               employeeId: employeeId,
@@ -441,6 +463,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
         });
 
         if (attendance != null) {
+          // Set context for showing alerts
+          TrackingService.instance.setContext(context);
           await TrackingService.instance.startTracking(
             attendanceId: attendance.id,
             employeeId: employeeId,
@@ -905,11 +929,89 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text('Punch System'),
-        backgroundColor: primaryColor,
+    // Set context for tracking service alerts
+    TrackingService.instance.setContext(context);
+    
+    // Only block navigation if tracking is actually active
+    // Both conditions must be true: user is punched in AND tracking service is running
+    final isTrackingActive = isPunchedIn && TrackingService.instance.isTracking;
+    
+    // Debug logging
+    if (isTrackingActive) {
+      print('🔒 PopScope: Blocking navigation - tracking is active');
+    } else {
+      print('✅ PopScope: Allowing navigation - isPunchedIn=$isPunchedIn, isTracking=${TrackingService.instance.isTracking}');
+    }
+    
+    return PopScope(
+      canPop: !isTrackingActive, // Allow navigation unless tracking is active
+      onPopInvoked: (didPop) async {
+        // If already popped (canPop was true), navigation already happened - do nothing
+        if (didPop) {
+          print('✅ Navigation allowed - user went back');
+          return;
+        }
+        
+        // Double-check tracking status before showing dialog
+        final currentlyTracking = isPunchedIn && TrackingService.instance.isTracking;
+        
+        // Only show dialog if tracking is actually active
+        if (currentlyTracking) {
+          print('⚠️ Showing tracking confirmation dialog');
+          final shouldClose = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange, size: 28),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Tracking Active')),
+                ],
+              ),
+              content: const Text(
+                'Location tracking is currently active.\n\n'
+                'Going back will stop tracking. Are you sure you want to go back?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Stop tracking before going back
+                    TrackingService.instance.stopTracking();
+                    Navigator.of(context).pop(true);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Stop Tracking & Go Back'),
+                ),
+              ],
+            ),
+          );
+          
+          // If user confirmed, navigate back
+          if (shouldClose == true && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else {
+          // If not tracking, allow normal navigation immediately
+          // This is a safety fallback - should not normally execute since canPop should be true
+          print('✅ Safety fallback: Allowing navigation (not tracking)');
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: AppBar(
+          title: const Text('Punch System'),
+          backgroundColor: primaryColor,
         elevation: 0,
       ),
       body: RefreshIndicator(
@@ -1135,6 +1237,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
               child: const Icon(Icons.refresh, color: Colors.white),
             )
           : null,
+        ),
     );
   }
 

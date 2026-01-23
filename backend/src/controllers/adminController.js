@@ -2,6 +2,7 @@ import prisma from '../config/db.js';
 import { cleanPhoneNumber } from '../utils/phoneUtils.js';
 import { uploadBase64Image } from '../services/cloudinaryService.js';
 import { generateUserIdentifiers } from '../utils/idGenerator.js';
+import { cascadeDeleteUser } from '../utils/userCascadeDelete.js';
 
 
 
@@ -450,24 +451,236 @@ export const updateUserByAdmin = async (req, res) => {
   }
 };
 
-// Delete user
+// Delete user with cascade deletion of all related data
 export const deleteUserByAdmin = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await prisma.user.delete({
+    // First, verify user exists
+    const user = await prisma.user.findUnique({
       where: { id },
+      select: {
+        id: true,
+        name: true,
+        employeeCode: true,
+      },
     });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    console.log(`🗑️ Starting cascade deletion for user: ${user.name} (${user.id})`);
+
+    // Count records before deletion (for logging) - do this outside transaction
+    const counts = {
+      employeeArea: await prisma.employeeArea.count({ where: { employeeId: id } }),
+      salaryInfo: await prisma.salaryInformation.count({ where: { employeeId: id } }),
+      expenses: await prisma.expense.count({ where: { employeeId: id } }),
+      areaAssignments: await prisma.areaAssignment.count({ where: { salesmanId: id } }),
+      notifications: await prisma.notification.count({ where: { targetUserId: id } }),
+      lateApprovals: await prisma.latePunchApproval.count({ where: { employeeId: id } }),
+      earlyApprovals: await prisma.earlyPunchOutApproval.count({ where: { employeeId: id } }),
+      leaves: await prisma.leave.count({ where: { employeeId: id } }),
+      leaveBalance: await prisma.leaveBalance.count({ where: { employeeId: id } }),
+      beatPlans: await prisma.weeklyBeatPlan.count({ where: { salesmanId: id } }),
+      beatCompletions: await prisma.beatCompletion.count({ where: { salesmanId: id } }),
+      trackingPoints: await prisma.salesmanTrackingPoint.count({ where: { employeeId: id } }),
+    };
+
+    console.log(`   📊 Records to be deleted:`);
+    console.log(`      - EmployeeArea: ${counts.employeeArea}`);
+    console.log(`      - SalaryInformation: ${counts.salaryInfo}`);
+    console.log(`      - Expenses: ${counts.expenses}`);
+    console.log(`      - AreaAssignments: ${counts.areaAssignments}`);
+    console.log(`      - Notifications: ${counts.notifications}`);
+    console.log(`      - LatePunchApprovals: ${counts.lateApprovals}`);
+    console.log(`      - EarlyPunchOutApprovals: ${counts.earlyApprovals}`);
+    console.log(`      - Leaves: ${counts.leaves}`);
+    console.log(`      - LeaveBalance: ${counts.leaveBalance}`);
+    console.log(`      - WeeklyBeatPlans: ${counts.beatPlans}`);
+    console.log(`      - BeatCompletions: ${counts.beatCompletions}`);
+    console.log(`      - TrackingPoints: ${counts.trackingPoints}`);
+
+    // Use transaction to ensure atomic deletion
+    // Set timeout to 60 seconds to handle large datasets
+    await prisma.$transaction(
+      async (tx) => {
+      // 1. Handle Account relations (set foreign keys to null instead of deleting accounts)
+      const accountsToUpdate = await tx.account.findMany({
+        where: {
+          OR: [
+            { assignedToId: id },
+            { createdById: id },
+            { approvedById: id },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (accountsToUpdate.length > 0) {
+        console.log(`   📋 Updating ${accountsToUpdate.length} accounts (removing user references)`);
+        await tx.account.updateMany({
+          where: {
+            OR: [
+              { assignedToId: id },
+              { createdById: id },
+              { approvedById: id },
+            ],
+          },
+          data: {
+            assignedToId: null,
+            createdById: null,
+            approvedById: null,
+          },
+        });
+      }
+
+      // 2. Handle Expense approver relations (set approvedBy to null)
+      const expensesToUpdate = await tx.expense.findMany({
+        where: { approvedBy: id },
+        select: { id: true },
+      });
+
+      if (expensesToUpdate.length > 0) {
+        console.log(`   💰 Updating ${expensesToUpdate.length} expenses (removing approver references)`);
+        await tx.expense.updateMany({
+          where: { approvedBy: id },
+          data: { approvedBy: null },
+        });
+      }
+
+      // 3. Handle LatePunchApproval approver relations
+      const lateApprovalsToUpdate = await tx.latePunchApproval.findMany({
+        where: { approvedBy: id },
+        select: { id: true },
+      });
+
+      if (lateApprovalsToUpdate.length > 0) {
+        console.log(`   ⏰ Updating ${lateApprovalsToUpdate.length} late punch approvals (removing approver references)`);
+        await tx.latePunchApproval.updateMany({
+          where: { approvedBy: id },
+          data: { approvedBy: null },
+        });
+      }
+
+      // 4. Handle EarlyPunchOutApproval approver relations
+      const earlyApprovalsToUpdate = await tx.earlyPunchOutApproval.findMany({
+        where: { approvedBy: id },
+        select: { id: true },
+      });
+
+      if (earlyApprovalsToUpdate.length > 0) {
+        console.log(`   ⏰ Updating ${earlyApprovalsToUpdate.length} early punch-out approvals (removing approver references)`);
+        await tx.earlyPunchOutApproval.updateMany({
+          where: { approvedBy: id },
+          data: { approvedBy: null },
+        });
+      }
+
+      // 5. Handle Leave approver relations
+      const leavesToUpdate = await tx.leave.findMany({
+        where: { approvedBy: id },
+        select: { id: true },
+      });
+
+      if (leavesToUpdate.length > 0) {
+        console.log(`   🏖️ Updating ${leavesToUpdate.length} leave requests (removing approver references)`);
+        await tx.leave.updateMany({
+          where: { approvedBy: id },
+          data: { approvedBy: null },
+        });
+      }
+
+      // 6. Handle WeeklyBeatPlan generator/approver/locker relations
+      const beatPlansToUpdate = await tx.weeklyBeatPlan.findMany({
+        where: {
+          OR: [
+            { generatedBy: id },
+            { approvedBy: id },
+            { lockedBy: id },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (beatPlansToUpdate.length > 0) {
+        console.log(`   📅 Updating ${beatPlansToUpdate.length} beat plans (removing admin references)`);
+        await tx.weeklyBeatPlan.updateMany({
+          where: {
+            OR: [
+              { generatedBy: id },
+              { approvedBy: id },
+              { lockedBy: id },
+            ],
+          },
+          data: {
+            generatedBy: null,
+            approvedBy: null,
+            lockedBy: null,
+          },
+        });
+      }
+
+      // 7. Handle BeatCompletion verifier relations
+      const beatCompletionsToUpdate = await tx.beatCompletion.findMany({
+        where: { verifiedBy: id },
+        select: { id: true },
+      });
+
+      if (beatCompletionsToUpdate.length > 0) {
+        console.log(`   ✅ Updating ${beatCompletionsToUpdate.length} beat completions (removing verifier references)`);
+        await tx.beatCompletion.updateMany({
+          where: { verifiedBy: id },
+          data: { verifiedBy: null },
+        });
+      }
+
+      // 8. Finally, delete the user (this will cascade delete all records with onDelete: Cascade)
+      console.log(`   🗑️ Deleting user record...`);
+      await tx.user.delete({
+        where: { id },
+      });
+      },
+      {
+        timeout: 60000, // 60 seconds timeout
+        isolationLevel: 'ReadCommitted', // Use ReadCommitted for better performance
+      }
+    );
+
+    console.log(`✅ User ${user.name} (${user.id}) and all related data deleted successfully`);
 
     res.json({
       success: true,
-      message: 'User deleted successfully',
+      message: 'User and all related data deleted successfully',
     });
   } catch (error) {
     console.error('❌ Delete User Error:', error);
+    
+    // Handle specific Prisma errors
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Handle foreign key constraint errors
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete user: There are still references to this user that need to be handled',
+        error: error.meta,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Failed to delete user',
+      error: error.message,
     });
   }
 };
