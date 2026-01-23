@@ -28,6 +28,7 @@ import punchStatusRoutes from './routes/punchStatusRoutes.js';
 import leaveRoutes from './routes/leaveRoutes.js';
 import beatPlanRoutes from './routes/beatPlanRoutes.js';
 import shopRoutes from './routes/shopRoutes.js';
+import trackingRoutes from './routes/trackingRoutes.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -90,6 +91,7 @@ app.use('/punch', punchStatusRoutes);
 app.use('/leaves', leaveRoutes);
 app.use('/beat-plans', beatPlanRoutes);
 app.use('/shops', shopRoutes);
+app.use('/tracking', trackingRoutes);
 
 // 404 Handler
 app.use((req, res) => {

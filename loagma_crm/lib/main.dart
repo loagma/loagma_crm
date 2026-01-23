@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'router/app_router.dart';
 import 'services/user_service.dart';
 import 'utils/exit_dialog.dart';
 import 'package:go_router/go_router.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init skipped: $e');
+  }
   await UserService.init(); // load prefs
   runApp(const MyApp());
 }

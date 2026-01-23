@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
+import '../../services/tracking_service.dart';
 import '../../services/employee_working_hours_service.dart';
 import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
@@ -23,7 +24,7 @@ class EnhancedPunchScreen extends StatefulWidget {
   State<EnhancedPunchScreen> createState() => _EnhancedPunchScreenState();
 }
 
-class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
+class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsBindingObserver {
   static const Color primaryColor = Color(0xFFD7BE69);
 
   // Punch status
@@ -60,11 +61,39 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Listen to app lifecycle
     _updateCurrentTime();
     _startTimeTimer();
     _loadEmployeeWorkingHours();
     _loadTodayPunchData();
     _initializeLocationService();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Ensure tracking continues when app goes to background
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      print('📱 App backgrounded - tracking should continue via foreground service');
+      // Tracking service should continue via LocationService foreground service
+    } else if (state == AppLifecycleState.resumed) {
+      print('📱 App resumed - verifying tracking is active');
+      // Verify tracking is still active when app comes back
+      if (isPunchedIn && !TrackingService.instance.isTracking) {
+        final attendance = currentAttendance;
+        if (attendance != null) {
+          final employeeId = UserService.currentUserId;
+          final employeeName = UserService.name;
+          if (employeeId != null && employeeName != null) {
+            TrackingService.instance.startTracking(
+              attendanceId: attendance.id,
+              employeeId: employeeId,
+              employeeName: employeeName,
+            );
+          }
+        }
+      }
+    }
   }
 
   @override
@@ -81,8 +110,11 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
-    LocationService.instance.stopLocationTracking();
+    if (!TrackingService.instance.isTracking) {
+      LocationService.instance.stopLocationTracking();
+    }
     super.dispose();
   }
 
@@ -326,6 +358,18 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = attendance.punchInTime;
           hasEarlyPunchOutApproval = hasApprovedEarlyPunchOut;
         });
+
+        if (attendance.isPunchedIn) {
+          final employeeId = UserService.currentUserId;
+          final employeeName = UserService.name;
+          if (employeeId != null && employeeName != null) {
+            await TrackingService.instance.startTracking(
+              attendanceId: attendance.id,
+              employeeId: employeeId,
+              employeeName: employeeName,
+            );
+          }
+        }
       } else {
         print('📊 No attendance found for today');
         setState(() {
@@ -395,6 +439,14 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = attendance?.punchInTime;
           hasLatePunchApproval = false; // Clear approval after use
         });
+
+        if (attendance != null) {
+          await TrackingService.instance.startTracking(
+            attendanceId: attendance.id,
+            employeeId: employeeId,
+            employeeName: employeeName,
+          );
+        }
 
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
@@ -1640,6 +1692,8 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> {
           punchInTime = null;
           hasEarlyPunchOutApproval = false; // Clear approval after use
         });
+
+        await TrackingService.instance.stopTracking();
 
         CustomToast.showSuccess(context, 'Punched out successfully!');
       } else {

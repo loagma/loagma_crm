@@ -104,6 +104,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/reports",
           ),
           SidebarItem("Maps", Icons.map_outlined, "/dashboard/admin/map"),
+          SidebarItem(
+            "Live Tracking",
+            Icons.location_searching,
+            "/dashboard/admin/tracking",
+          ),
 
           SidebarItem(
             "Attendance Management",

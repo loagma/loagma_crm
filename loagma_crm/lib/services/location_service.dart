@@ -239,10 +239,11 @@ class LocationService {
 
       // Configure for high accuracy continuous tracking
       // Uses foreground service on Android for background support
+      // Remove timeLimit to allow continuous background tracking
       const LocationSettings locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 1, // Update every 1 meter
-        timeLimit: Duration(seconds: 30),
+        // timeLimit removed to allow continuous background tracking
       );
 
       // Start position stream

@@ -148,6 +148,9 @@ model User {
   lockedBeatPlans WeeklyBeatPlan[] @relation("LockedBeatPlans") // Beat plans locked by this admin
   completedBeats BeatCompletion[] @relation("CompletedBeats") // Beat completions by this salesman
   verifiedBeats BeatCompletion[] @relation("VerifiedBeats") // Beat completions verified by this admin
+
+  // Live Tracking Relations
+  trackingPoints SalesmanTrackingPoint[] @relation("EmployeeTrackingPoints")
 }
 
 model EmployeeArea {
@@ -377,12 +380,33 @@ model Attendance {
   // Metadata
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+
+  // Live Tracking Relations
+  trackingPoints      SalesmanTrackingPoint[] @relation("AttendanceTrackingPoints")
   
   @@index([employeeId])
   @@index([date])
   @@index([status])
   @@index([punchInTime])
   @@index([isLatePunchIn])
+}
+
+model SalesmanTrackingPoint {
+  id           String   @id @default(cuid())
+  employeeId   String
+  attendanceId String
+  latitude     Float
+  longitude    Float
+  speed        Float?
+  accuracy     Float?
+  recordedAt   DateTime @default(now())
+
+  employee     User       @relation("EmployeeTrackingPoints", fields: [employeeId], references: [id], onDelete: Cascade)
+  attendance   Attendance @relation("AttendanceTrackingPoints", fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([attendanceId])
+  @@index([recordedAt])
 }
 
 model AreaAssignment {
