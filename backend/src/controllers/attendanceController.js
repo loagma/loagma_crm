@@ -663,6 +663,90 @@ export const punchOut = async (req, res) => {
     }
 };
 
+// Get Today's Active Attendance for Multiple Employees (for Live Tracking)
+export const getTodayActiveAttendanceForEmployees = async (req, res) => {
+    try {
+        const { employeeIds } = req.query; // Comma-separated employee IDs
+
+        if (!employeeIds) {
+            return res.status(400).json({
+                success: false,
+                message: 'employeeIds query parameter is required (comma-separated)'
+            });
+        }
+
+        const employeeIdArray = employeeIds.split(',').map(id => id.trim()).filter(id => id);
+        
+        if (employeeIdArray.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'At least one employee ID is required'
+            });
+        }
+
+        // Get today's date range in IST
+        const { startOfDay, endOfDay } = getISTDateRange();
+
+        // Get today's attendance for all requested employees (both active and completed)
+        // We want the most recent one per employee
+        const todayAttendances = await prisma.attendance.findMany({
+            where: {
+                employeeId: { in: employeeIdArray },
+                punchInTime: {
+                    gte: startOfDay,
+                    lt: endOfDay
+                }
+            },
+            orderBy: {
+                punchInTime: 'desc'
+            }
+        });
+
+        // Create a map of employeeId -> most recent attendance (prefer active, then most recent)
+        const attendanceMap = {};
+        const employeeAttendanceMap = {}; // Track by employeeId
+        
+        // First pass: collect all attendances by employee
+        todayAttendances.forEach(attendance => {
+            if (!employeeAttendanceMap[attendance.employeeId]) {
+                employeeAttendanceMap[attendance.employeeId] = [];
+            }
+            employeeAttendanceMap[attendance.employeeId].push(attendance);
+        });
+        
+        // Second pass: for each employee, prefer active attendance, otherwise most recent
+        employeeIdArray.forEach(employeeId => {
+            const employeeAttendances = employeeAttendanceMap[employeeId] || [];
+            if (employeeAttendances.length > 0) {
+                // Prefer active attendance, otherwise get the most recent (already sorted desc)
+                const selectedAttendance = employeeAttendances.find(a => a.status === 'active') 
+                    || employeeAttendances[0];
+                
+                attendanceMap[employeeId] = {
+                    ...selectedAttendance,
+                    punchInTimeIST: formatISTTime(convertUTCToIST(selectedAttendance.punchInTime), 'datetime'),
+                    punchInTimeISTFormatted: formatISTTime(convertUTCToIST(selectedAttendance.punchInTime), 'time'),
+                };
+            } else {
+                // No attendance for this employee today - include null so client knows to check
+                attendanceMap[employeeId] = null;
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: attendanceMap
+        });
+    } catch (error) {
+        console.error('Get today active attendance for employees error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch attendance',
+            error: error.message
+        });
+    }
+};
+
 // Get Today's Attendance (Latest Active or All Today's Sessions)
 export const getTodayAttendance = async (req, res) => {
     try {

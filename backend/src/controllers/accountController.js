@@ -15,6 +15,7 @@ export const getAllAccounts = async (req, res) => {
       funnelStage,
       isApproved,
       createdById,
+      approvedById,
       search,
       startDate,
       endDate,
@@ -30,6 +31,7 @@ export const getAllAccounts = async (req, res) => {
     if (funnelStage) where.funnelStage = funnelStage;
     if (isApproved !== undefined) where.isApproved = isApproved === 'true';
     if (createdById) where.createdById = createdById;
+    if (approvedById) where.approvedById = approvedById;
 
     // Date range filtering
     if (startDate || endDate) {
@@ -790,6 +792,7 @@ export const approveAccount = async (req, res) => {
   try {
     const { id } = req.params;
     const approvedById = req.user?.id || req.body.approvedById;
+    const verificationNotes = req.body.verificationNotes ?? null;
 
     if (!approvedById) {
       return res.status(400).json({
@@ -803,7 +806,9 @@ export const approveAccount = async (req, res) => {
       data: {
         isApproved: true,
         approvedById,
-        approvedAt: new Date()
+        approvedAt: new Date(),
+        verificationNotes: verificationNotes || null,
+        rejectionNotes: null
       },
       include: {
         assignedTo: {
@@ -847,13 +852,16 @@ export const approveAccount = async (req, res) => {
 export const rejectAccount = async (req, res) => {
   try {
     const { id } = req.params;
+    const rejectionNotes = req.body.rejectionNotes ?? null;
 
     const account = await prisma.account.update({
       where: { id },
       data: {
         isApproved: false,
         approvedById: null,
-        approvedAt: null
+        approvedAt: null,
+        verificationNotes: null,
+        rejectionNotes: rejectionNotes || null
       },
       include: {
         createdBy: {

@@ -817,7 +817,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Chip(
-                        label: Text(acc.isApproved ? 'Approved' : 'Pending'),
+                        label: Text(acc.isApproved ? 'Verified' : 'Pending'),
                         backgroundColor: acc.isApproved
                             ? Colors.green[100]
                             : Colors.orange[100],
@@ -860,7 +860,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const Divider(),
-            _buildDetailRow('Contact', acc.contactNumber),
+            _buildContactRow(acc.contactNumber),
             if (acc.businessType != null)
               _buildDetailRow('Business Type', acc.businessType!),
             if (acc.businessSize != null)
@@ -871,6 +871,12 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
               _buildDetailRow('Customer Stage', acc.customerStage!),
             if (acc.funnelStage != null)
               _buildDetailRow('Funnel Stage', acc.funnelStage!),
+            if (acc.isApproved) ...[
+              _buildDetailRow('Verified by', acc.approvedByName),
+              if (acc.verificationNotes != null &&
+                  acc.verificationNotes!.trim().isNotEmpty)
+                _buildDetailRow('Verification notes', acc.verificationNotes!),
+            ],
           ],
         ),
       ),
@@ -1157,6 +1163,61 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildContactRow(String contactNumber) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text('Contact', style: TextStyle(color: Colors.grey[600])),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => _launchDialer(contactNumber),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.phone, size: 18, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      contactNumber,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.green.shade700,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchDialer(String phoneNumber) async {
+    String clean = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (clean.length == 10 && !clean.startsWith('+')) clean = '+91$clean';
+    if (clean.length == 12 && clean.startsWith('91')) clean = '+$clean';
+    final uri = Uri(scheme: 'tel', path: clean);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showError('Cannot open dialer');
+      }
+    } catch (e) {
+      _showError('Error opening dialer: $e');
+    }
   }
 
   // --------------------------

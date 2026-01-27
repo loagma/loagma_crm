@@ -85,71 +85,70 @@ export const getTrackingRoute = async (req, res) => {
     }
 
     // Validate Prisma client is initialized
-    if (!prisma || !prisma.salesmanTrackingPoint) {
-      console.error('❌ Prisma client not initialized properly');
+    if (!prisma) {
+      console.error('❌ Prisma client not initialized');
       return res.status(500).json({
         success: false,
         message: 'Database connection error. Please restart the server.',
       });
     }
 
-    const startDate = parseDateValue(start) ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const endDate = parseDateValue(end) ?? new Date();
+    // Calculate date range - default to today
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const parsedStart = parseDateValue(start);
+    const parsedEnd = parseDateValue(end);
+    const finalStartDate = parsedStart && parsedStart >= startOfToday ? parsedStart : startOfToday;
+    const finalEndDate = parsedEnd && parsedEnd <= now ? parsedEnd : now;
 
-    console.log(`🔍 Loading route for employeeId: ${employeeId}, from ${startDate} to ${endDate}`);
-    if (attendanceId) {
-      console.log(`   Filtering by attendanceId: ${attendanceId}`);
-    }
-
-    // First, check if there are any tracking points for this employee at all
-    const totalPoints = await prisma.salesmanTrackingPoint.count({
-      where: {
-        employeeId: employeeId.toString(),
-      },
-    });
-    console.log(`   Total tracking points for employee ${employeeId}: ${totalPoints}`);
-
-    const points = await prisma.salesmanTrackingPoint.findMany({
-      where: {
+    // Try to query - if model doesn't exist, catch the error
+    let points = [];
+    try {
+      const whereClause = {
         employeeId: employeeId.toString(),
         ...(attendanceId ? { attendanceId: attendanceId.toString() } : {}),
         recordedAt: {
-          gte: startDate,
-          lte: endDate,
+          gte: finalStartDate,
+          lte: finalEndDate,
         },
-      },
-      orderBy: { recordedAt: 'asc' },
-      take: limit ? Number(limit) : undefined,
-    });
+      };
 
-    console.log(`✅ Found ${points.length} tracking points for route (filtered by date range)`);
-    if (points.length === 0 && totalPoints > 0) {
-      console.log(`⚠️ No points in date range, but ${totalPoints} total points exist. Consider expanding date range.`);
-      // Get the earliest and latest points to help with date range debugging
-      const earliestPoint = await prisma.salesmanTrackingPoint.findFirst({
-        where: { employeeId: employeeId.toString() },
+      points = await prisma.salesmanTrackingPoint.findMany({
+        where: whereClause,
         orderBy: { recordedAt: 'asc' },
+        take: limit ? Number(limit) : undefined,
       });
-      const latestPoint = await prisma.salesmanTrackingPoint.findFirst({
-        where: { employeeId: employeeId.toString() },
-        orderBy: { recordedAt: 'desc' },
-      });
-      if (earliestPoint && latestPoint) {
-        console.log(`   Date range of existing points: ${earliestPoint.recordedAt} to ${latestPoint.recordedAt}`);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Found ${points.length} tracking points for route`);
       }
-    } else if (points.length === 0 && totalPoints === 0) {
-      console.log(`⚠️ No tracking points exist for employee ${employeeId} at all. Make sure tracking is active and points are being saved.`);
+    } catch (dbError) {
+      // Check if error is about missing model
+      const errorMsg = dbError.message || dbError.toString();
+      if (errorMsg.includes('salesmanTrackingPoint') || 
+          errorMsg.includes('undefined') ||
+          errorMsg.includes("Cannot read properties") ||
+          dbError.code === 'P2001') {
+        console.error('❌ Prisma model salesmanTrackingPoint not available');
+        console.error('   Solution: Stop the server, then run: cd backend && npx prisma generate');
+        return res.status(500).json({
+          success: false,
+          message: 'Database model not available. Please stop server and run: npx prisma generate',
+        });
+      }
+      // Re-throw other database errors
+      throw dbError;
     }
 
     return res.json({
       success: true,
       data: points,
       meta: {
-        totalPointsForEmployee: totalPoints,
         dateRange: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
+          start: finalStartDate.toISOString(),
+          end: finalEndDate.toISOString(),
         },
+        attendanceId: attendanceId || null,
       },
     });
   } catch (error) {

@@ -212,6 +212,8 @@ model Account {
   approvedById          String?
   approvedAt            DateTime?
   isApproved            Boolean   @default(false)
+  verificationNotes     String?   // Notes from telecaller when verifying
+  rejectionNotes        String?   // Notes when rejecting (optional)
   
   // Timestamps
   createdAt             DateTime  @default(now())

@@ -3,6 +3,7 @@ import {
     punchIn,
     punchOut,
     getTodayAttendance,
+    getTodayActiveAttendanceForEmployees,
     getAttendanceHistory,
     getAttendanceStats,
     getAllAttendance,
@@ -19,6 +20,7 @@ router.post('/punch-out', punchOut);
 
 // Get Attendance
 router.get('/today/:employeeId', getTodayAttendance);
+router.get('/today-active', getTodayActiveAttendanceForEmployees); // Query: ?employeeIds=id1,id2,id3
 router.get('/history/:employeeId', getAttendanceHistory);
 router.get('/stats/:employeeId', getAttendanceStats);
 

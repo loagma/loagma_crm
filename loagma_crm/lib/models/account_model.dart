@@ -28,6 +28,8 @@ class Account {
   final String? approvedById;
   final DateTime? approvedAt;
   final bool isApproved;
+  final String? verificationNotes;
+  final String? rejectionNotes;
   final int? areaId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -68,6 +70,8 @@ class Account {
     this.approvedById,
     this.approvedAt,
     this.isApproved = false,
+    this.verificationNotes,
+    this.rejectionNotes,
     this.areaId,
     required this.createdAt,
     required this.updatedAt,
@@ -112,6 +116,8 @@ class Account {
           ? DateTime.parse(json['approvedAt'])
           : null,
       isApproved: json['isApproved'] ?? false,
+      verificationNotes: json['verificationNotes'],
+      rejectionNotes: json['rejectionNotes'],
       areaId: json['areaId'],
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),

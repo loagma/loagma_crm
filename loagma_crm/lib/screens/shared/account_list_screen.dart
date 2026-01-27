@@ -474,7 +474,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                           ),
                           DropdownMenuItem(
                             value: true,
-                            child: Text('Approved'),
+                            child: Text('Verified'),
                           ),
                           DropdownMenuItem(
                             value: false,
@@ -781,7 +781,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
       activeFilters.add(_filterCustomerStage!);
     }
     if (_filterIsApproved != null) {
-      activeFilters.add(_filterIsApproved! ? 'Approved' : 'Pending');
+      activeFilters.add(_filterIsApproved! ? 'Verified' : 'Pending');
     }
     if (_filterSalesmanId != null) {
       final salesman = _salesmen.firstWhere(
@@ -1197,7 +1197,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          account.isApproved ? 'Approved' : 'Pending',
+                          account.isApproved ? 'Verified' : 'Pending',
                           style: TextStyle(
                             fontSize: 12,
                             color: account.isApproved

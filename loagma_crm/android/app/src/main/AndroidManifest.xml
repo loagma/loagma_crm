@@ -89,7 +89,8 @@ package="com.example.loagma_crm">
             android:exported="false"
             android:foregroundServiceType="location" />
             
-        <!-- Boot receiver to restart location tracking after device restart -->
+        <!-- Boot receiver to restart location trackin
+        .++`g after device restart -->
         <receiver
             android:name="io.flutter.plugins.geolocator.BootReceiver"
             android:enabled="true"

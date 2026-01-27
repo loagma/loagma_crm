@@ -330,6 +330,382 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
     );
   }
 
+  void _showDetailsDialog(Map<String, dynamic> request, String type) {
+    final isLatePunch = type == 'late_punch_in';
+    final createdAt = DateTime.parse(request['createdAt']);
+    final formattedDate = DateFormat('dd MMM yyyy').format(createdAt);
+    final formattedTime = DateFormat('hh:mm a').format(createdAt);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isLatePunch ? Colors.orange[50] : Colors.blue[50],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isLatePunch
+                              ? Colors.orange[100]
+                              : Colors.blue[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          isLatePunch ? Icons.login : Icons.logout,
+                          color: isLatePunch
+                              ? Colors.orange[700]
+                              : Colors.blue[700],
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isLatePunch
+                                  ? 'Late Punch-In Request'
+                                  : 'Early Punch-Out Request',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isLatePunch
+                                    ? Colors.orange[900]
+                                    : Colors.blue[900],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.amber[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'PENDING',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber[800],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                ),
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Employee Information
+                      _buildDetailSection(
+                        'Employee Information',
+                        Icons.person,
+                        [
+                          _buildDetailRow(
+                            'Name',
+                            request['employee']?['name'] ??
+                                request['employeeName'] ??
+                                'Unknown',
+                          ),
+                          _buildDetailRow(
+                            'Employee Code',
+                            _getEmployeeCode(request),
+                          ),
+                          _buildDetailRow(
+                            'Contact Number',
+                            _getContactNumber(request),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Request Details
+                      _buildDetailSection(
+                        'Request Details',
+                        Icons.info_outline,
+                        [
+                          _buildDetailRow('Date', formattedDate),
+                          _buildDetailRow('Time', formattedTime),
+                          _buildDetailRow(
+                            'Type',
+                            isLatePunch ? 'Late Punch-In' : 'Early Punch-Out',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Reason
+                      _buildDetailSection('Reason', Icons.description, [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Text(
+                            request['reason'] ?? 'No reason provided',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[800],
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: 24),
+                      // Action Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                                _showConfirmationDialog(
+                                  requestId: request['id'],
+                                  type: type,
+                                  employeeName:
+                                      request['employee']?['name'] ??
+                                      request['employeeName'] ??
+                                      'Unknown',
+                                  reason:
+                                      request['reason'] ?? 'No reason provided',
+                                  isApproval: false,
+                                );
+                              },
+                              icon: const Icon(Icons.close, size: 18),
+                              label: const Text('Reject'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(
+                                  color: Colors.red,
+                                  width: 2,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                                _showConfirmationDialog(
+                                  requestId: request['id'],
+                                  type: type,
+                                  employeeName:
+                                      request['employee']?['name'] ??
+                                      request['employeeName'] ??
+                                      'Unknown',
+                                  reason:
+                                      request['reason'] ?? 'No reason provided',
+                                  isApproval: true,
+                                );
+                              },
+                              icon: const Icon(Icons.check, size: 18),
+                              label: const Text('Approve'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showConfirmationDialog({
+    required String requestId,
+    required String type,
+    required String employeeName,
+    required String reason,
+    required bool isApproval,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              isApproval ? Icons.check_circle : Icons.cancel,
+              color: isApproval ? Colors.green : Colors.red,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isApproval ? 'Confirm Approval' : 'Confirm Rejection',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isApproval
+                  ? 'Do you confirm to approve this request?'
+                  : 'Do you confirm to reject this request?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Employee: $employeeName',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Type: ${type == 'late_punch_in' ? 'Late Punch-In' : 'Early Punch-Out'}',
+                    style: TextStyle(color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _showApprovalDialog(
+                requestId: requestId,
+                type: type,
+                employeeName: employeeName,
+                reason: reason,
+                isApproval: isApproval,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isApproval ? Colors.green : Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(isApproval ? 'Yes, Approve' : 'Yes, Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailSection(
+    String title,
+    IconData icon,
+    List<Widget> children,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 20, color: primaryColor),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...children,
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -793,60 +1169,35 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildInfoRow('Employee Code', _getEmployeeCode(request)),
-                  const SizedBox(height: 6),
-                  _buildInfoRow('Contact', _getContactNumber(request)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Reason:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    request['reason'] ?? 'No reason provided',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            // Action Buttons Row
             Row(
               children: [
+                // View Details Button
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showApprovalDialog(
-                      requestId: request['id'],
-                      type: type,
-                      employeeName:
-                          request['employee']?['name'] ??
-                          request['employeeName'] ??
-                          'Unknown',
-                      reason: request['reason'] ?? 'No reason provided',
-                      isApproval: false,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showDetailsDialog(request, type),
+                    icon: const Icon(Icons.visibility, size: 18),
+                    label: const Text(
+                      'View\nDetails',
+                      textAlign: TextAlign.center,
                     ),
-                    icon: const Icon(Icons.close, size: 16),
-                    label: const Text('Reject'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2196F3),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 3,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                // Approve Button
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _showApprovalDialog(
+                    onPressed: () => _showConfirmationDialog(
                       requestId: request['id'],
                       type: type,
                       employeeName:
@@ -856,12 +1207,43 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                       reason: request['reason'] ?? 'No reason provided',
                       isApproval: true,
                     ),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('Approve'),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Approve', textAlign: TextAlign.center),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: const Color(0xFF4CAF50),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 3,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Reject Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showConfirmationDialog(
+                      requestId: request['id'],
+                      type: type,
+                      employeeName:
+                          request['employee']?['name'] ??
+                          request['employeeName'] ??
+                          'Unknown',
+                      reason: request['reason'] ?? 'No reason provided',
+                      isApproval: false,
+                    ),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Reject', textAlign: TextAlign.center),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF44336),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 3,
                     ),
                   ),
                 ),
@@ -870,22 +1252,6 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            '$label:',
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
-          ),
-        ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
-      ],
     );
   }
 

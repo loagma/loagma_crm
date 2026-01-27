@@ -124,9 +124,11 @@ class AccountService {
     String? funnelStage,
     bool? isApproved,
     String? createdById,
+    String? approvedById,
     String? search,
     DateTime? startDate,
     DateTime? endDate,
+    String? salesmanId, // Helper: filters by createdById (for salesman accounts)
   }) async {
     try {
       // Check connectivity first
@@ -138,6 +140,9 @@ class AccountService {
       }
 
       final headers = await _getHeaders();
+      // If salesmanId is provided, use it as createdById (accounts are linked to salesmen via createdById)
+      final effectiveCreatedById = salesmanId ?? createdById;
+      
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
@@ -146,7 +151,8 @@ class AccountService {
         if (customerStage != null) 'customerStage': customerStage,
         if (funnelStage != null) 'funnelStage': funnelStage,
         if (isApproved != null) 'isApproved': isApproved.toString(),
-        if (createdById != null) 'createdById': createdById,
+        if (effectiveCreatedById != null) 'createdById': effectiveCreatedById,
+        if (approvedById != null) 'approvedById': approvedById,
         if (search != null) 'search': search,
         if (startDate != null)
           'startDate': startDate
@@ -251,9 +257,10 @@ class AccountService {
     }
   }
 
-  // ==================== APPROVAL ====================
+  // ==================== VERIFY / REJECT ====================
+  // Terminology: use "verify" / "verified" in UI; backend uses approve.
 
-  static Future<Account> approveAccount(String id) async {
+  static Future<Account> verifyAccount(String id, {String? notes}) async {
     try {
       final userId = await _getUserId();
       final headers = await _getHeaders();
@@ -261,7 +268,10 @@ class AccountService {
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/$id/approve'),
         headers: headers,
-        body: json.encode({if (userId != null) 'approvedById': userId}),
+        body: json.encode({
+          if (userId != null) 'approvedById': userId,
+          if (notes != null && notes.trim().isNotEmpty) 'verificationNotes': notes.trim(),
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -269,20 +279,23 @@ class AccountService {
         return Account.fromJson(data['data']);
       } else {
         final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Failed to approve account');
+        throw Exception(error['message'] ?? 'Failed to verify account');
       }
     } catch (e) {
-      print('Error approving account: $e');
+      print('Error verifying account: $e');
       rethrow;
     }
   }
 
-  static Future<Account> rejectAccount(String id) async {
+  static Future<Account> rejectAccount(String id, {String? notes}) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/$id/reject'),
         headers: headers,
+        body: json.encode({
+          if (notes != null && notes.trim().isNotEmpty) 'rejectionNotes': notes.trim(),
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -297,6 +310,9 @@ class AccountService {
       rethrow;
     }
   }
+
+  /// Legacy alias for verifyAccount (approve).
+  static Future<Account> approveAccount(String id) => verifyAccount(id);
 
   // ==================== STATISTICS ====================
 

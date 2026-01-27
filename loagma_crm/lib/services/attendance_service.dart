@@ -216,6 +216,83 @@ class AttendanceService {
     }
   }
 
+  // Get Today's Active Attendance for Multiple Employees (for Live Tracking)
+  static Future<Map<String, AttendanceModel?>> getTodayActiveAttendanceForEmployees(
+      List<String> employeeIds) async {
+    try {
+      if (employeeIds.isEmpty) {
+        return {};
+      }
+
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final employeeIdsParam = employeeIds.join(',');
+      final uri = Uri.parse('$baseUrl/today-active')
+          .replace(queryParameters: {'employeeIds': employeeIdsParam});
+
+      print('📡 Fetching attendance from: $uri');
+
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Request timeout');
+        },
+      );
+
+      print('📊 Attendance API response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('📊 Attendance API response data: ${data['success']}');
+        
+        if (data['success'] == true && data['data'] != null) {
+          final Map<String, dynamic> attendanceMap = data['data'];
+          final Map<String, AttendanceModel?> result = {};
+          
+          attendanceMap.forEach((employeeId, attendanceData) {
+            try {
+              if (attendanceData != null && attendanceData is Map) {
+                // Cast to Map<String, dynamic> for AttendanceModel.fromJson
+                final attendanceJson = Map<String, dynamic>.from(attendanceData as Map);
+                result[employeeId] = AttendanceModel.fromJson(attendanceJson);
+                print('✅ Parsed attendance for $employeeId: ${result[employeeId]?.punchInTime}');
+              } else {
+                result[employeeId] = null;
+                print('⚠️ No attendance data for $employeeId');
+              }
+            } catch (e) {
+              print('❌ Error parsing attendance for $employeeId: $e');
+              result[employeeId] = null;
+            }
+          });
+          
+          // Ensure all requested employee IDs are in the result map
+          for (var id in employeeIds) {
+            if (!result.containsKey(id)) {
+              result[id] = null;
+            }
+          }
+          
+          return result;
+        } else {
+          print('⚠️ API returned success=false or no data');
+        }
+      } else {
+        print('❌ Attendance API error: ${response.statusCode} - ${response.body}');
+      }
+      
+      // Return empty map if no data or error
+      return {for (var id in employeeIds) id: null};
+    } catch (e) {
+      print('❌ Error fetching today active attendance for employees: $e');
+      return {for (var id in employeeIds) id: null};
+    }
+  }
+
   // Get Today's Attendance
   static Future<AttendanceModel?> getTodayAttendance(String employeeId) async {
     try {

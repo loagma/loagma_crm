@@ -99,6 +99,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/tasks/view",
           ),
           SidebarItem(
+            "SR Customer Allotment",
+            Icons.map_outlined, // visually represents allotment/area
+            "/dashboard/admin/customer-allotment",
+          ),
+          SidebarItem(
             "Performance Reports",
             Icons.stacked_line_chart, // great for analytics
             "/dashboard/admin/reports",
@@ -124,6 +129,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Beat Plan Management",
             Icons.route,
             "/dashboard/admin/beat-plans",
+          ),
+          SidebarItem(
+            "Verify Accounts",
+            Icons.verified_user_outlined,
+            "/dashboard/admin/verify-accounts",
           ),
         ];
 
@@ -234,8 +244,15 @@ class RoleDashboardTemplate extends StatelessWidget {
     final color = primaryColor ?? const Color(0xFFD7BE69);
     final dashCards = getDashCards(context);
 
-    return WillPopScope(
-      onWillPop: () => _onBackPressed(context),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final shouldPop = await _onBackPressed(context);
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
       child: Scaffold(
         appBar: _buildAppBar(context, color),
         drawer: EnterpriseSidebar(
