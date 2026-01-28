@@ -225,6 +225,14 @@ final GoRouter appRouter = GoRouter(
           path: 'account/all',
           builder: (_, __) => const AccountListScreen(),
         ),
+        // Admin "Customer List" – shows only telecaller‑approved accounts
+        GoRoute(
+          path: 'customers',
+          builder: (_, __) => const AccountListScreen(
+            onlyApproved: true,
+            appBarTitle: 'Customer List',
+          ),
+        ),
         GoRoute(
           path: 'account/view/:id',
           builder: (context, state) {

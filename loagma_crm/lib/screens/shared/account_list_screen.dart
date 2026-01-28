@@ -10,7 +10,18 @@ import '../../services/network_service.dart';
 import 'edit_account_master_screen.dart';
 
 class AccountListScreen extends StatefulWidget {
-  const AccountListScreen({super.key});
+  /// When true, this screen will show only telecaller‑approved
+  /// accounts by default (used for the Admin "Customer List" panel).
+  final bool onlyApproved;
+
+  /// Optional custom title for the AppBar. Falls back to "Accounts".
+  final String? appBarTitle;
+
+  const AccountListScreen({
+    super.key,
+    this.onlyApproved = false,
+    this.appBarTitle,
+  });
 
   @override
   State<AccountListScreen> createState() => _AccountListScreenState();
@@ -48,6 +59,14 @@ class _AccountListScreenState extends State<AccountListScreen> {
   @override
   void initState() {
     super.initState();
+    // If this screen is opened in "Customer List" mode for Admin,
+    // pre‑apply filters so that only telecaller‑verified AND
+    // admin‑approved customers are shown by default.
+    if (widget.onlyApproved) {
+      _filterIsApproved = true;
+      _filterCustomerStage = 'Customer';
+    }
+
     _scrollController.addListener(_onScroll);
     // Use post frame callback to avoid blocking initial render
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -265,8 +284,12 @@ class _AccountListScreenState extends State<AccountListScreen> {
       page: _currentPage,
       limit: 20,
       search: _searchQuery,
-      customerStage: _filterCustomerStage,
-      isApproved: _filterIsApproved,
+      // For "Customer List", enforce final customer stage = Customer,
+      // otherwise use whatever filter user selected.
+      customerStage: widget.onlyApproved ? 'Customer' : _filterCustomerStage,
+      // If this screen is used as "Customer List" in admin,
+      // hard‑enforce isApproved = true so only verified accounts load.
+      isApproved: widget.onlyApproved ? true : _filterIsApproved,
       startDate: _filterStartDate,
       endDate: _filterEndDate,
       // For non-admin users, if no salesman filter is selected, show only their accounts
@@ -442,47 +465,66 @@ class _AccountListScreenState extends State<AccountListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DropdownButtonFormField<String>(
-                        initialValue: tmpStage,
+                        initialValue: widget.onlyApproved
+                            ? 'Customer'
+                            : tmpStage,
                         decoration: const InputDecoration(
                           labelText: 'Customer Stage',
                         ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('All Stages'),
-                          ),
-                          ...['Lead', 'Prospect', 'Customer'].map(
-                            (stage) => DropdownMenuItem(
-                              value: stage,
-                              child: Text(stage),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setDialogState(() => tmpStage = value),
+                        items: widget.onlyApproved
+                            ? const [
+                                DropdownMenuItem<String>(
+                                  value: 'Customer',
+                                  child: Text('Customer'),
+                                ),
+                              ]
+                            : [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('All Stages'),
+                                ),
+                                ...['Lead', 'Prospect', 'Customer'].map(
+                                  (stage) => DropdownMenuItem(
+                                    value: stage,
+                                    child: Text(stage),
+                                  ),
+                                ),
+                              ],
+                        onChanged: widget.onlyApproved
+                            ? null
+                            : (value) => setDialogState(() => tmpStage = value),
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<bool>(
-                        initialValue: tmpApproved,
+                        initialValue: widget.onlyApproved ? true : tmpApproved,
                         decoration: const InputDecoration(
                           labelText: 'Approval Status',
                         ),
-                        items: const [
-                          DropdownMenuItem<bool>(
-                            value: null,
-                            child: Text('All Status'),
-                          ),
-                          DropdownMenuItem(
-                            value: true,
-                            child: Text('Verified'),
-                          ),
-                          DropdownMenuItem(
-                            value: false,
-                            child: Text('Pending'),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setDialogState(() => tmpApproved = value),
+                        items: widget.onlyApproved
+                            ? const [
+                                DropdownMenuItem<bool>(
+                                  value: true,
+                                  child: Text('Verified'),
+                                ),
+                              ]
+                            : const [
+                                DropdownMenuItem<bool>(
+                                  value: null,
+                                  child: Text('All Status'),
+                                ),
+                                DropdownMenuItem(
+                                  value: true,
+                                  child: Text('Verified'),
+                                ),
+                                DropdownMenuItem(
+                                  value: false,
+                                  child: Text('Pending'),
+                                ),
+                              ],
+                        onChanged: widget.onlyApproved
+                            ? null
+                            : (value) =>
+                                  setDialogState(() => tmpApproved = value),
                       ),
                       const SizedBox(height: 15),
                       DropdownButtonFormField<String>(
@@ -723,8 +765,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      _filterCustomerStage = null;
-                      _filterIsApproved = null;
+                      _filterCustomerStage = widget.onlyApproved
+                          ? 'Customer'
+                          : null;
+                      _filterIsApproved = widget.onlyApproved ? true : null;
                       _filterStartDate = null;
                       _filterEndDate = null;
                       _filterSalesmanId = null;
@@ -831,7 +875,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Accounts'),
+        title: Text(widget.appBarTitle ?? 'Accounts'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
           // Network status indicator

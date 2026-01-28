@@ -92,6 +92,12 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
   @override
   void initState() {
     super.initState();
+    // Telecaller should see pending accounts by default.
+    // Admin should see accounts that have already been verified
+    // by telecallers (status = Verified) when opening this panel.
+    if (_isAdmin) {
+      _statusFilter = _StatusFilter.verified;
+    }
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchControllerChanged);
     _loadUsers();
@@ -900,6 +906,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
       itemCount: _accounts.length,
       itemBuilder: (context, index) {
         final account = _accounts[index];
+        final bool canAdminApprove =
+            _isAdmin && account.isApproved && account.customerStage != 'Customer';
+
         return _AccountCard(
           account: account,
           isNarrow: isNarrow,
@@ -909,11 +918,138 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               if (context.mounted) _loadAccounts();
             });
           },
-          onVerify: account.isApproved ? null : () => _showVerifyDialog(account),
-          onReject: account.isApproved ? null : () => _showRejectDialog(account),
+          onVerify:
+              !_isAdmin && !account.isApproved ? () => _showVerifyDialog(account) : null,
+          onReject:
+              !_isAdmin && !account.isApproved ? () => _showRejectDialog(account) : null,
+          // In admin dashboard, show telecaller verification notes so that
+          // admin can see what telecaller captured during verification.
+          showVerificationNotes: _isAdmin,
+          onApprove: canAdminApprove ? () => _showApproveDialog(account) : null,
         );
       },
     );
+  }
+
+  /// Admin final approval: move telecaller-verified account to "Customer" stage
+  /// so that it appears in the Customer List.
+  Future<void> _approveAccount(Account account) async {
+    try {
+      await AccountService.updateAccount(account.id, {
+        'customerStage': 'Customer',
+      });
+      if (!mounted) return;
+      CustomToast.showSuccess(context, 'Account approved as Customer');
+      _loadAccounts();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to approve account: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Show dialog to admin with telecaller notes before final approval.
+  Future<void> _showApproveDialog(Account account) async {
+    final notes = account.verificationNotes?.trim();
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade700, size: 26),
+              const SizedBox(width: 10),
+              const Text(
+                'Approve as Customer',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  account.businessName ?? account.personName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  account.contactNumber,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Telecaller Notes',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    (notes != null && notes.isNotEmpty)
+                        ? notes
+                        : 'No notes were added by telecaller.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Do you want to approve this account as a final customer?',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Approve'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      await _approveAccount(account);
+    }
   }
 }
 
@@ -924,6 +1060,8 @@ class _AccountCard extends StatelessWidget {
   final VoidCallback onViewDetails;
   final VoidCallback? onVerify;
   final VoidCallback? onReject;
+  final bool showVerificationNotes;
+  final VoidCallback? onApprove; // Admin final approval
 
   const _AccountCard({
     required this.account,
@@ -932,6 +1070,8 @@ class _AccountCard extends StatelessWidget {
     required this.onViewDetails,
     this.onVerify,
     this.onReject,
+    this.showVerificationNotes = false,
+    this.onApprove,
   });
 
   @override
@@ -1059,64 +1199,126 @@ class _AccountCard extends StatelessWidget {
               ),
             ],
 
-            const SizedBox(height: 14),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
+            // Telecaller / Admin verification notes
+            if (showVerificationNotes &&
+                account.verificationNotes != null &&
+                account.verificationNotes!.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 18,
+                    color: Colors.grey.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Telecaller Notes',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          account.verificationNotes!.trim(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+            ] else ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+            ],
 
             /// ================= FOOTER =================
-     /// ================= FOOTER =================
-Row(
-  children: [
-    /// View button (Primary)
-    Expanded(
-      child: OutlinedButton.icon(
-        onPressed: onViewDetails,
-        icon: const Icon(Icons.visibility_outlined, size: 18),
-        label: const Text('View Details'),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-        ),
-      ),
-    ),
+            /// ================= FOOTER =================
+            Row(
+              children: [
+                /// View button (Primary)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onViewDetails,
+                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                    label: const Text('View Details'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
 
-    const SizedBox(width: 8),
+                const SizedBox(width: 8),
 
-    /// Verify
-    if (onVerify != null)
-      IconButton(
-        tooltip: 'Verify',
-        onPressed: onVerify,
-        icon: const Icon(Icons.check_circle_outline),
-        color: Colors.green.shade700,
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.green.shade50,
-        ),
-      ),
+                // Admin: single "Approve" button (final approval)
+                if (onApprove != null) ...[
+                  ElevatedButton.icon(
+                    onPressed: onApprove,
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: const Text('Approve'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else ...[
+                  /// Telecaller: Verify
+                  if (onVerify != null)
+                    IconButton(
+                      tooltip: 'Verify',
+                      onPressed: onVerify,
+                      icon: const Icon(Icons.check_circle_outline),
+                      color: Colors.green.shade700,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.green.shade50,
+                      ),
+                    ),
 
-    /// Reject
-    if (onReject != null)
-      IconButton(
-        tooltip: 'Reject',
-        onPressed: onReject,
-        icon: const Icon(Icons.close),
-        color: Colors.red.shade700,
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.red.shade50,
-        ),
-      ),
+                  /// Telecaller: Reject
+                  if (onReject != null)
+                    IconButton(
+                      tooltip: 'Reject',
+                      onPressed: onReject,
+                      icon: const Icon(Icons.close),
+                      color: Colors.red.shade700,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.red.shade50,
+                      ),
+                    ),
+                ],
 
-    /// Call
-    IconButton(
-      tooltip: 'Call',
-      onPressed: () => onCall(account.contactNumber),
-      icon: const Icon(Icons.call),
-      color: Colors.green.shade700,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.green.shade50,
-      ),
-    ),
-  ],
-),
+                /// Call
+                IconButton(
+                  tooltip: 'Call',
+                  onPressed: () => onCall(account.contactNumber),
+                  icon: const Icon(Icons.call),
+                  color: Colors.green.shade700,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.green.shade50,
+                  ),
+                ),
+              ],
+            ),
 
           ],
         ),

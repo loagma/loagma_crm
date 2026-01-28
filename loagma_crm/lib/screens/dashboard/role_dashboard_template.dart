@@ -88,6 +88,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/account/all",
           ),
           SidebarItem(
+            "Customer List",
+            Icons.people_outline,
+            "/dashboard/admin/customers",
+          ),
+          SidebarItem(
             "SR Area Allotment",
             Icons.map_outlined, // visually represents allotment/area
             "/dashboard/admin/task-assignment",
