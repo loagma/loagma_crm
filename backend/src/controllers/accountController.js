@@ -530,13 +530,16 @@ export const updateAccount = async (req, res) => {
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role?.code || req.body.userRole;
 
-    // Check if user is admin (admins can edit anytime)
-    const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN';
+    // Check if user is admin (admins can edit anytime, any account)
+    const isAdmin =
+      currentUserRole === 'ADMIN' ||
+      currentUserRole === 'SUPER_ADMIN' ||
+      currentUserRole === 'admin';
 
     // If not admin, check 2-hour edit window for the creator
     if (!isAdmin) {
       const isCreator = existingAccount.createdById === currentUserId;
-      
+
       if (isCreator) {
         // Check if account was created within the last 2 hours
         const createdAt = new Date(existingAccount.createdAt);
@@ -547,7 +550,8 @@ export const updateAccount = async (req, res) => {
         if (timeDiff > twoHoursInMs) {
           return res.status(403).json({
             success: false,
-            message: 'Edit window expired. You can only edit accounts within 2 hours of creation.',
+            message:
+              'Edit window expired. You can only edit accounts within 2 hours of creation.',
             editWindowExpired: true
           });
         }
