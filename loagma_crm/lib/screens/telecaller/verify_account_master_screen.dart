@@ -252,6 +252,51 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
     }
   }
 
+  Future<void> _confirmAndCall(String phoneNumber) async {
+    if (!mounted) return;
+    final shouldCall = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.phone, color: Colors.green.shade700, size: 24),
+            const SizedBox(width: 10),
+            const Text(
+              'Confirm Call',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Text(
+          'Do you want to call $phoneNumber?',
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Call', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldCall == true && mounted) {
+      await _launchDialer(phoneNumber);
+    }
+  }
+
   Future<void> _showVerifyDialog(Account account) async {
     final notesController = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -720,186 +765,7 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
     );
   }
 
-  Widget _buildStatusFilter() {
-    final isFilterActive = _statusFilter != _StatusFilter.all;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: isFilterActive ? const Color(0xFFD7BE69).withOpacity(0.1) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isFilterActive ? const Color(0xFFD7BE69) : Colors.grey.shade300,
-          width: isFilterActive ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: DropdownButtonFormField<_StatusFilter>(
-        value: _statusFilter,
-        decoration: InputDecoration(
-          labelText: 'Status',
-          labelStyle: TextStyle(
-            color: isFilterActive ? const Color(0xFFD7BE69) : Colors.grey.shade700,
-            fontSize: 13,
-            fontWeight: isFilterActive ? FontWeight.w600 : FontWeight.normal,
-          ),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-        items: const [
-          DropdownMenuItem(value: _StatusFilter.all, child: Text('All', style: TextStyle(fontSize: 14))),
-          DropdownMenuItem(value: _StatusFilter.pending, child: Text('Pending', style: TextStyle(fontSize: 14))),
-          DropdownMenuItem(value: _StatusFilter.verified, child: Text('Verified', style: TextStyle(fontSize: 14))),
-        ],
-        onChanged: (value) {
-          if (value != null) {
-            setState(() {
-              _statusFilter = value;
-              _loadAccounts();
-            });
-          }
-        },
-        style: TextStyle(
-          fontSize: 14,
-          color: isFilterActive ? const Color(0xFFD7BE69) : Colors.black87,
-          fontWeight: FontWeight.w500,
-        ),
-        isExpanded: true,
-        icon: Icon(
-          Icons.keyboard_arrow_down,
-          color: isFilterActive ? const Color(0xFFD7BE69) : Colors.grey.shade600,
-        ),
-        dropdownColor: Colors.white,
-      ),
-    );
-  }
-
-  Widget _buildSalesmanDropdown(bool isNarrow) {
-    final selectedSalesman = _salesmanId != null
-        ? _users.firstWhere(
-            (u) => u['id'] == _salesmanId,
-            orElse: () => {'name': 'Unknown'},
-          )['name'] as String?
-        : null;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: _salesmanId != null ? const Color(0xFFD7BE69).withOpacity(0.1) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: _salesmanId != null ? const Color(0xFFD7BE69) : Colors.grey.shade300,
-          width: _salesmanId != null ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: DropdownButtonFormField<String>(
-        value: _salesmanId,
-        decoration: InputDecoration(
-          labelText: 'Salesman',
-          hintText: selectedSalesman ?? 'All',
-          labelStyle: TextStyle(
-            color: _salesmanId != null ? const Color(0xFFD7BE69) : Colors.grey.shade700,
-            fontSize: 13,
-            fontWeight: _salesmanId != null ? FontWeight.w600 : FontWeight.normal,
-          ),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('All Salesmen', style: TextStyle(fontSize: 14))),
-          ..._users.map((u) {
-            final id = u['id'] as String?;
-            final name = u['name'] as String? ?? 'Unknown';
-            return DropdownMenuItem(
-              value: id,
-              child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            );
-          }),
-        ],
-        onChanged: (v) {
-          setState(() {
-            _salesmanId = v;
-            _loadAccounts();
-          });
-        },
-        style: TextStyle(
-          fontSize: 14,
-          color: _salesmanId != null ? const Color(0xFFD7BE69) : Colors.black87,
-          fontWeight: FontWeight.w500,
-        ),
-        isExpanded: true,
-        icon: Icon(
-          Icons.keyboard_arrow_down,
-          color: _salesmanId != null ? const Color(0xFFD7BE69) : Colors.grey.shade600,
-        ),
-        dropdownColor: Colors.white,
-      ),
-    );
-  }
-
-  Widget _buildTelecallerDropdown(bool isNarrow) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: DropdownButtonFormField<String>(
-        value: _telecallerId,
-        decoration: InputDecoration(
-          labelText: 'Verified by',
-          labelStyle: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('All', style: TextStyle(fontSize: 14))),
-          ..._users.map((u) {
-            final id = u['id'] as String?;
-            final name = u['name'] as String? ?? 'Unknown';
-            return DropdownMenuItem(value: id, child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)));
-          }),
-        ],
-        onChanged: (v) {
-          setState(() {
-            _telecallerId = v;
-            _loadAccounts();
-          });
-        },
-        style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
-        isExpanded: true,
-        icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
-        dropdownColor: Colors.white,
-      ),
-    );
-  }
+  // (old DropdownButtonFormField-based filter widgets removed in favor of `_FilterDropdown`)
 
   Widget _buildEmptyState() {
     final hasActiveFilters = _salesmanId != null || 
@@ -1037,7 +903,7 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
         return _AccountCard(
           account: account,
           isNarrow: isNarrow,
-          onCall: _launchDialer,
+          onCall: _confirmAndCall,
           onViewDetails: () {
             context.push('/account/${account.id}').then((_) {
               if (context.mounted) _loadAccounts();
