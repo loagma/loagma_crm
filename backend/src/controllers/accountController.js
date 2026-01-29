@@ -526,43 +526,13 @@ export const updateAccount = async (req, res) => {
       });
     }
 
-    // Get current user info from request
-    const currentUserId = req.user?.id;
-    const currentUserRole = req.user?.role?.code || req.body.userRole;
-
-    // Check if user is admin (admins can edit anytime, any account)
-    const isAdmin =
-      currentUserRole === 'ADMIN' ||
-      currentUserRole === 'SUPER_ADMIN' ||
-      currentUserRole === 'admin';
-
-    // If not admin, check 2-hour edit window for the creator
-    if (!isAdmin) {
-      const isCreator = existingAccount.createdById === currentUserId;
-
-      if (isCreator) {
-        // Check if account was created within the last 2 hours
-        const createdAt = new Date(existingAccount.createdAt);
-        const now = new Date();
-        const twoHoursInMs = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-        const timeDiff = now.getTime() - createdAt.getTime();
-
-        if (timeDiff > twoHoursInMs) {
-          return res.status(403).json({
-            success: false,
-            message:
-              'Edit window expired. You can only edit accounts within 2 hours of creation.',
-            editWindowExpired: true
-          });
-        }
-      } else {
-        // Non-admin trying to edit someone else's account
-        return res.status(403).json({
-          success: false,
-          message: 'You do not have permission to edit this account'
-        });
-      }
-    }
+    // NOTE: Previous version restricted edits to creator within a 2‑hour window
+    // and blocked other users with "You do not have permission to edit this account".
+    // For the CRM flows (telecaller verify + admin approve + customer list),
+    // we now allow any authenticated user who reaches this controller to update.
+    //
+    // If you ever need fine‑grained permissions again, reintroduce checks here,
+    // but make sure admin roles are always allowed to bypass them.
 
     // If updating contact number, check for duplicates
     if (contactNumber && contactNumber !== existingAccount.contactNumber) {

@@ -88,7 +88,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/account/all",
           ),
           SidebarItem(
-            "Customer List",
+            "SR Customer List",
             Icons.people_outline,
             "/dashboard/admin/customers",
           ),
@@ -103,11 +103,7 @@ class RoleDashboardTemplate extends StatelessWidget {
                 .route_outlined, // route-based visualization for assigned tasks
             "/dashboard/admin/tasks/view",
           ),
-          SidebarItem(
-            "SR Customer Allotment",
-            Icons.map_outlined, // visually represents allotment/area
-            "/dashboard/admin/customer-allotment",
-          ),
+        
           SidebarItem(
             "Performance Reports",
             Icons.stacked_line_chart, // great for analytics

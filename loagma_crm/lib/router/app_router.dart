@@ -21,7 +21,6 @@ import '../screens/admin/modern_task_assignment_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
 import '../screens/admin/approval_requests_screen.dart';
 import '../screens/admin/live_tracking_screen.dart';
-import '../screens/admin/customer_allotment_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -194,10 +193,6 @@ final GoRouter appRouter = GoRouter(
           path: 'tracking',
           builder: (_, __) => const LiveTrackingScreen(),
         ),
-        GoRoute(
-          path: 'customer-allotment',
-          builder: (_, __) => const CustomerAllotmentScreen(),
-        ),
 
         // Beat Planning routes (Admin)
         GoRoute(
@@ -230,7 +225,7 @@ final GoRouter appRouter = GoRouter(
           path: 'customers',
           builder: (_, __) => const AccountListScreen(
             onlyApproved: true,
-            appBarTitle: 'Customer List',
+            appBarTitle: 'SR Customer List',
           ),
         ),
         GoRoute(
@@ -323,12 +318,20 @@ final GoRouter appRouter = GoRouter(
                     '• Each verified account stores who verified it (telecaller), when, and optional notes.\n'
                     '• Use “Verify Accounts” → filter “Verified by” (admin) to see which telecaller verified which accounts.\n'
                     '• Account details show “Verified by” and “Verification notes”.',
-                    style: TextStyle(fontSize: 15, height: 1.5, color: Colors.grey.shade700),
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(
                     'Future call history could log each call (account, telecaller, time, duration, outcome) in a separate table for full audit and reporting.',
-                    style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ],
               ),
