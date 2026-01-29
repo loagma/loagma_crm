@@ -120,6 +120,8 @@ class AccountService {
     int limit = 50,
     String? areaId,
     String? assignedToId,
+    /// Day filter for salesman allotment: 1=Mon .. 7=Sun. Backend filters by assignedDays.
+    int? assignedDay,
     String? customerStage,
     String? funnelStage,
     bool? isApproved,
@@ -148,6 +150,7 @@ class AccountService {
         'limit': limit.toString(),
         if (areaId != null) 'areaId': areaId,
         if (assignedToId != null) 'assignedToId': assignedToId,
+        if (assignedDay != null && assignedDay >= 1 && assignedDay <= 7) 'assignedDay': assignedDay.toString(),
         if (customerStage != null) 'customerStage': customerStage,
         if (funnelStage != null) 'funnelStage': funnelStage,
         if (isApproved != null) 'isApproved': isApproved.toString(),
@@ -351,16 +354,22 @@ class AccountService {
   static Future<int> bulkAssignAccounts({
     required List<String> accountIds,
     required String assignedToId,
+    /// Beat days: 1=Mon .. 7=Sun. Sent to backend for day-wise salesman list.
+    List<int>? assignedDays,
   }) async {
     try {
       final headers = await _getHeaders();
+      final body = <String, dynamic>{
+        'accountIds': accountIds,
+        'assignedToId': assignedToId,
+      };
+      if (assignedDays != null && assignedDays.isNotEmpty) {
+        body['assignedDays'] = assignedDays;
+      }
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/bulk/assign'),
         headers: headers,
-        body: json.encode({
-          'accountIds': accountIds,
-          'assignedToId': assignedToId,
-        }),
+        body: json.encode(body),
       );
 
       if (response.statusCode == 200) {

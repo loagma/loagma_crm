@@ -44,6 +44,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
   bool _hasNetworkError = false;
   String? _lastErrorMessage;
 
+  // Selection mode for allotment (admin only)
+  bool _selectionMode = false;
+  final Set<String> _selectedAccountIds = {};
+
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
@@ -55,6 +59,16 @@ class _AccountListScreenState extends State<AccountListScreen> {
   }
 
   String? get _currentUserId => UserService.currentUserId;
+
+  bool get _isAdmin => UserService.currentRole?.toLowerCase() == 'admin';
+
+  /// Salesmen only (for allotment dropdown)
+  List<Map<String, dynamic>> get _salesmenForAllotment {
+    return _salesmen.where((u) {
+      final role = (u['role'] ?? u['roleId'] ?? '').toString().toLowerCase();
+      return role.contains('salesman') || role.contains('sales');
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -871,6 +885,313 @@ class _AccountListScreenState extends State<AccountListScreen> {
     );
   }
 
+  static const List<String> _weekDayLabels = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  /// Step 1: Select salesman, then Next.
+  Future<void> _showAllotToSalesmanDialog() async {
+    if (_selectedAccountIds.isEmpty) return;
+
+    String? selectedSalesmanId;
+    String? selectedSalesmanName;
+    final salesmenList = _salesmenForAllotment;
+
+    if (!mounted) return;
+    final step1 = await showDialog<Map<String, dynamic>?>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.person_add, color: Color(0xFFD7BE69), size: 26),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Allot customers to salesman',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '${_selectedAccountIds.length} account(s) selected. First select the salesman.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Salesman',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: selectedSalesmanId,
+                      decoration: InputDecoration(
+                        hintText: 'Select salesman',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('-- Select salesman --'),
+                        ),
+                        ...salesmenList.map((u) {
+                          final id = u['id'] ?? u['_id'];
+                          final name = u['name'] ?? 'Unknown';
+                          return DropdownMenuItem<String>(
+                            value: id?.toString(),
+                            child: Text(name.toString()),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) {
+                        setDialogState(() {
+                          selectedSalesmanId = v;
+                          if (v != null) {
+                            Map<String, dynamic>? found;
+                            for (final e in salesmenList) {
+                              if ((e['id'] ?? e['_id']).toString() == v) {
+                                found = e;
+                                break;
+                              }
+                            }
+                            selectedSalesmanName =
+                                found?['name']?.toString() ?? 'Salesman';
+                          } else {
+                            selectedSalesmanName = null;
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: selectedSalesmanId == null
+                      ? null
+                      : () => Navigator.of(ctx).pop({
+                          'salesmanId': selectedSalesmanId,
+                          'salesmanName': selectedSalesmanName ?? 'Salesman',
+                        }),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Color(0xFFD7BE69),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Next'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (step1 == null || !mounted) return;
+    final salesmanId = step1['salesmanId'] as String?;
+    final salesmanName = step1['salesmanName'] as String?;
+    if (salesmanId == null) return;
+
+    // Step 2: Beat plan – select week days, then Allot.
+    await _showBeatPlanSelectDaysDialog(
+      salesmanId: salesmanId,
+      salesmanName: salesmanName ?? 'Salesman',
+    );
+  }
+
+  /// Step 2: Beat plan screen – show all week days, select days, then Allot.
+  Future<void> _showBeatPlanSelectDaysDialog({
+    required String salesmanId,
+    required String salesmanName,
+  }) async {
+    final selectedDays = <int>{};
+
+    if (!mounted) return;
+    final result = await showDialog<Set<int>?>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.calendar_view_week,
+                    color: Color(0xFFD7BE69),
+                    size: 26,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Beat plan – Select days',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Allotment for $salesmanName. Select the week day(s) for this beat plan.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ...List.generate(7, (index) {
+                      final dayIndex = index + 1;
+                      final label = _weekDayLabels[index];
+                      final isSelected = selectedDays.contains(dayIndex);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: isSelected
+                              ? Color(0xFFD7BE69).withValues(alpha: 0.15)
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            onTap: () {
+                              setDialogState(() {
+                                if (isSelected) {
+                                  selectedDays.remove(dayIndex);
+                                } else {
+                                  selectedDays.add(dayIndex);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isSelected
+                                        ? Icons.check_circle
+                                        : Icons.radio_button_unchecked,
+                                    color: isSelected
+                                        ? Color(0xFFD7BE69)
+                                        : Colors.grey.shade600,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: isSelected
+                                          ? Color(0xFF8B7355)
+                                          : Colors.grey.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: const Text('Back'),
+                ),
+                FilledButton(
+                  onPressed: selectedDays.isEmpty
+                      ? null
+                      : () =>
+                            Navigator.of(ctx).pop(Set<int>.from(selectedDays)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Color(0xFFD7BE69),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Allot'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+    if (result.isEmpty) return;
+
+    try {
+      final count = await AccountService.bulkAssignAccounts(
+        accountIds: _selectedAccountIds.toList(),
+        assignedToId: salesmanId,
+        assignedDays: result.toList(),
+      );
+      if (!mounted) return;
+      final daysStr = result.toList()..sort();
+      final dayLabels = daysStr.map((d) => _weekDayLabels[d - 1]).join(', ');
+      _showSuccess(
+        '$count customer(s) allotted to $salesmanName for: $dayLabels',
+      );
+      setState(() {
+        _selectionMode = false;
+        _selectedAccountIds.clear();
+      });
+      _refreshAccounts();
+    } catch (e) {
+      if (mounted) _showError('Failed to allot: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -912,6 +1233,39 @@ class _AccountListScreenState extends State<AccountListScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _refreshAccounts,
           ),
+          if (_isAdmin && !_selectionMode)
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _selectionMode = true;
+                _selectedAccountIds.clear();
+              }),
+              icon: const Icon(Icons.checklist_rtl, size: 20),
+              label: const Text('Select'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+            ),
+          if (_selectionMode) ...[
+            TextButton(
+              onPressed: () => setState(() {
+                _selectionMode = false;
+                _selectedAccountIds.clear();
+              }),
+              child: const Text('Cancel'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+            ),
+            TextButton.icon(
+              onPressed: _selectedAccountIds.isEmpty
+                  ? null
+                  : _showAllotToSalesmanDialog,
+              icon: const Icon(Icons.person_add, size: 20),
+              label: Text('Allot (${_selectedAccountIds.length})'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: _selectedAccountIds.isEmpty
+                    ? Colors.grey
+                    : Colors.green.shade700,
+              ),
+            ),
+          ],
         ],
       ),
       body: Column(
@@ -992,6 +1346,41 @@ class _AccountListScreenState extends State<AccountListScreen> {
                         fontSize: 12,
                         color: Colors.red,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Selection mode banner (admin allotment)
+          if (_selectionMode && _isAdmin)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 15),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD7BE69).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFD7BE69).withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.checklist_rtl,
+                    color: Color(0xFFD7BE69),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Select accounts, then tap Allot to assign to a salesman (day-wise).',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -1084,15 +1473,17 @@ class _AccountListScreenState extends State<AccountListScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.push("/dashboard/admin/account/master");
-        },
-        backgroundColor: const Color(0xFFD7BE69),
-        tooltip: "Create New Account",
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton(
+              onPressed: () {
+                context.push("/dashboard/admin/account/master");
+              },
+              backgroundColor: const Color(0xFFD7BE69),
+              tooltip: "Create New Account",
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
@@ -1162,12 +1553,25 @@ class _AccountListScreenState extends State<AccountListScreen> {
   }
 
   Widget _buildAccountCard(Account account) {
+    final isSelected = _selectedAccountIds.contains(account.id);
     return Card(
       margin: const EdgeInsets.only(bottom: 15),
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _navigateToDetail(account.id),
+        onTap: () {
+          if (_selectionMode && _isAdmin) {
+            setState(() {
+              if (isSelected) {
+                _selectedAccountIds.remove(account.id);
+              } else {
+                _selectedAccountIds.add(account.id);
+              }
+            });
+          } else {
+            _navigateToDetail(account.id);
+          }
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(15),
@@ -1176,6 +1580,23 @@ class _AccountListScreenState extends State<AccountListScreen> {
             children: [
               Row(
                 children: [
+                  if (_selectionMode && _isAdmin)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _selectedAccountIds.add(account.id);
+                            } else {
+                              _selectedAccountIds.remove(account.id);
+                            }
+                          });
+                        },
+                        activeColor: const Color(0xFFD7BE69),
+                      ),
+                    ),
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(

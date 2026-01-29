@@ -24,6 +24,8 @@ class Account {
   final double? latitude;
   final double? longitude;
   final String? assignedToId;
+  /// Beat days: 1=Mon .. 7=Sun (from admin allotment).
+  final List<int>? assignedDays;
   final String? createdById;
   final String? approvedById;
   final DateTime? approvedAt;
@@ -66,6 +68,7 @@ class Account {
     this.latitude,
     this.longitude,
     this.assignedToId,
+    this.assignedDays,
     this.createdById,
     this.approvedById,
     this.approvedAt,
@@ -161,6 +164,7 @@ class Account {
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
       if (assignedToId != null) 'assignedToId': assignedToId,
+      if (assignedDays != null) 'assignedDays': assignedDays,
       if (createdById != null) 'createdById': createdById,
       if (areaId != null) 'areaId': areaId,
     };

@@ -11,6 +11,7 @@ export const getAllAccounts = async (req, res) => {
     const {
       areaId,
       assignedToId,
+      assignedDay,
       customerStage,
       funnelStage,
       isApproved,
@@ -27,6 +28,11 @@ export const getAllAccounts = async (req, res) => {
 
     if (areaId) where.areaId = parseInt(areaId);
     if (assignedToId) where.assignedToId = assignedToId;
+    // Day-wise filter for salesman: 1=Mon .. 7=Sun
+    if (assignedDay !== undefined && assignedDay !== '' && assignedDay !== null) {
+      const day = parseInt(assignedDay, 10);
+      if (day >= 1 && day <= 7) where.assignedDays = { has: day };
+    }
     if (customerStage) where.customerStage = customerStage;
     if (funnelStage) where.funnelStage = funnelStage;
     if (isApproved !== undefined) where.isApproved = isApproved === 'true';
@@ -996,7 +1002,7 @@ export const getAccountStats = async (req, res) => {
 
 export const bulkAssignAccounts = async (req, res) => {
   try {
-    const { accountIds, assignedToId } = req.body;
+    const { accountIds, assignedToId, assignedDays } = req.body;
 
     if (!accountIds || !Array.isArray(accountIds) || accountIds.length === 0) {
       return res.status(400).json({
@@ -1005,13 +1011,19 @@ export const bulkAssignAccounts = async (req, res) => {
       });
     }
 
+    const data = { assignedToId };
+    if (assignedDays && Array.isArray(assignedDays) && assignedDays.length > 0) {
+      const days = assignedDays.map((d) => parseInt(d, 10)).filter((d) => d >= 1 && d <= 7);
+      data.assignedDays = [...new Set(days)];
+    } else {
+      data.assignedDays = [];
+    }
+
     const result = await prisma.account.updateMany({
       where: {
         id: { in: accountIds }
       },
-      data: {
-        assignedToId
-      }
+      data
     });
 
     res.json({

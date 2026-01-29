@@ -208,6 +208,7 @@ model Account {
   
   // Assignment and approval
   assignedToId          String?
+  assignedDays          Int[]    @default([]) // 1=Mon .. 7=Sun: beat days for this salesman
   createdById           String?
   approvedById          String?
   approvedAt            DateTime?

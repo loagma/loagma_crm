@@ -33,6 +33,7 @@ import '../screens/shared/employee_list_screen.dart';
 // Salesman screens
 import '../screens/salesman/salesman_accounts_screen.dart';
 import '../screens/salesman/salesman_assignments_screen.dart';
+import '../screens/salesman/salesman_customer_allotment_screen.dart';
 import '../screens/salesman/salesman_map_screen.dart';
 import '../screens/salesman/enhanced_punch_screen.dart';
 import '../screens/salesman/leave_management_screen.dart';
@@ -248,6 +249,10 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'accounts',
           builder: (_, __) => const SalesmanAccountsScreen(),
+        ),
+        GoRoute(
+          path: 'customer-allotment',
+          builder: (_, __) => const SalesmanCustomerAllotmentScreen(),
         ),
         GoRoute(
           path: 'assignments',
