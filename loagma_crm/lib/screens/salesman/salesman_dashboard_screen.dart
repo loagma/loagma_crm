@@ -10,10 +10,13 @@ import '../../services/task_assignment_service.dart';
 import '../../services/leave_service.dart';
 import '../../models/attendance_model.dart';
 import '../../models/leave_model.dart';
+import '../../models/account_model.dart';
 import '../../widgets/attendance_status_widget.dart';
 import '../../widgets/notification_bell.dart';
 import '../../utils/time_formatting_utils.dart';
+import '../../services/account_service.dart';
 import 'sr_area_allotment_screen.dart';
+import 'salesman_customer_allotment_screen.dart';
 import 'enhanced_salesman_map_screen.dart';
 
 class SalesmanDashboardScreen extends StatefulWidget {
@@ -49,6 +52,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   // Leave statistics
   LeaveStatistics? leaveStatistics;
   bool isLoadingLeaveStats = false;
+
+  // Allotted customers (assigned to this salesman by admin)
+  int allottedCustomersCount = 0;
+  List<Map<String, dynamic>> allottedCustomers = [];
 
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -270,6 +277,37 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
           areaAssignmentsData['assignments'] as List<dynamic>? ?? [];
       print('   Area Assignments: ${areaAssignmentsList.length}');
 
+      // Fetch allotted customers list and count (assigned to this salesman by admin)
+      int allottedCount = 0;
+      List<Map<String, dynamic>> allottedList = [];
+      try {
+        final allottedResult = await AccountService.fetchAccounts(
+          assignedToId: userId,
+          limit: 10,
+          page: 1,
+        );
+        final pagination = allottedResult['pagination'];
+        if (pagination is Map && pagination['total'] != null) {
+          allottedCount = (pagination['total'] as num).toInt();
+        }
+        final accounts = allottedResult['accounts'] as List<dynamic>? ?? [];
+        for (final a in accounts) {
+          if (a is Account) {
+            allottedList.add({
+              'id': a.id,
+              'personName': a.personName,
+              'businessName': a.businessName,
+              'contactNumber': a.contactNumber,
+              'isApproved': a.isApproved,
+              'createdAt': a.createdAt.toIso8601String(),
+            });
+          }
+        }
+        print('   Allotted Customers: $allottedCount (showing ${allottedList.length} on dashboard)');
+      } catch (e) {
+        print('   Allotted customers fetch failed: $e');
+      }
+
       setState(() {
         accountStats = accountStatsData['data'] ?? {};
         assignments = List<Map<String, dynamic>>.from(
@@ -280,6 +318,8 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
           accountsData['data'] ?? [],
         );
         customerStageBreakdown = stageBreakdown;
+        allottedCustomersCount = allottedCount;
+        allottedCustomers = allottedList;
       });
 
       _animationController.forward();
@@ -614,6 +654,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                       if (areaAssignments.isNotEmpty)
                         _buildAreaAllotmentsSection(),
 
+                      // Allotted Customers Section (customers assigned by admin)
+                      if (allottedCustomersCount > 0)
+                        _buildAllottedCustomersSection(),
+
                       // Recent Accounts with Pagination
                       if (recentAccounts.isNotEmpty)
                         _buildRecentAccountsSection(),
@@ -631,9 +675,10 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
     String title,
     String value,
     IconData icon,
-    Color color,
-  ) {
-    return Card(
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    final card = Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -658,6 +703,53 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
             ),
           ],
         ),
+      ),
+    );
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: card,
+      );
+    }
+    return card;
+  }
+
+  Widget _buildAllottedCustomersSection() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Allotted Customers',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const SalesmanCustomerAllotmentScreen(),
+                  ),
+                ),
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Customers allotted to you by admin (day-wise). Tap View All to see the full list.',
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+          if (allottedCustomers.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...allottedCustomers.map((customer) => _buildRecentAccountCard(customer)),
+          ],
+        ],
       ),
     );
   }
@@ -1037,6 +1129,18 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 () => context.go('/dashboard/salesman/accounts'),
               ),
               _buildActionCard(
+                'Allotted Customers',
+                Icons.people_alt_outlined,
+                const Color(0xFF6B8E23),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const SalesmanCustomerAllotmentScreen(),
+                  ),
+                ),
+              ),
+              _buildActionCard(
                 'Today\'s Beat Plan',
                 Icons.route,
                 primaryColor,
@@ -1075,12 +1179,6 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 Icons.event_available,
                 Colors.indigo,
                 () => context.go('/dashboard/salesman/leaves/status'),
-              ),
-              _buildActionCard(
-                'Punch',
-                Icons.punch_clock,
-                const Color.fromARGB(255, 206, 52, 25),
-                () => context.go('/dashboard/salesman/punch'),
               ),
             ],
           ),

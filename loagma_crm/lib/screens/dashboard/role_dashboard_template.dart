@@ -162,7 +162,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/salesman/accounts",
           ),
           SidebarItem(
-            "Customer list allotment",
+            "Allotted Customers",
             Icons.people_alt_outlined,
             "/dashboard/salesman/customer-allotment",
           ),
