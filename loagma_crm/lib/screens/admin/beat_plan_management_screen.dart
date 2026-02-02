@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/beat_plan_model.dart';
 import '../../services/beat_plan_service.dart';
+import 'salesman_allotment_screen.dart';
 import 'generate_beat_plan_screen.dart';
 import 'beat_plan_details_screen.dart';
 
@@ -156,23 +157,22 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final result = await Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const GenerateBeatPlanScreen(),
+              builder: (context) => const SalesmanAllotmentScreen(),
             ),
           );
-
-          if (result == true) {
-            _loadBeatPlans(refresh: true);
-          }
+          _loadBeatPlans(refresh: true);
         },
         backgroundColor: primaryColor,
-        elevation: 2,
-        mini: true, // 👈 smaller size
-        child: const Icon(Icons.add, color: Colors.white, size: 20),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Create Beat Plan',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -265,9 +265,55 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
-        itemCount: _beatPlans.length + (_hasMoreData ? 1 : 0),
+        itemCount: 1 + _beatPlans.length + (_hasMoreData ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index == _beatPlans.length) {
+          if (index == 0) {
+            return Card(
+              color: primaryColor.withValues(alpha: 0.08),
+              margin: const EdgeInsets.only(bottom: 16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'How to create a beat plan',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildStep(1, 'Account List', 'Select accounts → Allot → Pick salesman'),
+                    _buildStep(2, 'Salesman Allotment', 'See who has which customers'),
+                    _buildStep(3, 'Create Beat Plan', 'Auto distribute → Save'),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SalesmanAllotmentScreen(),
+                            ),
+                          ).then((_) => _loadBeatPlans(refresh: true));
+                        },
+                        icon: const Icon(Icons.add, size: 20),
+                        label: const Text('Start — Create Beat Plan'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (index == _beatPlans.length + 1) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
@@ -275,7 +321,7 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
               ),
             );
           }
-          return _buildBeatPlanCard(_beatPlans[index]);
+          return _buildBeatPlanCard(_beatPlans[index - 1]);
         },
       ),
     );
@@ -494,6 +540,56 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
                       foregroundColor: Colors.red,
                       elevation: 0,
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep(int num, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: primaryColor,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '$num',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
                   ),
                 ),
               ],

@@ -42,10 +42,9 @@ async function main() {
   // Seed default roles
   const roles = [
     { id: 'admin', name: 'Admin' },
-    { id: 'nsm', name: 'NSM' },
-    { id: 'rsm', name: 'RSM' },
-    { id: 'asm', name: 'ASM' },
-    { id: 'tso', name: 'TSO' },
+    { id: 'manager', name: 'Manager' },
+    { id: 'salesman', name: 'Salesman' },
+    { id: 'telecaller', name: 'Telecaller' },
   ];
 
   for (const role of roles) {

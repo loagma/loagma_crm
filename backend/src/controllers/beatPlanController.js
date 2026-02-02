@@ -65,6 +65,56 @@ export const generateWeeklyBeatPlan = async (req, res) => {
 };
 
 /**
+ * @desc Generate beat plan from allotted customers (day-wise assignment)
+ * @route POST /beat-plans/generate-from-customers
+ * @access Admin only
+ */
+export const generateFromCustomers = async (req, res) => {
+    try {
+        const { salesmanId, weekStartDate, dayAssignments } = req.body;
+        const generatedBy = req.user.id;
+
+        if (!salesmanId || !weekStartDate || !dayAssignments || typeof dayAssignments !== 'object') {
+            return res.status(400).json({
+                success: false,
+                message: 'salesmanId, weekStartDate, and dayAssignments object are required'
+            });
+        }
+
+        const result = await BeatPlanService.generateFromCustomers(
+            salesmanId,
+            new Date(weekStartDate),
+            dayAssignments,
+            generatedBy
+        );
+
+        await NotificationService.createNotification({
+            title: 'New Beat Plan (Customers)',
+            message: `Your weekly beat plan has been created for ${new Date(weekStartDate).toLocaleDateString()}`,
+            type: 'beat_plan',
+            priority: 'normal',
+            targetUserId: salesmanId,
+            data: {
+                weeklyBeatId: result.weeklyPlan.id,
+                totalCustomers: result.totalAreas
+            }
+        });
+
+        res.json({
+            success: true,
+            message: 'Beat plan created from customers successfully',
+            data: result
+        });
+    } catch (error) {
+        console.error('❌ Error generating beat plan from customers:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to create beat plan'
+        });
+    }
+};
+
+/**
  * @desc Get today's beat plan for salesman
  * @route GET /beat-plans/today
  * @access Salesman only

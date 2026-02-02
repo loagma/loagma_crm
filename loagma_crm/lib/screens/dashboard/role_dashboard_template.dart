@@ -4,6 +4,7 @@ import '../../services/user_service.dart';
 import '../../widgets/enterprise_sidebar.dart';
 import '../../widgets/notification_bell.dart';
 import '../salesman/salesman_dashboard_screen.dart';
+import '../manager/manager_dashboard_screen.dart';
 
 class RoleDashboardTemplate extends StatelessWidget {
   final String roleName;
@@ -87,11 +88,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.folder_special_outlined, // cleaner than list_alt
             "/dashboard/admin/account/all",
           ),
-          SidebarItem(
-            "SR Customer List",
-            Icons.people_outline,
-            "/dashboard/admin/customers",
-          ),
+          
           SidebarItem(
             "SR Area Allotment",
             Icons.map_outlined, // visually represents allotment/area
@@ -127,7 +124,12 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/admin/leaves",
           ),
           SidebarItem(
-            "Beat Plan Management",
+            "Beat Plan (Create)",
+            Icons.calendar_view_week,
+            "/dashboard/admin/salesman-allotment",
+          ),
+          SidebarItem(
+            "Beat Plans (View)",
             Icons.route,
             "/dashboard/admin/beat-plans",
           ),
@@ -135,6 +137,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Verify Accounts",
             Icons.verified_user_outlined,
             "/dashboard/admin/verify-accounts",
+          ),
+          SidebarItem(
+            "SR Customer List",
+            Icons.people_outline,
+            "/dashboard/admin/customers",
           ),
         ];
 
@@ -217,6 +224,31 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Call History",
             Icons.call_outlined,
             "/dashboard/telecaller/call-history",
+          ),
+        ];
+
+      case "manager":
+        return [
+          SidebarItem("Dashboard", Icons.dashboard, "/dashboard/manager"),
+          SidebarItem(
+            "Reminder Calls",
+            Icons.phone_callback_outlined,
+            "/dashboard/manager/reminder-calls",
+          ),
+          SidebarItem(
+            "Create Task",
+            Icons.task_alt_outlined,
+            "/dashboard/manager/create-task",
+          ),
+          SidebarItem(
+            "View Accounts",
+            Icons.people_outline,
+            "/dashboard/manager/account/all",
+          ),
+          SidebarItem(
+            "Task Allotments",
+            Icons.route_outlined,
+            "/dashboard/manager/tasks/view",
           ),
         ];
 
@@ -315,9 +347,11 @@ class RoleDashboardTemplate extends StatelessWidget {
         ],
       ),
       actions: [
-        // Show notification bell only for admin role
+        // Show notification bell for admin and manager
         if (roleName.toLowerCase() == 'admin')
           const NotificationBell(role: 'admin'),
+        if (roleName.toLowerCase() == 'manager')
+          const NotificationBell(role: 'manager'),
         IconButton(
           icon: const Icon(Icons.logout),
           tooltip: "Logout",
@@ -363,6 +397,10 @@ class RoleDashboardTemplate extends StatelessWidget {
     // Show custom dashboard for salesman
     if (roleName.toLowerCase() == 'salesman') {
       return const SalesmanDashboardScreen();
+    }
+    // Show custom dashboard for manager
+    if (roleName.toLowerCase() == 'manager') {
+      return const ManagerDashboardScreen();
     }
 
     return Column(

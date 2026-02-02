@@ -113,6 +113,11 @@ class Account {
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
       assignedToId: json['assignedToId'],
+      assignedDays: json['assignedDays'] != null
+          ? List<int>.from(
+              (json['assignedDays'] as List).map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 0),
+            )
+          : null,
       createdById: json['createdById'],
       approvedById: json['approvedById'],
       approvedAt: json['approvedAt'] != null

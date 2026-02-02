@@ -279,6 +279,44 @@ class BeatPlanService {
         console.log(`📋 Found weekly plan:`, weeklyPlan ? weeklyPlan.id : 'null');
 
         if (!weeklyPlan || weeklyPlan.dailyPlans.length === 0) {
+            // Fallback: get customers by assignedDays (customer-based beat plan)
+            const customersByDay = await prisma.account.findMany({
+                where: {
+                    assignedToId: salesmanId,
+                    assignedDays: { has: dayOfWeek },
+                    isActive: true
+                },
+                select: {
+                    id: true,
+                    accountCode: true,
+                    personName: true,
+                    businessName: true,
+                    contactNumber: true,
+                    area: true,
+                    address: true,
+                    latitude: true,
+                    longitude: true
+                },
+                take: 100
+            });
+            if (customersByDay.length > 0) {
+                return {
+                    weeklyPlan: {
+                        id: 'customer-based',
+                        weekStartDate: monday,
+                        weekEndDate: new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000),
+                        status: 'ACTIVE',
+                        totalAreas: customersByDay.length
+                    },
+                    dailyPlan: {
+                        id: 'customer-based',
+                        assignedAreas: [...new Set(customersByDay.map(a => a.area).filter(Boolean))],
+                        plannedVisits: customersByDay.length
+                    },
+                    accounts: customersByDay,
+                    completedAreas: []
+                };
+            }
             return null;
         }
 
@@ -320,6 +358,116 @@ class BeatPlanService {
             dailyPlan: todaysPlan,
             accounts,
             completedAreas: todaysPlan.beatCompletions.map(bc => bc.areaName)
+        };
+    }
+
+    /**
+     * Generate beat plan from allotted customers - assign customers day-wise
+     * @param {string} salesmanId - Salesman ID
+     * @param {Date} weekStartDate - Monday of the week
+     * @param {Object} dayAssignments - { "1": [accountIds], "2": [accountIds], ... } (1=Mon..6=Sat)
+     * @param {string} generatedBy - Admin ID
+     */
+    static async generateFromCustomers(salesmanId, weekStartDate, dayAssignments, generatedBy) {
+        const monday = new Date(weekStartDate);
+        monday.setHours(0, 0, 0, 0);
+        const saturday = new Date(monday);
+        saturday.setDate(saturday.getDate() + 5);
+
+        const salesman = await prisma.user.findUnique({
+            where: { id: salesmanId },
+            select: { name: true }
+        });
+        if (!salesman) throw new Error('Salesman not found');
+
+        const allAssignedIds = new Set();
+        for (let day = 1; day <= 6; day++) {
+            const ids = dayAssignments[day.toString()] || [];
+            ids.forEach(id => allAssignedIds.add(id));
+        }
+
+        // Clear assignedDays for allotted accounts not in any day
+        await prisma.account.updateMany({
+            where: {
+                assignedToId: salesmanId,
+                id: { notIn: Array.from(allAssignedIds) }
+            },
+            data: { assignedDays: [] }
+        });
+
+        // Update Account.assignedDays for each customer (only if allotted to this salesman)
+        let totalCustomers = 0;
+        for (let day = 1; day <= 6; day++) {
+            const accountIds = dayAssignments[day.toString()] || [];
+            for (const accountId of accountIds) {
+                await prisma.account.updateMany({
+                    where: { id: accountId, assignedToId: salesmanId },
+                    data: { assignedDays: [day] }
+                });
+                totalCustomers += 1;
+            }
+        }
+
+        // Delete existing beat plan for this week if any
+        const existing = await prisma.weeklyBeatPlan.findFirst({
+            where: {
+                salesmanId,
+                weekStartDate: {
+                    gte: monday,
+                    lt: new Date(monday.getTime() + 24 * 60 * 60 * 1000)
+                }
+            }
+        });
+        if (existing) {
+            await BeatPlanService.deleteWeeklyBeatPlan(existing.id);
+        }
+
+        // Create WeeklyBeatPlan + DailyBeatPlans (customer-based)
+        const weeklyBeatPlan = await prisma.weeklyBeatPlan.create({
+            data: {
+                salesmanId,
+                salesmanName: salesman.name || 'Unknown',
+                weekStartDate: monday,
+                weekEndDate: saturday,
+                pincodes: [],
+                totalAreas: totalCustomers,
+                status: 'ACTIVE',
+                generatedBy
+            }
+        });
+
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const distribution = [];
+
+        for (let day = 1; day <= 6; day++) {
+            const accountIds = dayAssignments[day.toString()] || [];
+            const dayDate = new Date(monday);
+            dayDate.setDate(dayDate.getDate() + (day - 1));
+
+            // Get areas from these accounts for backward compatibility
+            const accounts = await prisma.account.findMany({
+                where: { id: { in: accountIds } },
+                select: { area: true }
+            });
+            const areas = accounts.map(a => a.area).filter(Boolean);
+
+            await prisma.dailyBeatPlan.create({
+                data: {
+                    weeklyBeatId: weeklyBeatPlan.id,
+                    dayOfWeek: day,
+                    dayDate,
+                    assignedAreas: areas,
+                    plannedVisits: accountIds.length,
+                    status: 'PLANNED'
+                }
+            });
+            distribution.push(accountIds);
+        }
+
+        return {
+            weeklyPlan: weeklyBeatPlan,
+            totalAreas: totalCustomers,
+            distribution
         };
     }
 

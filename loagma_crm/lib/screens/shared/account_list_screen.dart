@@ -52,15 +52,16 @@ class _AccountListScreenState extends State<AccountListScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
 
-  // Determines whether we should pass createdBy filter (non-admin)
+  // Determines whether we should pass createdBy filter (admin/manager see all)
   bool get _shouldFilterByOwner {
     final role = UserService.currentRole?.toLowerCase();
-    return role != null && role != 'admin';
+    return role != null && role != 'admin' && role != 'manager';
   }
 
   String? get _currentUserId => UserService.currentUserId;
 
   bool get _isAdmin => UserService.currentRole?.toLowerCase() == 'admin';
+  bool get _isManager => UserService.currentRole?.toLowerCase() == 'manager';
 
   /// Salesmen only (for allotment dropdown)
   List<Map<String, dynamic>> get _salesmenForAllotment {

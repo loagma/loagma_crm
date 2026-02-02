@@ -852,6 +852,15 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
       return;
     }
 
+    // Validate salary (backend requires salary > 0)
+    final salaryValue = double.tryParse(_salary.text.trim());
+    if (salaryValue == null || salaryValue <= 0) {
+      Fluttertoast.showToast(
+        msg: 'Salary per month is required and must be greater than 0',
+      );
+      return;
+    }
+
     setState(() => isLoading = true);
 
     // Convert image to base64 if selected
@@ -873,7 +882,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
     final body = {
       "contactNumber": _phone.text.trim(),
-      "salaryPerMonth": double.tryParse(_salary.text.trim()),
+      "salaryPerMonth": salaryValue,
 
       if (_name.text.isNotEmpty) "name": _name.text.trim(),
       if (_email.text.isNotEmpty) "email": _email.text.trim(),
@@ -2126,11 +2135,18 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
               const SizedBox(height: 15),
 
-              // SALARY
+              // SALARY (required by backend)
               TextFormField(
                 controller: _salary,
                 keyboardType: TextInputType.number,
-                decoration: _input("Salary Per Month ", Icons.currency_rupee),
+                decoration: _input("Salary Per Month *", Icons.currency_rupee),
+                validator: (v) {
+                  final val = double.tryParse(v?.trim() ?? '');
+                  if (val == null || val <= 0) {
+                    return 'Salary is required and must be greater than 0';
+                  }
+                  return null;
+                },
               ),
 
               const SizedBox(height: 15),

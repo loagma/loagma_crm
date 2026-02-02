@@ -105,6 +105,7 @@ class _AccountMasterScreenState extends State<AccountMasterScreen> {
     'Consideration',
     'Intent',
     'Evaluation',
+    'Follow-up',
     'Converted',
   ];
 

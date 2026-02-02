@@ -18,6 +18,7 @@ import '../screens/admin/view_tasks_screen.dart';
 import '../screens/admin/reports_screen.dart';
 import '../screens/admin/enhanced_salesman_reports_screen.dart';
 import '../screens/admin/modern_task_assignment_screen.dart';
+import '../screens/manager/manager_reminder_calls_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
 import '../screens/admin/approval_requests_screen.dart';
 import '../screens/admin/live_tracking_screen.dart';
@@ -47,6 +48,7 @@ import '../screens/admin/map_view_screen.dart';
 import '../screens/admin/leave_requests_screen.dart';
 
 // Beat Planning screens
+import '../screens/admin/salesman_allotment_screen.dart';
 import '../screens/admin/beat_plan_management_screen.dart';
 import '../screens/admin/generate_beat_plan_screen.dart';
 import '../screens/admin/beat_plan_details_screen.dart';
@@ -134,6 +136,17 @@ final GoRouter appRouter = GoRouter(
           );
         }
 
+        // For manager, show custom dashboard with Reminder Calls first
+        if (role == 'manager') {
+          return RoleDashboardTemplate(
+            roleName: role,
+            roleDisplayName: 'Manager',
+            roleIcon: Icons.manage_accounts_outlined,
+            userContactNumber: UserService.contactNumber,
+            primaryColor: const Color(0xFFD7BE69),
+          );
+        }
+
         return RoleDashboardTemplate(
           roleName: role,
           roleDisplayName: role.toUpperCase(),
@@ -174,6 +187,15 @@ final GoRouter appRouter = GoRouter(
           path: 'task-assignment',
           builder: (_, __) => const ModernTaskAssignmentScreen(),
         ),
+        // Manager routes
+        GoRoute(
+          path: 'reminder-calls',
+          builder: (_, __) => const ManagerReminderCallsScreen(),
+        ),
+        GoRoute(
+          path: 'create-task',
+          builder: (_, __) => const ModernTaskAssignmentScreen(),
+        ),
         GoRoute(
           path: 'employees/list',
           builder: (_, __) => const EmployeeListScreen(),
@@ -195,6 +217,11 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const LiveTrackingScreen(),
         ),
 
+        // Salesman Allotment (Admin) - shows salesman ↔ customers
+        GoRoute(
+          path: 'salesman-allotment',
+          builder: (_, __) => const SalesmanAllotmentScreen(),
+        ),
         // Beat Planning routes (Admin)
         GoRoute(
           path: 'beat-plans',

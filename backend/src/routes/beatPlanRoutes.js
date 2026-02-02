@@ -2,6 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import {
     generateWeeklyBeatPlan,
+    generateFromCustomers,
     getTodaysBeatPlan,
     markBeatAreaComplete,
     getWeeklyBeatPlans,
@@ -21,7 +22,8 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Admin routes - Beat plan management
-router.post('/generate', generateWeeklyBeatPlan);                    // Generate weekly beat plan
+router.post('/generate', generateWeeklyBeatPlan);                    // Generate weekly beat plan (area-based)
+router.post('/generate-from-customers', generateFromCustomers);      // Generate from allotted customers (day-wise)
 router.get('/', getWeeklyBeatPlans);                                 // Get all beat plans (admin)
 router.get('/analytics', getBeatPlanAnalytics);                     // Get beat plan analytics
 router.put('/:id', updateWeeklyBeatPlan);                           // Update beat plan

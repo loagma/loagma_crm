@@ -101,6 +101,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
     'Consideration',
     'Intent',
     'Evaluation',
+    'Follow-up',
     'Converted',
   ];
 
