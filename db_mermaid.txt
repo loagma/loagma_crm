@@ -1,0 +1,149 @@
+erDiagram
+    %% ======================
+    %% AUTH & ACCESS
+    %% ======================
+    ROLES ||--o{ USERS : has
+    ROLES ||--o{ TASK_TYPES : defines
+
+    ROLES {
+        int role_id PK
+        varchar role_name
+        timestamp created_at
+    }
+
+    USERS {
+        int user_id PK
+        varchar full_name
+        int role_id FK
+        varchar phone
+        varchar email
+        varchar password_hash
+        enum status
+        timestamp created_at
+    }
+
+    %% ======================
+    %% CORE BUSINESS
+    %% ======================
+    CUSTOMERS ||--o{ TASKS : involved_in
+    CUSTOMERS ||--o{ ORDERS : places
+    CUSTOMERS ||--o{ SUPPORT_TICKETS : raises
+
+    CUSTOMERS {
+        int customer_id PK
+        varchar customer_name
+        varchar phone
+        text address
+        decimal latitude
+        decimal longitude
+        timestamp created_at
+    }
+
+    %% ======================
+    %% TASK SYSTEM (CENTRAL)
+    %% ======================
+    TASK_TYPES ||--o{ TASKS : categorizes
+    USERS ||--o{ TASKS : creates
+    USERS ||--o{ TASKS : assigned_to
+
+    TASKS ||--|| TASK_SLA : sla
+    TASKS ||--o{ TASK_HISTORY : audit
+    TASKS ||--o{ TASK_PROOFS : proof
+    TASKS ||--o| ORDERS : may_generate
+
+    TASK_TYPES {
+        int task_type_id PK
+        int role_id FK
+        varchar task_name
+        boolean requires_location
+        boolean requires_proof
+        timestamp created_at
+    }
+
+    TASKS {
+        bigint task_id PK
+        int task_type_id FK
+        int created_by FK
+        int assigned_to FK
+        int customer_id FK
+        varchar title
+        enum priority
+        datetime due_date
+        enum status
+        enum outcome
+        text remarks
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    TASK_SLA {
+        int sla_id PK
+        bigint task_id FK
+        datetime start_time
+        datetime expected_end
+        datetime actual_end
+        boolean breached
+    }
+
+    TASK_HISTORY {
+        bigint history_id PK
+        bigint task_id FK
+        varchar old_status
+        varchar new_status
+        int changed_by FK
+        timestamp changed_at
+        text reason
+    }
+
+    TASK_PROOFS {
+        bigint proof_id PK
+        bigint task_id FK
+        text file_url
+        enum file_type
+        int uploaded_by FK
+        timestamp uploaded_at
+    }
+
+    %% ======================
+    %% FINANCE & DELIVERY
+    %% ======================
+    ORDERS ||--o{ PAYMENTS : receives
+
+    ORDERS {
+        bigint order_id PK
+        int customer_id FK
+        int sales_user_id FK
+        decimal total_amount
+        enum payment_status
+        enum delivery_status
+        timestamp created_at
+    }
+
+    PAYMENTS {
+        bigint payment_id PK
+        bigint order_id FK
+        int collected_by FK
+        decimal amount
+        enum payment_mode
+        varchar reference_no
+        datetime payment_date
+        enum status
+    }
+
+    %% ======================
+    %% CUSTOMER SUPPORT
+    %% ======================
+    USERS ||--o{ SUPPORT_TICKETS : handles
+
+    SUPPORT_TICKETS {
+        bigint ticket_id PK
+        int customer_id FK
+        int created_by FK
+        int assigned_to FK
+        varchar issue_type
+        text description
+        enum priority
+        enum status
+        timestamp created_at
+    }
+

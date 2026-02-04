@@ -1,0 +1,149 @@
+CREATE TABLE roles (
+    role_id INT PRIMARY KEY AUTO_INCREMENT,
+    role_name VARCHAR(50) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+CREATE TABLE users (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    full_name VARCHAR(100) NOT NULL,
+    role_id INT NOT NULL,
+    phone VARCHAR(15),
+    email VARCHAR(100) UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id) REFERENCES roles(role_id)
+);
+
+
+CREATE TABLE customers (
+    customer_id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_name VARCHAR(150) NOT NULL,
+    phone VARCHAR(15),
+    address TEXT,
+    latitude DECIMAL(10,7),
+    longitude DECIMAL(10,7),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE task_types (
+    task_type_id INT PRIMARY KEY AUTO_INCREMENT,
+    role_id INT NOT NULL,
+    task_name VARCHAR(100) NOT NULL,
+    requires_location BOOLEAN DEFAULT FALSE,
+    requires_proof BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id) REFERENCES roles(role_id)
+);
+
+
+CREATE TABLE tasks (
+    task_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    task_type_id INT NOT NULL,
+    created_by INT NOT NULL,
+    assigned_to INT,
+    customer_id INT,
+    title VARCHAR(255),
+    priority ENUM('LOW','MEDIUM','HIGH') DEFAULT 'MEDIUM',
+    due_date DATETIME,
+    status ENUM(
+        'NEW',
+        'ASSIGNED',
+        'ACCEPTED',
+        'IN_PROGRESS',
+        'COMPLETED',
+        'PENDING_APPROVAL',
+        'CLOSED',
+        'REJECTED'
+    ) DEFAULT 'NEW',
+    outcome ENUM('SUCCESS','PARTIAL','FAILED'),
+    remarks TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_type_id) REFERENCES task_types(task_type_id),
+    FOREIGN KEY (created_by) REFERENCES users(user_id),
+    FOREIGN KEY (assigned_to) REFERENCES users(user_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+);
+
+
+
+CREATE TABLE task_sla (
+    sla_id INT PRIMARY KEY AUTO_INCREMENT,
+    task_id BIGINT NOT NULL,
+    start_time DATETIME,
+    expected_end DATETIME,
+    actual_end DATETIME,
+    breached BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (task_id) REFERENCES tasks(task_id)
+);
+
+
+CREATE TABLE task_history (
+    history_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    task_id BIGINT NOT NULL,
+    old_status VARCHAR(30),
+    new_status VARCHAR(30),
+    changed_by INT,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reason TEXT,
+    FOREIGN KEY (task_id) REFERENCES tasks(task_id),
+    FOREIGN KEY (changed_by) REFERENCES users(user_id)
+);
+
+
+CREATE TABLE task_proofs (
+    proof_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    task_id BIGINT NOT NULL,
+    file_url TEXT NOT NULL,
+    file_type ENUM('PHOTO','PDF','SIGNATURE','VOICE'),
+    uploaded_by INT,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(task_id),
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id)
+);
+
+
+CREATE TABLE orders (
+    order_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT NOT NULL,
+    sales_user_id INT NOT NULL,
+    total_amount DECIMAL(12,2),
+    payment_status ENUM('PENDING','PARTIAL','PAID') DEFAULT 'PENDING',
+    delivery_status ENUM('PENDING','IN_TRANSIT','DELIVERED','FAILED'),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (sales_user_id) REFERENCES users(user_id)
+);
+
+
+CREATE TABLE payments (
+    payment_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    collected_by INT,
+    amount DECIMAL(12,2),
+    payment_mode ENUM('CASH','UPI','BANK'),
+    reference_no VARCHAR(100),
+    payment_date DATETIME,
+    status ENUM('SUCCESS','FAILED'),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (collected_by) REFERENCES users(user_id)
+);
+
+
+CREATE TABLE support_tickets (
+    ticket_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT NOT NULL,
+    created_by INT,
+    assigned_to INT,
+    issue_type VARCHAR(100),
+    description TEXT,
+    priority ENUM('LOW','MEDIUM','HIGH'),
+    status ENUM('NEW','IN_PROGRESS','RESOLVED','CLOSED'),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (assigned_to) REFERENCES users(user_id)
+);
