@@ -28,16 +28,26 @@ export function getCurrentISTTime() {
 }
 
 /**
- * Convert a UTC date to IST for display purposes
- * Note: This returns a Date object shifted by IST offset for display
+ * Convert a UTC date to IST for display purposes.
+ *
+ * IMPORTANT:
+ * - All instants are stored in UTC in the database.
+ * - For display we rely on Intl with `timeZone: 'Asia/Kolkata'`.
+ * - That API already applies the +05:30 offset.
+ *
+ * To avoid applying the offset twice (which was causing a 5.5 hour
+ * error in some places like live tracking), this helper now simply
+ * normalizes the input into a Date instance without shifting it.
+ *
  * @param {Date|string|number} utcDate
  * @returns {Date|null}
  */
 export function convertUTCToIST(utcDate) {
     if (!utcDate) return null;
-    const d = new Date(utcDate);
-    // For display purposes, shift the time by IST offset
-    return new Date(d.getTime() + IST_OFFSET_MS);
+    // Normalize to Date without changing the actual instant.
+    // Callers should pass this directly to `formatISTTime`, which
+    // will render it correctly in IST using the Intl API.
+    return new Date(utcDate);
 }
 
 /**

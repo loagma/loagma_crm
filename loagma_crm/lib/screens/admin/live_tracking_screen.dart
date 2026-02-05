@@ -796,18 +796,28 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       final point = routeData[i];
       final lat = point['latitude'];
       final lng = point['longitude'];
-      final recordedAt = point['recordedAt'];
+      final recordedAtRaw = point['recordedAt'];
+
+      // Backend sends recordedAt in UTC; convert to local for display.
+      DateTime? recordedAt;
+      if (recordedAtRaw != null) {
+        if (recordedAtRaw is DateTime) {
+          recordedAt = recordedAtRaw.toLocal();
+        } else {
+          try {
+            recordedAt = DateTime.parse(recordedAtRaw.toString()).toLocal();
+          } catch (_) {
+            recordedAt = null;
+          }
+        }
+      }
 
       if (lat != null && lng != null) {
         if (i == 0 && recordedAt != null) {
-          startTime = recordedAt is DateTime
-              ? recordedAt
-              : DateTime.parse(recordedAt.toString());
+          startTime = recordedAt;
         }
         if (i == routeData.length - 1 && recordedAt != null) {
-          endTime = recordedAt is DateTime
-              ? recordedAt
-              : DateTime.parse(recordedAt.toString());
+          endTime = recordedAt;
         }
 
         if (i > 0) {
@@ -979,7 +989,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                       final point = routeData[index];
                       final lat = point['latitude'];
                       final lng = point['longitude'];
-                      final recordedAt = point['recordedAt'];
+                      final recordedAtRaw = point['recordedAt'];
                       final speed = point['speed'];
                       final accuracy = point['accuracy'];
 
@@ -1004,13 +1014,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (recordedAt != null)
+                            if (recordedAtRaw != null)
                               Text(
-                                DateFormat('MMM dd, HH:mm:ss').format(
-                                  recordedAt is DateTime
-                                      ? recordedAt
-                                      : DateTime.parse(recordedAt.toString()),
-                                ),
+                                () {
+                                  try {
+                                    final dt = recordedAtRaw is DateTime
+                                        ? recordedAtRaw.toLocal()
+                                        : DateTime.parse(
+                                                recordedAtRaw.toString())
+                                            .toLocal();
+                                    return DateFormat('MMM dd, HH:mm:ss')
+                                        .format(dt);
+                                  } catch (_) {
+                                    return recordedAtRaw.toString();
+                                  }
+                                }(),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade600,
