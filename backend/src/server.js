@@ -29,6 +29,8 @@ import leaveRoutes from './routes/leaveRoutes.js';
 import beatPlanRoutes from './routes/beatPlanRoutes.js';
 import shopRoutes from './routes/shopRoutes.js';
 import trackingRoutes from './routes/trackingRoutes.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,6 +69,8 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/locations', locationRoutes);
