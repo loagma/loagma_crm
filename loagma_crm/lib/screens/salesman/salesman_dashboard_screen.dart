@@ -15,6 +15,7 @@ import '../../widgets/attendance_status_widget.dart';
 import '../../widgets/notification_bell.dart';
 import '../../utils/time_formatting_utils.dart';
 import '../../services/account_service.dart';
+import '../../services/attendance_session_manager.dart';
 import 'sr_area_allotment_screen.dart';
 import 'salesman_customer_allotment_screen.dart';
 import 'enhanced_salesman_map_screen.dart';
@@ -108,6 +109,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
         setState(() {
           todayAttendance = attendance;
         });
+
+        // Bootstrap / auto-restart live tracking when dashboard opens.
+        // This ensures that if the user already has an active attendance
+        // (e.g. after app restart), tracking starts without requiring
+        // them to open the punch screen.
+        await AttendanceSessionManager.ensureTrackingForActiveSession(context);
       }
     } catch (e) {
       print('Error loading attendance: $e');
@@ -303,7 +310,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
             });
           }
         }
-        print('   Allotted Customers: $allottedCount (showing ${allottedList.length} on dashboard)');
+        print(
+          '   Allotted Customers: $allottedCount (showing ${allottedList.length} on dashboard)',
+        );
       } catch (e) {
         print('   Allotted customers fetch failed: $e');
       }
@@ -747,7 +756,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
           ),
           if (allottedCustomers.isNotEmpty) ...[
             const SizedBox(height: 12),
-            ...allottedCustomers.map((customer) => _buildRecentAccountCard(customer)),
+            ...allottedCustomers.map(
+              (customer) => _buildRecentAccountCard(customer),
+            ),
           ],
         ],
       ),

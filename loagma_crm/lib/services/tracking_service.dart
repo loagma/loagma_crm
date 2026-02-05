@@ -9,15 +9,36 @@ import 'location_service.dart';
 import 'network_service.dart';
 import 'user_service.dart';
 
+/// Handles continuous location streaming for attendance sessions.
+///
+/// Data flow per point:
+/// - Reads high-frequency GPS updates from `LocationService`.
+/// - Sends points to:
+///   - Firestore `tracking_live` (latest point per employee) and `tracking` (historical),
+///   - Backend `/tracking/point` for long‑term storage and route queries.
+///
+/// Tuning constants below are chosen to give:
+/// - Very live movement on the admin map,
+/// - While keeping network/battery usage reasonable on Android devices.
 class TrackingService {
   static TrackingService? _instance;
   static TrackingService get instance => _instance ??= TrackingService._();
   TrackingService._();
 
-  static const Duration _minSendInterval = Duration(seconds: 5);
+  // Minimum time between GPS payloads pushed to Firestore/backend
+  // when the user is actively moving. Shorter → smoother polyline
+  // but more network/battery. 3 seconds is a good \"live\" balance.
+  static const Duration _minSendInterval = Duration(seconds: 3);
+
+  // Heartbeat interval used to keep the salesman \"LIVE\" in Firestore
+  // even if the device is not moving. This should be equal to or
+  // slightly larger than _minSendInterval.
   static const Duration _heartbeatInterval = Duration(seconds: 5);
   static const Duration _statusCheckInterval = Duration(seconds: 10);
-  static const double _minDistanceMeters = 25;
+  // Ignore very small position shifts when updates are frequent.
+  // Smaller value → denser polyline. 10m keeps routes smooth
+  // without exploding Firestore/HTTP writes.
+  static const double _minDistanceMeters = 10;
   // Removed accuracy filter to allow tracking even with lower accuracy
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -38,7 +59,7 @@ class TrackingService {
   bool _hasShownNetworkAlert = false;
 
   bool get isTracking => _isTracking;
-  
+
   // Set context for showing alerts (should be called from UI)
   void setContext(BuildContext? context) {
     _context = context;
@@ -70,8 +91,8 @@ class TrackingService {
     _employeeId = employeeId;
     _employeeName = finalEmployeeName; // Now guaranteed to be non-empty
 
-    final locationStarted =
-        await LocationService.instance.startLocationTracking();
+    final locationStarted = await LocationService.instance
+        .startLocationTracking();
     if (!locationStarted) {
       return false;
     }
@@ -86,7 +107,7 @@ class TrackingService {
 
     // Start heartbeat to force updates every 5 seconds
     _startHeartbeat();
-    
+
     // Start status monitoring
     _startStatusMonitoring();
 
@@ -161,7 +182,9 @@ class TrackingService {
         _sendToBackend(_lastSentPosition!);
       } else {
         // If no position yet, try to get current location
-        LocationService.instance.getCurrentLocation(forceRefresh: true).then((position) {
+        LocationService.instance.getCurrentLocation(forceRefresh: true).then((
+          position,
+        ) {
           if (position != null && _isTracking) {
             _lastSentPosition = position;
             _lastSentAt = DateTime.now();
@@ -301,7 +324,7 @@ class TrackingService {
       if (employeeId == null || attendanceId == null) return;
 
       final timestamp = position.timestamp;
-      
+
       // Ensure employeeName is never null or empty
       // _employeeName is guaranteed to be non-empty after startTracking()
       String finalEmployeeName = _employeeName ?? employeeId;
@@ -315,7 +338,7 @@ class TrackingService {
           finalEmployeeName = employeeId;
         }
       }
-      
+
       final payload = {
         'employeeId': employeeId,
         'employeeName': finalEmployeeName,
@@ -334,7 +357,7 @@ class TrackingService {
           .collection('tracking_live')
           .doc(employeeId.toString()) // Ensure string conversion
           .set(payload, SetOptions(merge: true));
-      
+
       print('📡 Firebase update sent for employeeId: $employeeId');
 
       // Store historical tracking points
@@ -345,8 +368,10 @@ class TrackingService {
           .doc(attendanceId)
           .collection('points')
           .add(payload);
-          
-      print('✅ Tracking point sent: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}');
+
+      print(
+        '✅ Tracking point sent: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+      );
     } catch (e) {
       print('❌ Firebase tracking write failed: $e');
       // Don't throw - continue tracking even if Firebase write fails
@@ -368,19 +393,31 @@ class TrackingService {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      await http.post(
+      final payload = {
+        'employeeId': employeeId,
+        'attendanceId': attendanceId,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'speed': position.speed,
+        'accuracy': position.accuracy,
+        'recordedAt': position.timestamp.toIso8601String(),
+      };
+
+      final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/tracking/point'),
         headers: headers,
-        body: jsonEncode({
-          'employeeId': employeeId,
-          'attendanceId': attendanceId,
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'speed': position.speed,
-          'accuracy': position.accuracy,
-          'recordedAt': position.timestamp.toIso8601String(),
-        }),
+        body: jsonEncode(payload),
       );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        debugPrint(
+          '📨 Backend tracking OK (${response.statusCode}) for employeeId=$employeeId, attendanceId=$attendanceId',
+        );
+      } else {
+        debugPrint(
+          '⚠️ Backend tracking non‑200 (${response.statusCode}) for employeeId=$employeeId, attendanceId=$attendanceId, body=${response.body}',
+        );
+      }
     } catch (e) {
       print('❌ Backend tracking write failed: $e');
     }

@@ -38,8 +38,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   Map<String, List<Map<String, dynamic>>> _routeDetails =
       {}; // employeeId -> route data with stats
   int _lastDocCount = 0; // Track document count to reduce logging
-  List<_LivePoint> _currentLivePoints = []; // Store current live points for route loading
-  Map<String, AttendanceModel?> _attendanceMap = {}; // employeeId -> today's active attendance
+  List<_LivePoint> _currentLivePoints =
+      []; // Store current live points for route loading
+  Map<String, AttendanceModel?> _attendanceMap =
+      {}; // employeeId -> today's active attendance
 
   LatLng _defaultCenter = LatLng(20.5937, 78.9629);
 
@@ -58,21 +60,28 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   Future<void> _fetchTodayAttendance(List<String> employeeIds) async {
     if (employeeIds.isEmpty) return;
-    
+
     try {
-      debugPrint('📅 Fetching today attendance for ${employeeIds.length} employees: $employeeIds');
-      final attendanceMap = await AttendanceService.getTodayActiveAttendanceForEmployees(employeeIds);
-      
+      debugPrint(
+        '📅 Fetching today attendance for ${employeeIds.length} employees: $employeeIds',
+      );
+      final attendanceMap =
+          await AttendanceService.getTodayActiveAttendanceForEmployees(
+            employeeIds,
+          );
+
       if (mounted) {
         setState(() {
           // Merge with existing map to preserve data
           _attendanceMap = {..._attendanceMap, ...attendanceMap};
         });
-        
+
         // Log what we got
         attendanceMap.forEach((employeeId, attendance) {
           if (attendance != null) {
-            debugPrint('✅ Found today attendance for $employeeId: ${attendance.punchInTime}');
+            debugPrint(
+              '✅ Found today attendance for $employeeId: ${attendance.punchInTime}',
+            );
           } else {
             debugPrint('⚠️ No today attendance for $employeeId');
           }
@@ -183,7 +192,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           (point) => point.employeeId == employeeId,
           orElse: () => _LivePoint.fallback(),
         );
-        if (currentLivePoint != _LivePoint.fallback() && 
+        if (currentLivePoint != _LivePoint.fallback() &&
             currentLivePoint.attendanceId != null) {
           attendanceId = currentLivePoint.attendanceId;
         }
@@ -192,10 +201,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       // Always use today's date range to get current session data
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
-      
+
       DateTime? startDate = _startDate;
       DateTime? endDate = _endDate;
-      
+
       // If no date range specified OR if dates are old, use today
       if (startDate == null || startDate.isBefore(startOfToday)) {
         startDate = startOfToday;
@@ -203,7 +212,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       if (endDate == null || endDate.isBefore(startOfToday)) {
         endDate = now;
       }
-      
+
       // Ensure end date is not in the future
       if (endDate.isAfter(now)) {
         endDate = now;
@@ -248,7 +257,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             });
             // Calculate route details
             _calculateRouteDetails(employeeId, data);
-            debugPrint('✅ Loaded ${points.length} route points for employee $employeeId');
+            debugPrint(
+              '✅ Loaded ${points.length} route points for employee $employeeId',
+            );
           }
         } else {
           if (mounted) {
@@ -265,11 +276,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           setState(() {
             _routePoints = [];
             _isLoadingRoute = false;
-            _hasLoadedRoute = true; // Mark as loaded to prevent infinite retries
+            _hasLoadedRoute =
+                true; // Mark as loaded to prevent infinite retries
           });
           // Only log errors that aren't the Prisma model issue
           final errorMsg = result['message']?.toString() ?? '';
-          if (!errorMsg.contains('count') && 
+          if (!errorMsg.contains('count') &&
               !errorMsg.contains('undefined') &&
               !errorMsg.contains('Prisma')) {
             debugPrint('⚠️ Route load failed: $errorMsg');
@@ -316,7 +328,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
       // Combine historical route with current live position
       final combined = List<LatLng>.from(historicalPoints);
       final liveLatLng = currentLivePoint.latLng;
-      
+
       // Always add live point if we have historical points
       // If no historical points, start with live point
       if (combined.isEmpty) {
@@ -430,12 +442,22 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   }
 
   Widget _buildLiveTrackingTab() {
-    // Get all live tracking documents - Firebase will update in real-time
-    // We'll filter old data on the client side based on updatedAt timestamp
+    // Get live tracking documents - Firebase will update in real-time.
+    // We filter by `updatedAt` on the server side so only recent
+    // locations (last 24 hours) are streamed to the client.
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(hours: 24));
+
+    final liveStream = FirebaseFirestore.instance
+        .collection('tracking_live')
+        .where('updatedAt', isGreaterThan: Timestamp.fromDate(yesterday))
+        .orderBy('updatedAt', descending: true)
+        // Safety cap to avoid flooding UI if many devices are live.
+        .limit(500)
+        .snapshots();
+
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('tracking_live')
-          .snapshots(),
+      stream: liveStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           final error = snapshot.error.toString();
@@ -472,12 +494,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           debugPrint('📊 Firebase: ${docs.length} active tracking documents');
           _lastDocCount = docs.length;
         }
-        
-        // Filter out old data - only show points updated in last 24 hours
-        // This ensures we get current attendance sessions
-        final now = DateTime.now();
-        final yesterday = now.subtract(const Duration(hours: 24));
-        
+
+        // Convert raw docs into live points. We still keep a defensive
+        // time filter on the client, but the heavy lifting is done by
+        // the Firestore query above.
         final livePoints = docs
             .map((doc) => _LivePoint.fromDoc(doc, _employeeNameMap))
             .where((point) {
@@ -498,7 +518,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         // Only fetch if we don't already have data for these employees
         if (livePoints.isNotEmpty) {
           final employeeIds = livePoints.map((p) => p.employeeId).toList();
-          final missingIds = employeeIds.where((id) => !_attendanceMap.containsKey(id)).toList();
+          final missingIds = employeeIds
+              .where((id) => !_attendanceMap.containsKey(id))
+              .toList();
           if (missingIds.isNotEmpty) {
             _fetchTodayAttendance(missingIds);
           }
@@ -511,7 +533,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         // Update live route points in real-time (combine historical + live)
         if (_selectedEmployeeId != null) {
           _updateLiveRoutePointsWithLiveData(_routePoints, livePoints);
-          
+
           // Always ensure we have at least the current live point for polyline
           if (_liveRoutePoints.isEmpty) {
             final currentLivePoint = livePoints.firstWhere(
@@ -581,22 +603,22 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             height: 50,
             builder: (_) => GestureDetector(
               onTap: () {
-                    setState(() {
-                      _selectedEmployeeId = point.employeeId;
-                      _selectedEmployeeName = displayName;
-                      _hasLoadedRoute = false; // Reset flag when employee changes
-                      _routePoints = []; // Clear old route
-                      _liveRoutePoints = []; // Clear old live route
-                    });
-                    _focusOnPoint(point.latLng);
-                    // Fetch attendance for selected employee if not already loaded
-                    if (!_attendanceMap.containsKey(point.employeeId)) {
-                      _fetchTodayAttendance([point.employeeId]);
-                    }
-                    // Load route after state update
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _loadRoute();
-                    });
+                setState(() {
+                  _selectedEmployeeId = point.employeeId;
+                  _selectedEmployeeName = displayName;
+                  _hasLoadedRoute = false; // Reset flag when employee changes
+                  _routePoints = []; // Clear old route
+                  _liveRoutePoints = []; // Clear old live route
+                });
+                _focusOnPoint(point.latLng);
+                // Fetch attendance for selected employee if not already loaded
+                if (!_attendanceMap.containsKey(point.employeeId)) {
+                  _fetchTodayAttendance([point.employeeId]);
+                }
+                // Load route after state update
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _loadRoute();
+                });
               },
               child: Stack(
                 alignment: Alignment.center,
@@ -1021,10 +1043,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                                     final dt = recordedAtRaw is DateTime
                                         ? recordedAtRaw.toLocal()
                                         : DateTime.parse(
-                                                recordedAtRaw.toString())
-                                            .toLocal();
-                                    return DateFormat('MMM dd, HH:mm:ss')
-                                        .format(dt);
+                                            recordedAtRaw.toString(),
+                                          ).toLocal();
+                                    return DateFormat(
+                                      'MMM dd, HH:mm:ss',
+                                    ).format(dt);
                                   } catch (_) {
                                     return recordedAtRaw.toString();
                                   }
@@ -1194,7 +1217,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     setState(() {
                       _selectedEmployeeId = value;
                       _selectedEmployeeName = displayName;
-                      _hasLoadedRoute = false; // Reset flag when employee changes
+                      _hasLoadedRoute =
+                          false; // Reset flag when employee changes
                       _routePoints = []; // Clear old route
                       _liveRoutePoints = []; // Clear old live route
                     });
@@ -1294,25 +1318,31 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     final isLive =
                         lastUpdate != null &&
                         DateTime.now().difference(lastUpdate).inMinutes < 2;
-                    
+
                     // Get actual punch-in time from attendance record (today's data)
                     final attendance = _attendanceMap[selectedPoint.employeeId];
                     final punchInTime = attendance?.punchInTime;
-                    
+
                     // Check if punch-in time is from today
                     final now = DateTime.now();
                     final startOfToday = DateTime(now.year, now.month, now.day);
-                    final isTodayPunchIn = punchInTime != null && 
-                        punchInTime.isAfter(startOfToday.subtract(const Duration(days: 1))) &&
-                        punchInTime.isBefore(startOfToday.add(const Duration(days: 1)));
-                    
+                    final isTodayPunchIn =
+                        punchInTime != null &&
+                        punchInTime.isAfter(
+                          startOfToday.subtract(const Duration(days: 1)),
+                        ) &&
+                        punchInTime.isBefore(
+                          startOfToday.add(const Duration(days: 1)),
+                        );
+
                     // Use today's punch-in time if available, otherwise fallback to tracking start time
-                    final displayTime = (isTodayPunchIn && punchInTime != null) 
-                        ? punchInTime 
+                    final displayTime = isTodayPunchIn
+                        ? punchInTime
                         : selectedPoint.recordedAt;
-                    
+
                     // Check if we should show "No punch-in today" message
-                    final hasNoTodayPunchIn = attendance == null || !isTodayPunchIn;
+                    final hasNoTodayPunchIn =
+                        attendance == null || !isTodayPunchIn;
 
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -1672,7 +1702,7 @@ class _LivePoint {
       final data = doc.data();
       final lat = data['latitude'];
       final lng = data['longitude'];
-      
+
       if (lat == null || lng == null) {
         return null;
       }
@@ -1683,7 +1713,8 @@ class _LivePoint {
       // Use Firebase name if available, otherwise fallback to backend map
       final employeeName = firebaseName.isNotEmpty
           ? firebaseName
-          : (employeeNameMap[employeeId] ?? employeeId); // Fallback to employeeId if no name found
+          : (employeeNameMap[employeeId] ??
+                employeeId); // Fallback to employeeId if no name found
 
       // Parse timestamps
       DateTime? recordedAt;

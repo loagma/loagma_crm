@@ -3,8 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
-/// Location service for continuous GPS tracking
-/// Supports background location updates with foreground service notification
+/// Location service for continuous GPS tracking.
+///
+/// Background behaviour on Android:
+/// - Uses Geolocator's foreground service (`GeolocatorLocationService`)
+///   configured in `android/app/src/main/AndroidManifest.xml`.
+/// - Requires the following permissions declared in the manifest:
+///   - `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`
+///   - `ACCESS_BACKGROUND_LOCATION` (Android 10+)
+///   - `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_LOCATION`
+/// - A persistent notification is shown while tracking is active so the
+///   OS treats the app as a foreground service and keeps delivering
+///   location updates even when the UI is in background or the screen
+///   is off.
+///
+/// Battery‑optimization notes:
+/// - Users should avoid putting the app into \"battery optimized\" or
+///   restricted background mode, otherwise Android may still stop
+///   location updates after some time.
+/// - For field devices, recommend whitelisting the app from battery
+///   optimization and keeping GPS + mobile data enabled during shifts.
+///
+/// iOS / other platforms:
+/// - This file is written to be cross‑platform, but actual background
+///   behaviour depends on platform‑specific configuration. The current
+///   focus of this app is Android field usage.
 class LocationService {
   static LocationService? _instance;
   static LocationService get instance => _instance ??= LocationService._();

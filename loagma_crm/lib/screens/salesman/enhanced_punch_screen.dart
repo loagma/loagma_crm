@@ -10,6 +10,7 @@ import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
 import '../../services/tracking_service.dart';
+import '../../services/attendance_session_manager.dart';
 import '../../services/employee_working_hours_service.dart';
 import '../../services/early_punch_out_approval_service.dart';
 import '../../models/attendance_model.dart';
@@ -24,7 +25,8 @@ class EnhancedPunchScreen extends StatefulWidget {
   State<EnhancedPunchScreen> createState() => _EnhancedPunchScreenState();
 }
 
-class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsBindingObserver {
+class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
+    with WidgetsBindingObserver {
   static const Color primaryColor = Color(0xFFD7BE69);
 
   // Punch status
@@ -68,32 +70,23 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
     _loadTodayPunchData();
     _initializeLocationService();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     // Ensure tracking continues when app goes to background
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      print('📱 App backgrounded - tracking should continue via foreground service');
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      print(
+        '📱 App backgrounded - tracking should continue via foreground service',
+      );
       // Tracking service should continue via LocationService foreground service
     } else if (state == AppLifecycleState.resumed) {
       print('📱 App resumed - verifying tracking is active');
       // Verify tracking is still active when app comes back
+      // and restart if there is an active attendance session.
       if (isPunchedIn && !TrackingService.instance.isTracking) {
-        final attendance = currentAttendance;
-        if (attendance != null) {
-          final employeeId = UserService.currentUserId;
-          final employeeName = UserService.name;
-          if (employeeId != null && employeeName != null) {
-            // Set context for showing alerts
-            TrackingService.instance.setContext(context);
-            TrackingService.instance.startTracking(
-              attendanceId: attendance.id,
-              employeeId: employeeId,
-              employeeName: employeeName,
-            );
-          }
-        }
+        AttendanceSessionManager.ensureTrackingForActiveSession(context);
       }
     }
   }
@@ -137,23 +130,14 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
         if (isPunchedIn) {
           setState(() {});
         }
-        
-        // Periodic check to restart tracking if it stops unexpectedly
+
+        // Periodic check to restart tracking if it stops unexpectedly.
+        // Use AttendanceSessionManager so all tracking logic stays centralized.
         if (isPunchedIn && !TrackingService.instance.isTracking) {
-          print('⚠️ Tracking stopped unexpectedly - attempting to restart');
-          final attendance = currentAttendance;
-          if (attendance != null) {
-            final employeeId = UserService.currentUserId;
-            final employeeName = UserService.name;
-            if (employeeId != null && employeeName != null) {
-              TrackingService.instance.setContext(context);
-              TrackingService.instance.startTracking(
-                attendanceId: attendance.id,
-                employeeId: employeeId,
-                employeeName: employeeName,
-              );
-            }
-          }
+          print(
+            '⚠️ Tracking stopped unexpectedly - delegating restart to AttendanceSessionManager',
+          );
+          AttendanceSessionManager.ensureTrackingForActiveSession(context);
         }
       }
     });
@@ -380,17 +364,12 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
         });
 
         if (attendance.isPunchedIn) {
-          final employeeId = UserService.currentUserId;
-          final employeeName = UserService.name;
-          if (employeeId != null && employeeName != null) {
-            // Set context for showing alerts
-            TrackingService.instance.setContext(context);
-            await TrackingService.instance.startTracking(
-              attendanceId: attendance.id,
-              employeeId: employeeId,
-              employeeName: employeeName,
-            );
-          }
+          await AttendanceSessionManager.handlePunchInSuccess(
+            context,
+            attendance,
+          );
+        } else {
+          await UserService.setCurrentAttendanceId(null);
         }
       } else {
         print('📊 No attendance found for today');
@@ -400,6 +379,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
           punchInTime = null;
           hasEarlyPunchOutApproval = false;
         });
+        await UserService.setCurrentAttendanceId(null);
       }
     } catch (e) {
       print('Error loading attendance: $e');
@@ -463,12 +443,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
         });
 
         if (attendance != null) {
-          // Set context for showing alerts
-          TrackingService.instance.setContext(context);
-          await TrackingService.instance.startTracking(
-            attendanceId: attendance.id,
-            employeeId: employeeId,
-            employeeName: employeeName,
+          await AttendanceSessionManager.handlePunchInSuccess(
+            context,
+            attendance,
           );
         }
 
@@ -931,313 +908,242 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
   Widget build(BuildContext context) {
     // Set context for tracking service alerts
     TrackingService.instance.setContext(context);
-    
-    // Only block navigation if tracking is actually active
-    // Both conditions must be true: user is punched in AND tracking service is running
-    final isTrackingActive = isPunchedIn && TrackingService.instance.isTracking;
-    
-    // Debug logging
-    if (isTrackingActive) {
-      print('🔒 PopScope: Blocking navigation - tracking is active');
-    } else {
-      print('✅ PopScope: Allowing navigation - isPunchedIn=$isPunchedIn, isTracking=${TrackingService.instance.isTracking}');
-    }
-    
+
     return PopScope(
-      canPop: !isTrackingActive, // Allow navigation unless tracking is active
-      onPopInvoked: (didPop) async {
-        // If already popped (canPop was true), navigation already happened - do nothing
-        if (didPop) {
-          print('✅ Navigation allowed - user went back');
-          return;
-        }
-        
-        // Double-check tracking status before showing dialog
-        final currentlyTracking = isPunchedIn && TrackingService.instance.isTracking;
-        
-        // Only show dialog if tracking is actually active
-        if (currentlyTracking) {
-          print('⚠️ Showing tracking confirmation dialog');
-          final shouldClose = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.orange, size: 28),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Tracking Active')),
-                ],
-              ),
-              content: const Text(
-                'Location tracking is currently active.\n\n'
-                'Going back will stop tracking. Are you sure you want to go back?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    // Stop tracking before going back
-                    TrackingService.instance.stopTracking();
-                    Navigator.of(context).pop(true);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Stop Tracking & Go Back'),
-                ),
-              ],
-            ),
-          );
-          
-          // If user confirmed, navigate back
-          if (shouldClose == true && context.mounted) {
-            Navigator.of(context).pop();
-          }
-        } else {
-          // If not tracking, allow normal navigation immediately
-          // This is a safety fallback - should not normally execute since canPop should be true
-          print('✅ Safety fallback: Allowing navigation (not tracking)');
-          if (context.mounted) {
-            Navigator.of(context).pop();
-          }
-        }
-      },
+      // Always allow navigation; tracking continues based on attendance state
+      // and is managed centrally by AttendanceSessionManager.
+      canPop: true,
       child: Scaffold(
         backgroundColor: Colors.grey[100],
         appBar: AppBar(
           title: const Text('Punch System'),
           backgroundColor: primaryColor,
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadEmployeeWorkingHours();
-          await _loadTodayPunchData();
-          await _initializeLocationService();
-          // Force refresh of approval status by rebuilding the widget
-          setState(() {});
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              // Current Time Card
-              _buildCurrentTimeCard(),
+          elevation: 0,
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await _loadEmployeeWorkingHours();
+            await _loadTodayPunchData();
+            await _initializeLocationService();
+            // Force refresh of approval status by rebuilding the widget
+            setState(() {});
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                // Current Time Card
+                _buildCurrentTimeCard(),
 
-              // Status Card
-              _buildStatusCard(),
+                // Status Card
+                _buildStatusCard(),
 
-              // Punch Button or Late Approval Widget
-              if (isPunchedIn) ...[
-                // Debug: User is punched in
-                _buildPunchedInCard(),
-              ] else if (isAfterCutoff) ...[
-                // Debug: After cutoff, should show approval widget
-                // print(
-                //   '🔍 BUILD: Showing approval widget (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
-                // ),
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: LatePunchApprovalWidget(
-                        employeeWorkingHours: employeeWorkingHours,
-                        onApprovalRequested: () {
-                          // Refresh status after approval request
-                          setState(() {});
-                        },
-                        onApprovalCodeValidated: (String status) {
-                          // Store the approval status (no OTP needed)
-                          setState(() {
-                            hasLatePunchApproval = true;
-                          });
+                // Punch Button or Late Approval Widget
+                if (isPunchedIn) ...[
+                  // Debug: User is punched in
+                  _buildPunchedInCard(),
+                ] else if (isAfterCutoff) ...[
+                  // Debug: After cutoff, should show approval widget
+                  // print(
+                  //   '🔍 BUILD: Showing approval widget (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
+                  // ),
+                  Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: LatePunchApprovalWidget(
+                          employeeWorkingHours: employeeWorkingHours,
+                          onApprovalRequested: () {
+                            // Refresh status after approval request
+                            setState(() {});
+                          },
+                          onApprovalCodeValidated: (String status) {
+                            // Store the approval status (no OTP needed)
+                            setState(() {
+                              hasLatePunchApproval = true;
+                            });
 
-                          // Show success message
-                          CustomToast.showSuccess(
-                            context,
-                            'Approval received! You can now punch in.',
-                          );
-                        },
-                        onApprovalReceived: () {
-                          // Refresh attendance status when approval is received or code is used
-                          _loadTodayPunchData();
-                        },
+                            // Show success message
+                            CustomToast.showSuccess(
+                              context,
+                              'Approval received! You can now punch in.',
+                            );
+                          },
+                          onApprovalReceived: () {
+                            // Refresh attendance status when approval is received or code is used
+                            _loadTodayPunchData();
+                          },
+                        ),
                       ),
-                    ),
-                    // Show punch-in button when approval is received
-                    if (hasLatePunchApproval) ...[
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.green[50],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.green[200]!),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: Colors.green[700],
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Approval received! You can now punch in directly.',
-                                      style: TextStyle(
-                                        color: Colors.green[700],
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
+                      // Show punch-in button when approval is received
+                      if (hasLatePunchApproval) ...[
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.green[200]!),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green[700],
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Approval received! You can now punch in directly.',
+                                        style: TextStyle(
+                                          color: Colors.green[700],
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 60,
-                              child: ElevatedButton(
-                                onPressed:
-                                    (_currentPosition != null &&
-                                        !isLoadingLocation)
-                                    ? () => _handlePunchIn()
-                                    : null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  elevation: 4,
+                                  ],
                                 ),
-                                child: isLoadingAttendance
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white,
-                                      )
-                                    : Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.login, size: 28),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            (_currentPosition != null &&
-                                                    !isLoadingLocation)
-                                                ? 'PUNCH IN (APPROVED)'
-                                                : 'Getting Location...',
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 1.0,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 60,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      (_currentPosition != null &&
+                                          !isLoadingLocation)
+                                      ? () => _handlePunchIn()
+                                      : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 4,
+                                  ),
+                                  child: isLoadingAttendance
+                                      ? const CircularProgressIndicator(
+                                          color: Colors.white,
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(Icons.login, size: 28),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              (_currentPosition != null &&
+                                                      !isLoadingLocation)
+                                                  ? 'PUNCH IN (APPROVED)'
+                                                  : 'Getting Location...',
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 1.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-              ] else ...[
-                // Debug: Before cutoff, showing normal punch button
-                // print(
-                //   '🔍 BUILD: Showing normal punch button (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
-                // ),
-                _buildPunchButton(),
+                  ),
+                ] else ...[
+                  // Debug: Before cutoff, showing normal punch button
+                  // print(
+                  //   '🔍 BUILD: Showing normal punch button (isAfterCutoff=$isAfterCutoff, isPunchedIn=$isPunchedIn)',
+                  // ),
+                  _buildPunchButton(),
+                ],
+
+                // Location Info
+                _buildLocationInfo(),
+
+                // Debug info for troubleshooting
+                if (isPunchedIn)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.yellow[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.yellow[300]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'DEBUG INFO:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[800],
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'isPunchedIn: $isPunchedIn',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        Text(
+                          'isBeforeEarlyPunchOutCutoff: $isBeforeEarlyPunchOutCutoff',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        Text(
+                          'currentAttendance: ${currentAttendance?.id}',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        Text(
+                          'Current time: ${DateTime.now()}',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        Text(
+                          'Should show approval: ${isBeforeEarlyPunchOutCutoff && currentAttendance != null}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                (isBeforeEarlyPunchOutCutoff &&
+                                    currentAttendance != null)
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 20),
               ],
-
-              // Location Info
-              _buildLocationInfo(),
-
-              // Debug info for troubleshooting
-              if (isPunchedIn)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.yellow[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.yellow[300]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DEBUG INFO:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange[800],
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'isPunchedIn: $isPunchedIn',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      Text(
-                        'isBeforeEarlyPunchOutCutoff: $isBeforeEarlyPunchOutCutoff',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      Text(
-                        'currentAttendance: ${currentAttendance?.id}',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      Text(
-                        'Current time: ${DateTime.now()}',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      Text(
-                        'Should show approval: ${isBeforeEarlyPunchOutCutoff && currentAttendance != null}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              (isBeforeEarlyPunchOutCutoff &&
-                                  currentAttendance != null)
-                              ? Colors.green
-                              : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              const SizedBox(height: 20),
-            ],
+            ),
           ),
         ),
+        floatingActionButton: isAfterCutoff && !isPunchedIn
+            ? FloatingActionButton.small(
+                onPressed: () {
+                  // Force refresh the approval widget
+                  setState(() {});
+                  CustomToast.showSuccess(
+                    context,
+                    'Refreshing approval status...',
+                  );
+                },
+                backgroundColor: Colors.orange,
+                child: const Icon(Icons.refresh, color: Colors.white),
+              )
+            : null,
       ),
-      floatingActionButton: isAfterCutoff && !isPunchedIn
-          ? FloatingActionButton.small(
-              onPressed: () {
-                // Force refresh the approval widget
-                setState(() {});
-                CustomToast.showSuccess(
-                  context,
-                  'Refreshing approval status...',
-                );
-              },
-              backgroundColor: Colors.orange,
-              child: const Icon(Icons.refresh, color: Colors.white),
-            )
-          : null,
-        ),
     );
   }
 
@@ -1796,7 +1702,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
           hasEarlyPunchOutApproval = false; // Clear approval after use
         });
 
-        await TrackingService.instance.stopTracking();
+        await AttendanceSessionManager.handlePunchOutSuccess();
 
         CustomToast.showSuccess(context, 'Punched out successfully!');
       } else {
@@ -2255,5 +2161,4 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen> with WidgetsB
       ),
     );
   }
-
 }
