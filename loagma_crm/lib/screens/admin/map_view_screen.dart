@@ -10,6 +10,7 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/google_places_service.dart';
 import '../../services/location_service.dart';
+import '../../services/tracking_service.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
 import '../../services/shop_service.dart';
@@ -277,7 +278,12 @@ class _AdminEnhancedMapScreenState extends State<AdminEnhancedMapScreen>
     _filterAnimationController.dispose();
     _filterDebounceTimer?.cancel();
     _markerCache.clear(); // Clear marker cache
-    LocationService.instance.stopLocationTracking();
+    // Only stop raw location tracking if live salesman tracking is not active.
+    // This prevents accidentally stopping background tracking for field users
+    // if they navigate through this admin map on the same device.
+    if (!TrackingService.instance.isTracking) {
+      LocationService.instance.stopLocationTracking();
+    }
     super.dispose();
   }
 

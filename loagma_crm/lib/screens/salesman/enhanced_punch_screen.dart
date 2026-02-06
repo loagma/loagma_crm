@@ -1069,6 +1069,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
 
                 // Location Info
                 _buildLocationInfo(),
+                _buildBatteryOptimizationInfo(),
 
                 // Debug info for troubleshooting
                 if (isPunchedIn)
@@ -2157,6 +2158,44 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Small helper text explaining device battery optimization settings that can
+  /// interfere with reliable background tracking on some Android devices.
+  Widget _buildBatteryOptimizationInfo() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.battery_alert,
+            color: Colors.orange[700],
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'For reliable background tracking, keep Location and mobile data ON '
+              'and allow Loagma CRM to run without battery optimization.\n\n'
+              'On many Android phones you can open Settings → Battery → App '
+              'battery usage, select Loagma CRM and choose “Unrestricted” or '
+              '“Allow in background”.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[800],
+              ),
+            ),
+          ),
         ],
       ),
     );

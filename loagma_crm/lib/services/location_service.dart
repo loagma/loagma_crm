@@ -260,14 +260,36 @@ class LocationService {
         return false;
       }
 
-      // Configure for high accuracy continuous tracking
-      // Uses foreground service on Android for background support
-      // Remove timeLimit to allow continuous background tracking
-      const LocationSettings locationSettings = LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 1, // Update every 1 meter
-        // timeLimit removed to allow continuous background tracking
-      );
+      // Configure for high accuracy continuous tracking.
+      // On Android we use a foreground service with a persistent notification
+      // so that tracking keeps working when the screen is off or the app is
+      // in the background.
+      LocationSettings locationSettings;
+
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        debugPrint(
+          '📡 Using Android foreground service for continuous background tracking',
+        );
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 1, // Update every 1 meter
+          // Let TrackingService/heartbeat control send cadence; keep sensor live.
+          foregroundNotificationConfig: const ForegroundNotificationConfig(
+            notificationTitle: 'Loagma CRM – Live work tracking',
+            notificationText:
+                'Location tracking is active for your work shift.',
+            notificationChannelName: 'Work tracking',
+            setOngoing: true,
+            enableWakeLock: true,
+            enableWifiLock: true,
+          ),
+        );
+      } else {
+        locationSettings = const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 1, // Update every 1 meter
+        );
+      }
 
       // Start position stream
       _positionStreamSubscription =
