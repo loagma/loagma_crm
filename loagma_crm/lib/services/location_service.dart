@@ -45,6 +45,68 @@ class LocationService {
   Position? get currentPosition => _currentPosition;
   bool get isTracking => _isTracking;
 
+  /// Current location permission (for background gate on Android).
+  Future<LocationPermission> getCurrentPermission() async {
+    try {
+      return await Geolocator.checkPermission();
+    } catch (e) {
+      debugPrint('Error getting location permission: $e');
+      return LocationPermission.denied;
+    }
+  }
+
+  /// On Android, background tracking requires "Allow all the time".
+  /// On other platforms we do not enforce this.
+  Future<bool> hasBackgroundLocationPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    final permission = await getCurrentPermission();
+    return permission == LocationPermission.always;
+  }
+
+  /// Show blocking dialog asking user to set Location to "Allow all the time"
+  /// so tracking works when the screen is off. Call when starting tracking on
+  /// Android with only "while in use" permission.
+  static Future<void> showRequireBackgroundLocationDialog(
+    BuildContext context,
+  ) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.location_on, color: Colors.orange, size: 28),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Background location required'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'To keep tracking while your screen is off, set Location to '
+            '"Allow all the time" for Loagma CRM in system Settings.\n\n'
+            'Without this, tracking will stop as soon as you lock the device.\n\n'
+            'When you have changed the setting, return here and tap Punch In again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   /// Check if location permissions are granted
   Future<bool> checkLocationPermission() async {
     try {
@@ -190,6 +252,119 @@ class LocationService {
     );
   }
 
+  /// Show a simple help dialog with step-by-step Android settings for
+  /// background tracking (Location "Allow all the time" and Battery unrestricted).
+  static Future<void> showBackgroundTrackingHelpDialog(
+    BuildContext context,
+  ) async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.help_outline, color: Colors.blue, size: 28),
+              SizedBox(width: 12),
+              Expanded(child: Text('Background tracking settings')),
+            ],
+          ),
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'For live tracking to work when the screen is off, set the following on your Android device:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  '1. Location – Allow all the time',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                Text(
+                  'Settings → Apps → Loagma CRM → Permissions → Location → '
+                  'choose "Allow all the time".',
+                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  '2. Battery – Unrestricted',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                Text(
+                  'Settings → Apps → Loagma CRM → Battery → '
+                  'choose "Unrestricted" or "Allow in background".',
+                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Names may vary slightly depending on your phone manufacturer.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openAppSettings();
+              },
+              child: const Text('Open App Settings'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Explain how to disable battery optimization for the app and jump the user
+  /// into the system App Settings screen so they can change it.
+  static Future<void> showBatteryOptimizationDialog(
+    BuildContext context,
+  ) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.battery_alert, color: Colors.orange, size: 28),
+              SizedBox(width: 12),
+              Expanded(child: Text('Battery optimization may stop tracking')),
+            ],
+          ),
+          content: const Text(
+            'On some Android phones, battery optimization can stop location '
+            'updates as soon as the screen is off.\n\n'
+            'To keep tracking reliable, open App Settings for Loagma CRM and:\n'
+            '• Set Battery / Power to “Unrestricted” or “Allow in background”.\n'
+            '• Make sure Location is set to “Allow all the time”.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openAppSettings();
+              },
+              child: const Text('Open App Settings'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   /// Show background location dialog
   static Future<bool> showBackgroundLocationDialog(BuildContext context) async {
     return await showDialog<bool>(
@@ -247,7 +422,7 @@ class LocationService {
   /// Start continuous location tracking with foreground service
   Future<bool> startLocationTracking() async {
     if (_isTracking) {
-      debugPrint('Location tracking already active');
+      debugPrint('📡 [LocationService] Location tracking already active');
       return true;
     }
 
@@ -263,28 +438,41 @@ class LocationService {
       // Configure for high accuracy continuous tracking.
       // On Android we use a foreground service with a persistent notification
       // so that tracking keeps working when the screen is off or the app is
-      // in the background.
+      // in the background. On other platforms we still request high accuracy
+      // but do not configure a foreground notification.
       LocationSettings locationSettings;
 
       if (defaultTargetPlatform == TargetPlatform.android) {
+        final permission = await getCurrentPermission();
         debugPrint(
-          '📡 Using Android foreground service for continuous background tracking',
+          '📡 [LocationService] Platform: Android – using foreground service for continuous background tracking',
+        );
+        debugPrint(
+          '📡 [LocationService] Android settings applied: enableWakeLock=true, enableWifiLock=true, icon=ic_launcher (mipmap)',
+        );
+        debugPrint(
+          '📡 [LocationService] Effective permission at tracking start: $permission',
+        );
+        debugPrint(
+          '📡 [LocationService] Starting Geolocator.getPositionStream with AndroidSettings + ForegroundNotificationConfig',
         );
         locationSettings = AndroidSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 1, // Update every 1 meter
-          // Let TrackingService/heartbeat control send cadence; keep sensor live.
+          distanceFilter: 5, // 5m to reduce sensor noise while keeping continuous
           foregroundNotificationConfig: const ForegroundNotificationConfig(
-            notificationTitle: 'Loagma CRM – Live work tracking',
-            notificationText:
-                'Location tracking is active for your work shift.',
+            notificationTitle: 'Loagma CRM – Tracking active',
+            notificationText: 'Live work tracking is on. Keep this for your shift.',
             notificationChannelName: 'Work tracking',
+            notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
             setOngoing: true,
             enableWakeLock: true,
             enableWifiLock: true,
           ),
         );
       } else {
+        debugPrint(
+          '📡 [LocationService] Platform: $defaultTargetPlatform – using high-accuracy LocationSettings without foreground notification',
+        );
         locationSettings = const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 1, // Update every 1 meter
@@ -297,6 +485,11 @@ class LocationService {
             locationSettings: locationSettings,
           ).listen(
             (Position position) {
+              if (!_isTracking) {
+                debugPrint(
+                  '⚠️ [LocationService] Received position while _isTracking=false; keeping stream but will ignore until tracking restarts.',
+                );
+              }
               _currentPosition = position;
               _locationController.add(position);
               debugPrint(
@@ -323,7 +516,10 @@ class LocationService {
       }
 
       _isTracking = true;
-      debugPrint('✅ Location tracking started');
+      final effectivePermission = await getCurrentPermission();
+      debugPrint(
+        '✅ Location tracking started; effective permission: $effectivePermission',
+      );
       return true;
     } catch (e) {
       debugPrint('❌ Error starting location tracking: $e');

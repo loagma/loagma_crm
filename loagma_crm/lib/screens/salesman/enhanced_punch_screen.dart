@@ -60,6 +60,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
 
+  // Background tracking guidance
+  bool _shouldShowBatteryOptimizationGuide = false;
+  LocationPermission? _lastKnownPermission;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +73,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
     _loadEmployeeWorkingHours();
     _loadTodayPunchData();
     _initializeLocationService();
+    _refreshBackgroundTrackingHints();
   }
 
   @override
@@ -88,6 +93,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
       if (isPunchedIn && !TrackingService.instance.isTracking) {
         AttendanceSessionManager.ensureTrackingForActiveSession(context);
       }
+
+      // Refresh permission/battery guidance when user returns from Settings.
+      _refreshBackgroundTrackingHints();
     }
   }
 
@@ -101,6 +109,53 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
         _checkCutoffTime();
       }
     });
+  }
+
+  /// Whether to show the non-blocking "set location to Allow all the time" hint
+  /// when not punched in (Android only).
+  bool _shouldShowPrePunchLocationHint = false;
+
+  /// Evaluate whether we should show the battery/location background guidance
+  /// banner. This is primarily targeted at Android devices while the user is
+  /// punched in and does not yet have "Allow all the time" location.
+  Future<void> _refreshBackgroundTrackingHints() async {
+    if (!mounted) return;
+
+    final platform = Theme.of(context).platform;
+    if (platform != TargetPlatform.android) {
+      if (_shouldShowBatteryOptimizationGuide ||
+          _lastKnownPermission != null ||
+          _shouldShowPrePunchLocationHint) {
+        setState(() {
+          _shouldShowBatteryOptimizationGuide = false;
+          _lastKnownPermission = null;
+          _shouldShowPrePunchLocationHint = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      final permission = await LocationService.instance.getCurrentPermission();
+      final shouldShowGuide =
+          isPunchedIn && permission != LocationPermission.always;
+      final shouldShowPreHint =
+          !isPunchedIn && permission == LocationPermission.whileInUse;
+
+      if (!mounted) return;
+
+      setState(() {
+        _shouldShowBatteryOptimizationGuide = shouldShowGuide;
+        _lastKnownPermission = permission;
+        _shouldShowPrePunchLocationHint = shouldShowPreHint;
+      });
+
+      debugPrint(
+        '📋 Background tracking hints: isPunchedIn=$isPunchedIn, permission=$permission, showGuide=$shouldShowGuide, showPreHint=$shouldShowPreHint',
+      );
+    } catch (e) {
+      debugPrint('❌ Error refreshing background tracking hints: $e');
+    }
   }
 
   @override
@@ -363,6 +418,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
           hasEarlyPunchOutApproval = hasApprovedEarlyPunchOut;
         });
 
+        // Update background tracking guidance based on latest punch state.
+        await _refreshBackgroundTrackingHints();
+
         if (attendance.isPunchedIn) {
           await AttendanceSessionManager.handlePunchInSuccess(
             context,
@@ -380,6 +438,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
           hasEarlyPunchOutApproval = false;
         });
         await UserService.setCurrentAttendanceId(null);
+        await _refreshBackgroundTrackingHints();
       }
     } catch (e) {
       print('Error loading attendance: $e');
@@ -396,6 +455,25 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
     if (_currentPosition == null) {
       CustomToast.showError(context, 'Location required for punch in');
       return;
+    }
+
+    // On Android, require "Allow all the time" before starting a shift so
+    // tracking stays online when the screen is off.
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      final hasBackground =
+          await LocationService.instance.hasBackgroundLocationPermission();
+      if (!hasBackground) {
+        await LocationService.showRequireBackgroundLocationDialog(context);
+        final hasAfter =
+            await LocationService.instance.hasBackgroundLocationPermission();
+        if (!hasAfter) {
+          CustomToast.showError(
+            context,
+            'Set Location to "Allow all the time" to start tracking.',
+          );
+          return;
+        }
+      }
     }
 
     // Show punch in dialog
@@ -448,6 +526,11 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
             attendance,
           );
         }
+
+        // User is now punched in; refresh background tracking guidance which
+        // may instruct them to switch Location to "Allow all the time" and
+        // relax battery optimization.
+        await _refreshBackgroundTrackingHints();
 
         CustomToast.showSuccess(context, 'Punched in successfully!');
       } else {
@@ -1354,6 +1437,42 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
       margin: const EdgeInsets.all(16),
       child: Column(
         children: [
+          if (_shouldShowPrePunchLocationHint) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'For tracking when screen is off, set Location to "Allow all the time" in Settings.',
+                      style: TextStyle(
+                        color: Colors.orange[800],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Geolocator.openAppSettings(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Settings', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (!isAfterCutoff) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -1704,6 +1823,9 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
         });
 
         await AttendanceSessionManager.handlePunchOutSuccess();
+
+        // No active shift; background tracking hints are no longer needed.
+        await _refreshBackgroundTrackingHints();
 
         CustomToast.showSuccess(context, 'Punched out successfully!');
       } else {
@@ -2166,6 +2288,10 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
   /// Small helper text explaining device battery optimization settings that can
   /// interfere with reliable background tracking on some Android devices.
   Widget _buildBatteryOptimizationInfo() {
+    if (!_shouldShowBatteryOptimizationGuide) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.all(12),
@@ -2184,16 +2310,64 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              'For reliable background tracking, keep Location and mobile data ON '
-              'and allow Loagma CRM to run without battery optimization.\n\n'
-              'On many Android phones you can open Settings → Battery → App '
-              'battery usage, select Loagma CRM and choose “Unrestricted” or '
-              '“Allow in background”.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[800],
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'For reliable tracking when your screen is off, keep Location '
+                  'and mobile data ON and allow Loagma CRM to run without battery '
+                  'optimization.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Settings → Apps → Loagma CRM:\n'
+                  '• Battery / Power → “Unrestricted” or “Allow in background”.\n'
+                  '• Permissions → Location → “Allow all the time”.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        LocationService.showBatteryOptimizationDialog(context);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: 4,
+                        ),
+                      ),
+                      child: const Text(
+                        'Fix battery & location settings',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        LocationService.showBackgroundTrackingHelpDialog(context);
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: 4,
+                        ),
+                      ),
+                      child: const Text(
+                        'Learn more',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],

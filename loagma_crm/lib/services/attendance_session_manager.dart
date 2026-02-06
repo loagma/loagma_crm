@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/attendance_model.dart';
 import 'attendance_service.dart';
+import 'location_service.dart';
 import 'tracking_service.dart';
 import 'user_service.dart';
 
@@ -37,6 +39,37 @@ class AttendanceSessionManager {
       if (TrackingService.instance.isTracking) {
         debugPrint('ℹ️ handlePunchInSuccess: tracking already active');
         return;
+      }
+
+      // On Android, require "Allow all the time" so tracking works with screen off.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final hasBackgroundBefore =
+            await LocationService.instance.hasBackgroundLocationPermission();
+        if (!hasBackgroundBefore) {
+          debugPrint(
+            '⚠️ handlePunchInSuccess: Android background location not granted, showing dialog',
+          );
+
+          // This dialog clearly explains why "Allow all the time" is needed
+          // and takes the user to App Settings.
+          await LocationService.showRequireBackgroundLocationDialog(context);
+
+          // Re-check after the user returns from Settings. Only allow the
+          // shift to start if background permission is now granted.
+          final hasBackgroundAfter =
+              await LocationService.instance.hasBackgroundLocationPermission();
+
+          if (!hasBackgroundAfter) {
+            debugPrint(
+              '❌ handlePunchInSuccess: background location still not granted after dialog, aborting tracking start',
+            );
+            return;
+          }
+
+          debugPrint(
+            '✅ handlePunchInSuccess: background location granted after dialog',
+          );
+        }
       }
 
       TrackingService.instance.setContext(context);

@@ -35,6 +35,8 @@ class TrackingService {
   // slightly larger than _minSendInterval.
   static const Duration _heartbeatInterval = Duration(seconds: 5);
   static const Duration _statusCheckInterval = Duration(seconds: 10);
+  /// If no GPS position received for this long while punched in, show a warning.
+  static const Duration _noGpsWarningThreshold = Duration(minutes: 3);
   // Ignore very small position shifts when updates are frequent.
   // Smaller value → denser polyline. 10m keeps routes smooth
   // without exploding Firestore/HTTP writes.
@@ -57,6 +59,9 @@ class TrackingService {
   bool _networkConnected = true;
   bool _hasShownLocationAlert = false;
   bool _hasShownNetworkAlert = false;
+  /// Last time we received a position from the GPS stream (not from heartbeat).
+  DateTime? _lastPositionReceivedAt;
+  bool _hasShownNoGpsWarning = false;
 
   bool get isTracking => _isTracking;
 
@@ -129,8 +134,10 @@ class TrackingService {
     _employeeName = null;
     _lastSentAt = null;
     _lastSentPosition = null;
+    _lastPositionReceivedAt = null;
     _hasShownLocationAlert = false;
     _hasShownNetworkAlert = false;
+    _hasShownNoGpsWarning = false;
     print('🛑 Tracking stopped');
   }
 
@@ -160,6 +167,7 @@ class TrackingService {
 
     _lastSentAt = now;
     _lastSentPosition = position;
+    _lastPositionReceivedAt = now;
 
     _sendToFirebase(position);
     _sendToBackend(position);
@@ -233,7 +241,59 @@ class TrackingService {
           _sendToBackend(_lastSentPosition!);
         }
       }
+
+      // If we had at least one position but none for a long time, likely
+      // battery optimization or "while in use" permission stopped updates.
+      if (_lastPositionReceivedAt != null &&
+          !_hasShownNoGpsWarning &&
+          DateTime.now().difference(_lastPositionReceivedAt!) >
+              _noGpsWarningThreshold) {
+        _hasShownNoGpsWarning = true;
+        debugPrint(
+          '⚠️ No GPS updates for ${_noGpsWarningThreshold.inMinutes}+ minutes; '
+          'possible battery optimization or permission issue.',
+        );
+        _showNoGpsUpdatesWarning();
+      }
     });
+  }
+
+  void _showNoGpsUpdatesWarning() {
+    if (_context == null || !_context!.mounted) return;
+    showDialog(
+      context: _context!,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.gps_off, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Expanded(child: Text('Tracking may have paused')),
+          ],
+        ),
+        content: const Text(
+          'No GPS updates for several minutes. This often happens when '
+          'the screen is off and either:\n\n'
+          '• Location is set to "Allow only while using the app" – change it to '
+          '"Allow all the time" for Loagma CRM in Settings → App → Permissions.\n\n'
+          '• Battery optimization is limiting the app – set Battery to '
+          '"Unrestricted" or "Allow in background" for Loagma CRM.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Geolocator.openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showLocationDisabledAlert() {
