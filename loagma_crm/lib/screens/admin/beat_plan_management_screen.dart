@@ -170,8 +170,8 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
         backgroundColor: primaryColor,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
-          'Create Beat Plan',
-          style: TextStyle(color: Colors.white),
+          '',
+          
         ),
       ),
     );
@@ -271,46 +271,6 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
             return Card(
               color: primaryColor.withValues(alpha: 0.08),
               margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'How to create a beat plan',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildStep(1, 'Account List', 'Select accounts → Allot → Pick salesman'),
-                    _buildStep(2, 'Salesman Allotment', 'See who has which customers'),
-                    _buildStep(3, 'Create Beat Plan', 'Auto distribute → Save'),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SalesmanAllotmentScreen(),
-                            ),
-                          ).then((_) => _loadBeatPlans(refresh: true));
-                        },
-                        icon: const Icon(Icons.add, size: 20),
-                        label: const Text('Start — Create Beat Plan'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             );
           }
           if (index == _beatPlans.length + 1) {

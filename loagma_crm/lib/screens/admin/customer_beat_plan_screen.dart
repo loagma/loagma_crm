@@ -274,8 +274,8 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildSimpleInstructions(),
-          const SizedBox(height: 16),
+          // _buildSimpleInstructions(),
+          // const SizedBox(height: 16),
           _buildWeekSelector(),
           const SizedBox(height: 16),
           _buildSummary(),
@@ -288,46 +288,48 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
     );
   }
 
-  Widget _buildSimpleInstructions() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.touch_app, color: Colors.blue.shade700, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                'Quick steps',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade900,
-                  fontSize: 15,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '1. Tap "Auto Distribute" to split customers across Mon–Sat\n'
-            '2. (Optional) Change any customer\'s day using the dropdown\n'
-            '3. Tap "Create Beat Plan" at the bottom',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.blue.shade900,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildSimpleInstructions() {
+  //   return Container(
+  //     padding: const EdgeInsets.all(14),
+  //     decoration: BoxDecoration(
+  //       color: Colors.blue.shade50,
+  //       borderRadius: BorderRadius.circular(12),
+  //       border: Border.all(color: Colors.blue.shade200),
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           children: [
+  //             Icon(Icons.touch_app, color: Colors.blue.shade700, size: 22),
+  //             const SizedBox(width: 8),
+  //             Text(
+  //               'Quick steps',
+  //               style: TextStyle(
+  //                 fontWeight: FontWeight.bold,
+  //                 color: Colors.blue.shade900,
+  //                 fontSize: 15,
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 8),
+  //         Text(
+  //           '1. Tap "Auto Distribute" to split customers across Mon–Sat\n'
+  //           '2. (Optional) Change any customer\'s day using the dropdown\n'
+  //           '3. Tap "Create Beat Plan" at the bottom',
+  //           style: TextStyle(
+  //             fontSize: 13,
+  //             color: Colors.blue.shade900,
+  //             height: 1.4,
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+
 
   Widget _buildWeekSelector() {
     return Card(

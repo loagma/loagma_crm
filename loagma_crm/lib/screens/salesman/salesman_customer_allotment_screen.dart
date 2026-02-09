@@ -18,6 +18,10 @@ class SalesmanCustomerAllotmentScreen extends StatefulWidget {
 
 class _SalesmanCustomerAllotmentScreenState
     extends State<SalesmanCustomerAllotmentScreen> {
+  // All allotted accounts for the salesman (unfiltered)
+  List<Account> _allAccounts = [];
+
+  // Currently visible accounts after applying day/search filters
   List<Account> _accounts = [];
   bool _isLoading = true;
   String? _searchQuery;
@@ -34,6 +38,9 @@ class _SalesmanCustomerAllotmentScreenState
     'Saturday',
     'Sunday',
   ];
+
+  /// Cached count of customers per day (1–7) for quick UX summary.
+  final Map<int, int> _dayCounts = {};
 
   String? get _currentUserId => UserService.currentUserId;
   static const Color _primary = Color(0xFFD7BE69);
@@ -61,14 +68,17 @@ class _SalesmanCustomerAllotmentScreenState
     try {
       final result = await AccountService.fetchAccounts(
         assignedToId: userId,
-        assignedDay: _selectedDayIndex > 0 ? _selectedDayIndex : null,
-        search: _searchQuery?.trim().isEmpty == true ? null : _searchQuery,
+        // Load all allotted customers; we will filter day & search client‑side
+        assignedDay: null,
+        search: null,
         limit: 500,
       );
       if (!mounted) return;
       final accounts = List<Account>.from(result['accounts'] ?? []);
       setState(() {
-        _accounts = accounts;
+        _allAccounts = accounts;
+        _recomputeDayCounts();
+        _applyFilters();
         _isLoading = false;
       });
     } catch (e) {
@@ -81,6 +91,50 @@ class _SalesmanCustomerAllotmentScreenState
           ),
         );
       }
+    }
+  }
+
+  /// Recalculate how many customers fall on each beat day (1–7).
+  void _recomputeDayCounts() {
+    _dayCounts.clear();
+    for (final acc in _allAccounts) {
+      final days = acc.assignedDays ?? const [];
+      for (final d in days) {
+        if (d < 1 || d > 7) continue;
+        _dayCounts[d] = (_dayCounts[d] ?? 0) + 1;
+      }
+    }
+  }
+
+  /// Apply current day + search filters to `_allAccounts`.
+  void _applyFilters() {
+    final query = _searchQuery?.trim().toLowerCase();
+    final selectedDay = _selectedDayIndex; // 0 = All
+
+    _accounts = _allAccounts.where((acc) {
+      // Day filter
+      if (selectedDay > 0) {
+        final days = acc.assignedDays ?? const [];
+        if (!days.contains(selectedDay)) return false;
+      }
+
+      // Search filter
+      if (query != null && query.isNotEmpty) {
+        final haystack = [
+          acc.personName,
+          acc.businessName ?? '',
+          acc.accountCode,
+          acc.contactNumber,
+        ].join(' ').toLowerCase();
+        if (!haystack.contains(query)) return false;
+      }
+
+      return true;
+    }).toList();
+
+    // Trigger rebuild
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -156,10 +210,8 @@ class _SalesmanCustomerAllotmentScreenState
                             ),
                           ),
                           onSubmitted: (v) {
-                            setState(() {
-                              _searchQuery = v.trim().isEmpty ? null : v.trim();
-                              _loadAccounts();
-                            });
+                            _searchQuery = v.trim().isEmpty ? null : v.trim();
+                            _applyFilters();
                           },
                         ),
                         const SizedBox(height: 12),
@@ -176,14 +228,25 @@ class _SalesmanCustomerAllotmentScreenState
                           child: Row(
                             children: List.generate(_dayLabels.length, (i) {
                               final isSelected = _selectedDayIndex == i;
+                              // For index 0 show total unique customers,
+                              // for other days show per‑day counts.
+                              String labelText;
+                              if (i == 0) {
+                                labelText =
+                                    'All days (${_allAccounts.length})';
+                              } else {
+                                final count = _dayCounts[i] ?? 0;
+                                labelText =
+                                    '${_dayLabels[i]}${count > 0 ? ' ($count)' : ''}';
+                              }
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: FilterChip(
-                                  label: Text(_dayLabels[i]),
+                                  label: Text(labelText),
                                   selected: isSelected,
                                   onSelected: (v) {
-                                    setState(() => _selectedDayIndex = v == true ? i : 0);
-                                    _loadAccounts();
+                                    _selectedDayIndex = v == true ? i : 0;
+                                    _applyFilters();
                                   },
                                   selectedColor: _primary.withValues(alpha: 0.3),
                                   checkmarkColor: _primary,

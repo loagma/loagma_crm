@@ -323,27 +323,61 @@ export const getWeeklyBeatPlanDetails = async (req, res) => {
             });
         }
 
-        // Get accounts for each day's areas
+        // Get accounts for each day's areas / assigned customers
         const dailyPlansWithAccounts = await Promise.all(
             beatPlan.dailyPlans.map(async (dailyPlan) => {
-                const accounts = await prisma.account.findMany({
-                    where: {
-                        area: { in: dailyPlan.assignedAreas },
-                        pincode: { in: beatPlan.pincodes },
-                        isActive: true
-                    },
-                    select: {
-                        id: true,
-                        accountCode: true,
-                        personName: true,
-                        businessName: true,
-                        contactNumber: true,
-                        area: true,
-                        address: true,
-                        latitude: true,
-                        longitude: true
-                    }
-                });
+                let accounts;
+
+                // For customer-based beat plans (generated from allotted customers),
+                // we don't store pincodes on the weekly plan. Instead, customers are
+                // linked via Account.assignedToId + assignedDays.
+                const isCustomerBasedPlan =
+                    !beatPlan.pincodes || beatPlan.pincodes.length === 0;
+
+                if (isCustomerBasedPlan) {
+                    // Fetch accounts allotted to this salesman for this specific day
+                    accounts = await prisma.account.findMany({
+                        where: {
+                            assignedToId: beatPlan.salesmanId,
+                            // assignedDays is an Int[] - use `has` to match current day
+                            assignedDays: {
+                                has: dailyPlan.dayOfWeek
+                            },
+                            isActive: true
+                        },
+                        select: {
+                            id: true,
+                            accountCode: true,
+                            personName: true,
+                            businessName: true,
+                            contactNumber: true,
+                            area: true,
+                            address: true,
+                            latitude: true,
+                            longitude: true
+                        }
+                    });
+                } else {
+                    // Original pincode/area-based plans
+                    accounts = await prisma.account.findMany({
+                        where: {
+                            area: { in: dailyPlan.assignedAreas },
+                            pincode: { in: beatPlan.pincodes },
+                            isActive: true
+                        },
+                        select: {
+                            id: true,
+                            accountCode: true,
+                            personName: true,
+                            businessName: true,
+                            contactNumber: true,
+                            area: true,
+                            address: true,
+                            latitude: true,
+                            longitude: true
+                        }
+                    });
+                }
 
                 return {
                     ...dailyPlan,

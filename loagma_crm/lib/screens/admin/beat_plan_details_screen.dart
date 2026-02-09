@@ -180,26 +180,48 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Areas',
-                    beatPlan.totalAreas.toString(),
-                    Icons.location_on,
-                    primaryColor,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Completion',
-                    '${beatPlan.completionRate}%',
-                    Icons.pie_chart,
-                    Colors.green,
-                  ),
-                ),
-              ],
+            Builder(
+              builder: (context) {
+                // Calculate total accounts across all daily plans
+                int totalAccounts = 0;
+                if (beatPlan.dailyPlans != null) {
+                  for (final dailyPlan in beatPlan.dailyPlans!) {
+                    if (dailyPlan.accounts != null) {
+                      totalAccounts += dailyPlan.accounts!.length;
+                    }
+                  }
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Areas',
+                        beatPlan.totalAreas.toString(),
+                        Icons.location_on,
+                        primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Accounts',
+                        totalAccounts.toString(),
+                        Icons.people,
+                        Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Completion',
+                        '${beatPlan.completionRate}%',
+                        Icons.pie_chart,
+                        Colors.green,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
             const Text(
@@ -334,12 +356,37 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        dailyPlan.dayName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            dailyPlan.dayName,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (dailyPlan.accounts != null && dailyPlan.accounts!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${dailyPlan.accounts!.length} accounts',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blue[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       Text(
                         '${dailyPlan.dayDate.day}/${dailyPlan.dayDate.month}/${dailyPlan.dayDate.year}',
@@ -420,6 +467,210 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                   );
                 }).toList(),
               ),
+            ],
+            // Show accounts for this day, grouped by area
+            if (dailyPlan.accounts != null && dailyPlan.accounts!.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.people, size: 18, color: primaryColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Accounts (${dailyPlan.accounts!.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Group accounts by area
+              ...dailyPlan.assignedAreas.map((areaName) {
+                final areaAccounts = dailyPlan.accounts!.where((accountMap) {
+                  final accountArea = accountMap['area']?.toString() ?? '';
+                  return accountArea.toLowerCase() == areaName.toLowerCase();
+                }).toList();
+                
+                if (areaAccounts.isEmpty) return const SizedBox.shrink();
+                
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.1),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.location_on, size: 18, color: primaryColor),
+                            const SizedBox(width: 8),
+                            Text(
+                              areaName,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${areaAccounts.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: areaAccounts.map((accountMap) {
+                            final accountName = accountMap['personName'] ?? 
+                                accountMap['businessName'] ?? 'Unknown';
+                            final businessName = accountMap['businessName'] ?? '';
+                            final contactNumber = accountMap['contactNumber'] ?? '';
+                            final address = accountMap['address'] ?? '';
+                            
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        accountName.isNotEmpty 
+                                            ? accountName[0].toUpperCase() 
+                                            : '?',
+                                        style: TextStyle(
+                                          color: primaryColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          accountName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (businessName.isNotEmpty && 
+                                            businessName != accountName) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            businessName,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                        if (contactNumber.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.phone, 
+                                                size: 12, 
+                                                color: Colors.grey[600],
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                contactNumber,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey[700],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        if (address != null && address.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Icon(
+                                                Icons.location_on, 
+                                                size: 12, 
+                                                color: Colors.grey[600],
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  address,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ],
             if (dailyPlan.isMissed && !_beatPlan!.isLocked) ...[
               const SizedBox(height: 16),

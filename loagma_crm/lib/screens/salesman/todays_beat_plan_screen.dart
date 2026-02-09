@@ -11,7 +11,6 @@ class TodaysBeatPlanScreen extends StatefulWidget {
 }
 
 class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
-  TodaysBeatPlan? _todaysPlan;
   WeeklyBeatPlan? _weeklyPlan;
   bool _isLoading = true;
   String? _error;
@@ -41,12 +40,8 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
       // Load this week's beat plan
       final weeklyPlan = await BeatPlanService.getThisWeeksBeatPlan();
 
-      // Also try to get today's specific plan
-      final todaysPlan = await BeatPlanService.getTodaysBeatPlan();
-
       setState(() {
         _weeklyPlan = weeklyPlan;
-        _todaysPlan = todaysPlan;
         _isLoading = false;
 
         // Set selected day to today
@@ -211,7 +206,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
       return _buildErrorState();
     }
 
-    if (_weeklyPlan == null && _todaysPlan == null) {
+    if (_weeklyPlan == null) {
       return _buildNoPlanState();
     }
 
