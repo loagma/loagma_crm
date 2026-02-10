@@ -412,18 +412,25 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Tracking'),
+        title: const Padding(
+          padding: EdgeInsets.only(bottom: 4),
+          child: Text('Live Tracking'),
+        ),
         backgroundColor: primaryColor,
         elevation: 2,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.location_on), text: 'Live Tracking'),
-            Tab(icon: Icon(Icons.route), text: 'Route Details'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(40),
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            labelPadding: const EdgeInsets.symmetric(vertical: 4),
+            tabs: const [
+              Tab(icon: Icon(Icons.location_on, size: 18), text: 'Live Tracking'),
+              Tab(icon: Icon(Icons.route, size: 18), text: 'Route Details'),
+            ],
+          ),
         ),
         actions: [
           if (_errorMessage != null)
@@ -624,22 +631,27 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                 alignment: Alignment.center,
                 clipBehavior: Clip.none,
                 children: [
-                  Icon(
-                    Icons.person_pin_circle,
-                    color: isSelected
-                        ? primaryColor
-                        : (isLive ? Colors.green : Colors.red),
-                    size: 40,
+                  // Bike PNG marker (from assets/bycicle.png)
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/bycicle.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   if (isSelected)
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: primaryColor, width: 3),
-                      ),
-                    ),
+                    
                   // Live indicator dot
                   if (isLive && !isSelected)
                     Positioned(
@@ -668,9 +680,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
               livePoints.isNotEmpty ? livePoints.first : _LivePoint.fallback(),
         );
 
-        final centerPoint = livePoints.isNotEmpty
-            ? selectedPoint.latLng
-            : _defaultCenter;
+          final centerPoint = livePoints.isNotEmpty
+              ? selectedPoint.latLng
+              : _defaultCenter;
 
         // Note: The StreamBuilder automatically rebuilds when Firebase data changes,
         // so markers update in real-time. The map center is set initially but
@@ -679,6 +691,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         return Column(
           children: [
             _buildFilterBar(livePoints),
+            const Divider(height: 1),
             Expanded(
               child: FlutterMap(
                 mapController: _mapController,
@@ -1147,7 +1160,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
   Widget _buildFilterBar(List<_LivePoint> livePoints) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -1158,405 +1171,445 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedEmployeeId,
-                  decoration: InputDecoration(
-                    labelText: 'Employee',
-                    prefixIcon: const Icon(Icons.person),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(
-                        color: primaryColor,
-                        width: 2,
-                      ),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 16,
-                    ),
-                  ),
-                  items: livePoints.map((point) {
-                    final displayName = _getEmployeeName(
-                      point.employeeId,
-                      point.employeeName,
-                    );
-                    return DropdownMenuItem(
-                      value: point.employeeId,
-                      child: Text(
-                        displayName.isNotEmpty ? displayName : point.employeeId,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    final selected = livePoints.firstWhere(
-                      (point) => point.employeeId == value,
-                      orElse: () => _LivePoint.fallback(),
-                    );
-                    final displayName = _getEmployeeName(
-                      selected.employeeId,
-                      selected.employeeName,
-                    );
-                    setState(() {
-                      _selectedEmployeeId = value;
-                      _selectedEmployeeName = displayName;
-                      _hasLoadedRoute =
-                          false; // Reset flag when employee changes
-                      _routePoints = []; // Clear old route
-                      _liveRoutePoints = []; // Clear old live route
-                    });
-                    if (selected != _LivePoint.fallback()) {
-                      _focusOnPoint(selected.latLng);
-                    }
-                    // Fetch attendance for selected employee
-                    _fetchTodayAttendance([value]);
-                    // Load route after state update
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _loadRoute();
-                    });
-                  },
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _selectedEmployeeId,
+              decoration: InputDecoration(
+                labelText: 'Employee',
+                prefixIcon: const Icon(Icons.person, size: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-              const SizedBox(width: 12),
-              if (_isLoadingRoute)
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
                     color: primaryColor,
+                    width: 2,
                   ),
-                )
-              else if (_selectedEmployeeId != null)
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Reload Route',
-                  onPressed: () {
-                    setState(() {
-                      _hasLoadedRoute = false; // Reset to allow reload
-                      _routePoints = []; // Clear old route
-                      _liveRoutePoints = []; // Clear old live route
-                    });
-                    _loadRoute();
-                  },
-                  color: primaryColor,
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickDate(isStart: true),
-                icon: const Icon(Icons.date_range, size: 18),
-                label: Text(
-                  _startDate == null
-                      ? 'Start date'
-                      : '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryColor,
-                  side: BorderSide(color: primaryColor),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () => _pickDate(isStart: false),
-                icon: const Icon(Icons.event, size: 18),
-                label: Text(
-                  _endDate == null
-                      ? 'End date'
-                      : '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryColor,
-                  side: BorderSide(color: primaryColor),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+              items: livePoints.map((point) {
+                final displayName = _getEmployeeName(
+                  point.employeeId,
+                  point.employeeName,
+                );
+                return DropdownMenuItem(
+                  value: point.employeeId,
+                  child: Text(
+                    displayName.isNotEmpty ? displayName : point.employeeId,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ),
-              // Employee info card with punch-in time and live indicator
-              if (_selectedEmployeeId != null)
-                Builder(
-                  builder: (context) {
-                    final selectedPoint = livePoints.firstWhere(
-                      (point) => point.employeeId == _selectedEmployeeId,
-                      orElse: () => _LivePoint.fallback(),
-                    );
-
-                    if (selectedPoint == _LivePoint.fallback()) {
-                      return const SizedBox.shrink();
-                    }
-
-                    final lastUpdate =
-                        selectedPoint.updatedAt ?? selectedPoint.recordedAt;
-                    // Consider live if updated within last 2 minutes (more lenient)
-                    final isLive =
-                        lastUpdate != null &&
-                        DateTime.now().difference(lastUpdate).inMinutes < 2;
-
-                    // Get actual punch-in time from attendance record (today's data)
-                    final attendance = _attendanceMap[selectedPoint.employeeId];
-                    final punchInTime = attendance?.punchInTime;
-
-                    // Check if punch-in time is from today
-                    final now = DateTime.now();
-                    final startOfToday = DateTime(now.year, now.month, now.day);
-                    final isTodayPunchIn =
-                        punchInTime != null &&
-                        punchInTime.isAfter(
-                          startOfToday.subtract(const Duration(days: 1)),
-                        ) &&
-                        punchInTime.isBefore(
-                          startOfToday.add(const Duration(days: 1)),
-                        );
-
-                    // Use today's punch-in time if available, otherwise fallback to tracking start time
-                    final displayTime = isTodayPunchIn
-                        ? punchInTime
-                        : selectedPoint.recordedAt;
-
-                    // Check if we should show "No punch-in today" message
-                    final hasNoTodayPunchIn =
-                        attendance == null || !isTodayPunchIn;
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isLive ? Colors.green : Colors.grey.shade300,
-                          width: isLive ? 2 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.person, size: 18, color: primaryColor),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _selectedEmployeeName ?? 'Unknown',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: primaryColor,
-                                  ),
-                                ),
-                              ),
-                              // Live tracking indicator
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isLive
-                                      ? Colors.green
-                                      : Colors.grey.shade400,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isLive)
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.white,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      )
-                                    else
-                                      const SizedBox(width: 8),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isLive ? 'LIVE' : 'OFFLINE',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          if (hasNoTodayPunchIn && displayTime != null) ...[
-                            // Show yesterday's or old punch-in time with a note
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.login,
-                                  size: 14,
-                                  color: Colors.orange.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    'Last punch-in: ${DateFormat('MMM dd, HH:mm').format(displayTime)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.orange.shade600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'No punch-in today',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey.shade500,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ] else if (displayTime != null) ...[
-                            // Show today's punch-in time
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.login,
-                                  size: 14,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Punched in: ${DateFormat('MMM dd, HH:mm').format(displayTime)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (lastUpdate != null) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.access_time,
-                                  size: 14,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Last update: ${_formatTime(lastUpdate)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.person, size: 18, color: primaryColor),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Select an employee',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: Colors.red.shade700,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _loadEmployeeNames,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                final selected = livePoints.firstWhere(
+                  (point) => point.employeeId == value,
+                  orElse: () => _LivePoint.fallback(),
+                );
+                final displayName = _getEmployeeName(
+                  selected.employeeId,
+                  selected.employeeName,
+                );
+                setState(() {
+                  _selectedEmployeeId = value;
+                  _selectedEmployeeName = displayName;
+                  _hasLoadedRoute = false; // Reset flag when employee changes
+                  _routePoints = []; // Clear old route
+                  _liveRoutePoints = []; // Clear old live route
+                });
+                if (selected != _LivePoint.fallback()) {
+                  _focusOnPoint(selected.latLng);
+                }
+                // Fetch attendance for selected employee
+                _fetchTodayAttendance([value]);
+                // Load route after state update
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _loadRoute();
+                });
+              },
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          if (_isLoadingRoute)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: primaryColor,
+              ),
+            )
+          else if (_selectedEmployeeId != null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Reload Route',
+              onPressed: () {
+                setState(() {
+                  _hasLoadedRoute = false; // Reset to allow reload
+                  _routePoints = []; // Clear old route
+                  _liveRoutePoints = []; // Clear old live route
+                });
+                _loadRoute();
+              },
+              color: primaryColor,
+            ),
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: 'Filters & info',
+            onPressed: () => _showFilterBottomSheet(livePoints),
+            color: primaryColor,
+          ),
         ],
       ),
+    );
+  }
+
+  void _showFilterBottomSheet(List<_LivePoint> livePoints) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Filters & employee info',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _pickDate(isStart: true),
+                      icon: const Icon(Icons.date_range, size: 18),
+                      label: Text(
+                        _startDate == null
+                            ? 'Start date'
+                            : '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: primaryColor,
+                        side: const BorderSide(color: primaryColor),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _pickDate(isStart: false),
+                      icon: const Icon(Icons.event, size: 18),
+                      label: Text(
+                        _endDate == null
+                            ? 'End date'
+                            : '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: primaryColor,
+                        side: const BorderSide(color: primaryColor),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (_selectedEmployeeId != null)
+                  Builder(
+                    builder: (context) {
+                      final selectedPoint = livePoints.firstWhere(
+                        (point) => point.employeeId == _selectedEmployeeId,
+                        orElse: () => _LivePoint.fallback(),
+                      );
+
+                      if (selectedPoint == _LivePoint.fallback()) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final lastUpdate =
+                          selectedPoint.updatedAt ?? selectedPoint.recordedAt;
+                      // Consider live if updated within last 10 minutes (more lenient)
+                      final isLive = lastUpdate != null &&
+                          DateTime.now().difference(lastUpdate) <
+                              const Duration(minutes: 10);
+
+                      // Get actual punch-in time from attendance record (today's data)
+                      final attendance =
+                          _attendanceMap[selectedPoint.employeeId];
+                      final punchInTime = attendance?.punchInTime;
+
+                      // Check if punch-in time is from today
+                      final now = DateTime.now();
+                      final startOfToday =
+                          DateTime(now.year, now.month, now.day);
+                      final isTodayPunchIn =
+                          punchInTime != null &&
+                          punchInTime.isAfter(
+                            startOfToday.subtract(const Duration(days: 1)),
+                          ) &&
+                          punchInTime.isBefore(
+                            startOfToday.add(const Duration(days: 1)),
+                          );
+
+                      // Use today's punch-in time if available, otherwise fallback to tracking start time
+                      final displayTime = isTodayPunchIn
+                          ? punchInTime
+                          : selectedPoint.recordedAt;
+
+                      // Check if we should show "No punch-in today" message
+                      final hasNoTodayPunchIn =
+                          attendance == null || !isTodayPunchIn;
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isLive
+                                ? Colors.green
+                                : Colors.grey.shade300,
+                            width: isLive ? 2 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.person,
+                                    size: 18, color: primaryColor),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _selectedEmployeeName ?? 'Unknown',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isLive
+                                        ? Colors.green
+                                        : Colors.grey.shade400,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isLive)
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        )
+                                      else
+                                        const SizedBox(width: 8),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isLive ? 'LIVE' : 'OFFLINE',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            if (hasNoTodayPunchIn && displayTime != null) ...[
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.login,
+                                    size: 14,
+                                    color: Colors.orange.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      'Last punch-in: ${DateFormat('MMM dd, HH:mm').format(displayTime)}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.orange.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'No punch-in today',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade500,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ] else if (displayTime != null) ...[
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.login,
+                                    size: 14,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Punched in: ${DateFormat('MMM dd, HH:mm').format(displayTime)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (lastUpdate != null) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 14,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Last update: ${_formatTime(lastUpdate)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.person, size: 18, color: primaryColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Select an employee',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _loadEmployeeNames,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -36,7 +36,7 @@ class TrackingService {
   static const Duration _heartbeatInterval = Duration(seconds: 5);
   static const Duration _statusCheckInterval = Duration(seconds: 10);
   /// If no GPS position received for this long while punched in, show a warning.
-  static const Duration _noGpsWarningThreshold = Duration(minutes: 3);
+  static const Duration _noGpsWarningThreshold = Duration(minutes: 1);
   // Ignore very small position shifts when updates are frequent.
   // Smaller value → denser polyline. 10m keeps routes smooth
   // without exploding Firestore/HTTP writes.

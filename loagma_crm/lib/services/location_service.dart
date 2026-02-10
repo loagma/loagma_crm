@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 
 /// Location service for continuous GPS tracking.
 ///
@@ -355,7 +356,15 @@ class LocationService {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                Geolocator.openAppSettings();
+                if (defaultTargetPlatform == TargetPlatform.android) {
+                  // Deep-link directly into battery optimization settings where possible.
+                  // This uses the disable_battery_optimization plugin which handles
+                  // manufacturer-specific screens on many devices.
+                  DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+                } else {
+                  // Fallback for non-Android platforms.
+                  Geolocator.openAppSettings();
+                }
               },
               child: const Text('Open App Settings'),
             ),
