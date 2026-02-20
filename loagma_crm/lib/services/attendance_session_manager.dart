@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../models/attendance_model.dart';
 import 'attendance_service.dart';
 import 'location_service.dart';
-import 'tracking_service.dart';
+import 'socket_tracking_service.dart';
 import 'user_service.dart';
 
 /// Central place to coordinate attendance sessions and live tracking.
@@ -36,15 +36,15 @@ class AttendanceSessionManager {
       }
 
       // If tracking is already running, don't restart it.
-      if (TrackingService.instance.isTracking) {
+      if (SocketTrackingService.instance.isTracking) {
         debugPrint('ℹ️ handlePunchInSuccess: tracking already active');
         return;
       }
 
       // On Android, require "Allow all the time" so tracking works with screen off.
       if (defaultTargetPlatform == TargetPlatform.android) {
-        final hasBackgroundBefore =
-            await LocationService.instance.hasBackgroundLocationPermission();
+        final hasBackgroundBefore = await LocationService.instance
+            .hasBackgroundLocationPermission();
         if (!hasBackgroundBefore) {
           debugPrint(
             '⚠️ handlePunchInSuccess: Android background location not granted, showing dialog',
@@ -56,8 +56,8 @@ class AttendanceSessionManager {
 
           // Re-check after the user returns from Settings. Only allow the
           // shift to start if background permission is now granted.
-          final hasBackgroundAfter =
-              await LocationService.instance.hasBackgroundLocationPermission();
+          final hasBackgroundAfter = await LocationService.instance
+              .hasBackgroundLocationPermission();
 
           if (!hasBackgroundAfter) {
             debugPrint(
@@ -72,15 +72,16 @@ class AttendanceSessionManager {
         }
       }
 
-      TrackingService.instance.setContext(context);
-      await TrackingService.instance.startTracking(
-        attendanceId: attendance.id,
+      // Connect to Socket.IO and start tracking
+      await SocketTrackingService.instance.connect();
+      await SocketTrackingService.instance.startTracking(
         employeeId: employeeId,
+        attendanceId: attendance.id,
         employeeName: employeeName,
       );
 
       debugPrint(
-        '✅ handlePunchInSuccess: tracking started for attendance ${attendance.id}',
+        '✅ handlePunchInSuccess: Socket.IO tracking started for attendance ${attendance.id}',
       );
     } catch (e) {
       debugPrint('❌ handlePunchInSuccess error: $e');
@@ -92,9 +93,10 @@ class AttendanceSessionManager {
     try {
       await UserService.setCurrentAttendanceId(null);
 
-      if (TrackingService.instance.isTracking) {
-        await TrackingService.instance.stopTracking();
-        debugPrint('✅ handlePunchOutSuccess: tracking stopped');
+      if (SocketTrackingService.instance.isTracking) {
+        await SocketTrackingService.instance.stopTracking();
+        await SocketTrackingService.instance.disconnect();
+        debugPrint('✅ handlePunchOutSuccess: Socket.IO tracking stopped');
       } else {
         debugPrint('ℹ️ handlePunchOutSuccess: tracking already stopped');
       }
@@ -126,7 +128,7 @@ class AttendanceSessionManager {
       }
 
       // If tracking is already active, nothing to do.
-      if (TrackingService.instance.isTracking) {
+      if (SocketTrackingService.instance.isTracking) {
         debugPrint(
           'ℹ️ ensureTrackingForActiveSession: tracking already active',
         );

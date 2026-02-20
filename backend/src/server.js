@@ -1,9 +1,11 @@
 import './config/env.js';
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { startExpiryJob, stopExpiryJob } from './jobs/approvalExpiryJob.js';
+import { initializeSocketServer, getActiveConnectionsCount } from './socket/socketServer.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
@@ -37,6 +39,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app);
 
 // Middleware
 app.use(cors({
@@ -61,15 +64,30 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
+    const connections = getActiveConnectionsCount();
     res.json({
         success: true,
         message: 'Server is healthy',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        socketIO: {
+            active: true,
+            connections,
+        },
     });
 });
 
 // API Routes
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Socket.IO status endpoint
+app.get('/socket/status', (req, res) => {
+    const connections = getActiveConnectionsCount();
+    res.json({
+        socketIO: 'active',
+        connections,
+        timestamp: new Date().toISOString(),
+    });
+});
 
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
@@ -129,10 +147,14 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-const server = app.listen(PORT, HOST, () => {
+const server = httpServer.listen(PORT, HOST, () => {
     console.log(`✅ Server running on http://${HOST}:${PORT}`);
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔌 Socket.IO initialized and ready`);
 });
+
+// Initialize Socket.IO after server starts
+initializeSocketServer(httpServer);
 
 
 // Start background jobs
@@ -142,7 +164,7 @@ startExpiryJob();
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully');
     stopExpiryJob();
-    server.close(() => {
+    httpServer.close(() => {
         console.log('✅ Server closed');
         process.exit(0);
     });
@@ -151,7 +173,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
     stopExpiryJob();
-    server.close(() => {
+    httpServer.close(() => {
         console.log('✅ Server closed');
         process.exit(0);
     });

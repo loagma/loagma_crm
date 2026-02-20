@@ -1,0 +1,11 @@
+# Add these dependencies to your pubspec.yaml
+
+dependencies:
+  # Existing dependencies...
+  
+  # Socket.IO client for real-time tracking
+  socket_io_client: ^2.0.3+1
+  
+  # Already have these (keep them):
+  # geolocator: ^13.0.2
+  # permission_handler: ^11.3.1
