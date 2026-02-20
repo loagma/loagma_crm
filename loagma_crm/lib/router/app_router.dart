@@ -22,6 +22,7 @@ import '../screens/manager/manager_reminder_calls_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
 import '../screens/admin/approval_requests_screen.dart';
 import '../screens/admin/live_tracking_screen.dart';
+import '../screens/admin/enhanced_live_tracking_screen.dart';
 
 // Shared screens
 import '../screens/shared/account_master_screen.dart';
@@ -214,7 +215,7 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: 'tracking',
-          builder: (_, __) => const LiveTrackingScreen(),
+          builder: (_, __) => const EnhancedLiveTrackingScreen(),
         ),
 
         // Salesman Allotment (Admin) - shows salesman ↔ customers

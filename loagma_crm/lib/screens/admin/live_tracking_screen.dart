@@ -341,16 +341,23 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
           liveLatLng.latitude,
           liveLatLng.longitude,
         );
-        // Add if distance is more than 5 meters (to avoid duplicate points from GPS drift)
-        // But always update the last point if it's the same location (for real-time updates)
-        if (distance > 0.005) {
+        // Add if distance is more than 10 meters (reduced threshold for better tracking)
+        // This ensures we capture actual movement while filtering GPS drift
+        if (distance > 0.010) {
           combined.add(liveLatLng);
-        } else {
-          // Update last point to current live position (in case GPS accuracy improved)
-          combined[combined.length - 1] = liveLatLng;
+        } else if (combined.length == 1) {
+          // If only one point, always update it to show current position
+          combined[0] = liveLatLng;
         }
       }
       _liveRoutePoints = combined;
+
+      // Debug log only when route size changes significantly (every 10 points)
+      if (combined.length % 10 == 0 || combined.length <= 5) {
+        debugPrint(
+          '🗺️ Live route updated: ${combined.length} points (${historicalPoints.length} historical + live)',
+        );
+      }
     } else {
       // No live point, just use historical route
       _liveRoutePoints = historicalPoints;
@@ -427,7 +434,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
             unselectedLabelColor: Colors.white70,
             labelPadding: const EdgeInsets.symmetric(vertical: 4),
             tabs: const [
-              Tab(icon: Icon(Icons.location_on, size: 18), text: 'Live Tracking'),
+              Tab(
+                icon: Icon(Icons.location_on, size: 18),
+                text: 'Live Tracking',
+              ),
               Tab(icon: Icon(Icons.route, size: 18), text: 'Route Details'),
             ],
           ),
@@ -521,16 +531,18 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
         // Store current live points for route loading
         _currentLivePoints = livePoints;
 
-        // Fetch today's active attendance for all visible employees
+        // Fetch today's active attendance for all visible employees (only once)
         // Only fetch if we don't already have data for these employees
-        if (livePoints.isNotEmpty) {
-          final employeeIds = livePoints.map((p) => p.employeeId).toList();
-          final missingIds = employeeIds
-              .where((id) => !_attendanceMap.containsKey(id))
+        if (livePoints.isNotEmpty && _attendanceMap.isEmpty) {
+          final employeeIds = livePoints
+              .map((p) => p.employeeId)
+              .toSet()
               .toList();
-          if (missingIds.isNotEmpty) {
-            _fetchTodayAttendance(missingIds);
-          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _fetchTodayAttendance(employeeIds);
+            }
+          });
         }
 
         if (livePoints.isEmpty) {
@@ -539,6 +551,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
         // Update live route points in real-time (combine historical + live)
         if (_selectedEmployeeId != null) {
+          // Update route without triggering setState to avoid rebuild loop
           _updateLiveRoutePointsWithLiveData(_routePoints, livePoints);
 
           // Always ensure we have at least the current live point for polyline
@@ -651,22 +664,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     ),
                   ),
                   if (isSelected)
-                    
-                  // Live indicator dot
-                  if (isLive && !isSelected)
-                    Positioned(
-                      top: -2,
-                      right: -2,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                    // Live indicator dot
+                    if (isLive && !isSelected)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
                         ),
                       ),
-                    ),
                 ],
               ),
             ),
@@ -680,9 +692,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
               livePoints.isNotEmpty ? livePoints.first : _LivePoint.fallback(),
         );
 
-          final centerPoint = livePoints.isNotEmpty
-              ? selectedPoint.latLng
-              : _defaultCenter;
+        final centerPoint = livePoints.isNotEmpty
+            ? selectedPoint.latLng
+            : _defaultCenter;
 
         // Note: The StreamBuilder automatically rebuilds when Firebase data changes,
         // so markers update in real-time. The map center is set initially but
@@ -711,8 +723,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                     backgroundColor: Colors.transparent,
                   ),
                   // Route polyline - show combined route (historical + live)
-                  // Show polyline if we have at least 2 points
-                  if (_liveRoutePoints.length > 1)
+                  // Show polyline if we have at least 1 point (changed from 2 to show even single point routes)
+                  if (_liveRoutePoints.isNotEmpty)
                     PolylineLayer(
                       polylines: [
                         Polyline(
@@ -725,7 +737,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                       ],
                     )
                   // If we only have historical route (no live points yet), show that
-                  else if (_routePoints.length > 1)
+                  else if (_routePoints.isNotEmpty)
                     PolylineLayer(
                       polylines: [
                         Polyline(
@@ -1188,10 +1200,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(
-                    color: primaryColor,
-                    width: 2,
-                  ),
+                  borderSide: const BorderSide(color: primaryColor, width: 2),
                 ),
                 filled: true,
                 fillColor: Colors.grey.shade50,
@@ -1368,7 +1377,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                       final lastUpdate =
                           selectedPoint.updatedAt ?? selectedPoint.recordedAt;
                       // Consider live if updated within last 10 minutes (more lenient)
-                      final isLive = lastUpdate != null &&
+                      final isLive =
+                          lastUpdate != null &&
                           DateTime.now().difference(lastUpdate) <
                               const Duration(minutes: 10);
 
@@ -1379,8 +1389,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
 
                       // Check if punch-in time is from today
                       final now = DateTime.now();
-                      final startOfToday =
-                          DateTime(now.year, now.month, now.day);
+                      final startOfToday = DateTime(
+                        now.year,
+                        now.month,
+                        now.day,
+                      );
                       final isTodayPunchIn =
                           punchInTime != null &&
                           punchInTime.isAfter(
@@ -1409,9 +1422,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                           color: primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isLive
-                                ? Colors.green
-                                : Colors.grey.shade300,
+                            color: isLive ? Colors.green : Colors.grey.shade300,
                             width: isLive ? 2 : 1,
                           ),
                         ),
@@ -1421,8 +1432,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen>
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.person,
-                                    size: 18, color: primaryColor),
+                                Icon(
+                                  Icons.person,
+                                  size: 18,
+                                  color: primaryColor,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(

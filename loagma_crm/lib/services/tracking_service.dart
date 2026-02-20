@@ -27,14 +27,15 @@ class TrackingService {
 
   // Minimum time between GPS payloads pushed to Firestore/backend
   // when the user is actively moving. Shorter → smoother polyline
-  // but more network/battery. 3 seconds is a good \"live\" balance.
-  static const Duration _minSendInterval = Duration(seconds: 3);
+  // but more network/battery. 5 seconds is a good balance.
+  static const Duration _minSendInterval = Duration(seconds: 5);
 
   // Heartbeat interval used to keep the salesman \"LIVE\" in Firestore
   // even if the device is not moving. This should be equal to or
   // slightly larger than _minSendInterval.
-  static const Duration _heartbeatInterval = Duration(seconds: 5);
+  static const Duration _heartbeatInterval = Duration(seconds: 10);
   static const Duration _statusCheckInterval = Duration(seconds: 10);
+
   /// If no GPS position received for this long while punched in, show a warning.
   static const Duration _noGpsWarningThreshold = Duration(minutes: 1);
   // Ignore very small position shifts when updates are frequent.
@@ -59,6 +60,7 @@ class TrackingService {
   bool _networkConnected = true;
   bool _hasShownLocationAlert = false;
   bool _hasShownNetworkAlert = false;
+
   /// Last time we received a position from the GPS stream (not from heartbeat).
   DateTime? _lastPositionReceivedAt;
   bool _hasShownNoGpsWarning = false;
@@ -146,28 +148,41 @@ class TrackingService {
       return;
     }
 
-    // Removed accuracy filter - accept all positions to keep tracking active
-    // Only filter by time/distance to avoid excessive updates
+    // Accept all positions to keep tracking active
+    // Filter by time/distance to avoid excessive updates
     final now = DateTime.now();
-    if (_lastSentAt != null &&
-        now.difference(_lastSentAt!) < _minSendInterval) {
-      final distance = _lastSentPosition == null
-          ? 0.0
-          : Geolocator.distanceBetween(
-              _lastSentPosition!.latitude,
-              _lastSentPosition!.longitude,
-              position.latitude,
-              position.longitude,
-            );
-      // If less than 5 seconds passed, only send if moved 25+ meters
-      if (distance < _minDistanceMeters) {
-        return;
-      }
+
+    // Calculate distance from last sent position
+    final distance = _lastSentPosition == null
+        ? double.infinity
+        : Geolocator.distanceBetween(
+            _lastSentPosition!.latitude,
+            _lastSentPosition!.longitude,
+            position.latitude,
+            position.longitude,
+          );
+
+    // Send if:
+    // 1. First position (no last sent position)
+    // 2. Minimum interval passed AND moved at least 10 meters
+    // 3. Moved more than 50 meters (regardless of time)
+    final shouldSend =
+        _lastSentAt == null ||
+        (now.difference(_lastSentAt!) >= _minSendInterval &&
+            distance >= _minDistanceMeters) ||
+        distance >= 50;
+
+    if (!shouldSend) {
+      return;
     }
 
     _lastSentAt = now;
     _lastSentPosition = position;
     _lastPositionReceivedAt = now;
+
+    debugPrint(
+      '📍 Sending position: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)} (moved ${distance.toStringAsFixed(1)}m)',
+    );
 
     _sendToFirebase(position);
     _sendToBackend(position);

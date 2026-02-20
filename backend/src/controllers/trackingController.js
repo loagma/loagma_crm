@@ -93,13 +93,19 @@ export const getTrackingRoute = async (req, res) => {
       });
     }
 
-    // Calculate date range - default to today
+    // Calculate date range
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const parsedStart = parseDateValue(start);
     const parsedEnd = parseDateValue(end);
-    const finalStartDate = parsedStart && parsedStart >= startOfToday ? parsedStart : startOfToday;
-    const finalEndDate = parsedEnd && parsedEnd <= now ? parsedEnd : now;
+
+    // Default to today if no dates provided
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const finalStartDate = parsedStart || startOfToday;
+    const finalEndDate = parsedEnd || endOfToday;
+
+    console.log(`📍 Fetching route for employeeId=${employeeId}, attendanceId=${attendanceId || 'all'}, date range: ${finalStartDate.toISOString()} to ${finalEndDate.toISOString()}`);
 
     // Try to query - if model doesn't exist, catch the error
     let points = [];
@@ -119,16 +125,14 @@ export const getTrackingRoute = async (req, res) => {
         take: limit ? Number(limit) : undefined,
       });
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`✅ Found ${points.length} tracking points for route`);
-      }
+      console.log(`✅ Found ${points.length} tracking points for route`);
     } catch (dbError) {
       // Check if error is about missing model
       const errorMsg = dbError.message || dbError.toString();
-      if (errorMsg.includes('salesmanTrackingPoint') || 
-          errorMsg.includes('undefined') ||
-          errorMsg.includes("Cannot read properties") ||
-          dbError.code === 'P2001') {
+      if (errorMsg.includes('salesmanTrackingPoint') ||
+        errorMsg.includes('undefined') ||
+        errorMsg.includes("Cannot read properties") ||
+        dbError.code === 'P2001') {
         console.error('❌ Prisma model salesmanTrackingPoint not available');
         console.error('   Solution: Stop the server, then run: cd backend && npx prisma generate');
         return res.status(500).json({
@@ -144,6 +148,7 @@ export const getTrackingRoute = async (req, res) => {
       success: true,
       data: points,
       meta: {
+        count: points.length,
         dateRange: {
           start: finalStartDate.toISOString(),
           end: finalEndDate.toISOString(),
