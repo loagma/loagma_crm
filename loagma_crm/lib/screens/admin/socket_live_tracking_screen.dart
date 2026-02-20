@@ -77,6 +77,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
   // In-memory state of active employees
   final Map<String, _EmployeeLocation> _activeEmployees = {};
+  final Map<String, List<LatLng>> _employeeRoutes =
+      {}; // Store routes for each employee
   String? _selectedEmployeeId;
   bool _isConnected = false;
   bool _isConnecting = true;
@@ -168,57 +170,90 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     });
 
     try {
-      // Get latest locations for all employees
-      final response = await TrackingApiService.getLiveTracking();
+      // Get today's punched-in employees from attendance API
+      final response = await TrackingApiService.getTodayPunchedInEmployees();
 
       if (!mounted) return;
 
       if (response['success'] == true && response['data'] is List) {
-        final locationsList = response['data'] as List;
+        final punchedInList = response['data'] as List;
 
-        for (var location in locationsList) {
-          if (location is Map) {
-            final employeeId = location['employeeId']?.toString();
-            final lat = location['latitude'];
-            final lng = location['longitude'];
+        debugPrint('📋 Found ${punchedInList.length} punched-in employees');
 
-            if (employeeId != null && lat != null && lng != null && mounted) {
-              // Check if this employee is currently punched in
-              final timeSinceUpdate = DateTime.now().difference(
-                DateTime.parse(
-                  location['recordedAt'] ?? DateTime.now().toIso8601String(),
-                ),
+        for (var attendance in punchedInList) {
+          if (attendance is Map) {
+            final employeeId = attendance['employeeId']?.toString();
+            final employeeName = attendance['employeeName']?.toString();
+
+            if (employeeId != null && employeeName != null && mounted) {
+              // Try to get latest location for this employee
+              final locationResult = await TrackingApiService.getLiveTracking(
+                employeeId: employeeId,
               );
 
-              // Only show if updated within last 2 hours (likely still punched in)
-              if (timeSinceUpdate.inHours < 2) {
+              // Check if location data exists
+              if (locationResult['success'] == true &&
+                  locationResult['data'] != null &&
+                  locationResult['data'] is Map) {
+                final locationData = locationResult['data'];
+                final lat = locationData['latitude'];
+                final lng = locationData['longitude'];
+
+                if (lat != null && lng != null) {
+                  final latLng = LatLng(
+                    (lat is num ? lat : num.parse(lat.toString())).toDouble(),
+                    (lng is num ? lng : num.parse(lng.toString())).toDouble(),
+                  );
+
+                  setState(() {
+                    _activeEmployees[employeeId] = _EmployeeLocation(
+                      employeeId: employeeId,
+                      employeeName: employeeName,
+                      latitude: latLng.latitude,
+                      longitude: latLng.longitude,
+                      speed: locationData['speed'] != null
+                          ? (locationData['speed'] is num
+                                    ? locationData['speed']
+                                    : num.parse(
+                                        locationData['speed'].toString(),
+                                      ))
+                                .toDouble()
+                          : 0,
+                      accuracy: locationData['accuracy'] != null
+                          ? (locationData['accuracy'] is num
+                                    ? locationData['accuracy']
+                                    : num.parse(
+                                        locationData['accuracy'].toString(),
+                                      ))
+                                .toDouble()
+                          : 0,
+                      lastUpdate: DateTime.parse(
+                        locationData['recordedAt'] ??
+                            DateTime.now().toIso8601String(),
+                      ),
+                    );
+
+                    // Initialize route with current location
+                    if (!_employeeRoutes.containsKey(employeeId)) {
+                      _employeeRoutes[employeeId] = [latLng];
+                    }
+                  });
+                  debugPrint('✅ Loaded location for $employeeName');
+                }
+              } else {
+                // No location data yet, but still add employee to list with default location
                 setState(() {
                   _activeEmployees[employeeId] = _EmployeeLocation(
                     employeeId: employeeId,
-                    employeeName:
-                        employeeId, // Will be updated by Socket.IO if connected
-                    latitude: (lat is num ? lat : num.parse(lat.toString()))
-                        .toDouble(),
-                    longitude: (lng is num ? lng : num.parse(lng.toString()))
-                        .toDouble(),
-                    speed: location['speed'] != null
-                        ? (location['speed'] is num
-                                  ? location['speed']
-                                  : num.parse(location['speed'].toString()))
-                              .toDouble()
-                        : 0,
-                    accuracy: location['accuracy'] != null
-                        ? (location['accuracy'] is num
-                                  ? location['accuracy']
-                                  : num.parse(location['accuracy'].toString()))
-                              .toDouble()
-                        : 0,
-                    lastUpdate: DateTime.parse(
-                      location['recordedAt'] ??
-                          DateTime.now().toIso8601String(),
-                    ),
+                    employeeName: employeeName,
+                    latitude: 0,
+                    longitude: 0,
+                    speed: 0,
+                    accuracy: 0,
+                    lastUpdate: DateTime.now(),
                   );
                 });
+                debugPrint('⚠️ No location data yet for $employeeName');
               }
             }
           }
@@ -232,10 +267,10 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       }
 
       debugPrint(
-        '✅ Loaded ${_activeEmployees.length} employees with recent locations from API',
+        '✅ Loaded ${_activeEmployees.length} punched-in employees (${_activeEmployees.values.where((e) => e.latitude != 0 || e.longitude != 0).length} with locations)',
       );
     } catch (e) {
-      debugPrint('❌ Error loading employee locations: $e');
+      debugPrint('❌ Error loading punched-in employees: $e');
       if (mounted) {
         setState(() {
           _isLoadingFallback = false;
@@ -317,16 +352,19 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
         return;
       }
 
+      final latLng = LatLng(
+        (latitude is num ? latitude : num.parse(latitude.toString()))
+            .toDouble(),
+        (longitude is num ? longitude : num.parse(longitude.toString()))
+            .toDouble(),
+      );
+
       setState(() {
         _activeEmployees[employeeId] = _EmployeeLocation(
           employeeId: employeeId,
           employeeName: employeeName ?? employeeId,
-          latitude:
-              (latitude is num ? latitude : num.parse(latitude.toString()))
-                  .toDouble(),
-          longitude:
-              (longitude is num ? longitude : num.parse(longitude.toString()))
-                  .toDouble(),
+          latitude: latLng.latitude,
+          longitude: latLng.longitude,
           speed: (speed is num ? speed : num.parse(speed.toString()))
               .toDouble(),
           accuracy:
@@ -334,10 +372,21 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                   .toDouble(),
           lastUpdate: recordedAt,
         );
+
+        // Add point to employee's route
+        if (!_employeeRoutes.containsKey(employeeId)) {
+          _employeeRoutes[employeeId] = [];
+        }
+        _employeeRoutes[employeeId]!.add(latLng);
+
+        // Keep only last 100 points to avoid memory issues
+        if (_employeeRoutes[employeeId]!.length > 100) {
+          _employeeRoutes[employeeId]!.removeAt(0);
+        }
       });
 
       debugPrint(
-        '📍 Location updated: $employeeId (${_activeEmployees.length} active)',
+        '📍 Location updated: $employeeId (${_activeEmployees.length} active, ${_employeeRoutes[employeeId]?.length ?? 0} points)',
       );
     } catch (e) {
       debugPrint('❌ Error handling location update: $e');
@@ -350,6 +399,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
     setState(() {
       _activeEmployees.remove(employeeId);
+      // Keep the route for historical view, or remove it
+      // _employeeRoutes.remove(employeeId); // Uncomment to clear route on disconnect
     });
 
     debugPrint(
@@ -441,23 +492,151 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       return _buildEmptyState();
     }
 
-    return _buildMap();
+    return Column(
+      children: [
+        _buildEmployeeDropdown(),
+        Expanded(child: _buildMap()),
+      ],
+    );
+  }
+
+  Widget _buildEmployeeDropdown() {
+    final employees = _activeEmployees.values.toList();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.grey[100],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Select Employee to Track',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _selectedEmployeeId,
+            hint: const Text('Choose an employee'),
+            isExpanded: true,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              suffixIcon: _selectedEmployeeId != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _selectedEmployeeId = null;
+                        });
+                      },
+                    )
+                  : null,
+            ),
+            items: employees.map((emp) {
+              final routePoints = _employeeRoutes[emp.employeeId]?.length ?? 0;
+              final hasLocation = emp.latitude != 0 || emp.longitude != 0;
+              final timeAgo = hasLocation
+                  ? _formatTimeAgo(DateTime.now().difference(emp.lastUpdate))
+                  : 'No location';
+
+              return DropdownMenuItem<String>(
+                value: emp.employeeId,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: hasLocation ? Colors.green : Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          hasLocation
+                              ? '${emp.employeeName} ($routePoints pts)'
+                              : '${emp.employeeName} (waiting...)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        timeAgo,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedEmployeeId = value;
+              });
+              if (value != null && _activeEmployees.containsKey(value)) {
+                final emp = _activeEmployees[value]!;
+                if (emp.latitude != 0 || emp.longitude != 0) {
+                  _mapController.move(LatLng(emp.latitude, emp.longitude), 15);
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMap() {
-    final employees = _activeEmployees.values.toList();
+    // Filter employees with valid locations
+    final employeesWithLocation = _activeEmployees.values
+        .where((e) => e.latitude != 0 || e.longitude != 0)
+        .toList();
+
+    // Show default map with message if no locations yet
+    final showDefaultMap = employeesWithLocation.isEmpty;
 
     // Calculate center point
-    final centerLat =
-        employees.map((e) => e.latitude).reduce((a, b) => a + b) /
-        employees.length;
-    final centerLng =
-        employees.map((e) => e.longitude).reduce((a, b) => a + b) /
-        employees.length;
-    final center = LatLng(centerLat, centerLng);
+    LatLng center;
+    if (_selectedEmployeeId != null &&
+        _activeEmployees.containsKey(_selectedEmployeeId)) {
+      final emp = _activeEmployees[_selectedEmployeeId]!;
+      if (emp.latitude != 0 || emp.longitude != 0) {
+        center = LatLng(emp.latitude, emp.longitude);
+      } else {
+        // Default center if selected employee has no location
+        center = LatLng(24.8607, 67.0011); // Karachi default
+      }
+    } else if (employeesWithLocation.isNotEmpty) {
+      final centerLat =
+          employeesWithLocation.map((e) => e.latitude).reduce((a, b) => a + b) /
+          employeesWithLocation.length;
+      final centerLng =
+          employeesWithLocation
+              .map((e) => e.longitude)
+              .reduce((a, b) => a + b) /
+          employeesWithLocation.length;
+      center = LatLng(centerLat, centerLng);
+    } else {
+      // Default center when no locations available
+      center = LatLng(24.8607, 67.0011); // Karachi default
+    }
 
-    // Create markers
-    final markers = employees.map((employee) {
+    // Create markers only for employees with valid locations
+    final markers = employeesWithLocation.map((employee) {
       final isSelected = employee.employeeId == _selectedEmployeeId;
       final timeSinceUpdate = DateTime.now().difference(employee.lastUpdate);
       final isLive = timeSinceUpdate.inMinutes < 2;
@@ -523,92 +702,92 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       );
     }).toList();
 
-    return Column(
-      children: [
-        _buildEmployeeList(employees),
-        Expanded(
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(center: center, zoom: 13),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.loagma_crm',
-              ),
-              MarkerLayer(markers: markers),
-            ],
-          ),
+    // Get polyline for selected employee
+    final polylines = <Polyline>[];
+    if (_selectedEmployeeId != null &&
+        _employeeRoutes.containsKey(_selectedEmployeeId) &&
+        _employeeRoutes[_selectedEmployeeId]!.length > 1) {
+      polylines.add(
+        Polyline(
+          points: _employeeRoutes[_selectedEmployeeId]!,
+          color: primaryColor,
+          strokeWidth: 4,
+          borderStrokeWidth: 2,
+          borderColor: Colors.white,
         ),
-      ],
-    );
-  }
+      );
 
-  Widget _buildEmployeeList(List<_EmployeeLocation> employees) {
-    return Container(
-      height: 80,
-      color: Colors.grey[100],
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        itemCount: employees.length,
-        itemBuilder: (context, index) {
-          final employee = employees[index];
-          final isSelected = employee.employeeId == _selectedEmployeeId;
-          final timeSinceUpdate = DateTime.now().difference(
-            employee.lastUpdate,
-          );
-          final timeAgo = _formatTimeAgo(timeSinceUpdate);
+      // Add start marker for the route
+      final startPoint = _employeeRoutes[_selectedEmployeeId]!.first;
+      markers.add(
+        Marker(
+          point: startPoint,
+          width: 30,
+          height: 30,
+          builder: (_) =>
+              const Icon(Icons.play_circle, color: Colors.green, size: 30),
+        ),
+      );
+    }
 
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedEmployeeId = employee.employeeId;
-              });
-              _mapController.move(
-                LatLng(employee.latitude, employee.longitude),
-                15,
-              );
-            },
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(center: center, zoom: 13),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.example.loagma_crm',
+        ),
+        if (polylines.isNotEmpty) PolylineLayer(polylines: polylines),
+        MarkerLayer(markers: markers),
+        // Show overlay message when waiting for locations
+        if (showDefaultMap)
+          Positioned.fill(
             child: Container(
-              width: 140,
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isSelected ? primaryColor : Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isSelected ? primaryColor : Colors.grey[300]!,
-                  width: 2,
+              color: Colors.black.withValues(alpha: 0.5),
+              child: Center(
+                child: Card(
+                  margin: const EdgeInsets.all(32),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.location_searching,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Waiting for Location Data',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${_activeEmployees.length} employee(s) punched in',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Waiting for them to send location...',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    employee.employeeName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? Colors.white : Colors.black87,
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    timeAgo,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isSelected ? Colors.white70 : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
             ),
-          );
-        },
-      ),
+          ),
+      ],
     );
   }
 

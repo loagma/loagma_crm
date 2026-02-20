@@ -152,6 +152,14 @@ class SocketTrackingService {
       await connect();
     }
 
+    // Start location service first
+    final locationStarted = await LocationService.instance
+        .startLocationTracking();
+    if (!locationStarted) {
+      debugPrint('❌ Failed to start location service');
+      throw Exception('Failed to start location service');
+    }
+
     // Notify server about session start
     _socket?.emit('session-start', {
       'employeeId': employeeId,
@@ -180,6 +188,9 @@ class SocketTrackingService {
     await _locationSubscription?.cancel();
     _locationSubscription = null;
 
+    // Stop location service
+    LocationService.instance.stopLocationTracking();
+
     // Notify server about session end
     _socket?.emit('session-end', {
       'employeeId': _employeeId,
@@ -196,13 +207,22 @@ class SocketTrackingService {
 
   /// Handle location updates from GPS
   void _handleLocationUpdate(Position position) {
-    if (!_isTracking || !isConnected) return;
+    if (!_isTracking || !isConnected) {
+      debugPrint(
+        '⏭️ Skipping location update: tracking=$_isTracking, connected=$isConnected',
+      );
+      return;
+    }
 
     final now = DateTime.now();
 
     // Rate limiting: Enforce 5-second interval
     if (_lastSentTime != null &&
         now.difference(_lastSentTime!) < _sendInterval) {
+      final timeSinceLastSend = now.difference(_lastSentTime!).inSeconds;
+      debugPrint(
+        '⏭️ Skipping location update: too soon (${timeSinceLastSend}s < ${_sendInterval.inSeconds}s)',
+      );
       return;
     }
 
@@ -216,8 +236,13 @@ class SocketTrackingService {
       );
 
       if (distance < _minDistanceMeters) {
+        debugPrint(
+          '⏭️ Skipping location update: movement too small (${distance.toStringAsFixed(1)}m < ${_minDistanceMeters}m)',
+        );
         return; // Skip update if movement is too small
       }
+
+      debugPrint('✅ Movement threshold met: ${distance.toStringAsFixed(1)}m');
     }
 
     // Send location update via Socket.IO
@@ -228,6 +253,9 @@ class SocketTrackingService {
   void _sendLocationUpdate(Position position) {
     if (!isConnected || _employeeId == null || _attendanceId == null) {
       debugPrint('⚠️ Cannot send location: Not connected or missing IDs');
+      debugPrint(
+        '   Connected: $isConnected, EmployeeId: $_employeeId, AttendanceId: $_attendanceId',
+      );
       return;
     }
 
@@ -242,14 +270,22 @@ class SocketTrackingService {
       'timestamp': DateTime.now().toIso8601String(),
     };
 
+    debugPrint('📤 Sending location update to server:');
+    debugPrint('   Employee: $_employeeName ($_employeeId)');
+    debugPrint('   Attendance: $_attendanceId');
+    debugPrint(
+      '   Location: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+    );
+    debugPrint(
+      '   Accuracy: ${position.accuracy.toStringAsFixed(1)}m, Speed: ${position.speed.toStringAsFixed(1)}m/s',
+    );
+
     _socket!.emit('location-update', payload);
 
     _lastPosition = position;
     _lastSentTime = DateTime.now();
 
-    debugPrint(
-      '📍 Location sent: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-    );
+    debugPrint('✅ Location update sent successfully');
   }
 
   /// Start heartbeat to keep connection alive

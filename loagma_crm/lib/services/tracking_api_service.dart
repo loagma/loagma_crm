@@ -152,4 +152,50 @@ class TrackingApiService {
       return {'success': false, 'message': 'Error: $e', 'data': []};
     }
   }
+
+  static Future<Map<String, dynamic>> getTodayPunchedInEmployees() async {
+    try {
+      // Get today's date in YYYY-MM-DD format
+      final today = DateTime.now();
+      final dateStr =
+          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/attendance/all').replace(
+        queryParameters: {
+          'date': dateStr,
+          'limit': '1000', // Get all for today
+        },
+      );
+
+      final token = UserService.token;
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        // Filter only punched-in employees (no punch out time)
+        final allAttendance = data['data'] as List;
+        final punchedIn = allAttendance.where((att) {
+          return att['punchOutTime'] == null;
+        }).toList();
+
+        return {'success': true, 'data': punchedIn};
+      }
+
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to load attendance',
+        'data': [],
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e', 'data': []};
+    }
+  }
 }

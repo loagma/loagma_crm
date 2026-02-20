@@ -173,9 +173,18 @@ const handleLocationUpdate = async (socket, data) => {
     const employeeId = socket.employeeId || socket.userId;
     const now = Date.now();
 
+    console.log(`📥 Received location update from ${employeeId}:`, {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        attendanceId: data.attendanceId,
+        speed: data.speed,
+        accuracy: data.accuracy,
+    });
+
     // Rate limiting: Max 1 update every 5 seconds
     const connectionInfo = activeConnections.get(employeeId);
     if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 5000) {
+        console.log(`⏭️ Skipping update for ${employeeId} - too frequent (${now - connectionInfo.lastUpdate}ms ago)`);
         return; // Ignore updates that are too frequent
     }
 
@@ -191,12 +200,14 @@ const handleLocationUpdate = async (socket, data) => {
 
         // Validate required fields
         if (!latitude || !longitude || !attendanceId) {
+            console.error(`❌ Missing required fields for ${employeeId}:`, { latitude, longitude, attendanceId });
             socket.emit('error', { message: 'Missing required fields' });
             return;
         }
 
         // Validate coordinates
         if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude, longitude });
             socket.emit('error', { message: 'Invalid coordinates' });
             return;
         }
@@ -205,8 +216,17 @@ const handleLocationUpdate = async (socket, data) => {
         const lastLocation = await getLastLocation(employeeId);
         if (lastLocation && !hasMovedSignificantly(lastLocation, { latitude, longitude })) {
             // Skip update if movement is less than 10 meters
+            const distance = calculateDistance(
+                lastLocation.latitude,
+                lastLocation.longitude,
+                latitude,
+                longitude
+            );
+            console.log(`⏭️ Skipping update for ${employeeId} - movement too small (${(distance * 1000).toFixed(1)}m)`);
             return;
         }
+
+        console.log(`💾 Saving location point for ${employeeId} to database...`);
 
         // Save to PostgreSQL (permanent storage)
         const savedPoint = await prisma.salesmanTrackingPoint.create({
@@ -220,6 +240,8 @@ const handleLocationUpdate = async (socket, data) => {
                 recordedAt: new Date(),
             },
         });
+
+        console.log(`✅ Saved tracking point: ID=${savedPoint.id}, Employee=${employeeId}, Attendance=${attendanceId}`);
 
         // Update connection info
         connectionInfo.lastUpdate = now;
@@ -238,6 +260,8 @@ const handleLocationUpdate = async (socket, data) => {
         };
 
         // Broadcast to all admins in real-time
+        const adminCount = io.sockets.adapter.rooms.get('admin-room')?.size || 0;
+        console.log(`📡 Broadcasting location to ${adminCount} admin(s) in admin-room`);
         io.to('admin-room').emit('location-update', payload);
 
         // Send acknowledgment to mobile app
@@ -246,10 +270,12 @@ const handleLocationUpdate = async (socket, data) => {
             timestamp: savedPoint.recordedAt,
         });
 
-        console.log(`📍 Location updated: ${employeeId} (${latitude}, ${longitude})`);
+        console.log(`📍 Location updated: ${employeeId} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
     } catch (error) {
         console.error('❌ Error handling location update:', error);
-        socket.emit('error', { message: 'Failed to save location' });
+        console.error('Error details:', error.message);
+        console.error('Stack trace:', error.stack);
+        socket.emit('error', { message: 'Failed to save location', error: error.message });
     }
 };
 
