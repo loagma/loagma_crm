@@ -79,6 +79,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
   final Map<String, _EmployeeLocation> _activeEmployees = {};
   final Map<String, List<LatLng>> _employeeRoutes =
       {}; // Store routes for each employee
+  final Map<String, LatLng> _employeePunchInLocations =
+      {}; // Store punch-in locations
   String? _selectedEmployeeId;
   bool _isConnected = false;
   bool _isConnecting = true;
@@ -184,8 +186,34 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           if (attendance is Map) {
             final employeeId = attendance['employeeId']?.toString();
             final employeeName = attendance['employeeName']?.toString();
+            final punchInLat = attendance['punchInLatitude'];
+            final punchInLng = attendance['punchInLongitude'];
 
             if (employeeId != null && employeeName != null && mounted) {
+              // Store punch-in location if available
+              if (punchInLat != null && punchInLng != null) {
+                final punchInLocation = LatLng(
+                  (punchInLat is num
+                          ? punchInLat
+                          : num.parse(punchInLat.toString()))
+                      .toDouble(),
+                  (punchInLng is num
+                          ? punchInLng
+                          : num.parse(punchInLng.toString()))
+                      .toDouble(),
+                );
+
+                setState(() {
+                  _employeePunchInLocations[employeeId] = punchInLocation;
+                  // Initialize route with punch-in location as first point
+                  _employeeRoutes[employeeId] = [punchInLocation];
+                });
+
+                debugPrint(
+                  '📍 Punch-in location for $employeeName: ${punchInLocation.latitude.toStringAsFixed(6)}, ${punchInLocation.longitude.toStringAsFixed(6)}',
+                );
+              }
+
               // Try to get latest location for this employee
               final locationResult = await TrackingApiService.getLiveTracking(
                 employeeId: employeeId,
@@ -233,9 +261,10 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                       ),
                     );
 
-                    // Initialize route with current location
-                    if (!_employeeRoutes.containsKey(employeeId)) {
-                      _employeeRoutes[employeeId] = [latLng];
+                    // Add current location to route (after punch-in location)
+                    if (_employeeRoutes.containsKey(employeeId) &&
+                        !_employeeRoutes[employeeId]!.contains(latLng)) {
+                      _employeeRoutes[employeeId]!.add(latLng);
                     }
                   });
                   debugPrint('✅ Loaded location for $employeeName');
@@ -373,15 +402,33 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           lastUpdate: recordedAt,
         );
 
-        // Add point to employee's route
+        // Initialize route with punch-in location if not already done
         if (!_employeeRoutes.containsKey(employeeId)) {
-          _employeeRoutes[employeeId] = [];
+          // If we have punch-in location, start with it
+          if (_employeePunchInLocations.containsKey(employeeId)) {
+            _employeeRoutes[employeeId] = [
+              _employeePunchInLocations[employeeId]!,
+            ];
+          } else {
+            _employeeRoutes[employeeId] = [];
+          }
         }
-        _employeeRoutes[employeeId]!.add(latLng);
+
+        // Add point to employee's route (avoid duplicates)
+        if (_employeeRoutes[employeeId]!.isEmpty ||
+            _employeeRoutes[employeeId]!.last != latLng) {
+          _employeeRoutes[employeeId]!.add(latLng);
+        }
 
         // Keep only last 100 points to avoid memory issues
         if (_employeeRoutes[employeeId]!.length > 100) {
-          _employeeRoutes[employeeId]!.removeAt(0);
+          // Keep punch-in location if it exists
+          if (_employeePunchInLocations.containsKey(employeeId)) {
+            final punchInLoc = _employeeRoutes[employeeId]!.first;
+            _employeeRoutes[employeeId]!.removeAt(1); // Remove second point
+          } else {
+            _employeeRoutes[employeeId]!.removeAt(0);
+          }
         }
       });
 
@@ -717,17 +764,71 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
         ),
       );
 
-      // Add start marker for the route
-      final startPoint = _employeeRoutes[_selectedEmployeeId]!.first;
-      markers.add(
-        Marker(
-          point: startPoint,
-          width: 30,
-          height: 30,
-          builder: (_) =>
-              const Icon(Icons.play_circle, color: Colors.green, size: 30),
-        ),
-      );
+      // Add punch-in marker (start point) if available
+      if (_employeePunchInLocations.containsKey(_selectedEmployeeId)) {
+        final punchInPoint = _employeePunchInLocations[_selectedEmployeeId]!;
+        markers.add(
+          Marker(
+            point: punchInPoint,
+            width: 40,
+            height: 40,
+            builder: (_) => Container(
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Add current location marker (end point) if different from punch-in
+      if (_employeeRoutes[_selectedEmployeeId]!.length > 1) {
+        final currentPoint = _employeeRoutes[_selectedEmployeeId]!.last;
+        // Only add if it's different from punch-in location
+        if (!_employeePunchInLocations.containsKey(_selectedEmployeeId) ||
+            _employeePunchInLocations[_selectedEmployeeId] != currentPoint) {
+          markers.add(
+            Marker(
+              point: currentPoint,
+              width: 40,
+              height: 40,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: primaryColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.navigation,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+          );
+        }
+      }
     }
 
     return FlutterMap(
@@ -1187,21 +1288,55 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
         // Start and End markers
         MarkerLayer(
           markers: [
-            // Start marker
+            // Start marker (Punch-in location)
             Marker(
               point: _routePoints.first,
-              width: 40,
-              height: 40,
-              builder: (_) =>
-                  const Icon(Icons.play_circle, color: Colors.green, size: 40),
+              width: 50,
+              height: 50,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
             ),
-            // End marker
+            // End marker (Last location)
             Marker(
               point: _routePoints.last,
-              width: 40,
-              height: 40,
-              builder: (_) =>
-                  const Icon(Icons.stop_circle, color: Colors.red, size: 40),
+              width: 50,
+              height: 50,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.stop,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
             ),
           ],
         ),
