@@ -1,5 +1,5 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import {
   getAllTaskAssignments,
   getSalesmanTaskAssignments,
@@ -12,7 +12,7 @@ import {
 } from '../controllers/taskAssignmentController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
-const prisma = new PrismaClient();
+
 const router = express.Router();
 
 // Apply authentication middleware to all routes

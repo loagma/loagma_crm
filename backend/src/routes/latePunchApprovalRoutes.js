@@ -1,8 +1,8 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
 
 // Request late punch-in approval
 router.post('/request', async (req, res) => {

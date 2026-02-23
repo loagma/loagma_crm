@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import {
     getCurrentISTTime,
     getISTDateRange,
@@ -6,7 +6,7 @@ import {
 } from '../utils/timezone.js';
 import NotificationService from '../services/notificationService.js';
 
-const prisma = new PrismaClient();
+
 
 // Request Early Punch-Out Approval
 export const requestEarlyPunchOutApproval = async (req, res) => {

@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from '../config/db.js';
+
 
 // Get all area assignments
 const getAllAreaAssignments = async (req, res) => {

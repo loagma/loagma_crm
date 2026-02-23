@@ -30,7 +30,7 @@
  * └─────────────────────────────────────────────────────────────────────────────┘
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import {
     getCurrentISTTime,
     getISTDateRange,
@@ -38,7 +38,7 @@ import {
     convertUTCToIST
 } from '../utils/timezone.js';
 
-const prisma = new PrismaClient();
+
 
 // Approval expiry duration in minutes
 const APPROVAL_EXPIRY_MINUTES = 30;

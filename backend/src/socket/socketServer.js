@@ -19,7 +19,6 @@ export const initializeSocketServer = (httpServer) => {
             methods: ['GET', 'POST'],
             credentials: true,
         },
-        transports: ['websocket'], // Force WebSocket only (no polling)
         pingTimeout: 60000,
         pingInterval: 25000,
     });
@@ -51,7 +50,9 @@ export const initializeSocketServer = (httpServer) => {
             }
 
             socket.userRole = user.role?.name?.toLowerCase() || 'unknown';
-            socket.employeeId = user.employeeId;
+            // Use stable user ID from schema for tracking identity.
+            socket.employeeId = user.id;
+            socket.employeeCode = user.employeeCode || null;
 
             console.log(`✅ Socket authenticated: ${socket.userId} (${socket.userRole}) - Employee: ${socket.employeeId}`);
             next();
@@ -66,9 +67,10 @@ export const initializeSocketServer = (httpServer) => {
         console.log(`🔌 Client connected: ${socket.id} (User: ${socket.userId})`);
 
         // Handle different user types
-        if (socket.userRole === 'admin' || socket.userRole === 'manager') {
+        const normalizedRole = socket.userRole || '';
+        if (normalizedRole.includes('admin') || normalizedRole.includes('manager')) {
             handleAdminConnection(socket);
-        } else if (socket.userRole === 'salesman') {
+        } else if (normalizedRole.includes('salesman')) {
             handleSalesmanConnection(socket);
         }
 
@@ -182,7 +184,11 @@ const handleLocationUpdate = async (socket, data) => {
     });
 
     // Rate limiting: Max 1 update every 3 seconds
-    const connectionInfo = activeConnections.get(employeeId);
+    const connectionInfo = activeConnections.get(employeeId) || {
+        socketId: socket.id,
+        connectedAt: new Date(),
+        lastUpdate: null,
+    };
     if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 3000) {
         console.log(`⏭️ Skipping update for ${employeeId} - too frequent (${now - connectionInfo.lastUpdate}ms ago)`);
         return;
@@ -199,14 +205,25 @@ const handleLocationUpdate = async (socket, data) => {
         } = data;
 
         // Validate required fields
-        if (!latitude || !longitude || !attendanceId) {
+        if (attendanceId === null || attendanceId === undefined || attendanceId === '') {
             console.error(`❌ Missing required fields for ${employeeId}:`, { latitude, longitude, attendanceId });
             socket.emit('error', { message: 'Missing required fields' });
             return;
         }
 
+        const latitudeNum = Number(latitude);
+        const longitudeNum = Number(longitude);
+        const speedNum = speed === null || speed === undefined || speed === '' ? null : Number(speed);
+        const accuracyNum = accuracy === null || accuracy === undefined || accuracy === '' ? null : Number(accuracy);
+
+        if (!Number.isFinite(latitudeNum) || !Number.isFinite(longitudeNum)) {
+            console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude, longitude });
+            socket.emit('error', { message: 'Invalid coordinates' });
+            return;
+        }
+
         // Validate coordinates
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        if (latitudeNum < -90 || latitudeNum > 90 || longitudeNum < -180 || longitudeNum > 180) {
             console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude, longitude });
             socket.emit('error', { message: 'Invalid coordinates' });
             return;
@@ -218,8 +235,8 @@ const handleLocationUpdate = async (socket, data) => {
             const distance = calculateDistance(
                 lastLocation.latitude,
                 lastLocation.longitude,
-                latitude,
-                longitude
+                latitudeNum,
+                longitudeNum
             );
 
             if (distance < 0.005) { // 5 meters in kilometers
@@ -235,10 +252,10 @@ const handleLocationUpdate = async (socket, data) => {
             data: {
                 employeeId: employeeId.toString(),
                 attendanceId: attendanceId.toString(),
-                latitude: parseFloat(latitude),
-                longitude: parseFloat(longitude),
-                speed: speed ? parseFloat(speed) : null,
-                accuracy: accuracy ? parseFloat(accuracy) : null,
+                latitude: latitudeNum,
+                longitude: longitudeNum,
+                speed: Number.isFinite(speedNum) ? speedNum : null,
+                accuracy: Number.isFinite(accuracyNum) ? accuracyNum : null,
                 recordedAt: new Date(),
             },
         });
@@ -253,10 +270,10 @@ const handleLocationUpdate = async (socket, data) => {
         const payload = {
             employeeId,
             employeeName: employeeName || employeeId,
-            latitude: parseFloat(latitude),
-            longitude: parseFloat(longitude),
-            speed: speed ? parseFloat(speed) : 0,
-            accuracy: accuracy ? parseFloat(accuracy) : 0,
+            latitude: latitudeNum,
+            longitude: longitudeNum,
+            speed: Number.isFinite(speedNum) ? speedNum : 0,
+            accuracy: Number.isFinite(accuracyNum) ? accuracyNum : 0,
             recordedAt: savedPoint.recordedAt.toISOString(),
             attendanceId,
         };
@@ -272,7 +289,7 @@ const handleLocationUpdate = async (socket, data) => {
             timestamp: savedPoint.recordedAt,
         });
 
-        console.log(`📍 Location updated: ${employeeId} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
+        console.log(`📍 Location updated: ${employeeId} (${latitudeNum.toFixed(6)}, ${longitudeNum.toFixed(6)})`);
     } catch (error) {
         console.error('❌ Error handling location update:', error);
         console.error('Error details:', error.message);

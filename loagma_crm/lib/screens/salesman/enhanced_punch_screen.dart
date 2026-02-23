@@ -9,7 +9,7 @@ import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/location_service.dart';
-import '../../services/tracking_service.dart';
+import '../../services/socket_tracking_service.dart';
 import '../../services/attendance_session_manager.dart';
 import '../../services/employee_working_hours_service.dart';
 import '../../services/early_punch_out_approval_service.dart';
@@ -90,7 +90,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
       print('📱 App resumed - verifying tracking is active');
       // Verify tracking is still active when app comes back
       // and restart if there is an active attendance session.
-      if (isPunchedIn && !TrackingService.instance.isTracking) {
+      if (isPunchedIn && !SocketTrackingService.instance.isTracking) {
         AttendanceSessionManager.ensureTrackingForActiveSession(context);
       }
 
@@ -162,9 +162,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
-    if (!TrackingService.instance.isTracking) {
-      LocationService.instance.stopLocationTracking();
-    }
     super.dispose();
   }
 
@@ -188,7 +185,7 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
 
         // Periodic check to restart tracking if it stops unexpectedly.
         // Use AttendanceSessionManager so all tracking logic stays centralized.
-        if (isPunchedIn && !TrackingService.instance.isTracking) {
+        if (isPunchedIn && !SocketTrackingService.instance.isTracking) {
           print(
             '⚠️ Tracking stopped unexpectedly - delegating restart to AttendanceSessionManager',
           );
@@ -989,9 +986,6 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Set context for tracking service alerts
-    TrackingService.instance.setContext(context);
-
     return PopScope(
       // Always allow navigation; tracking continues based on attendance state
       // and is managed centrally by AttendanceSessionManager.

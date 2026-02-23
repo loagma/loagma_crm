@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import {
     getCurrentISTTime,
     formatISTTime,
@@ -6,7 +6,7 @@ import {
 } from '../utils/timezone.js';
 import NotificationService from '../services/notificationService.js';
 
-const prisma = new PrismaClient();
+
 
 // Helper function to check if current time is after 9:45 AM
 function isAfterCutoffTime() {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import '../../services/user_service.dart';
@@ -83,6 +84,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       {}; // Store punch-in locations
   final Map<String, DateTime> _employeeLastUpdateTime =
       {}; // Track last update time
+  final Map<String, DateTime> _employeeSessionStartTime =
+      {}; // Track session punch-in time
   final Map<String, double> _employeeTotalDistance =
       {}; // Track total distance traveled in km
   String? _selectedEmployeeId;
@@ -111,6 +114,17 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     super.dispose();
   }
 
+  Future<bool> _isBackendReachable() async {
+    try {
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Connect to Socket.IO server
   Future<void> _connectToSocket() async {
     if (!mounted) return;
@@ -132,6 +146,18 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
         return;
       }
 
+      final backendReachable = await _isBackendReachable();
+      if (!backendReachable) {
+        if (mounted) {
+          setState(() {
+            _errorMessage =
+                'Backend not reachable at ${ApiConfig.baseUrl}. Start backend server on port 5000.';
+            _isConnecting = false;
+          });
+        }
+        return;
+      }
+
       // Use http:// URL directly - Socket.IO client handles WebSocket upgrade
       final socketUrl = ApiConfig.baseUrl;
       debugPrint('🔌 Admin connecting to Socket.IO: $socketUrl');
@@ -139,7 +165,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       _socket = IO.io(
         socketUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket'])
+            .setTransports(['websocket', 'polling'])
             .disableAutoConnect()
             .setAuth({'token': token})
             .setReconnectionAttempts(5)
@@ -190,10 +216,20 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           if (attendance is Map) {
             final employeeId = attendance['employeeId']?.toString();
             final employeeName = attendance['employeeName']?.toString();
+            final attendanceId = attendance['id']?.toString();
             final punchInLat = attendance['punchInLatitude'];
             final punchInLng = attendance['punchInLongitude'];
+            final punchInTimeRaw = attendance['punchInTime'];
 
             if (employeeId != null && employeeName != null && mounted) {
+              if (punchInTimeRaw is String && punchInTimeRaw.isNotEmpty) {
+                try {
+                  _employeeSessionStartTime[employeeId] = DateTime.parse(
+                    punchInTimeRaw,
+                  );
+                } catch (_) {}
+              }
+
               // Store punch-in location if available
               if (punchInLat != null && punchInLng != null) {
                 final punchInLocation = LatLng(
@@ -217,6 +253,13 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                   '📍 Punch-in location for $employeeName: ${punchInLocation.latitude.toStringAsFixed(6)}, ${punchInLocation.longitude.toStringAsFixed(6)}',
                 );
               }
+
+              // Load existing route points so polyline and distance include
+              // movement before this admin screen was opened.
+              await _loadTodayRouteForEmployee(
+                employeeId: employeeId,
+                attendanceId: attendanceId,
+              );
 
               // Try to get latest location for this employee
               final locationResult = await TrackingApiService.getLiveTracking(
@@ -264,6 +307,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                             DateTime.now().toIso8601String(),
                       ),
                     );
+                    _employeeLastUpdateTime[employeeId] =
+                        _activeEmployees[employeeId]!.lastUpdate;
 
                     // Add current location to route (after punch-in location)
                     if (_employeeRoutes.containsKey(employeeId) &&
@@ -298,6 +343,58 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       );
     } catch (e) {
       debugPrint('❌ Error loading punched-in employees: $e');
+    }
+  }
+
+  Future<void> _loadTodayRouteForEmployee({
+    required String employeeId,
+    String? attendanceId,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+
+      final routeResult = await TrackingApiService.getRoute(
+        employeeId: employeeId,
+        attendanceId: attendanceId,
+        start: startOfDay,
+        end: now,
+        limit: 2000,
+      );
+
+      if (routeResult['success'] != true || routeResult['data'] is! List) {
+        return;
+      }
+
+      final points = (routeResult['data'] as List)
+          .map((item) {
+            try {
+              final lat = item['latitude'];
+              final lng = item['longitude'];
+              if (lat == null || lng == null) return null;
+              return LatLng(
+                (lat is num ? lat : num.parse(lat.toString())).toDouble(),
+                (lng is num ? lng : num.parse(lng.toString())).toDouble(),
+              );
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<LatLng>()
+          .toList();
+
+      if (points.isEmpty || !mounted) return;
+
+      setState(() {
+        _employeeRoutes[employeeId] = points;
+      });
+
+      _recalculateDistance(employeeId);
+      debugPrint(
+        '✅ Loaded route bootstrap for $employeeId: ${points.length} points',
+      );
+    } catch (e) {
+      debugPrint('⚠️ Route bootstrap failed for $employeeId: $e');
     }
   }
 
@@ -1125,7 +1222,9 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     final employee = _activeEmployees[_selectedEmployeeId];
     final distance = _employeeTotalDistance[_selectedEmployeeId] ?? 0.0;
     final routePoints = _employeeRoutes[_selectedEmployeeId]?.length ?? 0;
-    final punchInTime = _employeeLastUpdateTime[_selectedEmployeeId];
+    final punchInTime =
+        _employeeSessionStartTime[_selectedEmployeeId] ??
+        _employeeLastUpdateTime[_selectedEmployeeId];
 
     // Calculate duration
     String duration = 'N/A';
@@ -1140,8 +1239,9 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     String avgSpeed = 'N/A';
     if (employee != null && punchInTime != null) {
       final diff = DateTime.now().difference(punchInTime);
-      if (diff.inMinutes > 0) {
-        final speedKmh = (distance / diff.inHours);
+      final hours = diff.inMinutes / 60.0;
+      if (hours > 0) {
+        final speedKmh = distance / hours;
         avgSpeed = '${speedKmh.toStringAsFixed(1)} km/h';
       }
     }

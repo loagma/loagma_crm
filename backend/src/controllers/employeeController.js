@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import { randomUUID } from 'crypto';
 
-const prisma = new PrismaClient();
+
 
 // Create Employee
 export const createEmployee = async (req, res) => {
