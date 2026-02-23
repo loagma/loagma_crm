@@ -1,8 +1,8 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { searchBusinessesByPincode } from '../services/googlePlacesService.js';
 
-
+const prisma = new PrismaClient();
 
 /**
  * Get all shops for a pincode - both existing accounts and Google Places

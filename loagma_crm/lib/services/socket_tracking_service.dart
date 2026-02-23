@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'user_service.dart';
 import 'api_config.dart';
@@ -40,17 +39,6 @@ class SocketTrackingService {
   bool get isTracking => _isTracking;
   bool get isConnected => _socket?.connected ?? false;
 
-  Future<bool> _isBackendReachable() async {
-    try {
-      final response = await http
-          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
-          .timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Initialize and connect to Socket.IO server
   Future<void> connect() async {
     if (_socket?.connected == true) {
@@ -71,13 +59,6 @@ class SocketTrackingService {
         throw Exception('No authentication token available');
       }
 
-      final backendReachable = await _isBackendReachable();
-      if (!backendReachable) {
-        throw Exception(
-          'Backend not reachable at ${ApiConfig.baseUrl}. Start backend server and verify port 5000.',
-        );
-      }
-
       // Use http:// URL directly - Socket.IO client handles WebSocket upgrade
       final socketUrl = ApiConfig.baseUrl;
 
@@ -86,7 +67,7 @@ class SocketTrackingService {
       _socket = IO.io(
         socketUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket', 'polling'])
+            .setTransports(['websocket']) // Force WebSocket only
             .disableAutoConnect()
             .setAuth({'token': token})
             .setReconnectionAttempts(_maxReconnectAttempts)

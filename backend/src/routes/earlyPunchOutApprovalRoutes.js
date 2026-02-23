@@ -1,8 +1,8 @@
 import express from 'express';
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 
 const router = express.Router();
-
+const prisma = new PrismaClient();
 
 // Request early punch-out approval
 router.post('/request', async (req, res) => {

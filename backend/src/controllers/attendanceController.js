@@ -1,4 +1,4 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 import {
     getCurrentISTTime,
     convertUTCToIST,
@@ -15,7 +15,7 @@ import NotificationService from '../services/notificationService.js';
 // kiranastore hostel caterers sweets 
 //  date filter in list of aaccoumts
 
-
+const prisma = new PrismaClient();
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 function calculateDistance(lat1, lon1, lat2, lon2) {

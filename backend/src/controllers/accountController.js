@@ -1,8 +1,8 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { uploadBase64Image } from '../services/cloudinaryService.js';
 
-
+const prisma = new PrismaClient();
 
 // ==================== ACCOUNT CRUD ====================
 

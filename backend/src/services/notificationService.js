@@ -1,7 +1,7 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 import { formatISTTime } from '../utils/timezone.js';
 
-
+const prisma = new PrismaClient();
 
 class NotificationService {
     /**

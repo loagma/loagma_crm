@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 import '../../services/google_places_service.dart';
+import '../../services/location_service.dart';
+import '../../services/tracking_service.dart';
 import '../../services/network_service.dart';
 import '../../services/task_assignment_service.dart';
 import '../../models/place_model.dart';
@@ -173,6 +175,11 @@ class _EnhancedSalesmanMapScreenState extends State<EnhancedSalesmanMapScreen>
 
     // Dispose animation controller
     _filterAnimationController.dispose();
+
+    // Stop location tracking only if live tracking is not active
+    if (!TrackingService.instance.isTracking) {
+      LocationService.instance.stopLocationTracking();
+    }
 
     print('✅ EnhancedSalesmanMapScreen disposed successfully');
     super.dispose();

@@ -1,6 +1,6 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 
-
+const prisma = new PrismaClient();
 
 // Create or Update Salary Information
 export const createOrUpdateSalary = async (req, res) => {

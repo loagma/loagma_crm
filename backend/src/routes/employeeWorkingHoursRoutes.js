@@ -1,8 +1,8 @@
 import express from 'express';
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
 
 const router = express.Router();
-
+const prisma = new PrismaClient();
 
 // Get employee working hours configuration
 // Now queries actual database columns after migration
