@@ -181,11 +181,11 @@ const handleLocationUpdate = async (socket, data) => {
         accuracy: data.accuracy,
     });
 
-    // Rate limiting: Max 1 update every 5 seconds
+    // Rate limiting: Max 1 update every 3 seconds
     const connectionInfo = activeConnections.get(employeeId);
-    if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 5000) {
+    if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 3000) {
         console.log(`⏭️ Skipping update for ${employeeId} - too frequent (${now - connectionInfo.lastUpdate}ms ago)`);
-        return; // Ignore updates that are too frequent
+        return;
     }
 
     try {
@@ -212,18 +212,20 @@ const handleLocationUpdate = async (socket, data) => {
             return;
         }
 
-        // Check if movement threshold is met (10 meters)
+        // Check if movement threshold is met (5 meters for smoother routes)
         const lastLocation = await getLastLocation(employeeId);
-        if (lastLocation && !hasMovedSignificantly(lastLocation, { latitude, longitude })) {
-            // Skip update if movement is less than 10 meters
+        if (lastLocation) {
             const distance = calculateDistance(
                 lastLocation.latitude,
                 lastLocation.longitude,
                 latitude,
                 longitude
             );
-            console.log(`⏭️ Skipping update for ${employeeId} - movement too small (${(distance * 1000).toFixed(1)}m)`);
-            return;
+
+            if (distance < 0.005) { // 5 meters in kilometers
+                console.log(`⏭️ Skipping update for ${employeeId} - movement too small (${(distance * 1000).toFixed(1)}m)`);
+                return;
+            }
         }
 
         console.log(`💾 Saving location point for ${employeeId} to database...`);
@@ -323,7 +325,7 @@ const getLastLocation = async (employeeId) => {
 };
 
 /**
- * Check if location has moved significantly (10 meters threshold)
+ * Check if location has moved significantly (5 meters threshold for smoother routes)
  */
 const hasMovedSignificantly = (lastLocation, newLocation) => {
     const distance = calculateDistance(
@@ -332,7 +334,7 @@ const hasMovedSignificantly = (lastLocation, newLocation) => {
         newLocation.latitude,
         newLocation.longitude
     );
-    return distance >= 0.01; // 10 meters in kilometers
+    return distance >= 0.005; // 5 meters in kilometers
 };
 
 /**

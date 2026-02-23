@@ -26,8 +26,10 @@ class SocketTrackingService {
   DateTime? _lastSentTime;
 
   // Configuration
-  static const Duration _sendInterval = Duration(seconds: 5);
-  static const double _minDistanceMeters = 10;
+  static const Duration _sendInterval = Duration(
+    seconds: 3,
+  ); // Reduced for responsiveness
+  static const double _minDistanceMeters = 5; // 5 meters for smoother routes
   static const int _maxReconnectAttempts = 5;
   static const Duration _reconnectDelay = Duration(seconds: 3);
 
@@ -216,17 +218,8 @@ class SocketTrackingService {
 
     final now = DateTime.now();
 
-    // Rate limiting: Enforce 5-second interval
-    if (_lastSentTime != null &&
-        now.difference(_lastSentTime!) < _sendInterval) {
-      final timeSinceLastSend = now.difference(_lastSentTime!).inSeconds;
-      debugPrint(
-        '⏭️ Skipping location update: too soon (${timeSinceLastSend}s < ${_sendInterval.inSeconds}s)',
-      );
-      return;
-    }
-
-    // Movement threshold: Only send if moved > 10 meters
+    // PRIMARY FILTER: Movement-based (5 meters)
+    // This is the main filter for smooth routes
     if (_lastPosition != null) {
       final distance = Geolocator.distanceBetween(
         _lastPosition!.latitude,
@@ -236,13 +229,22 @@ class SocketTrackingService {
       );
 
       if (distance < _minDistanceMeters) {
-        debugPrint(
-          '⏭️ Skipping location update: movement too small (${distance.toStringAsFixed(1)}m < ${_minDistanceMeters}m)',
-        );
-        return; // Skip update if movement is too small
+        // Not enough movement, skip this update
+        return;
       }
 
       debugPrint('✅ Movement threshold met: ${distance.toStringAsFixed(1)}m');
+    }
+
+    // SECONDARY FILTER: Time-based rate limiting (3 seconds minimum)
+    // Prevents too frequent updates even when moving fast
+    if (_lastSentTime != null &&
+        now.difference(_lastSentTime!) < _sendInterval) {
+      final timeSinceLastSend = now.difference(_lastSentTime!).inSeconds;
+      debugPrint(
+        '⏭️ Rate limit: too soon (${timeSinceLastSend}s < ${_sendInterval.inSeconds}s)',
+      );
+      return;
     }
 
     // Send location update via Socket.IO

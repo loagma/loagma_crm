@@ -81,11 +81,19 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       {}; // Store routes for each employee
   final Map<String, LatLng> _employeePunchInLocations =
       {}; // Store punch-in locations
+  final Map<String, DateTime> _employeeLastUpdateTime =
+      {}; // Track last update time
+  final Map<String, double> _employeeTotalDistance =
+      {}; // Track total distance traveled in km
   String? _selectedEmployeeId;
   bool _isConnected = false;
   bool _isConnecting = true;
-  bool _isLoadingFallback = false;
   String? _errorMessage;
+
+  // Route optimization settings
+  static const int _maxRoutePoints = 500; // Increased for better detail
+  static const double _routeSimplificationTolerance =
+      0.00001; // Douglas-Peucker tolerance
 
   @override
   void initState() {
@@ -166,10 +174,6 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
   /// Load punched-in employees from API as fallback
   Future<void> _loadPunchedInEmployees() async {
     if (!mounted) return;
-
-    setState(() {
-      _isLoadingFallback = true;
-    });
 
     try {
       // Get today's punched-in employees from attendance API
@@ -289,22 +293,11 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
         }
       }
 
-      if (mounted) {
-        setState(() {
-          _isLoadingFallback = false;
-        });
-      }
-
       debugPrint(
         '✅ Loaded ${_activeEmployees.length} punched-in employees (${_activeEmployees.values.where((e) => e.latitude != 0 || e.longitude != 0).length} with locations)',
       );
     } catch (e) {
       debugPrint('❌ Error loading punched-in employees: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingFallback = false;
-        });
-      }
     }
   }
 
@@ -402,6 +395,9 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           lastUpdate: recordedAt,
         );
 
+        // Track last update time
+        _employeeLastUpdateTime[employeeId] = recordedAt;
+
         // Initialize route with punch-in location if not already done
         if (!_employeeRoutes.containsKey(employeeId)) {
           // If we have punch-in location, start with it
@@ -412,33 +408,184 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           } else {
             _employeeRoutes[employeeId] = [];
           }
+          // Initialize distance
+          _employeeTotalDistance[employeeId] = 0.0;
         }
 
-        // Add point to employee's route (avoid duplicates)
-        if (_employeeRoutes[employeeId]!.isEmpty ||
-            _employeeRoutes[employeeId]!.last != latLng) {
+        // Add point to employee's route (avoid duplicates and very close points)
+        final shouldAddPoint =
+            _employeeRoutes[employeeId]!.isEmpty ||
+            _calculateDistance(_employeeRoutes[employeeId]!.last, latLng) >
+                0.003; // 3 meters minimum distance between points
+
+        if (shouldAddPoint) {
+          // Calculate distance from last point and add to total
+          if (_employeeRoutes[employeeId]!.isNotEmpty) {
+            final distanceFromLast = _calculateDistance(
+              _employeeRoutes[employeeId]!.last,
+              latLng,
+            );
+            _employeeTotalDistance[employeeId] =
+                (_employeeTotalDistance[employeeId] ?? 0.0) + distanceFromLast;
+          }
+
           _employeeRoutes[employeeId]!.add(latLng);
-        }
 
-        // Keep only last 100 points to avoid memory issues
-        if (_employeeRoutes[employeeId]!.length > 100) {
-          // Keep punch-in location if it exists
-          if (_employeePunchInLocations.containsKey(employeeId)) {
-            final punchInLoc = _employeeRoutes[employeeId]!.first;
-            _employeeRoutes[employeeId]!.removeAt(1); // Remove second point
-          } else {
-            _employeeRoutes[employeeId]!.removeAt(0);
+          // Optimize route if it gets too large
+          if (_employeeRoutes[employeeId]!.length > _maxRoutePoints) {
+            _optimizeRoute(employeeId);
           }
         }
       });
 
       debugPrint(
-        '📍 Location updated: $employeeId (${_activeEmployees.length} active, ${_employeeRoutes[employeeId]?.length ?? 0} points)',
+        '📍 Location updated: $employeeId (${_activeEmployees.length} active, ${_employeeRoutes[employeeId]?.length ?? 0} points, ${(_employeeTotalDistance[employeeId] ?? 0).toStringAsFixed(2)} km)',
       );
     } catch (e) {
       debugPrint('❌ Error handling location update: $e');
     }
   }
+
+  /// Optimize route by removing redundant points while keeping punch-in location
+  void _optimizeRoute(String employeeId) {
+    if (!_employeeRoutes.containsKey(employeeId)) return;
+
+    final route = _employeeRoutes[employeeId]!;
+    if (route.length <= _maxRoutePoints) return;
+
+    // Keep punch-in location (first point) if it exists
+    final hasPunchIn = _employeePunchInLocations.containsKey(employeeId);
+    final punchInPoint = hasPunchIn ? route.first : null;
+
+    // Keep recent points (last 200) and simplify older points
+    final recentPoints = route.sublist(math.max(0, route.length - 200));
+    final olderPoints = route.sublist(0, math.max(0, route.length - 200));
+
+    // Simplify older points using Douglas-Peucker algorithm
+    final simplifiedOlder = _simplifyRoute(
+      olderPoints,
+      _routeSimplificationTolerance,
+    );
+
+    // Combine: punch-in (if exists) + simplified older + recent
+    final optimizedRoute = <LatLng>[];
+    if (punchInPoint != null && !simplifiedOlder.contains(punchInPoint)) {
+      optimizedRoute.add(punchInPoint);
+    }
+    optimizedRoute.addAll(simplifiedOlder);
+    optimizedRoute.addAll(recentPoints);
+
+    _employeeRoutes[employeeId] = optimizedRoute;
+
+    // Recalculate total distance from optimized route
+    _recalculateDistance(employeeId);
+
+    debugPrint(
+      '🔧 Optimized route for $employeeId: ${route.length} → ${optimizedRoute.length} points, Distance: ${(_employeeTotalDistance[employeeId] ?? 0).toStringAsFixed(2)} km',
+    );
+  }
+
+  /// Recalculate total distance from the entire route
+  void _recalculateDistance(String employeeId) {
+    if (!_employeeRoutes.containsKey(employeeId)) return;
+
+    final route = _employeeRoutes[employeeId]!;
+    if (route.length < 2) {
+      _employeeTotalDistance[employeeId] = 0.0;
+      return;
+    }
+
+    double totalDistance = 0.0;
+    for (int i = 0; i < route.length - 1; i++) {
+      totalDistance += _calculateDistance(route[i], route[i + 1]);
+    }
+
+    _employeeTotalDistance[employeeId] = totalDistance;
+
+    debugPrint(
+      '📏 Recalculated distance for $employeeId: ${totalDistance.toStringAsFixed(2)} km from ${route.length} points',
+    );
+  }
+
+  /// Simplified Douglas-Peucker algorithm for route simplification
+  List<LatLng> _simplifyRoute(List<LatLng> points, double tolerance) {
+    if (points.length <= 2) return points;
+
+    // Find point with maximum distance from line between first and last
+    double maxDistance = 0;
+    int maxIndex = 0;
+
+    for (int i = 1; i < points.length - 1; i++) {
+      final distance = _perpendicularDistance(
+        points[i],
+        points.first,
+        points.last,
+      );
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        maxIndex = i;
+      }
+    }
+
+    // If max distance is greater than tolerance, recursively simplify
+    if (maxDistance > tolerance) {
+      final left = _simplifyRoute(points.sublist(0, maxIndex + 1), tolerance);
+      final right = _simplifyRoute(points.sublist(maxIndex), tolerance);
+
+      return [...left.sublist(0, left.length - 1), ...right];
+    } else {
+      return [points.first, points.last];
+    }
+  }
+
+  /// Calculate perpendicular distance from point to line
+  double _perpendicularDistance(
+    LatLng point,
+    LatLng lineStart,
+    LatLng lineEnd,
+  ) {
+    final dx = lineEnd.longitude - lineStart.longitude;
+    final dy = lineEnd.latitude - lineStart.latitude;
+
+    final mag = math.sqrt(dx * dx + dy * dy);
+    if (mag > 0.0) {
+      final u =
+          ((point.longitude - lineStart.longitude) * dx +
+              (point.latitude - lineStart.latitude) * dy) /
+          (mag * mag);
+
+      final intersectionLng = lineStart.longitude + u * dx;
+      final intersectionLat = lineStart.latitude + u * dy;
+
+      final dx2 = point.longitude - intersectionLng;
+      final dy2 = point.latitude - intersectionLat;
+
+      return math.sqrt(dx2 * dx2 + dy2 * dy2);
+    } else {
+      final dx2 = point.longitude - lineStart.longitude;
+      final dy2 = point.latitude - lineStart.latitude;
+      return math.sqrt(dx2 * dx2 + dy2 * dy2);
+    }
+  }
+
+  /// Calculate distance between two points in kilometers
+  double _calculateDistance(LatLng point1, LatLng point2) {
+    const R = 6371; // Earth's radius in km
+    final dLat = _toRadians(point2.latitude - point1.latitude);
+    final dLon = _toRadians(point2.longitude - point1.longitude);
+
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRadians(point1.latitude)) *
+            math.cos(_toRadians(point2.latitude)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
+  }
+
+  double _toRadians(double degrees) => degrees * (math.pi / 180);
 
   /// Handle employee disconnection
   void _handleEmployeeDisconnected(String employeeId) {
@@ -543,6 +690,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       children: [
         _buildEmployeeDropdown(),
         Expanded(child: _buildMap()),
+        if (_selectedEmployeeId != null) _buildDistanceStats(),
       ],
     );
   }
@@ -590,7 +738,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                   : null,
             ),
             items: employees.map((emp) {
-              final routePoints = _employeeRoutes[emp.employeeId]?.length ?? 0;
+              final distance = _employeeTotalDistance[emp.employeeId] ?? 0.0;
               final hasLocation = emp.latitude != 0 || emp.longitude != 0;
               final timeAgo = hasLocation
                   ? _formatTimeAgo(DateTime.now().difference(emp.lastUpdate))
@@ -615,7 +763,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                       Flexible(
                         child: Text(
                           hasLocation
-                              ? '${emp.employeeName} ($routePoints pts)'
+                              ? '${emp.employeeName} (${distance.toStringAsFixed(1)}km)'
                               : '${emp.employeeName} (waiting...)',
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -749,16 +897,17 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       );
     }).toList();
 
-    // Get polyline for selected employee
+    // Get polyline for selected employee with enhanced styling
     final polylines = <Polyline>[];
     if (_selectedEmployeeId != null &&
         _employeeRoutes.containsKey(_selectedEmployeeId) &&
         _employeeRoutes[_selectedEmployeeId]!.length > 1) {
+      // Main route polyline with smooth styling
       polylines.add(
         Polyline(
           points: _employeeRoutes[_selectedEmployeeId]!,
-          color: primaryColor,
-          strokeWidth: 4,
+          color: primaryColor.withValues(alpha: 0.9),
+          strokeWidth: 5,
           borderStrokeWidth: 2,
           borderColor: Colors.white,
         ),
@@ -770,8 +919,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
         markers.add(
           Marker(
             point: punchInPoint,
-            width: 40,
-            height: 40,
+            width: 50,
+            height: 50,
             builder: (_) => Container(
               decoration: BoxDecoration(
                 color: Colors.green,
@@ -780,15 +929,15 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
               child: const Icon(
                 Icons.play_arrow,
                 color: Colors.white,
-                size: 24,
+                size: 28,
               ),
             ),
           ),
@@ -798,31 +947,42 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       // Add current location marker (end point) if different from punch-in
       if (_employeeRoutes[_selectedEmployeeId]!.length > 1) {
         final currentPoint = _employeeRoutes[_selectedEmployeeId]!.last;
+        final emp = _activeEmployees[_selectedEmployeeId]!;
+
         // Only add if it's different from punch-in location
         if (!_employeePunchInLocations.containsKey(_selectedEmployeeId) ||
-            _employeePunchInLocations[_selectedEmployeeId] != currentPoint) {
+            _calculateDistance(
+                  _employeePunchInLocations[_selectedEmployeeId]!,
+                  currentPoint,
+                ) >
+                0.01) {
+          // 10 meters minimum distance
+
+          // Determine if employee is moving
+          final isMoving = emp.speed > 0.5; // Moving if speed > 0.5 m/s
+
           markers.add(
             Marker(
               point: currentPoint,
-              width: 40,
-              height: 40,
+              width: 50,
+              height: 50,
               builder: (_) => Container(
                 decoration: BoxDecoration(
-                  color: primaryColor,
+                  color: isMoving ? primaryColor : Colors.orange,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 3),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.navigation,
+                child: Icon(
+                  isMoving ? Icons.navigation : Icons.location_on,
                   color: Colors.white,
-                  size: 20,
+                  size: 24,
                 ),
               ),
             ),
@@ -956,6 +1116,92 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     if (duration.inMinutes < 60) return '${duration.inMinutes}m ago';
     if (duration.inHours < 24) return '${duration.inHours}h ago';
     return '${duration.inDays}d ago';
+  }
+
+  /// Build distance and stats widget
+  Widget _buildDistanceStats() {
+    if (_selectedEmployeeId == null) return const SizedBox.shrink();
+
+    final employee = _activeEmployees[_selectedEmployeeId];
+    final distance = _employeeTotalDistance[_selectedEmployeeId] ?? 0.0;
+    final routePoints = _employeeRoutes[_selectedEmployeeId]?.length ?? 0;
+    final punchInTime = _employeeLastUpdateTime[_selectedEmployeeId];
+
+    // Calculate duration
+    String duration = 'N/A';
+    if (punchInTime != null) {
+      final diff = DateTime.now().difference(punchInTime);
+      final hours = diff.inHours;
+      final minutes = diff.inMinutes % 60;
+      duration = '${hours}h ${minutes}m';
+    }
+
+    // Calculate average speed
+    String avgSpeed = 'N/A';
+    if (employee != null && punchInTime != null) {
+      final diff = DateTime.now().difference(punchInTime);
+      if (diff.inMinutes > 0) {
+        final speedKmh = (distance / diff.inHours);
+        avgSpeed = '${speedKmh.toStringAsFixed(1)} km/h';
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem(
+            Icons.route,
+            'Distance',
+            '${distance.toStringAsFixed(2)} km',
+            primaryColor,
+          ),
+          _buildStatItem(Icons.access_time, 'Duration', duration, Colors.blue),
+          _buildStatItem(Icons.speed, 'Avg Speed', avgSpeed, Colors.green),
+          _buildStatItem(
+            Icons.location_on,
+            'Points',
+            '$routePoints',
+            Colors.orange,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
   }
 }
 
@@ -1331,11 +1577,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.stop,
-                  color: Colors.white,
-                  size: 28,
-                ),
+                child: const Icon(Icons.stop, color: Colors.white, size: 28),
               ),
             ),
           ],
