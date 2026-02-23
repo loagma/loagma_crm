@@ -396,6 +396,7 @@ model Attendance {
 
 model SalesmanTrackingPoint {
   id           String   @id @default(cuid())
+  clientPointId String?  @unique
   employeeId   String
   attendanceId String
   latitude     Float
@@ -410,6 +411,7 @@ model SalesmanTrackingPoint {
   @@index([employeeId])
   @@index([attendanceId])
   @@index([recordedAt])
+  @@index([employeeId, attendanceId, recordedAt])
 }
 
 model AreaAssignment {

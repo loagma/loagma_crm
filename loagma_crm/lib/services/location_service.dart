@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
+import 'package:permission_handler/permission_handler.dart' as permission_handler;
 
 /// Location service for continuous GPS tracking.
 ///
@@ -442,6 +443,22 @@ class LocationService {
       if (!hasPermission) {
         debugPrint('Location permissions not granted');
         return false;
+      }
+
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          final notificationStatus =
+              await permission_handler.Permission.notification.status;
+          if (!notificationStatus.isGranted) {
+            final requested =
+                await permission_handler.Permission.notification.request();
+            debugPrint(
+              '🔔 Notification permission status for foreground tracking: $requested',
+            );
+          }
+        } catch (e) {
+          debugPrint('⚠️ Failed to request notification permission: $e');
+        }
       }
 
       // Configure for high accuracy continuous tracking.

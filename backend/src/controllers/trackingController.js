@@ -15,6 +15,7 @@ const parseDateValue = (value) => {
 export const createTrackingPoint = async (req, res) => {
   try {
     const {
+      clientPointId,
       employeeId,
       attendanceId,
       latitude,
@@ -42,6 +43,7 @@ export const createTrackingPoint = async (req, res) => {
     }
 
     const data = {
+      clientPointId: clientPointId || null,
       employeeId,
       attendanceId,
       latitude: latValue,
@@ -55,7 +57,22 @@ export const createTrackingPoint = async (req, res) => {
       data.recordedAt = recordedAtValue;
     }
 
-    const point = await prisma.salesmanTrackingPoint.create({ data });
+    let point;
+    try {
+      point = await prisma.salesmanTrackingPoint.create({ data });
+    } catch (createError) {
+      if (
+        createError?.code === 'P2002' &&
+        clientPointId &&
+        typeof clientPointId === 'string'
+      ) {
+        point = await prisma.salesmanTrackingPoint.findFirst({
+          where: { clientPointId },
+        });
+      } else {
+        throw createError;
+      }
+    }
 
     console.log(`✅ Tracking point saved: employeeId=${employeeId}, attendanceId=${attendanceId}, lat=${latValue}, lng=${lngValue}`);
 
@@ -66,6 +83,84 @@ export const createTrackingPoint = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error saving tracking point:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const createTrackingPointsBatch = async (req, res) => {
+  try {
+    const points = Array.isArray(req.body?.points) ? req.body.points : null;
+    if (!points || points.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'points array is required',
+      });
+    }
+
+    const results = [];
+    const acceptedClientPointIds = [];
+
+    for (const point of points) {
+      const employeeId = point?.employeeId?.toString();
+      const attendanceId = point?.attendanceId?.toString();
+      const clientPointId =
+        point?.clientPointId != null ? point.clientPointId.toString() : null;
+      const latitude = parseFloatValue(point?.latitude);
+      const longitude = parseFloatValue(point?.longitude);
+
+      if (!employeeId || !attendanceId || latitude === null || longitude === null) {
+        results.push({
+          clientPointId,
+          success: false,
+          message: 'Invalid point payload',
+        });
+        continue;
+      }
+
+      const data = {
+        clientPointId,
+        employeeId,
+        attendanceId,
+        latitude,
+        longitude,
+        speed: parseFloatValue(point?.speed),
+        accuracy: parseFloatValue(point?.accuracy),
+      };
+
+      const recordedAtValue = parseDateValue(point?.recordedAt);
+      if (recordedAtValue) {
+        data.recordedAt = recordedAtValue;
+      }
+
+      try {
+        await prisma.salesmanTrackingPoint.create({ data });
+        results.push({ clientPointId, success: true });
+        if (clientPointId) acceptedClientPointIds.push(clientPointId);
+      } catch (error) {
+        if (error?.code === 'P2002' && clientPointId) {
+          // Duplicate from retry/ack loss, treat as accepted.
+          results.push({ clientPointId, success: true, duplicate: true });
+          acceptedClientPointIds.push(clientPointId);
+        } else {
+          results.push({
+            clientPointId,
+            success: false,
+            message: error.message,
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      acceptedClientPointIds,
+      results,
+    });
+  } catch (error) {
+    console.error('❌ Error in createTrackingPointsBatch:', error);
     return res.status(500).json({
       success: false,
       message: error.message,

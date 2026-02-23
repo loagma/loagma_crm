@@ -1,13 +1,57 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'user_service.dart';
+
 import 'api_config.dart';
 import 'location_service.dart';
+import 'network_service.dart';
+import 'user_service.dart';
 
-/// Socket.IO-based tracking service for real-time GPS updates
-/// Replaces Firestore for live tracking
+class _PendingTrackingPoint {
+  _PendingTrackingPoint({
+    required this.clientPointId,
+    required this.employeeId,
+    required this.employeeName,
+    required this.attendanceId,
+    required this.latitude,
+    required this.longitude,
+    required this.speed,
+    required this.accuracy,
+    required this.recordedAt,
+  });
+
+  final String clientPointId;
+  final String employeeId;
+  final String employeeName;
+  final String attendanceId;
+  final double latitude;
+  final double longitude;
+  final double speed;
+  final double accuracy;
+  final DateTime recordedAt;
+
+  Map<String, dynamic> toPayload() {
+    return {
+      'clientPointId': clientPointId,
+      'employeeId': employeeId,
+      'employeeName': employeeName,
+      'attendanceId': attendanceId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'speed': speed,
+      'accuracy': accuracy,
+      'recordedAt': recordedAt.toIso8601String(),
+      'timestamp': recordedAt.toIso8601String(),
+    };
+  }
+}
+
+/// Socket.IO based tracking service with REST fallback queue.
 class SocketTrackingService {
   static final SocketTrackingService instance =
       SocketTrackingService._internal();
@@ -17,6 +61,7 @@ class SocketTrackingService {
   IO.Socket? _socket;
   StreamSubscription<Position>? _locationSubscription;
   Timer? _heartbeatTimer;
+  Timer? _flushTimer;
 
   String? _employeeId;
   String? _employeeName;
@@ -24,14 +69,17 @@ class SocketTrackingService {
   bool _isTracking = false;
   Position? _lastPosition;
   DateTime? _lastSentTime;
+  int _pointSequence = 0;
+  bool _isFlushing = false;
 
-  // Configuration
-  static const Duration _sendInterval = Duration(
-    seconds: 3,
-  ); // Reduced for responsiveness
-  static const double _minDistanceMeters = 5; // 5 meters for smoother routes
+  final LinkedHashMap<String, _PendingTrackingPoint> _pendingById =
+      LinkedHashMap<String, _PendingTrackingPoint>();
+
+  static const Duration _sendInterval = Duration(seconds: 3);
+  static const double _minDistanceMeters = 5;
   static const int _maxReconnectAttempts = 5;
   static const Duration _reconnectDelay = Duration(seconds: 3);
+  static const Duration _flushInterval = Duration(seconds: 12);
 
   int _reconnectAttempts = 0;
   bool _isConnecting = false;
@@ -39,35 +87,26 @@ class SocketTrackingService {
   bool get isTracking => _isTracking;
   bool get isConnected => _socket?.connected ?? false;
 
-  /// Initialize and connect to Socket.IO server
   Future<void> connect() async {
     if (_socket?.connected == true) {
-      debugPrint('✅ Socket already connected');
       return;
     }
 
     if (_isConnecting) {
-      debugPrint('⏳ Connection already in progress');
       return;
     }
 
     _isConnecting = true;
-
     try {
       final token = UserService.token;
       if (token == null || token.isEmpty) {
         throw Exception('No authentication token available');
       }
 
-      // Use http:// URL directly - Socket.IO client handles WebSocket upgrade
-      final socketUrl = ApiConfig.baseUrl;
-
-      debugPrint('🔌 Connecting to Socket.IO: $socketUrl');
-
       _socket = IO.io(
-        socketUrl,
+        ApiConfig.baseUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket']) // Force WebSocket only
+            .setTransports(['websocket'])
             .disableAutoConnect()
             .setAuth({'token': token})
             .setReconnectionAttempts(_maxReconnectAttempts)
@@ -79,29 +118,30 @@ class SocketTrackingService {
       _setupSocketListeners();
       _socket!.connect();
     } catch (e) {
-      debugPrint('❌ Socket connection error: $e');
       _isConnecting = false;
       rethrow;
     }
   }
 
-  /// Setup socket event listeners
   void _setupSocketListeners() {
     _socket!.onConnect((_) {
-      debugPrint('✅ Socket connected: ${_socket!.id}');
       _isConnecting = false;
       _reconnectAttempts = 0;
       _startHeartbeat();
+      _startFlushTimer();
+      _emitSessionStartIfReady();
+      unawaited(_flushPendingPointsToBatch());
     });
 
     _socket!.onDisconnect((reason) {
       debugPrint('🔌 Socket disconnected: $reason');
       _stopHeartbeat();
+      _startFlushTimer();
     });
 
     _socket!.onConnectError((error) {
-      debugPrint('❌ Socket connection error: $error');
       _isConnecting = false;
+      debugPrint('❌ Socket connection error: $error');
     });
 
     _socket!.onError((error) {
@@ -109,8 +149,9 @@ class SocketTrackingService {
     });
 
     _socket!.onReconnect((attempt) {
-      debugPrint('🔄 Socket reconnecting (attempt $attempt)');
       _reconnectAttempts = attempt as int;
+      _emitSessionStartIfReady();
+      unawaited(_flushPendingPointsToBatch());
     });
 
     _socket!.onReconnectError((error) {
@@ -123,54 +164,43 @@ class SocketTrackingService {
       );
     });
 
-    // Listen for acknowledgments
     _socket!.on('location-ack', (data) {
-      debugPrint('✅ Location acknowledged: $data');
+      if (data is! Map) return;
+      final clientPointId = data['clientPointId']?.toString();
+      if (clientPointId != null && clientPointId.isNotEmpty) {
+        _pendingById.remove(clientPointId);
+      }
     });
 
-    // Listen for errors
     _socket!.on('error', (data) {
       debugPrint('❌ Server error: $data');
     });
   }
 
-  /// Start tracking with Socket.IO
   Future<void> startTracking({
     required String employeeId,
     required String attendanceId,
     String? employeeName,
   }) async {
     if (_isTracking) {
-      debugPrint('⚠️ Tracking already active');
       return;
     }
 
     _employeeId = employeeId;
     _attendanceId = attendanceId;
-    _employeeName = employeeName ?? employeeId;
+    _employeeName = (employeeName == null || employeeName.isEmpty)
+        ? employeeId
+        : employeeName;
 
-    // Connect to socket if not connected
     if (!isConnected) {
       await connect();
     }
 
-    // Start location service first
-    final locationStarted = await LocationService.instance
-        .startLocationTracking();
+    final locationStarted = await LocationService.instance.startLocationTracking();
     if (!locationStarted) {
-      debugPrint('❌ Failed to start location service');
       throw Exception('Failed to start location service');
     }
 
-    // Notify server about session start
-    _socket?.emit('session-start', {
-      'employeeId': employeeId,
-      'attendanceId': attendanceId,
-      'employeeName': _employeeName,
-      'startedAt': DateTime.now().toIso8601String(),
-    });
-
-    // Start listening to location updates
     _locationSubscription = LocationService.instance.locationStream.listen(
       _handleLocationUpdate,
       onError: (error) {
@@ -179,47 +209,33 @@ class SocketTrackingService {
     );
 
     _isTracking = true;
-    debugPrint('🟢 Socket tracking started for $employeeId');
+    _emitSessionStartIfReady();
+    _startFlushTimer();
   }
 
-  /// Stop tracking
   Future<void> stopTracking() async {
     if (!_isTracking) return;
 
-    // Cancel location subscription
     await _locationSubscription?.cancel();
     _locationSubscription = null;
-
-    // Stop location service
     LocationService.instance.stopLocationTracking();
 
-    // Notify server about session end
-    _socket?.emit('session-end', {
-      'employeeId': _employeeId,
-      'attendanceId': _attendanceId,
-      'endedAt': DateTime.now().toIso8601String(),
-    });
-
+    _emitSessionEndIfReady();
     _isTracking = false;
     _lastPosition = null;
     _lastSentTime = null;
 
-    debugPrint('🔴 Socket tracking stopped');
+    _stopHeartbeat();
+    _stopFlushTimer();
   }
 
-  /// Handle location updates from GPS
   void _handleLocationUpdate(Position position) {
-    if (!_isTracking || !isConnected) {
-      debugPrint(
-        '⏭️ Skipping location update: tracking=$_isTracking, connected=$isConnected',
-      );
+    if (!_isTracking || _employeeId == null || _attendanceId == null) {
       return;
     }
 
     final now = DateTime.now();
 
-    // PRIMARY FILTER: Movement-based (5 meters)
-    // This is the main filter for smooth routes
     if (_lastPosition != null) {
       final distance = Geolocator.distanceBetween(
         _lastPosition!.latitude,
@@ -229,103 +245,180 @@ class SocketTrackingService {
       );
 
       if (distance < _minDistanceMeters) {
-        // Not enough movement, skip this update
         return;
       }
-
-      debugPrint('✅ Movement threshold met: ${distance.toStringAsFixed(1)}m');
     }
 
-    // SECONDARY FILTER: Time-based rate limiting (3 seconds minimum)
-    // Prevents too frequent updates even when moving fast
     if (_lastSentTime != null &&
         now.difference(_lastSentTime!) < _sendInterval) {
-      final timeSinceLastSend = now.difference(_lastSentTime!).inSeconds;
-      debugPrint(
-        '⏭️ Rate limit: too soon (${timeSinceLastSend}s < ${_sendInterval.inSeconds}s)',
-      );
       return;
     }
 
-    // Send location update via Socket.IO
-    _sendLocationUpdate(position);
-  }
-
-  /// Send location update to server
-  void _sendLocationUpdate(Position position) {
-    if (!isConnected || _employeeId == null || _attendanceId == null) {
-      debugPrint('⚠️ Cannot send location: Not connected or missing IDs');
-      debugPrint(
-        '   Connected: $isConnected, EmployeeId: $_employeeId, AttendanceId: $_attendanceId',
-      );
-      return;
-    }
-
-    final payload = {
-      'employeeId': _employeeId,
-      'employeeName': _employeeName,
-      'attendanceId': _attendanceId,
-      'latitude': position.latitude,
-      'longitude': position.longitude,
-      'speed': position.speed,
-      'accuracy': position.accuracy,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-
-    debugPrint('📤 Sending location update to server:');
-    debugPrint('   Employee: $_employeeName ($_employeeId)');
-    debugPrint('   Attendance: $_attendanceId');
-    debugPrint(
-      '   Location: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-    );
-    debugPrint(
-      '   Accuracy: ${position.accuracy.toStringAsFixed(1)}m, Speed: ${position.speed.toStringAsFixed(1)}m/s',
-    );
-
-    _socket!.emit('location-update', payload);
-
+    final point = _buildPendingPoint(position, now);
+    _pendingById[point.clientPointId] = point;
     _lastPosition = position;
-    _lastSentTime = DateTime.now();
+    _lastSentTime = now;
 
-    debugPrint('✅ Location update sent successfully');
+    _sendPointOverSocket(point);
   }
 
-  /// Start heartbeat to keep connection alive
+  _PendingTrackingPoint _buildPendingPoint(Position position, DateTime now) {
+    _pointSequence += 1;
+    final employeeId = _employeeId!;
+    final attendanceId = _attendanceId!;
+    final employeeName = _employeeName ?? employeeId;
+
+    return _PendingTrackingPoint(
+      clientPointId:
+          '$employeeId-$attendanceId-${now.microsecondsSinceEpoch}-$_pointSequence',
+      employeeId: employeeId,
+      employeeName: employeeName,
+      attendanceId: attendanceId,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      speed: position.speed,
+      accuracy: position.accuracy,
+      recordedAt: now,
+    );
+  }
+
+  void _sendPointOverSocket(_PendingTrackingPoint point) {
+    if (!isConnected || _socket == null) {
+      return;
+    }
+    _socket!.emit('location-update', point.toPayload());
+  }
+
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (!_isTracking) return;
+
       if (isConnected) {
         _socket!.emit('heartbeat', {
           'timestamp': DateTime.now().toIso8601String(),
         });
       }
+
+      final current = _lastPosition;
+      if (current != null && _employeeId != null && _attendanceId != null) {
+        final point = _buildPendingPoint(current, DateTime.now());
+        _pendingById[point.clientPointId] = point;
+        _sendPointOverSocket(point);
+      }
+
+      unawaited(_flushPendingPointsToBatch());
     });
   }
 
-  /// Stop heartbeat
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
   }
 
-  /// Disconnect from socket
+  void _startFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = Timer.periodic(_flushInterval, (_) {
+      unawaited(_flushPendingPointsToBatch());
+    });
+  }
+
+  void _stopFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+  }
+
+  Future<void> _flushPendingPointsToBatch() async {
+    if (_isFlushing || _pendingById.isEmpty) {
+      return;
+    }
+    if (_employeeId == null || _attendanceId == null) {
+      return;
+    }
+
+    final hasNetwork = await NetworkService.checkConnectivity();
+    if (!hasNetwork) {
+      return;
+    }
+
+    _isFlushing = true;
+    try {
+      final token = UserService.token;
+      if (token == null || token.isEmpty) return;
+
+      final snapshot = List<_PendingTrackingPoint>.from(_pendingById.values);
+      final payload = {
+        'points': snapshot.map((p) => p.toPayload()).toList(),
+      };
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/tracking/points/batch'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return;
+      }
+
+      final body = jsonDecode(response.body);
+      final accepted = body['acceptedClientPointIds'];
+      if (accepted is List) {
+        for (final id in accepted) {
+          _pendingById.remove(id.toString());
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to flush pending tracking points: $e');
+    } finally {
+      _isFlushing = false;
+    }
+  }
+
+  void _emitSessionStartIfReady() {
+    if (!isConnected || _employeeId == null || _attendanceId == null) {
+      return;
+    }
+    _socket!.emit('session-start', {
+      'employeeId': _employeeId,
+      'attendanceId': _attendanceId,
+      'employeeName': _employeeName ?? _employeeId,
+      'startedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  void _emitSessionEndIfReady() {
+    if (_socket == null || _employeeId == null || _attendanceId == null) {
+      return;
+    }
+    _socket!.emit('session-end', {
+      'employeeId': _employeeId,
+      'attendanceId': _attendanceId,
+      'endedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
   Future<void> disconnect() async {
     await stopTracking();
-    _stopHeartbeat();
+    await _flushPendingPointsToBatch();
+    _pendingById.clear();
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;
-    debugPrint('🔌 Socket disconnected and disposed');
+    _employeeId = null;
+    _employeeName = null;
+    _attendanceId = null;
   }
 
-  /// Reconnect manually
   Future<void> reconnect() async {
     await disconnect();
     await Future.delayed(const Duration(seconds: 1));
     await connect();
   }
 
-  /// Get connection status
   Map<String, dynamic> getStatus() {
     return {
       'connected': isConnected,
@@ -334,6 +427,7 @@ class SocketTrackingService {
       'attendanceId': _attendanceId,
       'lastUpdate': _lastSentTime?.toIso8601String(),
       'reconnectAttempts': _reconnectAttempts,
+      'pendingQueue': _pendingById.length,
     };
   }
 }

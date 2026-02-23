@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   createTrackingPoint,
+  createTrackingPointsBatch,
   getTrackingRoute,
   getLiveTracking,
 } from '../controllers/trackingController.js';
@@ -8,6 +9,7 @@ import {
 const router = express.Router();
 
 router.post('/point', createTrackingPoint);
+router.post('/points/batch', createTrackingPointsBatch);
 router.get('/route', getTrackingRoute);
 router.get('/live', getLiveTracking);
 

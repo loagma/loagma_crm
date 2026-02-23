@@ -7,6 +7,7 @@ let io;
 // Store active connections for monitoring
 const activeConnections = new Map();
 const adminConnections = new Set();
+const activeSessions = new Map();
 
 /**
  * Initialize Socket.IO server
@@ -128,7 +129,7 @@ const handleAdminConnection = (socket) => {
  * Handle salesman connections
  */
 const handleSalesmanConnection = (socket) => {
-    const employeeId = socket.employeeId || socket.userId;
+  const employeeId = socket.employeeId || socket.userId;
 
     // Store connection info
     activeConnections.set(employeeId, {
@@ -157,12 +158,25 @@ const handleSalesmanConnection = (socket) => {
     socket.on('session-start', (data) => {
         console.log(`🟢 Session started: ${employeeId}, Attendance: ${data.attendanceId}`);
         socket.attendanceId = data.attendanceId;
+        activeSessions.set(employeeId.toString(), data.attendanceId?.toString() || null);
+        io.to('admin-room').emit('employee-session-started', {
+            employeeId: employeeId.toString(),
+            employeeName: data.employeeName || employeeId.toString(),
+            attendanceId: data.attendanceId?.toString() || null,
+            startedAt: data.startedAt || new Date().toISOString(),
+        });
     });
 
     // Handle attendance session end
-    socket.on('session-end', () => {
+    socket.on('session-end', (data = {}) => {
         console.log(`🔴 Session ended: ${employeeId}`);
         socket.attendanceId = null;
+        activeSessions.delete(employeeId.toString());
+        io.to('admin-room').emit('employee-session-ended', {
+            employeeId: employeeId.toString(),
+            attendanceId: data.attendanceId?.toString() || null,
+            endedAt: data.endedAt || new Date().toISOString(),
+        });
     });
 };
 
@@ -173,6 +187,11 @@ const handleLocationUpdate = async (socket, data) => {
     const employeeId = socket.employeeId || socket.userId;
     const now = Date.now();
 
+    if (!data || typeof data !== 'object') {
+        socket.emit('error', { message: 'Invalid location payload' });
+        return;
+    }
+
     console.log(`📥 Received location update from ${employeeId}:`, {
         latitude: data.latitude,
         longitude: data.longitude,
@@ -182,7 +201,11 @@ const handleLocationUpdate = async (socket, data) => {
     });
 
     // Rate limiting: Max 1 update every 3 seconds
-    const connectionInfo = activeConnections.get(employeeId);
+    const connectionInfo = activeConnections.get(employeeId) || {
+        socketId: socket.id,
+        connectedAt: new Date(),
+        lastUpdate: null,
+    };
     if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 3000) {
         console.log(`⏭️ Skipping update for ${employeeId} - too frequent (${now - connectionInfo.lastUpdate}ms ago)`);
         return;
@@ -194,32 +217,43 @@ const handleLocationUpdate = async (socket, data) => {
             longitude,
             speed,
             accuracy,
-            attendanceId,
+            attendanceId: rawAttendanceId,
             employeeName,
+            clientPointId,
         } = data;
 
+        const latitudeValue = Number(latitude);
+        const longitudeValue = Number(longitude);
+        const speedValue = speed === null || speed === undefined ? null : Number(speed);
+        const accuracyValue = accuracy === null || accuracy === undefined ? null : Number(accuracy);
+        const attendanceId = (rawAttendanceId || socket.attendanceId || activeSessions.get(employeeId.toString()))?.toString();
+
         // Validate required fields
-        if (!latitude || !longitude || !attendanceId) {
-            console.error(`❌ Missing required fields for ${employeeId}:`, { latitude, longitude, attendanceId });
+        if (!Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue) || !attendanceId) {
+            console.error(`❌ Missing required fields for ${employeeId}:`, {
+                latitude,
+                longitude,
+                attendanceId,
+            });
             socket.emit('error', { message: 'Missing required fields' });
             return;
         }
 
         // Validate coordinates
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude, longitude });
+        if (latitudeValue < -90 || latitudeValue > 90 || longitudeValue < -180 || longitudeValue > 180) {
+            console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude: latitudeValue, longitude: longitudeValue });
             socket.emit('error', { message: 'Invalid coordinates' });
             return;
         }
 
         // Check if movement threshold is met (5 meters for smoother routes)
-        const lastLocation = await getLastLocation(employeeId);
+        const lastLocation = await getLastLocation(employeeId, attendanceId);
         if (lastLocation) {
             const distance = calculateDistance(
                 lastLocation.latitude,
                 lastLocation.longitude,
-                latitude,
-                longitude
+                latitudeValue,
+                longitudeValue
             );
 
             if (distance < 0.005) { // 5 meters in kilometers
@@ -231,17 +265,29 @@ const handleLocationUpdate = async (socket, data) => {
         console.log(`💾 Saving location point for ${employeeId} to database...`);
 
         // Save to PostgreSQL (permanent storage)
-        const savedPoint = await prisma.salesmanTrackingPoint.create({
-            data: {
-                employeeId: employeeId.toString(),
-                attendanceId: attendanceId.toString(),
-                latitude: parseFloat(latitude),
-                longitude: parseFloat(longitude),
-                speed: speed ? parseFloat(speed) : null,
-                accuracy: accuracy ? parseFloat(accuracy) : null,
-                recordedAt: new Date(),
-            },
-        });
+        let savedPoint;
+        try {
+            savedPoint = await prisma.salesmanTrackingPoint.create({
+                data: {
+                    clientPointId: clientPointId ? clientPointId.toString() : null,
+                    employeeId: employeeId.toString(),
+                    attendanceId: attendanceId.toString(),
+                    latitude: latitudeValue,
+                    longitude: longitudeValue,
+                    speed: Number.isFinite(speedValue) ? speedValue : null,
+                    accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
+                    recordedAt: new Date(),
+                },
+            });
+        } catch (createError) {
+            if (createError?.code === 'P2002' && clientPointId) {
+                savedPoint = await prisma.salesmanTrackingPoint.findFirst({
+                    where: { clientPointId: clientPointId.toString() },
+                });
+            } else {
+                throw createError;
+            }
+        }
 
         console.log(`✅ Saved tracking point: ID=${savedPoint.id}, Employee=${employeeId}, Attendance=${attendanceId}`);
 
@@ -253,12 +299,13 @@ const handleLocationUpdate = async (socket, data) => {
         const payload = {
             employeeId,
             employeeName: employeeName || employeeId,
-            latitude: parseFloat(latitude),
-            longitude: parseFloat(longitude),
-            speed: speed ? parseFloat(speed) : 0,
-            accuracy: accuracy ? parseFloat(accuracy) : 0,
+            latitude: latitudeValue,
+            longitude: longitudeValue,
+            speed: Number.isFinite(speedValue) ? speedValue : 0,
+            accuracy: Number.isFinite(accuracyValue) ? accuracyValue : 0,
             recordedAt: savedPoint.recordedAt.toISOString(),
             attendanceId,
+            clientPointId: clientPointId ? clientPointId.toString() : null,
         };
 
         // Broadcast to all admins in real-time
@@ -269,10 +316,12 @@ const handleLocationUpdate = async (socket, data) => {
         // Send acknowledgment to mobile app
         socket.emit('location-ack', {
             success: true,
+            clientPointId: clientPointId ? clientPointId.toString() : null,
+            serverPointId: savedPoint.id,
             timestamp: savedPoint.recordedAt,
         });
 
-        console.log(`📍 Location updated: ${employeeId} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
+        console.log(`📍 Location updated: ${employeeId} (${latitudeValue.toFixed(6)}, ${longitudeValue.toFixed(6)})`);
     } catch (error) {
         console.error('❌ Error handling location update:', error);
         console.error('Error details:', error.message);
@@ -292,6 +341,7 @@ const handleDisconnection = (socket, reason) => {
     // Remove from active connections
     if (activeConnections.has(employeeId)) {
         activeConnections.delete(employeeId);
+        activeSessions.delete(employeeId.toString());
 
         // Notify admins
         io.to('admin-room').emit('employee-disconnected', {
@@ -310,10 +360,13 @@ const handleDisconnection = (socket, reason) => {
 /**
  * Get last known location for employee
  */
-const getLastLocation = async (employeeId) => {
+const getLastLocation = async (employeeId, attendanceId) => {
     try {
         const latest = await prisma.salesmanTrackingPoint.findFirst({
-            where: { employeeId: employeeId.toString() },
+            where: {
+                employeeId: employeeId.toString(),
+                ...(attendanceId ? { attendanceId: attendanceId.toString() } : {}),
+            },
             orderBy: { recordedAt: 'desc' },
             select: { latitude: true, longitude: true },
         });
