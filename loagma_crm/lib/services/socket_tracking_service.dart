@@ -75,7 +75,7 @@ class SocketTrackingService {
   final LinkedHashMap<String, _PendingTrackingPoint> _pendingById =
       LinkedHashMap<String, _PendingTrackingPoint>();
 
-  static const Duration _sendInterval = Duration(seconds: 3);
+  static const Duration _sendInterval = Duration(seconds: 5);
   static const double _minDistanceMeters = 5;
   static const int _maxReconnectAttempts = 5;
   static const Duration _reconnectDelay = Duration(seconds: 3);
@@ -291,7 +291,7 @@ class SocketTrackingService {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       if (!_isTracking) return;
 
       if (isConnected) {

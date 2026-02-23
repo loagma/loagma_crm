@@ -12,6 +12,22 @@ const parseDateValue = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const toRadians = (degrees) => degrees * (Math.PI / 180);
+
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  const R = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 export const createTrackingPoint = async (req, res) => {
   try {
     const {
@@ -293,6 +309,101 @@ export const getLiveTracking = async (req, res) => {
     return res.json({
       success: true,
       data: latestPerEmployee,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getTrackingRouteStats = async (req, res) => {
+  try {
+    const { employeeId, attendanceId, start, end } = req.query;
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'employeeId is required',
+      });
+    }
+
+    const now = new Date();
+    const parsedStart = parseDateValue(start);
+    const parsedEnd = parseDateValue(end);
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      0,
+      0,
+      0
+    );
+    const endOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+    const finalStartDate = parsedStart || startOfToday;
+    const finalEndDate = parsedEnd || endOfToday;
+
+    const points = await prisma.salesmanTrackingPoint.findMany({
+      where: {
+        employeeId: employeeId.toString(),
+        ...(attendanceId ? { attendanceId: attendanceId.toString() } : {}),
+        recordedAt: {
+          gte: finalStartDate,
+          lte: finalEndDate,
+        },
+      },
+      orderBy: { recordedAt: 'asc' },
+      select: {
+        latitude: true,
+        longitude: true,
+        recordedAt: true,
+        attendanceId: true,
+      },
+    });
+
+    let totalDistanceKm = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      totalDistanceKm += calculateDistanceKm(
+        points[i - 1].latitude,
+        points[i - 1].longitude,
+        points[i].latitude,
+        points[i].longitude
+      );
+    }
+
+    const firstPoint = points.length > 0 ? points[0] : null;
+    const lastPoint = points.length > 0 ? points[points.length - 1] : null;
+    const durationSec =
+      firstPoint && lastPoint
+        ? Math.max(
+            0,
+            Math.floor(
+              (new Date(lastPoint.recordedAt).getTime() -
+                new Date(firstPoint.recordedAt).getTime()) /
+                1000
+            )
+          )
+        : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        employeeId: employeeId.toString(),
+        attendanceId: attendanceId || lastPoint?.attendanceId || null,
+        totalDistanceKm: Number(totalDistanceKm.toFixed(3)),
+        pointCount: points.length,
+        durationSec,
+        lastSeenAt: lastPoint?.recordedAt || null,
+      },
     });
   } catch (error) {
     return res.status(500).json({

@@ -8,6 +8,7 @@ let io;
 const activeConnections = new Map();
 const adminConnections = new Set();
 const activeSessions = new Map();
+const sessionMetrics = new Map();
 
 /**
  * Initialize Socket.IO server
@@ -157,12 +158,21 @@ const handleSalesmanConnection = (socket) => {
     // Handle attendance session start
     socket.on('session-start', (data) => {
         console.log(`🟢 Session started: ${employeeId}, Attendance: ${data.attendanceId}`);
-        socket.attendanceId = data.attendanceId;
-        activeSessions.set(employeeId.toString(), data.attendanceId?.toString() || null);
+        socket.attendanceId = data.attendanceId?.toString() || null;
+        const attendanceId = data.attendanceId?.toString() || null;
+        activeSessions.set(employeeId.toString(), attendanceId);
+        if (attendanceId) {
+            sessionMetrics.set(_sessionKey(employeeId, attendanceId), {
+                totalDistanceKm: 0,
+                pointCount: 0,
+                startedAt: new Date(),
+                lastSeenAt: new Date(),
+            });
+        }
         io.to('admin-room').emit('employee-session-started', {
             employeeId: employeeId.toString(),
             employeeName: data.employeeName || employeeId.toString(),
-            attendanceId: data.attendanceId?.toString() || null,
+            attendanceId,
             startedAt: data.startedAt || new Date().toISOString(),
         });
     });
@@ -170,11 +180,15 @@ const handleSalesmanConnection = (socket) => {
     // Handle attendance session end
     socket.on('session-end', (data = {}) => {
         console.log(`🔴 Session ended: ${employeeId}`);
+        const endedAttendanceId = (data.attendanceId || socket.attendanceId)?.toString() || null;
         socket.attendanceId = null;
         activeSessions.delete(employeeId.toString());
+        if (endedAttendanceId) {
+            sessionMetrics.delete(_sessionKey(employeeId, endedAttendanceId));
+        }
         io.to('admin-room').emit('employee-session-ended', {
             employeeId: employeeId.toString(),
-            attendanceId: data.attendanceId?.toString() || null,
+            attendanceId: endedAttendanceId,
             endedAt: data.endedAt || new Date().toISOString(),
         });
     });
@@ -247,6 +261,7 @@ const handleLocationUpdate = async (socket, data) => {
         }
 
         // Check if movement threshold is met (5 meters for smoother routes)
+        let lastSegmentKm = 0;
         const lastLocation = await getLastLocation(employeeId, attendanceId);
         if (lastLocation) {
             const distance = calculateDistance(
@@ -255,6 +270,7 @@ const handleLocationUpdate = async (socket, data) => {
                 latitudeValue,
                 longitudeValue
             );
+            lastSegmentKm = distance;
 
             if (distance < 0.005) { // 5 meters in kilometers
                 console.log(`⏭️ Skipping update for ${employeeId} - movement too small (${(distance * 1000).toFixed(1)}m)`);
@@ -266,6 +282,7 @@ const handleLocationUpdate = async (socket, data) => {
 
         // Save to PostgreSQL (permanent storage)
         let savedPoint;
+        let wasDuplicate = false;
         try {
             savedPoint = await prisma.salesmanTrackingPoint.create({
                 data: {
@@ -281,6 +298,7 @@ const handleLocationUpdate = async (socket, data) => {
             });
         } catch (createError) {
             if (createError?.code === 'P2002' && clientPointId) {
+                wasDuplicate = true;
                 savedPoint = await prisma.salesmanTrackingPoint.findFirst({
                     where: { clientPointId: clientPointId.toString() },
                 });
@@ -294,6 +312,20 @@ const handleLocationUpdate = async (socket, data) => {
         // Update connection info
         connectionInfo.lastUpdate = now;
         activeConnections.set(employeeId, connectionInfo);
+        const sessionKey = _sessionKey(employeeId, attendanceId);
+        const metric = sessionMetrics.get(sessionKey) || {
+            totalDistanceKm: 0,
+            pointCount: 0,
+            startedAt: savedPoint.recordedAt,
+            lastSeenAt: savedPoint.recordedAt,
+        };
+
+        if (!wasDuplicate) {
+            metric.pointCount += 1;
+            metric.totalDistanceKm += lastSegmentKm;
+        }
+        metric.lastSeenAt = savedPoint.recordedAt;
+        sessionMetrics.set(sessionKey, metric);
 
         // Prepare broadcast payload (compressed)
         const payload = {
@@ -306,6 +338,10 @@ const handleLocationUpdate = async (socket, data) => {
             recordedAt: savedPoint.recordedAt.toISOString(),
             attendanceId,
             clientPointId: clientPointId ? clientPointId.toString() : null,
+            totalDistanceKm: Number(metric.totalDistanceKm.toFixed(3)),
+            lastSegmentMeters: Number((lastSegmentKm * 1000).toFixed(1)),
+            lastSeenAt: savedPoint.recordedAt.toISOString(),
+            status: _deriveFreshnessStatus(savedPoint.recordedAt),
         };
 
         // Broadcast to all admins in real-time
@@ -347,6 +383,7 @@ const handleDisconnection = (socket, reason) => {
         io.to('admin-room').emit('employee-disconnected', {
             employeeId,
             disconnectedAt: new Date(),
+            status: 'OFFLINE',
         });
     }
 
@@ -375,6 +412,16 @@ const getLastLocation = async (employeeId, attendanceId) => {
         console.error('Error fetching last location:', error);
         return null;
     }
+};
+
+const _sessionKey = (employeeId, attendanceId) =>
+    `${employeeId.toString()}::${attendanceId.toString()}`;
+
+const _deriveFreshnessStatus = (lastSeenAt) => {
+    const ageMs = Date.now() - new Date(lastSeenAt).getTime();
+    if (ageMs <= 20 * 1000) return 'LIVE';
+    if (ageMs <= 120 * 1000) return 'DEGRADED';
+    return 'OFFLINE';
 };
 
 /**

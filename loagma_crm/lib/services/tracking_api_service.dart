@@ -153,6 +153,48 @@ class TrackingApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getRouteStats({
+    required String employeeId,
+    String? attendanceId,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'employeeId': employeeId,
+        if (attendanceId != null) 'attendanceId': attendanceId,
+        if (start != null) 'start': start.toIso8601String(),
+        if (end != null) 'end': end.toIso8601String(),
+      };
+
+      final uri = Uri.parse(
+        '$baseUrl/route-stats',
+      ).replace(queryParameters: queryParams);
+
+      final token = UserService.token;
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data'] ?? {}};
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to load route stats',
+        'data': {},
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e', 'data': {}};
+    }
+  }
+
   static Future<Map<String, dynamic>> getTodayPunchedInEmployees() async {
     try {
       // Get today's date in YYYY-MM-DD format

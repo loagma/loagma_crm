@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
+import 'dart:async';
 import '../../services/user_service.dart';
 import '../../services/api_config.dart';
 import '../../services/tracking_api_service.dart';
@@ -85,19 +86,33 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       {}; // Track last update time
   final Map<String, double> _employeeTotalDistance =
       {}; // Track total distance traveled in km
+  final Map<String, Map<String, dynamic>> _routeStatsByEmployee = {};
   String? _selectedEmployeeId;
   bool _isConnected = false;
   bool _isConnecting = true;
   String? _errorMessage;
+  bool _isDisposed = false;
+  Timer? _uiFlushTimer;
+  final Map<String, dynamic> _pendingLocationByEmployee = {};
+  DateTime _lastUiMutationAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _uiMutationThrottle = Duration(milliseconds: 700);
 
   // Route optimization settings
   static const int _maxRoutePoints = 500; // Increased for better detail
   static const double _routeSimplificationTolerance =
       0.00001; // Douglas-Peucker tolerance
 
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted || _isDisposed) return;
+    setState(fn);
+  }
+
   @override
   void initState() {
     super.initState();
+    _uiFlushTimer = Timer.periodic(_uiMutationThrottle, (_) {
+      _flushPendingLocationUpdates();
+    });
     _connectToSocket();
     // Load fallback data from API
     _loadPunchedInEmployees();
@@ -105,17 +120,23 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _uiFlushTimer?.cancel();
+    _uiFlushTimer = null;
+    _detachSocketListeners();
     _socket?.disconnect();
     _socket?.dispose();
+    _socket = null;
     _mapController.dispose();
     super.dispose();
   }
 
   /// Connect to Socket.IO server
   Future<void> _connectToSocket() async {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
+    if (_socket != null && (_socket!.connected || _isConnecting)) return;
 
-    setState(() {
+    _safeSetState(() {
       _isConnecting = true;
       _errorMessage = null;
     });
@@ -123,18 +144,22 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     try {
       final token = UserService.token;
       if (token == null || token.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Authentication required';
-            _isConnecting = false;
-          });
-        }
+        _safeSetState(() {
+          _errorMessage = 'Authentication required';
+          _isConnecting = false;
+        });
         return;
       }
 
       // Use http:// URL directly - Socket.IO client handles WebSocket upgrade
       final socketUrl = ApiConfig.baseUrl;
       debugPrint('🔌 Admin connecting to Socket.IO: $socketUrl');
+
+      if (_socket != null) {
+        _detachSocketListeners();
+        _socket!.dispose();
+        _socket = null;
+      }
 
       _socket = IO.io(
         socketUrl,
@@ -153,8 +178,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
       // Set timeout for connection
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && !_isConnected && _isConnecting) {
-          setState(() {
+        if (!_isDisposed && mounted && !_isConnected && _isConnecting) {
+          _safeSetState(() {
             _errorMessage = 'Connection timeout. Showing last known positions.';
             _isConnecting = false;
           });
@@ -162,12 +187,10 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       });
     } catch (e) {
       debugPrint('❌ Socket connection error: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Connection failed. Showing last known positions.';
-          _isConnecting = false;
-        });
-      }
+      _safeSetState(() {
+        _errorMessage = 'Connection failed. Showing last known positions.';
+        _isConnecting = false;
+      });
     }
   }
 
@@ -207,7 +230,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                       .toDouble(),
                 );
 
-                setState(() {
+                _safeSetState(() {
                   _employeePunchInLocations[employeeId] = punchInLocation;
                   // Initialize route with punch-in location as first point
                   _employeeRoutes[employeeId] = [punchInLocation];
@@ -237,7 +260,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                     (lng is num ? lng : num.parse(lng.toString())).toDouble(),
                   );
 
-                  setState(() {
+                  _safeSetState(() {
                     _activeEmployees[employeeId] = _EmployeeLocation(
                       employeeId: employeeId,
                       employeeName: employeeName,
@@ -259,6 +282,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                                       ))
                                 .toDouble()
                           : 0,
+                      attendanceId: locationData['attendanceId']?.toString(),
                       lastUpdate: DateTime.parse(
                         locationData['recordedAt'] ??
                             DateTime.now().toIso8601String(),
@@ -275,7 +299,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                 }
               } else {
                 // No location data yet, but still add employee to list with default location
-                setState(() {
+                _safeSetState(() {
                   _activeEmployees[employeeId] = _EmployeeLocation(
                     employeeId: employeeId,
                     employeeName: employeeName,
@@ -283,6 +307,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                     longitude: 0,
                     speed: 0,
                     accuracy: 0,
+                    attendanceId: null,
                     lastUpdate: DateTime.now(),
                   );
                 });
@@ -303,62 +328,100 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
   /// Setup socket event listeners
   void _setupSocketListeners() {
-    _socket!.onConnect((_) {
-      debugPrint('✅ Admin socket connected');
-      if (mounted) {
-        setState(() {
-          _isConnected = true;
-          _isConnecting = false;
-          _errorMessage = null;
-        });
-      }
-    });
+    _socket!.onConnect(_onSocketConnect);
+    _socket!.onDisconnect(_onSocketDisconnect);
+    _socket!.onConnectError(_onSocketConnectError);
+    _socket!.on('location-update', _onSocketLocationUpdate);
+    _socket!.on('employee-connected', _onSocketEmployeeConnected);
+    _socket!.on('employee-disconnected', _onSocketEmployeeDisconnected);
+    _socket!.on('active-employees', _onSocketActiveEmployees);
+  }
 
-    _socket!.onDisconnect((reason) {
-      debugPrint('🔌 Admin socket disconnected: $reason');
-      if (mounted) {
-        setState(() {
-          _isConnected = false;
-          _isConnecting = false;
-        });
-      }
-    });
+  void _detachSocketListeners() {
+    if (_socket == null) return;
+    _socket!.off('connect', _onSocketConnect);
+    _socket!.off('disconnect', _onSocketDisconnect);
+    _socket!.off('connect_error', _onSocketConnectError);
+    _socket!.off('location-update', _onSocketLocationUpdate);
+    _socket!.off('employee-connected', _onSocketEmployeeConnected);
+    _socket!.off('employee-disconnected', _onSocketEmployeeDisconnected);
+    _socket!.off('active-employees', _onSocketActiveEmployees);
+  }
 
-    _socket!.onConnectError((error) {
-      debugPrint('❌ Admin socket connection error: $error');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Connection error: $error';
-          _isConnecting = false;
-        });
-      }
+  void _onSocketConnect(dynamic _) {
+    debugPrint('Admin socket connected');
+    _safeSetState(() {
+      _isConnected = true;
+      _isConnecting = false;
+      _errorMessage = null;
     });
+  }
 
-    // Listen for location updates from all employees
-    _socket!.on('location-update', (data) {
-      _handleLocationUpdate(data);
+  void _onSocketDisconnect(dynamic reason) {
+    debugPrint('Admin socket disconnected: ');
+    _safeSetState(() {
+      _isConnected = false;
+      _isConnecting = false;
     });
+  }
 
-    // Listen for employee connection events
-    _socket!.on('employee-connected', (data) {
-      debugPrint('🟢 Employee connected: ${data['employeeId']}');
+  void _onSocketConnectError(dynamic error) {
+    debugPrint('Admin socket connection error: ');
+    _safeSetState(() {
+      _errorMessage = 'Connection error: ';
+      _isConnecting = false;
     });
+  }
 
-    // Listen for employee disconnection events
-    _socket!.on('employee-disconnected', (data) {
-      _handleEmployeeDisconnected(data['employeeId']);
-    });
+  void _onSocketLocationUpdate(dynamic data) {
+    _handleLocationUpdate(data);
+  }
 
-    // Listen for active employees list
-    _socket!.on('active-employees', (data) {
-      debugPrint('📋 Active employees: $data');
-    });
+  void _onSocketEmployeeConnected(dynamic data) {
+    debugPrint('Employee connected: ');
+  }
+
+  void _onSocketEmployeeDisconnected(dynamic data) {
+    final employeeId = data is Map ? data['employeeId']?.toString() : null;
+    if (employeeId == null || employeeId.isEmpty) return;
+    _handleEmployeeDisconnected(employeeId);
+  }
+
+  void _onSocketActiveEmployees(dynamic data) {
+    debugPrint('Active employees: ');
   }
 
   /// Handle incoming location updates
   void _handleLocationUpdate(dynamic data) {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
+    if (data is! Map) return;
 
+    final employeeId = data['employeeId']?.toString();
+    if (employeeId == null || employeeId.isEmpty) return;
+
+    final now = DateTime.now();
+    if (now.difference(_lastUiMutationAt) < _uiMutationThrottle) {
+      _pendingLocationByEmployee[employeeId] = data;
+      return;
+    }
+
+    _applyLocationUpdate(data);
+  }
+
+  void _flushPendingLocationUpdates() {
+    if (!mounted || _isDisposed || _pendingLocationByEmployee.isEmpty) {
+      return;
+    }
+
+    final pending = List<dynamic>.from(_pendingLocationByEmployee.values);
+    _pendingLocationByEmployee.clear();
+
+    for (final event in pending) {
+      _applyLocationUpdate(event);
+    }
+  }
+
+  void _applyLocationUpdate(dynamic data) {
     try {
       final employeeId = data['employeeId']?.toString();
       final employeeName = data['employeeName']?.toString() ?? employeeId;
@@ -369,6 +432,11 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
       final recordedAt = data['recordedAt'] != null
           ? DateTime.parse(data['recordedAt'])
           : DateTime.now();
+      final lastSeenAt = data['lastSeenAt'] != null
+          ? DateTime.parse(data['lastSeenAt'])
+          : recordedAt;
+      final totalDistanceKmRaw = data['totalDistanceKm'];
+      final attendanceId = data['attendanceId']?.toString();
 
       if (employeeId == null || latitude == null || longitude == null) {
         return;
@@ -381,7 +449,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
             .toDouble(),
       );
 
-      setState(() {
+      _safeSetState(() {
+        _lastUiMutationAt = DateTime.now();
         _activeEmployees[employeeId] = _EmployeeLocation(
           employeeId: employeeId,
           employeeName: employeeName ?? employeeId,
@@ -392,15 +461,13 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           accuracy:
               (accuracy is num ? accuracy : num.parse(accuracy.toString()))
                   .toDouble(),
-          lastUpdate: recordedAt,
+          attendanceId: attendanceId,
+          lastUpdate: lastSeenAt,
         );
 
-        // Track last update time
-        _employeeLastUpdateTime[employeeId] = recordedAt;
+        _employeeLastUpdateTime[employeeId] = lastSeenAt;
 
-        // Initialize route with punch-in location if not already done
         if (!_employeeRoutes.containsKey(employeeId)) {
-          // If we have punch-in location, start with it
           if (_employeePunchInLocations.containsKey(employeeId)) {
             _employeeRoutes[employeeId] = [
               _employeePunchInLocations[employeeId]!,
@@ -408,19 +475,17 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           } else {
             _employeeRoutes[employeeId] = [];
           }
-          // Initialize distance
           _employeeTotalDistance[employeeId] = 0.0;
         }
 
-        // Add point to employee's route (avoid duplicates and very close points)
         final shouldAddPoint =
             _employeeRoutes[employeeId]!.isEmpty ||
             _calculateDistance(_employeeRoutes[employeeId]!.last, latLng) >
-                0.003; // 3 meters minimum distance between points
+                0.003;
 
         if (shouldAddPoint) {
-          // Calculate distance from last point and add to total
-          if (_employeeRoutes[employeeId]!.isNotEmpty) {
+          if (_employeeRoutes[employeeId]!.isNotEmpty &&
+              totalDistanceKmRaw == null) {
             final distanceFromLast = _calculateDistance(
               _employeeRoutes[employeeId]!.last,
               latLng,
@@ -431,21 +496,23 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
           _employeeRoutes[employeeId]!.add(latLng);
 
-          // Optimize route if it gets too large
           if (_employeeRoutes[employeeId]!.length > _maxRoutePoints) {
             _optimizeRoute(employeeId);
           }
         }
+
+        if (totalDistanceKmRaw is num) {
+          _employeeTotalDistance[employeeId] = totalDistanceKmRaw.toDouble();
+        }
       });
 
       debugPrint(
-        '📍 Location updated: $employeeId (${_activeEmployees.length} active, ${_employeeRoutes[employeeId]?.length ?? 0} points, ${(_employeeTotalDistance[employeeId] ?? 0).toStringAsFixed(2)} km)',
+        'Location updated:  ( active,  points,  km)',
       );
     } catch (e) {
-      debugPrint('❌ Error handling location update: $e');
+      debugPrint('Error handling location update: ');
     }
   }
-
   /// Optimize route by removing redundant points while keeping punch-in location
   void _optimizeRoute(String employeeId) {
     if (!_employeeRoutes.containsKey(employeeId)) return;
@@ -589,16 +656,10 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
   /// Handle employee disconnection
   void _handleEmployeeDisconnected(String employeeId) {
-    if (!mounted) return;
-
-    setState(() {
-      _activeEmployees.remove(employeeId);
-      // Keep the route for historical view, or remove it
-      // _employeeRoutes.remove(employeeId); // Uncomment to clear route on disconnect
-    });
+    if (!mounted || _isDisposed) return;
 
     debugPrint(
-      '🔴 Employee disconnected: $employeeId (${_activeEmployees.length} active)',
+      '?? Employee disconnected: $employeeId (${_activeEmployees.length} active)',
     );
   }
 
@@ -730,7 +791,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 20),
                       onPressed: () {
-                        setState(() {
+                        _safeSetState(() {
                           _selectedEmployeeId = null;
                         });
                       },
@@ -740,6 +801,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
             items: employees.map((emp) {
               final distance = _employeeTotalDistance[emp.employeeId] ?? 0.0;
               final hasLocation = emp.latitude != 0 || emp.longitude != 0;
+              final freshnessStatus = _getFreshnessStatus(emp.lastUpdate);
               final timeAgo = hasLocation
                   ? _formatTimeAgo(DateTime.now().difference(emp.lastUpdate))
                   : 'No location';
@@ -755,7 +817,9 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: hasLocation ? Colors.green : Colors.orange,
+                          color: hasLocation
+                              ? _getFreshnessColor(freshnessStatus)
+                              : Colors.orange,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -763,7 +827,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                       Flexible(
                         child: Text(
                           hasLocation
-                              ? '${emp.employeeName} (${distance.toStringAsFixed(1)}km)'
+                              ? '${emp.employeeName} (${distance.toStringAsFixed(1)}km, $freshnessStatus)'
                               : '${emp.employeeName} (waiting...)',
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -779,7 +843,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
               );
             }).toList(),
             onChanged: (value) {
-              setState(() {
+              _safeSetState(() {
                 _selectedEmployeeId = value;
               });
               if (value != null && _activeEmployees.containsKey(value)) {
@@ -787,6 +851,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
                 if (emp.latitude != 0 || emp.longitude != 0) {
                   _mapController.move(LatLng(emp.latitude, emp.longitude), 15);
                 }
+                _refreshRouteStatsForSelected();
               }
             },
           ),
@@ -1118,32 +1183,65 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     return '${duration.inDays}d ago';
   }
 
+  String _getFreshnessStatus(DateTime lastUpdate) {
+    final age = DateTime.now().difference(lastUpdate);
+    if (age.inSeconds <= 20) return 'LIVE';
+    if (age.inSeconds <= 120) return 'DEGRADED';
+    return 'OFFLINE';
+  }
+
+  Color _getFreshnessColor(String status) {
+    switch (status) {
+      case 'LIVE':
+        return Colors.green;
+      case 'DEGRADED':
+        return Colors.orange;
+      default:
+        return Colors.red;
+    }
+  }
+
+  Future<void> _refreshRouteStatsForSelected() async {
+    final selectedId = _selectedEmployeeId;
+    if (selectedId == null || selectedId.isEmpty) return;
+    final attendanceId = _activeEmployees[selectedId]?.attendanceId;
+
+    final result = await TrackingApiService.getRouteStats(
+      employeeId: selectedId,
+      attendanceId: attendanceId,
+    );
+    if (result['success'] == true && result['data'] is Map) {
+      final stats = Map<String, dynamic>.from(result['data']);
+      _safeSetState(() {
+        _routeStatsByEmployee[selectedId] = stats;
+        final totalDistanceKm = stats['totalDistanceKm'];
+        if (totalDistanceKm is num) {
+          _employeeTotalDistance[selectedId] = totalDistanceKm.toDouble();
+        }
+      });
+    }
+  }
+
   /// Build distance and stats widget
   Widget _buildDistanceStats() {
     if (_selectedEmployeeId == null) return const SizedBox.shrink();
 
-    final employee = _activeEmployees[_selectedEmployeeId];
-    final distance = _employeeTotalDistance[_selectedEmployeeId] ?? 0.0;
-    final routePoints = _employeeRoutes[_selectedEmployeeId]?.length ?? 0;
-    final punchInTime = _employeeLastUpdateTime[_selectedEmployeeId];
+    final selectedId = _selectedEmployeeId!;
+    final distance = _employeeTotalDistance[selectedId] ?? 0.0;
+    final routePoints = _employeeRoutes[selectedId]?.length ?? 0;
+    final stats = _routeStatsByEmployee[selectedId];
+    final durationSec = stats != null && stats['durationSec'] is num
+        ? (stats['durationSec'] as num).toInt()
+        : routePoints * 5;
 
-    // Calculate duration
-    String duration = 'N/A';
-    if (punchInTime != null) {
-      final diff = DateTime.now().difference(punchInTime);
-      final hours = diff.inHours;
-      final minutes = diff.inMinutes % 60;
-      duration = '${hours}h ${minutes}m';
-    }
+    final hours = durationSec ~/ 3600;
+    final minutes = (durationSec % 3600) ~/ 60;
+    final duration = '$hours' 'h ' '$minutes' 'm';
 
-    // Calculate average speed
     String avgSpeed = 'N/A';
-    if (employee != null && punchInTime != null) {
-      final diff = DateTime.now().difference(punchInTime);
-      if (diff.inMinutes > 0) {
-        final speedKmh = (distance / diff.inHours);
-        avgSpeed = '${speedKmh.toStringAsFixed(1)} km/h';
-      }
+    if (durationSec > 0 && distance > 0) {
+      final speedKmh = distance / (durationSec / 3600);
+      avgSpeed = '${speedKmh.toStringAsFixed(1)} km/h';
     }
 
     return Container(
@@ -1213,6 +1311,7 @@ class _EmployeeLocation {
   final double longitude;
   final double speed;
   final double accuracy;
+  final String? attendanceId;
   final DateTime lastUpdate;
 
   _EmployeeLocation({
@@ -1222,6 +1321,7 @@ class _EmployeeLocation {
     required this.longitude,
     required this.speed,
     required this.accuracy,
+    this.attendanceId,
     required this.lastUpdate,
   });
 }
@@ -1729,3 +1829,6 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
     );
   }
 }
+
+
+
