@@ -19,6 +19,30 @@ const runtimeStats = {
     lastAcceptedAt: null,
 };
 
+const normalizeRole = (value) =>
+    value ? value.toString().trim().toLowerCase() : '';
+
+const isAdminOrManagerRole = (roleName) => {
+    const role = normalizeRole(roleName);
+    return role === 'admin' || role === 'manager';
+};
+
+const isSalesmanRole = (roleName, roleId, roles = []) => {
+    const role = normalizeRole(roleName);
+    const normalizedRoles = Array.isArray(roles)
+        ? roles.map((r) => normalizeRole(r))
+        : [];
+    return (
+        roleId?.toString().trim().toUpperCase() === 'R002' ||
+        role === 'salesman' ||
+        role === 'sales' ||
+        role === 'employee' ||
+        normalizedRoles.includes('salesman') ||
+        normalizedRoles.includes('sales') ||
+        normalizedRoles.includes('r002')
+    );
+};
+
 /**
  * Initialize Socket.IO server
  * @param {Object} httpServer - HTTP server instance
@@ -62,6 +86,7 @@ export const initializeSocketServer = (httpServer) => {
             }
 
             socket.userRole = user.role?.name?.toLowerCase() || 'unknown';
+            socket.userRoles = Array.isArray(user.roles) ? user.roles : [];
             socket.employeeId = user.employeeId;
 
             console.log(`✅ Socket authenticated: ${socket.userId} (${socket.userRole}) - Employee: ${socket.employeeId}`);
@@ -77,9 +102,14 @@ export const initializeSocketServer = (httpServer) => {
         console.log(`🔌 Client connected: ${socket.id} (User: ${socket.userId})`);
 
         // Handle different user types
-        if (socket.userRole === 'admin' || socket.userRole === 'manager') {
+        if (isAdminOrManagerRole(socket.userRole)) {
             handleAdminConnection(socket);
-        } else if (socket.userRole === 'salesman') {
+        } else if (isSalesmanRole(socket.userRole, socket.roleId, socket.userRoles)) {
+            handleSalesmanConnection(socket);
+        } else {
+            console.warn(
+                `⚠️ Socket role not explicitly recognized. Falling back to salesman handler: roleName=${socket.userRole}, roleId=${socket.roleId}, userId=${socket.userId}`
+            );
             handleSalesmanConnection(socket);
         }
 
