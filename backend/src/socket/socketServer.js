@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/db.js';
+import { ensureRedisConnection, getRedisClient, isRedisEnabled } from '../config/redis.js';
 
 let io;
 
@@ -9,6 +10,14 @@ const activeConnections = new Map();
 const adminConnections = new Set();
 const activeSessions = new Map();
 const sessionMetrics = new Map();
+const runtimeStats = {
+    pointsReceived: 0,
+    pointsAccepted: 0,
+    pointsDuplicate: 0,
+    pointsRejected: 0,
+    pointsPersistFailed: 0,
+    lastAcceptedAt: null,
+};
 
 /**
  * Initialize Socket.IO server
@@ -200,8 +209,10 @@ const handleSalesmanConnection = (socket) => {
 const handleLocationUpdate = async (socket, data) => {
     const employeeId = socket.employeeId || socket.userId;
     const now = Date.now();
+    runtimeStats.pointsReceived += 1;
 
     if (!data || typeof data !== 'object') {
+        runtimeStats.pointsRejected += 1;
         socket.emit('error', { message: 'Invalid location payload' });
         return;
     }
@@ -214,14 +225,15 @@ const handleLocationUpdate = async (socket, data) => {
         accuracy: data.accuracy,
     });
 
-    // Rate limiting: Max 1 update every 3 seconds
+    // Lightweight anti-spam rate limiting: do not drop valid 5s cadence.
     const connectionInfo = activeConnections.get(employeeId) || {
         socketId: socket.id,
         connectedAt: new Date(),
         lastUpdate: null,
     };
-    if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 3000) {
+    if (connectionInfo?.lastUpdate && (now - connectionInfo.lastUpdate) < 700) {
         console.log(`⏭️ Skipping update for ${employeeId} - too frequent (${now - connectionInfo.lastUpdate}ms ago)`);
+        runtimeStats.pointsRejected += 1;
         return;
     }
 
@@ -234,12 +246,18 @@ const handleLocationUpdate = async (socket, data) => {
             attendanceId: rawAttendanceId,
             employeeName,
             clientPointId,
+            recordedAt,
         } = data;
 
         const latitudeValue = Number(latitude);
         const longitudeValue = Number(longitude);
         const speedValue = speed === null || speed === undefined ? null : Number(speed);
         const accuracyValue = accuracy === null || accuracy === undefined ? null : Number(accuracy);
+        const recordedAtValue = recordedAt ? new Date(recordedAt) : null;
+        const persistedAt =
+            recordedAtValue && !Number.isNaN(recordedAtValue.getTime())
+                ? recordedAtValue
+                : new Date();
         const attendanceId = (rawAttendanceId || socket.attendanceId || activeSessions.get(employeeId.toString()))?.toString();
 
         // Validate required fields
@@ -249,6 +267,7 @@ const handleLocationUpdate = async (socket, data) => {
                 longitude,
                 attendanceId,
             });
+            runtimeStats.pointsRejected += 1;
             socket.emit('error', { message: 'Missing required fields' });
             return;
         }
@@ -256,11 +275,12 @@ const handleLocationUpdate = async (socket, data) => {
         // Validate coordinates
         if (latitudeValue < -90 || latitudeValue > 90 || longitudeValue < -180 || longitudeValue > 180) {
             console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude: latitudeValue, longitude: longitudeValue });
+            runtimeStats.pointsRejected += 1;
             socket.emit('error', { message: 'Invalid coordinates' });
             return;
         }
 
-        // Check if movement threshold is met (5 meters for smoother routes)
+        // Calculate segment distance for metrics, but do not drop stationary points.
         let lastSegmentKm = 0;
         const lastLocation = await getLastLocation(employeeId, attendanceId);
         if (lastLocation) {
@@ -271,14 +291,10 @@ const handleLocationUpdate = async (socket, data) => {
                 longitudeValue
             );
             lastSegmentKm = distance;
-
-            if (distance < 0.005) { // 5 meters in kilometers
-                console.log(`⏭️ Skipping update for ${employeeId} - movement too small (${(distance * 1000).toFixed(1)}m)`);
-                return;
-            }
         }
 
         console.log(`💾 Saving location point for ${employeeId} to database...`);
+        const persistStartedAt = Date.now();
 
         // Save to PostgreSQL (permanent storage)
         let savedPoint;
@@ -293,7 +309,7 @@ const handleLocationUpdate = async (socket, data) => {
                     longitude: longitudeValue,
                     speed: Number.isFinite(speedValue) ? speedValue : null,
                     accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
-                    recordedAt: new Date(),
+                    recordedAt: persistedAt,
                 },
             });
         } catch (createError) {
@@ -302,7 +318,9 @@ const handleLocationUpdate = async (socket, data) => {
                 savedPoint = await prisma.salesmanTrackingPoint.findFirst({
                     where: { clientPointId: clientPointId.toString() },
                 });
+                runtimeStats.pointsDuplicate += 1;
             } else {
+                runtimeStats.pointsPersistFailed += 1;
                 throw createError;
             }
         }
@@ -323,6 +341,8 @@ const handleLocationUpdate = async (socket, data) => {
         if (!wasDuplicate) {
             metric.pointCount += 1;
             metric.totalDistanceKm += lastSegmentKm;
+            runtimeStats.pointsAccepted += 1;
+            runtimeStats.lastAcceptedAt = savedPoint.recordedAt.toISOString();
         }
         metric.lastSeenAt = savedPoint.recordedAt;
         sessionMetrics.set(sessionKey, metric);
@@ -344,6 +364,9 @@ const handleLocationUpdate = async (socket, data) => {
             status: _deriveFreshnessStatus(savedPoint.recordedAt),
         };
 
+        // Best-effort Redis latest snapshot for fast live reads.
+        await persistLatestToRedis(payload);
+
         // Broadcast to all admins in real-time
         const adminCount = io.sockets.adapter.rooms.get('admin-room')?.size || 0;
         console.log(`📡 Broadcasting location to ${adminCount} admin(s) in admin-room`);
@@ -351,17 +374,30 @@ const handleLocationUpdate = async (socket, data) => {
 
         // Send acknowledgment to mobile app
         socket.emit('location-ack', {
-            success: true,
+            accepted: true,
             clientPointId: clientPointId ? clientPointId.toString() : null,
             serverPointId: savedPoint.id,
-            timestamp: savedPoint.recordedAt,
+            recordedAt: savedPoint.recordedAt.toISOString(),
         });
 
-        console.log(`📍 Location updated: ${employeeId} (${latitudeValue.toFixed(6)}, ${longitudeValue.toFixed(6)})`);
+        const persistMs = Date.now() - persistStartedAt;
+        console.log(
+            JSON.stringify({
+                event: 'tracking_point_ingested',
+                employeeId: employeeId.toString(),
+                attendanceId: attendanceId.toString(),
+                clientPointId: clientPointId ? clientPointId.toString() : null,
+                accepted: true,
+                duplicate: wasDuplicate,
+                persistMs,
+                recordedAt: savedPoint.recordedAt.toISOString(),
+            })
+        );
     } catch (error) {
         console.error('❌ Error handling location update:', error);
         console.error('Error details:', error.message);
         console.error('Stack trace:', error.stack);
+        runtimeStats.pointsPersistFailed += 1;
         socket.emit('error', { message: 'Failed to save location', error: error.message });
     }
 };
@@ -425,19 +461,6 @@ const _deriveFreshnessStatus = (lastSeenAt) => {
 };
 
 /**
- * Check if location has moved significantly (5 meters threshold for smoother routes)
- */
-const hasMovedSignificantly = (lastLocation, newLocation) => {
-    const distance = calculateDistance(
-        lastLocation.latitude,
-        lastLocation.longitude,
-        newLocation.latitude,
-        newLocation.longitude
-    );
-    return distance >= 0.005; // 5 meters in kilometers
-};
-
-/**
  * Calculate distance between two coordinates (Haversine formula)
  */
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -477,4 +500,25 @@ export const getActiveConnectionsCount = () => ({
     total: activeConnections.size + adminConnections.size,
 });
 
-export default { initializeSocketServer, getIO, getActiveConnectionsCount };
+export const getTrackingRuntimeStats = () => ({
+    ...runtimeStats,
+    redisEnabled: isRedisEnabled(),
+    activeSessions: activeSessions.size,
+});
+
+const persistLatestToRedis = async (payload) => {
+    if (!isRedisEnabled()) return;
+    const ready = await ensureRedisConnection();
+    if (!ready) return;
+    const redis = getRedisClient();
+    if (!redis) return;
+    const key = `tracking:latest:${payload.employeeId}`;
+    await redis.set(key, JSON.stringify(payload), 'EX', 60 * 60 * 12);
+};
+
+export default {
+    initializeSocketServer,
+    getIO,
+    getActiveConnectionsCount,
+    getTrackingRuntimeStats,
+};

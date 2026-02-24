@@ -65,6 +65,18 @@ class LocationService {
     return permission == LocationPermission.always;
   }
 
+  Future<bool> hasNotificationPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    final status = await permission_handler.Permission.notification.status;
+    return status.isGranted;
+  }
+
+  Future<bool> requestNotificationPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    final status = await permission_handler.Permission.notification.request();
+    return status.isGranted;
+  }
+
   /// Show blocking dialog asking user to set Location to "Allow all the time"
   /// so tracking works when the screen is off. Call when starting tracking on
   /// Android with only "while in use" permission.

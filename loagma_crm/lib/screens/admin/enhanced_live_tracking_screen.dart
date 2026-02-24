@@ -413,6 +413,8 @@ class HistoricalRoutesTab extends StatefulWidget {
 class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
   static const Color primaryColor = Color(0xFFD7BE69);
   late final MapController _mapController;
+  bool _isMapReady = false;
+  LatLng? _pendingMapCenter;
 
   List<Map<String, dynamic>> _allEmployees = [];
   String? _selectedEmployeeId;
@@ -431,6 +433,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
 
   @override
   void dispose() {
+    _isMapReady = false;
     _mapController.dispose();
     super.dispose();
   }
@@ -530,7 +533,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
             _isLoadingRoute = false;
           });
 
-          // Center map on route
+          // Center map on route only after map is ready.
           if (points.isNotEmpty) {
             final centerLat =
                 points.map((p) => p.latitude).reduce((a, b) => a + b) /
@@ -538,7 +541,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
             final centerLng =
                 points.map((p) => p.longitude).reduce((a, b) => a + b) /
                 points.length;
-            _mapController.move(LatLng(centerLat, centerLng), 13);
+            _moveOrQueueMapCenter(LatLng(centerLat, centerLng));
           }
 
           debugPrint('✅ Loaded ${points.length} historical points');
@@ -666,7 +669,18 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
 
     return FlutterMap(
       mapController: _mapController,
-      options: MapOptions(center: center, zoom: 13),
+      options: MapOptions(
+        center: center,
+        zoom: 13,
+        onMapReady: () {
+          _isMapReady = true;
+          if (_pendingMapCenter != null) {
+            final queued = _pendingMapCenter!;
+            _pendingMapCenter = null;
+            _mapController.move(queued, 13);
+          }
+        },
+      ),
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -707,6 +721,14 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
         ),
       ],
     );
+  }
+
+  void _moveOrQueueMapCenter(LatLng center) {
+    if (_isMapReady) {
+      _mapController.move(center, 13);
+      return;
+    }
+    _pendingMapCenter = center;
   }
 
   Widget _buildStats() {

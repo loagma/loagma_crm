@@ -70,6 +70,19 @@ class AttendanceSessionManager {
             '✅ handlePunchInSuccess: background location granted after dialog',
           );
         }
+
+        final hasNotification =
+            await LocationService.instance.hasNotificationPermission();
+        if (!hasNotification) {
+          final granted =
+              await LocationService.instance.requestNotificationPermission();
+          if (!granted) {
+            debugPrint(
+              '❌ handlePunchInSuccess: notification permission not granted, aborting tracking start',
+            );
+            return;
+          }
+        }
       }
 
       // Connect to Socket.IO and start tracking

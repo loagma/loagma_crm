@@ -61,3 +61,9 @@ if (process.env.DATABASE_URL) {
     }
   }
 }
+
+// Redis defaults for live tracking cache
+if (process.env.REDIS_ENABLED === undefined) {
+  process.env.REDIS_ENABLED =
+    process.env.NODE_ENV === 'production' ? 'true' : 'false';
+}

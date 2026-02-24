@@ -437,6 +437,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           : recordedAt;
       final totalDistanceKmRaw = data['totalDistanceKm'];
       final attendanceId = data['attendanceId']?.toString();
+      final serverStatus = data['status']?.toString();
 
       if (employeeId == null || latitude == null || longitude == null) {
         return;
@@ -462,6 +463,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
               (accuracy is num ? accuracy : num.parse(accuracy.toString()))
                   .toDouble(),
           attendanceId: attendanceId,
+          status: serverStatus,
           lastUpdate: lastSeenAt,
         );
 
@@ -478,10 +480,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           _employeeTotalDistance[employeeId] = 0.0;
         }
 
-        final shouldAddPoint =
-            _employeeRoutes[employeeId]!.isEmpty ||
-            _calculateDistance(_employeeRoutes[employeeId]!.last, latLng) >
-                0.003;
+        const shouldAddPoint = true;
 
         if (shouldAddPoint) {
           if (_employeeRoutes[employeeId]!.isNotEmpty &&
@@ -801,7 +800,10 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
             items: employees.map((emp) {
               final distance = _employeeTotalDistance[emp.employeeId] ?? 0.0;
               final hasLocation = emp.latitude != 0 || emp.longitude != 0;
-              final freshnessStatus = _getFreshnessStatus(emp.lastUpdate);
+              final freshnessStatus = _getFreshnessStatus(
+                emp.lastUpdate,
+                serverStatus: emp.status,
+              );
               final timeAgo = hasLocation
                   ? _formatTimeAgo(DateTime.now().difference(emp.lastUpdate))
                   : 'No location';
@@ -1177,14 +1179,21 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
   }
 
   String _formatTimeAgo(Duration duration) {
+    if (duration.isNegative) return 'just now';
     if (duration.inSeconds < 60) return '${duration.inSeconds}s ago';
     if (duration.inMinutes < 60) return '${duration.inMinutes}m ago';
     if (duration.inHours < 24) return '${duration.inHours}h ago';
     return '${duration.inDays}d ago';
   }
 
-  String _getFreshnessStatus(DateTime lastUpdate) {
+  String _getFreshnessStatus(DateTime lastUpdate, {String? serverStatus}) {
+    if (serverStatus == 'LIVE' ||
+        serverStatus == 'DEGRADED' ||
+        serverStatus == 'OFFLINE') {
+      return serverStatus!;
+    }
     final age = DateTime.now().difference(lastUpdate);
+    if (age.isNegative) return 'LIVE';
     if (age.inSeconds <= 20) return 'LIVE';
     if (age.inSeconds <= 120) return 'DEGRADED';
     return 'OFFLINE';
@@ -1312,6 +1321,7 @@ class _EmployeeLocation {
   final double speed;
   final double accuracy;
   final String? attendanceId;
+  final String? status;
   final DateTime lastUpdate;
 
   _EmployeeLocation({
@@ -1322,6 +1332,7 @@ class _EmployeeLocation {
     required this.speed,
     required this.accuracy,
     this.attendanceId,
+    this.status,
     required this.lastUpdate,
   });
 }
@@ -1337,6 +1348,8 @@ class HistoricalRoutesTab extends StatefulWidget {
 class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
   static const Color primaryColor = Color(0xFFD7BE69);
   late final MapController _mapController;
+  bool _isMapReady = false;
+  LatLng? _pendingMapCenter;
 
   List<Map<String, dynamic>> _allEmployees = [];
   String? _selectedEmployeeId;
@@ -1355,6 +1368,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
 
   @override
   void dispose() {
+    _isMapReady = false;
     _mapController.dispose();
     super.dispose();
   }
@@ -1456,7 +1470,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
             _isLoadingRoute = false;
           });
 
-          // Center map on route
+          // Center map on route only after map is ready.
           if (points.isNotEmpty) {
             final centerLat =
                 points.map((p) => p.latitude).reduce((a, b) => a + b) /
@@ -1464,7 +1478,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
             final centerLng =
                 points.map((p) => p.longitude).reduce((a, b) => a + b) /
                 points.length;
-            _mapController.move(LatLng(centerLat, centerLng), 13);
+            _moveOrQueueMapCenter(LatLng(centerLat, centerLng));
           }
 
           debugPrint('✅ Loaded ${points.length} historical points');
@@ -1613,7 +1627,18 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
 
     return FlutterMap(
       mapController: _mapController,
-      options: MapOptions(center: center, zoom: 13),
+      options: MapOptions(
+        center: center,
+        zoom: 13,
+        onMapReady: () {
+          _isMapReady = true;
+          if (_pendingMapCenter != null) {
+            final queued = _pendingMapCenter!;
+            _pendingMapCenter = null;
+            _mapController.move(queued, 13);
+          }
+        },
+      ),
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -1684,6 +1709,14 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
         ),
       ],
     );
+  }
+
+  void _moveOrQueueMapCenter(LatLng center) {
+    if (_isMapReady) {
+      _mapController.move(center, 13);
+      return;
+    }
+    _pendingMapCenter = center;
   }
 
   Widget _buildStats() {

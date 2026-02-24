@@ -36,6 +36,7 @@ class _PendingTrackingPoint {
   final DateTime recordedAt;
 
   Map<String, dynamic> toPayload() {
+    final recordedAtUtc = recordedAt.toUtc().toIso8601String();
     return {
       'clientPointId': clientPointId,
       'employeeId': employeeId,
@@ -45,8 +46,8 @@ class _PendingTrackingPoint {
       'longitude': longitude,
       'speed': speed,
       'accuracy': accuracy,
-      'recordedAt': recordedAt.toIso8601String(),
-      'timestamp': recordedAt.toIso8601String(),
+      'recordedAt': recordedAtUtc,
+      'timestamp': recordedAtUtc,
     };
   }
 }
@@ -62,6 +63,7 @@ class SocketTrackingService {
   StreamSubscription<Position>? _locationSubscription;
   Timer? _heartbeatTimer;
   Timer? _flushTimer;
+  Timer? _emitTimer;
 
   String? _employeeId;
   String? _employeeName;
@@ -69,14 +71,17 @@ class SocketTrackingService {
   bool _isTracking = false;
   Position? _lastPosition;
   DateTime? _lastSentTime;
+  DateTime? _lastAckTime;
   int _pointSequence = 0;
   bool _isFlushing = false;
+  int _emittedCount = 0;
+  int _ackedCount = 0;
+  int _flushedCount = 0;
 
   final LinkedHashMap<String, _PendingTrackingPoint> _pendingById =
       LinkedHashMap<String, _PendingTrackingPoint>();
 
   static const Duration _sendInterval = Duration(seconds: 5);
-  static const double _minDistanceMeters = 5;
   static const int _maxReconnectAttempts = 5;
   static const Duration _reconnectDelay = Duration(seconds: 3);
   static const Duration _flushInterval = Duration(seconds: 12);
@@ -169,6 +174,8 @@ class SocketTrackingService {
       final clientPointId = data['clientPointId']?.toString();
       if (clientPointId != null && clientPointId.isNotEmpty) {
         _pendingById.remove(clientPointId);
+        _ackedCount += 1;
+        _lastAckTime = DateTime.now();
       }
     });
 
@@ -210,6 +217,7 @@ class SocketTrackingService {
 
     _isTracking = true;
     _emitSessionStartIfReady();
+    _startEmitTimer();
     _startFlushTimer();
   }
 
@@ -225,6 +233,7 @@ class SocketTrackingService {
     _lastPosition = null;
     _lastSentTime = null;
 
+    _stopEmitTimer();
     _stopHeartbeat();
     _stopFlushTimer();
   }
@@ -234,31 +243,26 @@ class SocketTrackingService {
       return;
     }
 
-    final now = DateTime.now();
-
-    if (_lastPosition != null) {
-      final distance = Geolocator.distanceBetween(
-        _lastPosition!.latitude,
-        _lastPosition!.longitude,
-        position.latitude,
-        position.longitude,
-      );
-
-      if (distance < _minDistanceMeters) {
-        return;
-      }
+    _lastPosition = position;
+    if (_lastSentTime == null) {
+      _emitCurrentPoint();
     }
+  }
 
-    if (_lastSentTime != null &&
-        now.difference(_lastSentTime!) < _sendInterval) {
+  void _emitCurrentPoint() {
+    if (!_isTracking || _employeeId == null || _attendanceId == null) {
       return;
     }
-
+    final position = _lastPosition;
+    if (position == null) {
+      return;
+    }
+    final now = DateTime.now();
     final point = _buildPendingPoint(position, now);
     _pendingById[point.clientPointId] = point;
+    _emittedCount += 1;
     _lastPosition = position;
     _lastSentTime = now;
-
     _sendPointOverSocket(point);
   }
 
@@ -296,15 +300,10 @@ class SocketTrackingService {
 
       if (isConnected) {
         _socket!.emit('heartbeat', {
-          'timestamp': DateTime.now().toIso8601String(),
+          'employeeId': _employeeId,
+          'attendanceId': _attendanceId,
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
         });
-      }
-
-      final current = _lastPosition;
-      if (current != null && _employeeId != null && _attendanceId != null) {
-        final point = _buildPendingPoint(current, DateTime.now());
-        _pendingById[point.clientPointId] = point;
-        _sendPointOverSocket(point);
       }
 
       unawaited(_flushPendingPointsToBatch());
@@ -326,6 +325,18 @@ class SocketTrackingService {
   void _stopFlushTimer() {
     _flushTimer?.cancel();
     _flushTimer = null;
+  }
+
+  void _startEmitTimer() {
+    _emitTimer?.cancel();
+    _emitTimer = Timer.periodic(_sendInterval, (_) {
+      _emitCurrentPoint();
+    });
+  }
+
+  void _stopEmitTimer() {
+    _emitTimer?.cancel();
+    _emitTimer = null;
   }
 
   Future<void> _flushPendingPointsToBatch() async {
@@ -368,7 +379,10 @@ class SocketTrackingService {
       final accepted = body['acceptedClientPointIds'];
       if (accepted is List) {
         for (final id in accepted) {
-          _pendingById.remove(id.toString());
+          final removed = _pendingById.remove(id.toString());
+          if (removed != null) {
+            _flushedCount += 1;
+          }
         }
       }
     } catch (e) {
@@ -386,7 +400,7 @@ class SocketTrackingService {
       'employeeId': _employeeId,
       'attendanceId': _attendanceId,
       'employeeName': _employeeName ?? _employeeId,
-      'startedAt': DateTime.now().toIso8601String(),
+      'startedAt': DateTime.now().toUtc().toIso8601String(),
     });
   }
 
@@ -397,7 +411,7 @@ class SocketTrackingService {
     _socket!.emit('session-end', {
       'employeeId': _employeeId,
       'attendanceId': _attendanceId,
-      'endedAt': DateTime.now().toIso8601String(),
+      'endedAt': DateTime.now().toUtc().toIso8601String(),
     });
   }
 
@@ -425,9 +439,13 @@ class SocketTrackingService {
       'tracking': _isTracking,
       'employeeId': _employeeId,
       'attendanceId': _attendanceId,
-      'lastUpdate': _lastSentTime?.toIso8601String(),
+      'lastEmitAt': _lastSentTime?.toIso8601String(),
+      'lastAckAt': _lastAckTime?.toIso8601String(),
       'reconnectAttempts': _reconnectAttempts,
-      'pendingQueue': _pendingById.length,
+      'queued': _pendingById.length,
+      'emitted': _emittedCount,
+      'acked': _ackedCount,
+      'flushed': _flushedCount,
     };
   }
 }

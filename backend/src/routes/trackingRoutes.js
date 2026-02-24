@@ -4,6 +4,7 @@ import {
   createTrackingPointsBatch,
   getTrackingRoute,
   getTrackingRouteStats,
+  getTrackingDebugSession,
   getLiveTracking,
 } from '../controllers/trackingController.js';
 
@@ -14,5 +15,6 @@ router.post('/points/batch', createTrackingPointsBatch);
 router.get('/route', getTrackingRoute);
 router.get('/route-stats', getTrackingRouteStats);
 router.get('/live', getLiveTracking);
+router.get('/debug/session', getTrackingDebugSession);
 
 export default router;

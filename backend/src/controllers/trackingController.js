@@ -1,4 +1,6 @@
 import prisma from '../config/db.js';
+import { ensureRedisConnection, getRedisClient, isRedisEnabled } from '../config/redis.js';
+import { getTrackingRuntimeStats } from '../socket/socketServer.js';
 
 const parseFloatValue = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -26,6 +28,38 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+};
+
+const persistLatestToRedis = async ({
+  employeeId,
+  attendanceId,
+  latitude,
+  longitude,
+  speed,
+  accuracy,
+  recordedAt,
+}) => {
+  if (!isRedisEnabled()) return;
+  const ready = await ensureRedisConnection();
+  if (!ready) return;
+  const redis = getRedisClient();
+  if (!redis) return;
+  const payload = {
+    employeeId: employeeId.toString(),
+    attendanceId: attendanceId?.toString() || null,
+    latitude,
+    longitude,
+    speed: speed ?? 0,
+    accuracy: accuracy ?? 0,
+    recordedAt: new Date(recordedAt).toISOString(),
+    lastSeenAt: new Date(recordedAt).toISOString(),
+  };
+  await redis.set(
+    `tracking:latest:${employeeId.toString()}`,
+    JSON.stringify(payload),
+    'EX',
+    60 * 60 * 12
+  );
 };
 
 export const createTrackingPoint = async (req, res) => {
@@ -92,6 +126,16 @@ export const createTrackingPoint = async (req, res) => {
 
     console.log(`✅ Tracking point saved: employeeId=${employeeId}, attendanceId=${attendanceId}, lat=${latValue}, lng=${lngValue}`);
 
+    await persistLatestToRedis({
+      employeeId,
+      attendanceId,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      speed: point.speed,
+      accuracy: point.accuracy,
+      recordedAt: point.recordedAt,
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Tracking point saved',
@@ -152,7 +196,16 @@ export const createTrackingPointsBatch = async (req, res) => {
       }
 
       try {
-        await prisma.salesmanTrackingPoint.create({ data });
+        const created = await prisma.salesmanTrackingPoint.create({ data });
+        await persistLatestToRedis({
+          employeeId,
+          attendanceId,
+          latitude: created.latitude,
+          longitude: created.longitude,
+          speed: created.speed,
+          accuracy: created.accuracy,
+          recordedAt: created.recordedAt,
+        });
         results.push({ clientPointId, success: true });
         if (clientPointId) acceptedClientPointIds.push(clientPointId);
       } catch (error) {
@@ -280,6 +333,49 @@ export const getLiveTracking = async (req, res) => {
   try {
     const { employeeId } = req.query;
 
+    if (isRedisEnabled()) {
+      const ready = await ensureRedisConnection();
+      if (ready) {
+        const redis = getRedisClient();
+        if (redis) {
+          if (employeeId) {
+            const cached = await redis.get(
+              `tracking:latest:${employeeId.toString()}`
+            );
+            if (cached) {
+              return res.json({
+                success: true,
+                data: JSON.parse(cached),
+                source: 'redis',
+              });
+            }
+          } else {
+            const keys = await redis.keys('tracking:latest:*');
+            if (keys.length > 0) {
+              const values = await redis.mget(keys);
+              const parsed = values
+                .filter(Boolean)
+                .map((v) => {
+                  try {
+                    return JSON.parse(v);
+                  } catch (_) {
+                    return null;
+                  }
+                })
+                .filter(Boolean);
+              if (parsed.length > 0) {
+                return res.json({
+                  success: true,
+                  data: parsed,
+                  source: 'redis',
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (employeeId) {
       const latest = await prisma.salesmanTrackingPoint.findFirst({
         where: { employeeId: employeeId.toString() },
@@ -289,6 +385,7 @@ export const getLiveTracking = async (req, res) => {
       return res.json({
         success: true,
         data: latest,
+        source: 'postgres',
       });
     }
 
@@ -309,6 +406,7 @@ export const getLiveTracking = async (req, res) => {
     return res.json({
       success: true,
       data: latestPerEmployee,
+      source: 'postgres',
     });
   } catch (error) {
     return res.status(500).json({
@@ -403,6 +501,86 @@ export const getTrackingRouteStats = async (req, res) => {
         pointCount: points.length,
         durationSec,
         lastSeenAt: lastPoint?.recordedAt || null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getTrackingDebugSession = async (req, res) => {
+  try {
+    const { employeeId, attendanceId } = req.query;
+
+    if (!employeeId || !attendanceId) {
+      return res.status(400).json({
+        success: false,
+        message: 'employeeId and attendanceId are required',
+      });
+    }
+
+    const now = new Date();
+    const since = new Date(now.getTime() - 5 * 60 * 1000);
+
+    const [lastPoint, recentPoints] = await Promise.all([
+      prisma.salesmanTrackingPoint.findFirst({
+        where: {
+          employeeId: employeeId.toString(),
+          attendanceId: attendanceId.toString(),
+        },
+        orderBy: { recordedAt: 'desc' },
+      }),
+      prisma.salesmanTrackingPoint.count({
+        where: {
+          employeeId: employeeId.toString(),
+          attendanceId: attendanceId.toString(),
+          recordedAt: { gte: since },
+        },
+      }),
+    ]);
+
+    let redisLatest = null;
+    if (isRedisEnabled()) {
+      const ready = await ensureRedisConnection();
+      if (ready) {
+        const redis = getRedisClient();
+        if (redis) {
+          const raw = await redis.get(`tracking:latest:${employeeId.toString()}`);
+          if (raw) {
+            try {
+              redisLatest = JSON.parse(raw);
+            } catch (_) {
+              redisLatest = null;
+            }
+          }
+        }
+      }
+    }
+
+    const runtimeStats = getTrackingRuntimeStats();
+    const perMinuteRate = Number((recentPoints / 5).toFixed(2));
+    const lastSeenAt = lastPoint?.recordedAt || redisLatest?.lastSeenAt || null;
+    const ackLagMs = lastSeenAt
+      ? Math.max(0, Date.now() - new Date(lastSeenAt).getTime())
+      : null;
+
+    return res.json({
+      success: true,
+      data: {
+        employeeId: employeeId.toString(),
+        attendanceId: attendanceId.toString(),
+        recentPointCount5Min: recentPoints,
+        pointsPerMinute: perMinuteRate,
+        lastSeenAt,
+        ackLagMs,
+        redis: {
+          enabled: isRedisEnabled(),
+          latest: redisLatest,
+        },
+        runtime: runtimeStats,
       },
     });
   } catch (error) {

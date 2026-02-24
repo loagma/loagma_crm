@@ -474,6 +474,20 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
           return;
         }
       }
+
+      final hasNotification =
+          await LocationService.instance.hasNotificationPermission();
+      if (!hasNotification) {
+        final granted =
+            await LocationService.instance.requestNotificationPermission();
+        if (!granted) {
+          CustomToast.showError(
+            context,
+            'Notification permission is required for background live tracking.',
+          );
+          return;
+        }
+      }
     }
 
     // Show punch in dialog

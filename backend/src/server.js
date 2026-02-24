@@ -5,7 +5,11 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { startExpiryJob, stopExpiryJob } from './jobs/approvalExpiryJob.js';
-import { initializeSocketServer, getActiveConnectionsCount } from './socket/socketServer.js';
+import {
+    initializeSocketServer,
+    getActiveConnectionsCount,
+    getTrackingRuntimeStats,
+} from './socket/socketServer.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
@@ -82,9 +86,11 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Socket.IO status endpoint
 app.get('/socket/status', (req, res) => {
     const connections = getActiveConnectionsCount();
+    const tracking = getTrackingRuntimeStats();
     res.json({
         socketIO: 'active',
         connections,
+        tracking,
         timestamp: new Date().toISOString(),
     });
 });
