@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'admin_socket_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
@@ -66,6 +67,8 @@ class UserService {
   /// LOGOUT
   /// -------------------------------------------------------------
   static Future<void> logout() async {
+    // Disconnect admin socket if connected
+    AdminSocketService.instance.disconnect();
     await _prefs?.clear();
   }
 
