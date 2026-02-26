@@ -19,7 +19,12 @@ const runtimeStats = {
     lastAcceptedAt: null,
 };
 
-const MAX_ACCEPTABLE_ACCURACY_METERS = 20;
+// Raised to 50m for indoor/phone GPS testing; lower to 20m for production
+const MAX_ACCEPTABLE_ACCURACY_METERS = 50;
+
+// Minimum distance (in km) to consider a movement significant
+// 0.003 km = 3 meters - helps keep routes clean by ignoring micro-movements
+const MIN_MOVEMENT_KM = 0.003;
 
 /**
  * Initialize Socket.IO server
@@ -303,24 +308,32 @@ const handleLocationUpdate = async (socket, data) => {
             return;
         }
 
+        // Silently drop low-accuracy points (no error emitted to client)
         if (Number.isFinite(accuracyValue) && accuracyValue > MAX_ACCEPTABLE_ACCURACY_METERS) {
-            console.log(`⛔️ Accuracy too low for ${employeeId}: ${accuracyValue}m`);
+            console.log(`⛔️ Ignored low-accuracy point (${accuracyValue}m) for ${employeeId}`);
             runtimeStats.pointsRejected += 1;
-            socket.emit('error', { message: 'Location accuracy too low' });
-            return;
+            return; // silently ignore - don't emit error to avoid noise
         }
 
-        // Calculate segment distance for metrics, but do not drop stationary points.
+        // Get last location from in-memory sessionMetrics to avoid DB hit
+        const sessionKey = _sessionKey(employeeId, attendanceId);
+        let metric = sessionMetrics.get(sessionKey);
+        
+        // Calculate segment distance using in-memory last location
         let lastSegmentKm = 0;
-        const lastLocation = await getLastLocation(employeeId, attendanceId);
-        if (lastLocation) {
-            const distance = calculateDistance(
-                lastLocation.latitude,
-                lastLocation.longitude,
+        if (metric && Number.isFinite(metric.lastLat) && Number.isFinite(metric.lastLon)) {
+            lastSegmentKm = calculateDistance(
+                metric.lastLat,
+                metric.lastLon,
                 latitudeValue,
                 longitudeValue
             );
-            lastSegmentKm = distance;
+            
+            // Filter micro-movements (< 3 meters) to keep routes clean
+            if (lastSegmentKm < MIN_MOVEMENT_KM) {
+                console.log(`🚶 Ignored micro-movement (${(lastSegmentKm * 1000).toFixed(1)}m) for ${employeeId}`);
+                return; // silently ignore - position unchanged
+            }
         }
 
         console.log(`💾 Saving location point for ${employeeId} to database...`);
@@ -379,13 +392,18 @@ const handleLocationUpdate = async (socket, data) => {
         // Update connection info
         connectionInfo.lastUpdate = now;
         activeConnections.set(employeeId, connectionInfo);
-        const sessionKey = _sessionKey(employeeId, attendanceId);
-        const metric = sessionMetrics.get(sessionKey) || {
-            totalDistanceKm: 0,
-            pointCount: 0,
-            startedAt: savedPoint.recordedAt,
-            lastSeenAt: savedPoint.recordedAt,
-        };
+        
+        // Initialize or update session metrics with last known position (in-memory cache)
+        if (!metric) {
+            metric = {
+                totalDistanceKm: 0,
+                pointCount: 0,
+                startedAt: savedPoint.recordedAt,
+                lastSeenAt: savedPoint.recordedAt,
+                lastLat: latitudeValue,
+                lastLon: longitudeValue,
+            };
+        }
 
         if (!wasDuplicate) {
             metric.pointCount += 1;
@@ -394,6 +412,9 @@ const handleLocationUpdate = async (socket, data) => {
             runtimeStats.lastAcceptedAt = savedPoint.recordedAt.toISOString();
         }
         metric.lastSeenAt = savedPoint.recordedAt;
+        // Update in-memory last location to avoid DB reads on next update
+        metric.lastLat = latitudeValue;
+        metric.lastLon = longitudeValue;
         sessionMetrics.set(sessionKey, metric);
 
         // Prepare broadcast payload (compressed)

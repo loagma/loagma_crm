@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import '../../services/user_service.dart';
 import '../../services/api_config.dart';
 import '../../services/tracking_api_service.dart';
+import '../../services/admin_socket_service.dart';
 
 /// Socket.IO-based Live Tracking Screen with Live and Historical tabs
 class SocketLiveTrackingScreen extends StatefulWidget {
@@ -70,11 +70,20 @@ class LiveTrackingTab extends StatefulWidget {
   State<LiveTrackingTab> createState() => _LiveTrackingTabState();
 }
 
-class _LiveTrackingTabState extends State<LiveTrackingTab> {
+class _LiveTrackingTabState extends State<LiveTrackingTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Keep socket alive when switching tabs
+
   static const Color primaryColor = Color(0xFFD7BE69);
 
-  IO.Socket? _socket;
   final MapController _mapController = MapController();
+
+  // Stream subscriptions from global AdminSocketService
+  StreamSubscription<Map<String, dynamic>>? _locationUpdateSub;
+  StreamSubscription<Map<String, dynamic>>? _employeeConnectedSub;
+  StreamSubscription<Map<String, dynamic>>? _employeeDisconnectedSub;
+  StreamSubscription<bool>? _connectionStatusSub;
 
   // In-memory state of active employees
   final Map<String, _EmployeeLocation> _activeEmployees = {};
@@ -102,6 +111,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
   static const double _routeSimplificationTolerance =
       0.00001; // Douglas-Peucker tolerance
 
+  AdminSocketService get _socketService => AdminSocketService.instance;
+
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
     setState(fn);
@@ -113,9 +124,50 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     _uiFlushTimer = Timer.periodic(_uiMutationThrottle, (_) {
       _flushPendingLocationUpdates();
     });
-    _connectToSocket();
+    _subscribeToSocketService();
     // Load fallback data from API
     _loadPunchedInEmployees();
+  }
+
+  /// Subscribe to global AdminSocketService streams
+  void _subscribeToSocketService() {
+    // Register as active listener (triggers lazy connection if needed)
+    _socketService.addListener();
+
+    // Initial connection state
+    _isConnected = _socketService.isConnected;
+    _isConnecting = !_isConnected;
+
+    // Listen to connection status changes
+    _connectionStatusSub = _socketService.connectionStatus.listen((connected) {
+      _safeSetState(() {
+        _isConnected = connected;
+        _isConnecting = false;
+        if (connected) {
+          _errorMessage = null;
+        }
+      });
+    });
+
+    // Listen to location updates
+    _locationUpdateSub = _socketService.locationUpdates.listen((data) {
+      _handleLocationUpdate(data);
+    });
+
+    // Listen to employee session started
+    _employeeConnectedSub = _socketService.employeeConnected.listen((data) {
+      final employeeId = data['employeeId']?.toString();
+      debugPrint('🟢 Employee session started: $employeeId');
+      _loadPunchedInEmployees();
+    });
+
+    // Listen to employee disconnected/session ended
+    _employeeDisconnectedSub = _socketService.employeeDisconnected.listen((data) {
+      final employeeId = data['employeeId']?.toString();
+      if (employeeId == null || employeeId.isEmpty) return;
+      debugPrint('🔴 Employee session ended: $employeeId');
+      _handleEmployeeDisconnected(employeeId);
+    });
   }
 
   @override
@@ -123,75 +175,24 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     _isDisposed = true;
     _uiFlushTimer?.cancel();
     _uiFlushTimer = null;
-    _detachSocketListeners();
-    _socket?.disconnect();
-    _socket?.dispose();
-    _socket = null;
+    // Cancel stream subscriptions and unregister as listener
+    _locationUpdateSub?.cancel();
+    _employeeConnectedSub?.cancel();
+    _employeeDisconnectedSub?.cancel();
+    _connectionStatusSub?.cancel();
+    // Notify service that we're no longer listening (may trigger auto-disconnect)
+    _socketService.removeListener();
     _mapController.dispose();
     super.dispose();
   }
 
-  /// Connect to Socket.IO server
-  Future<void> _connectToSocket() async {
-    if (!mounted || _isDisposed) return;
-    if (_socket != null && (_socket!.connected || _isConnecting)) return;
-
+  /// Reconnect to socket using global AdminSocketService
+  void _reconnectSocket() {
     _safeSetState(() {
       _isConnecting = true;
       _errorMessage = null;
     });
-
-    try {
-      final token = UserService.token;
-      if (token == null || token.isEmpty) {
-        _safeSetState(() {
-          _errorMessage = 'Authentication required';
-          _isConnecting = false;
-        });
-        return;
-      }
-
-      // Use http:// URL directly - Socket.IO client handles WebSocket upgrade
-      final socketUrl = ApiConfig.baseUrl;
-      debugPrint('🔌 Admin connecting to Socket.IO: $socketUrl');
-
-      if (_socket != null) {
-        _detachSocketListeners();
-        _socket!.dispose();
-        _socket = null;
-      }
-
-      _socket = IO.io(
-        socketUrl,
-        IO.OptionBuilder()
-            .setTransports(['websocket'])
-            .disableAutoConnect()
-            .setAuth({'token': token})
-            .setReconnectionAttempts(5)
-            .setReconnectionDelay(3000)
-            .setTimeout(10000)
-            .build(),
-      );
-
-      _setupSocketListeners();
-      _socket!.connect();
-
-      // Set timeout for connection
-      Future.delayed(const Duration(seconds: 10), () {
-        if (!_isDisposed && mounted && !_isConnected && _isConnecting) {
-          _safeSetState(() {
-            _errorMessage = 'Connection timeout. Showing last known positions.';
-            _isConnecting = false;
-          });
-        }
-      });
-    } catch (e) {
-      debugPrint('❌ Socket connection error: $e');
-      _safeSetState(() {
-        _errorMessage = 'Connection failed. Showing last known positions.';
-        _isConnecting = false;
-      });
-    }
+    _socketService.connect();
   }
 
   /// Load punched-in employees from API as fallback
@@ -324,94 +325,6 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     } catch (e) {
       debugPrint('❌ Error loading punched-in employees: $e');
     }
-  }
-
-  /// Setup socket event listeners
-  void _setupSocketListeners() {
-    _socket!.onConnect(_onSocketConnect);
-    _socket!.onDisconnect(_onSocketDisconnect);
-    _socket!.onConnectError(_onSocketConnectError);
-    _socket!.on('location-update', _onSocketLocationUpdate);
-    // Raw socket lifecycle
-    _socket!.on('employee-connected', _onSocketEmployeeConnected);
-    _socket!.on('employee-disconnected', _onSocketEmployeeDisconnected);
-    // Attendance session lifecycle (clean punch-in / punch-out)
-    _socket!.on('employee-session-started', _onSocketEmployeeSessionStarted);
-    _socket!.on('employee-session-ended', _onSocketEmployeeSessionEnded);
-    _socket!.on('active-employees', _onSocketActiveEmployees);
-  }
-
-  void _detachSocketListeners() {
-    if (_socket == null) return;
-    _socket!.off('connect', _onSocketConnect);
-    _socket!.off('disconnect', _onSocketDisconnect);
-    _socket!.off('connect_error', _onSocketConnectError);
-    _socket!.off('location-update', _onSocketLocationUpdate);
-    _socket!.off('employee-connected', _onSocketEmployeeConnected);
-    _socket!.off('employee-disconnected', _onSocketEmployeeDisconnected);
-    _socket!.off('employee-session-started', _onSocketEmployeeSessionStarted);
-    _socket!.off('employee-session-ended', _onSocketEmployeeSessionEnded);
-    _socket!.off('active-employees', _onSocketActiveEmployees);
-  }
-
-  void _onSocketConnect(dynamic _) {
-    debugPrint('Admin socket connected');
-    _safeSetState(() {
-      _isConnected = true;
-      _isConnecting = false;
-      _errorMessage = null;
-    });
-  }
-
-  void _onSocketDisconnect(dynamic reason) {
-    debugPrint('Admin socket disconnected: ');
-    _safeSetState(() {
-      _isConnected = false;
-      _isConnecting = false;
-    });
-  }
-
-  void _onSocketConnectError(dynamic error) {
-    debugPrint('Admin socket connection error: ');
-    _safeSetState(() {
-      _errorMessage = 'Connection error: ';
-      _isConnecting = false;
-    });
-  }
-
-  void _onSocketLocationUpdate(dynamic data) {
-    _handleLocationUpdate(data);
-  }
-
-  void _onSocketEmployeeConnected(dynamic data) {
-    final employeeId = data is Map ? data['employeeId']?.toString() : null;
-    debugPrint('📱 Employee socket connected: $employeeId');
-  }
-
-  /// Fired when salesman emits session-start (clean punch-in).
-  /// Reloads the punched-in list so the new employee appears immediately.
-  void _onSocketEmployeeSessionStarted(dynamic data) {
-    final employeeId = data is Map ? data['employeeId']?.toString() : null;
-    debugPrint('🟢 Employee session started: $employeeId');
-    _loadPunchedInEmployees();
-  }
-
-  void _onSocketEmployeeDisconnected(dynamic data) {
-    final employeeId = data is Map ? data['employeeId']?.toString() : null;
-    if (employeeId == null || employeeId.isEmpty) return;
-    _handleEmployeeDisconnected(employeeId);
-  }
-
-  /// Fired when salesman emits session-end (clean punch-out).
-  void _onSocketEmployeeSessionEnded(dynamic data) {
-    final employeeId = data is Map ? data['employeeId']?.toString() : null;
-    if (employeeId == null || employeeId.isEmpty) return;
-    debugPrint('🔴 Employee session ended: $employeeId');
-    _handleEmployeeDisconnected(employeeId);
-  }
-
-  void _onSocketActiveEmployees(dynamic data) {
-    debugPrint('Active employees: ');
   }
 
   /// Handle incoming location updates
@@ -687,6 +600,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(body: _buildBody());
   }
 
@@ -723,7 +637,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
               ),
               if (!_isConnected && !_isConnecting)
                 TextButton.icon(
-                  onPressed: _connectToSocket,
+                  onPressed: _reconnectSocket,
                   icon: const Icon(Icons.refresh, size: 16),
                   label: const Text('Retry', style: TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
@@ -1193,7 +1107,7 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _connectToSocket,
+            onPressed: _reconnectSocket,
             child: const Text('Retry'),
           ),
         ],
