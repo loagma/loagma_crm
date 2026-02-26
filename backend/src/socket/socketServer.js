@@ -323,10 +323,21 @@ const handleLocationUpdate = async (socket, data) => {
         // Save to PostgreSQL (permanent storage)
         let savedPoint;
         let wasDuplicate = false;
-        try {
-            savedPoint = await prisma.salesmanTrackingPoint.create({
-                data: {
-                    clientPointId: clientPointId ? clientPointId.toString() : null,
+        if (clientPointId) {
+            const clientPointKey = clientPointId.toString();
+            const existingPoint = await prisma.salesmanTrackingPoint.findUnique({
+                where: { clientPointId: clientPointKey },
+            });
+
+            if (existingPoint) {
+                wasDuplicate = true;
+                runtimeStats.pointsDuplicate += 1;
+            }
+
+            savedPoint = await prisma.salesmanTrackingPoint.upsert({
+                where: { clientPointId: clientPointKey },
+                create: {
+                    clientPointId: clientPointKey,
                     employeeId: employeeId.toString(),
                     attendanceId: attendanceId.toString(),
                     latitude: latitudeValue,
@@ -335,15 +346,23 @@ const handleLocationUpdate = async (socket, data) => {
                     accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
                     recordedAt: persistedAt,
                 },
+                update: {},
             });
-        } catch (createError) {
-            if (createError?.code === 'P2002' && clientPointId) {
-                wasDuplicate = true;
-                savedPoint = await prisma.salesmanTrackingPoint.findFirst({
-                    where: { clientPointId: clientPointId.toString() },
+        } else {
+            try {
+                savedPoint = await prisma.salesmanTrackingPoint.create({
+                    data: {
+                        clientPointId: null,
+                        employeeId: employeeId.toString(),
+                        attendanceId: attendanceId.toString(),
+                        latitude: latitudeValue,
+                        longitude: longitudeValue,
+                        speed: Number.isFinite(speedValue) ? speedValue : null,
+                        accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
+                        recordedAt: persistedAt,
+                    },
                 });
-                runtimeStats.pointsDuplicate += 1;
-            } else {
+            } catch (createError) {
                 runtimeStats.pointsPersistFailed += 1;
                 throw createError;
             }
