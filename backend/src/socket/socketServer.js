@@ -19,6 +19,8 @@ const runtimeStats = {
     lastAcceptedAt: null,
 };
 
+const MAX_ACCEPTABLE_ACCURACY_METERS = 20;
+
 /**
  * Initialize Socket.IO server
  * @param {Object} httpServer - HTTP server instance
@@ -187,14 +189,29 @@ const handleSalesmanConnection = (socket) => {
     });
 
     // Handle attendance session end
-    socket.on('session-end', (data = {}) => {
+    socket.on('session-end', async (data = {}) => {
         console.log(`🔴 Session ended: ${employeeId}`);
         const endedAttendanceId = (data.attendanceId || socket.attendanceId)?.toString() || null;
         socket.attendanceId = null;
         activeSessions.delete(employeeId.toString());
+
         if (endedAttendanceId) {
+            // Persist accumulated distance to the Attendance row BEFORE clearing in-memory metrics
+            const metrics = sessionMetrics.get(_sessionKey(employeeId, endedAttendanceId));
+            if (metrics && metrics.totalDistanceKm > 0) {
+                try {
+                    await prisma.attendance.update({
+                        where: { id: endedAttendanceId },
+                        data: { totalDistanceKm: metrics.totalDistanceKm },
+                    });
+                    console.log(`✅ Persisted ${metrics.totalDistanceKm.toFixed(3)} km to attendance ${endedAttendanceId}`);
+                } catch (err) {
+                    console.error(`❌ Failed to persist distance for attendance ${endedAttendanceId}:`, err.message);
+                }
+            }
             sessionMetrics.delete(_sessionKey(employeeId, endedAttendanceId));
         }
+
         io.to('admin-room').emit('employee-session-ended', {
             employeeId: employeeId.toString(),
             attendanceId: endedAttendanceId,
@@ -277,6 +294,13 @@ const handleLocationUpdate = async (socket, data) => {
             console.error(`❌ Invalid coordinates for ${employeeId}:`, { latitude: latitudeValue, longitude: longitudeValue });
             runtimeStats.pointsRejected += 1;
             socket.emit('error', { message: 'Invalid coordinates' });
+            return;
+        }
+
+        if (Number.isFinite(accuracyValue) && accuracyValue > MAX_ACCEPTABLE_ACCURACY_METERS) {
+            console.log(`⛔️ Accuracy too low for ${employeeId}: ${accuracyValue}m`);
+            runtimeStats.pointsRejected += 1;
+            socket.emit('error', { message: 'Location accuracy too low' });
             return;
         }
 
