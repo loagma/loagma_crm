@@ -82,11 +82,15 @@ class TrackingApiService {
     }
   }
 
+  /// Fetches the latest known position for a single employee.
+  /// Uses GET /tracking/live?employeeId=... (correct backend endpoint).
   static Future<Map<String, dynamic>> getLatestLocation({
     required String employeeId,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/latest/$employeeId');
+      final uri = Uri.parse('$baseUrl/live').replace(
+        queryParameters: {'employeeId': employeeId},
+      );
 
       final token = UserService.token;
       final response = await http.get(
@@ -101,7 +105,10 @@ class TrackingApiService {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        return {'success': true, 'data': data['data']};
+        // /live returns a list keyed by employee; grab the first entry for this employee
+        final list = data['data'] as List?;
+        final point = (list != null && list.isNotEmpty) ? list.first : null;
+        return {'success': point != null, 'data': point};
       }
 
       return {

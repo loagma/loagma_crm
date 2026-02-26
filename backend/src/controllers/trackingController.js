@@ -1,6 +1,6 @@
 import prisma from '../config/db.js';
 import { ensureRedisConnection, getRedisClient, isRedisEnabled } from '../config/redis.js';
-import { getTrackingRuntimeStats } from '../socket/socketServer.js';
+import { getTrackingRuntimeStats, getIO } from '../socket/socketServer.js';
 
 const parseFloatValue = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -29,6 +29,8 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
+
+const MAX_ACCEPTABLE_ACCURACY_METERS = 20;
 
 const persistLatestToRedis = async ({
   employeeId,
@@ -84,11 +86,19 @@ export const createTrackingPoint = async (req, res) => {
 
     const latValue = parseFloatValue(latitude);
     const lngValue = parseFloatValue(longitude);
+    const accuracyValue = parseFloatValue(accuracy);
 
     if (latValue === null || lngValue === null) {
       return res.status(400).json({
         success: false,
         message: 'latitude and longitude must be valid numbers',
+      });
+    }
+
+    if (accuracyValue !== null && accuracyValue > MAX_ACCEPTABLE_ACCURACY_METERS) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location accuracy too low',
       });
     }
 
@@ -99,7 +109,7 @@ export const createTrackingPoint = async (req, res) => {
       latitude: latValue,
       longitude: lngValue,
       speed: parseFloatValue(speed),
-      accuracy: parseFloatValue(accuracy),
+      accuracy: accuracyValue,
     };
 
     const recordedAtValue = parseDateValue(recordedAt);
@@ -170,12 +180,22 @@ export const createTrackingPointsBatch = async (req, res) => {
         point?.clientPointId != null ? point.clientPointId.toString() : null;
       const latitude = parseFloatValue(point?.latitude);
       const longitude = parseFloatValue(point?.longitude);
+      const accuracyValue = parseFloatValue(point?.accuracy);
 
       if (!employeeId || !attendanceId || latitude === null || longitude === null) {
         results.push({
           clientPointId,
           success: false,
           message: 'Invalid point payload',
+        });
+        continue;
+      }
+
+      if (accuracyValue !== null && accuracyValue > MAX_ACCEPTABLE_ACCURACY_METERS) {
+        results.push({
+          clientPointId,
+          success: false,
+          message: 'Location accuracy too low',
         });
         continue;
       }
@@ -187,7 +207,7 @@ export const createTrackingPointsBatch = async (req, res) => {
         latitude,
         longitude,
         speed: parseFloatValue(point?.speed),
-        accuracy: parseFloatValue(point?.accuracy),
+        accuracy: accuracyValue,
       };
 
       const recordedAtValue = parseDateValue(point?.recordedAt);
@@ -206,6 +226,21 @@ export const createTrackingPointsBatch = async (req, res) => {
           accuracy: created.accuracy,
           recordedAt: created.recordedAt,
         });
+        // Broadcast to admin-room so live map stays in sync even when salesman uses REST fallback
+        try {
+          getIO().to('admin-room').emit('location-update', {
+            employeeId,
+            attendanceId,
+            latitude: created.latitude,
+            longitude: created.longitude,
+            speed: created.speed ?? 0,
+            accuracy: created.accuracy ?? 0,
+            recordedAt: created.recordedAt.toISOString(),
+            source: 'rest-batch',
+          });
+        } catch (_) {
+          // Socket.IO not yet initialized (e.g., test env) — skip broadcast
+        }
         results.push({ clientPointId, success: true });
         if (clientPointId) acceptedClientPointIds.push(clientPointId);
       } catch (error) {

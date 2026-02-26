@@ -332,8 +332,12 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     _socket!.onDisconnect(_onSocketDisconnect);
     _socket!.onConnectError(_onSocketConnectError);
     _socket!.on('location-update', _onSocketLocationUpdate);
+    // Raw socket lifecycle
     _socket!.on('employee-connected', _onSocketEmployeeConnected);
     _socket!.on('employee-disconnected', _onSocketEmployeeDisconnected);
+    // Attendance session lifecycle (clean punch-in / punch-out)
+    _socket!.on('employee-session-started', _onSocketEmployeeSessionStarted);
+    _socket!.on('employee-session-ended', _onSocketEmployeeSessionEnded);
     _socket!.on('active-employees', _onSocketActiveEmployees);
   }
 
@@ -345,6 +349,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
     _socket!.off('location-update', _onSocketLocationUpdate);
     _socket!.off('employee-connected', _onSocketEmployeeConnected);
     _socket!.off('employee-disconnected', _onSocketEmployeeDisconnected);
+    _socket!.off('employee-session-started', _onSocketEmployeeSessionStarted);
+    _socket!.off('employee-session-ended', _onSocketEmployeeSessionEnded);
     _socket!.off('active-employees', _onSocketActiveEmployees);
   }
 
@@ -378,12 +384,29 @@ class _LiveTrackingTabState extends State<LiveTrackingTab> {
   }
 
   void _onSocketEmployeeConnected(dynamic data) {
-    debugPrint('Employee connected: ');
+    final employeeId = data is Map ? data['employeeId']?.toString() : null;
+    debugPrint('📱 Employee socket connected: $employeeId');
+  }
+
+  /// Fired when salesman emits session-start (clean punch-in).
+  /// Reloads the punched-in list so the new employee appears immediately.
+  void _onSocketEmployeeSessionStarted(dynamic data) {
+    final employeeId = data is Map ? data['employeeId']?.toString() : null;
+    debugPrint('🟢 Employee session started: $employeeId');
+    _loadPunchedInEmployees();
   }
 
   void _onSocketEmployeeDisconnected(dynamic data) {
     final employeeId = data is Map ? data['employeeId']?.toString() : null;
     if (employeeId == null || employeeId.isEmpty) return;
+    _handleEmployeeDisconnected(employeeId);
+  }
+
+  /// Fired when salesman emits session-end (clean punch-out).
+  void _onSocketEmployeeSessionEnded(dynamic data) {
+    final employeeId = data is Map ? data['employeeId']?.toString() : null;
+    if (employeeId == null || employeeId.isEmpty) return;
+    debugPrint('🔴 Employee session ended: $employeeId');
     _handleEmployeeDisconnected(employeeId);
   }
 

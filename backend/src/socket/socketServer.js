@@ -19,29 +19,7 @@ const runtimeStats = {
     lastAcceptedAt: null,
 };
 
-const normalizeRole = (value) =>
-    value ? value.toString().trim().toLowerCase() : '';
-
-const isAdminOrManagerRole = (roleName) => {
-    const role = normalizeRole(roleName);
-    return role === 'admin' || role === 'manager';
-};
-
-const isSalesmanRole = (roleName, roleId, roles = []) => {
-    const role = normalizeRole(roleName);
-    const normalizedRoles = Array.isArray(roles)
-        ? roles.map((r) => normalizeRole(r))
-        : [];
-    return (
-        roleId?.toString().trim().toUpperCase() === 'R002' ||
-        role === 'salesman' ||
-        role === 'sales' ||
-        role === 'employee' ||
-        normalizedRoles.includes('salesman') ||
-        normalizedRoles.includes('sales') ||
-        normalizedRoles.includes('r002')
-    );
-};
+const MAX_ACCEPTABLE_ACCURACY_METERS = 20;
 
 /**
  * Initialize Socket.IO server
@@ -169,7 +147,7 @@ const handleAdminConnection = (socket) => {
  * Handle salesman connections
  */
 const handleSalesmanConnection = (socket) => {
-  const employeeId = socket.employeeId || socket.userId;
+    const employeeId = socket.employeeId || socket.userId;
 
     // Store connection info
     activeConnections.set(employeeId, {
@@ -217,14 +195,29 @@ const handleSalesmanConnection = (socket) => {
     });
 
     // Handle attendance session end
-    socket.on('session-end', (data = {}) => {
+    socket.on('session-end', async (data = {}) => {
         console.log(`🔴 Session ended: ${employeeId}`);
         const endedAttendanceId = (data.attendanceId || socket.attendanceId)?.toString() || null;
         socket.attendanceId = null;
         activeSessions.delete(employeeId.toString());
+
         if (endedAttendanceId) {
+            // Persist accumulated distance to the Attendance row BEFORE clearing in-memory metrics
+            const metrics = sessionMetrics.get(_sessionKey(employeeId, endedAttendanceId));
+            if (metrics && metrics.totalDistanceKm > 0) {
+                try {
+                    await prisma.attendance.update({
+                        where: { id: endedAttendanceId },
+                        data: { totalDistanceKm: metrics.totalDistanceKm },
+                    });
+                    console.log(`✅ Persisted ${metrics.totalDistanceKm.toFixed(3)} km to attendance ${endedAttendanceId}`);
+                } catch (err) {
+                    console.error(`❌ Failed to persist distance for attendance ${endedAttendanceId}:`, err.message);
+                }
+            }
             sessionMetrics.delete(_sessionKey(employeeId, endedAttendanceId));
         }
+
         io.to('admin-room').emit('employee-session-ended', {
             employeeId: employeeId.toString(),
             attendanceId: endedAttendanceId,
@@ -310,6 +303,13 @@ const handleLocationUpdate = async (socket, data) => {
             return;
         }
 
+        if (Number.isFinite(accuracyValue) && accuracyValue > MAX_ACCEPTABLE_ACCURACY_METERS) {
+            console.log(`⛔️ Accuracy too low for ${employeeId}: ${accuracyValue}m`);
+            runtimeStats.pointsRejected += 1;
+            socket.emit('error', { message: 'Location accuracy too low' });
+            return;
+        }
+
         // Calculate segment distance for metrics, but do not drop stationary points.
         let lastSegmentKm = 0;
         const lastLocation = await getLastLocation(employeeId, attendanceId);
@@ -329,10 +329,21 @@ const handleLocationUpdate = async (socket, data) => {
         // Save to PostgreSQL (permanent storage)
         let savedPoint;
         let wasDuplicate = false;
-        try {
-            savedPoint = await prisma.salesmanTrackingPoint.create({
-                data: {
-                    clientPointId: clientPointId ? clientPointId.toString() : null,
+        if (clientPointId) {
+            const clientPointKey = clientPointId.toString();
+            const existingPoint = await prisma.salesmanTrackingPoint.findUnique({
+                where: { clientPointId: clientPointKey },
+            });
+
+            if (existingPoint) {
+                wasDuplicate = true;
+                runtimeStats.pointsDuplicate += 1;
+            }
+
+            savedPoint = await prisma.salesmanTrackingPoint.upsert({
+                where: { clientPointId: clientPointKey },
+                create: {
+                    clientPointId: clientPointKey,
                     employeeId: employeeId.toString(),
                     attendanceId: attendanceId.toString(),
                     latitude: latitudeValue,
@@ -341,15 +352,23 @@ const handleLocationUpdate = async (socket, data) => {
                     accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
                     recordedAt: persistedAt,
                 },
+                update: {},
             });
-        } catch (createError) {
-            if (createError?.code === 'P2002' && clientPointId) {
-                wasDuplicate = true;
-                savedPoint = await prisma.salesmanTrackingPoint.findFirst({
-                    where: { clientPointId: clientPointId.toString() },
+        } else {
+            try {
+                savedPoint = await prisma.salesmanTrackingPoint.create({
+                    data: {
+                        clientPointId: null,
+                        employeeId: employeeId.toString(),
+                        attendanceId: attendanceId.toString(),
+                        latitude: latitudeValue,
+                        longitude: longitudeValue,
+                        speed: Number.isFinite(speedValue) ? speedValue : null,
+                        accuracy: Number.isFinite(accuracyValue) ? accuracyValue : null,
+                        recordedAt: persistedAt,
+                    },
                 });
-                runtimeStats.pointsDuplicate += 1;
-            } else {
+            } catch (createError) {
                 runtimeStats.pointsPersistFailed += 1;
                 throw createError;
             }
