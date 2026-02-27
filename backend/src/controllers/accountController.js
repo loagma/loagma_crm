@@ -31,7 +31,10 @@ export const getAllAccounts = async (req, res) => {
     // Day-wise filter for salesman: 1=Mon .. 7=Sun
     if (assignedDay !== undefined && assignedDay !== '' && assignedDay !== null) {
       const day = parseInt(assignedDay, 10);
-      if (day >= 1 && day <= 7) where.assignedDays = { has: day };
+      if (day >= 1 && day <= 7) {
+        // assignedDays is stored as JSON array of numbers in MySQL
+        where.assignedDays = { array_contains: day };
+      }
     }
     if (customerStage) where.customerStage = customerStage;
     if (funnelStage) where.funnelStage = funnelStage;
@@ -56,12 +59,12 @@ export const getAllAccounts = async (req, res) => {
 
     if (search) {
       where.OR = [
-        { businessName: { contains: search, mode: 'insensitive' } },
-        { personName: { contains: search, mode: 'insensitive' } },
-        { accountCode: { contains: search, mode: 'insensitive' } },
+        { businessName: { contains: search } },
+        { personName: { contains: search } },
+        { accountCode: { contains: search } },
         { contactNumber: { contains: search } },
-        { gstNumber: { contains: search, mode: 'insensitive' } },
-        { panCard: { contains: search, mode: 'insensitive' } }
+        { gstNumber: { contains: search } },
+        { panCard: { contains: search } }
       ];
     }
 

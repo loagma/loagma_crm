@@ -94,9 +94,9 @@ export const getAllEmployees = async (req, res) => {
     
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { employeeCode: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { employeeCode: { contains: search } },
+        { email: { contains: search } },
         { contactNumber: { contains: search } }
       ];
     }

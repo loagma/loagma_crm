@@ -283,7 +283,8 @@ class BeatPlanService {
             const customersByDay = await prisma.account.findMany({
                 where: {
                     assignedToId: salesmanId,
-                    assignedDays: { has: dayOfWeek },
+                    // assignedDays is stored as JSON array of numbers
+                    assignedDays: { array_contains: dayOfWeek },
                     isActive: true
                 },
                 select: {

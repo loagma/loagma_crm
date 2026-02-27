@@ -420,28 +420,28 @@ export const getLiveTracking = async (req, res) => {
       return res.json({
         success: true,
         data: latest,
-        source: 'postgres',
+        source: 'database',
       });
     }
 
+    // Get the latest tracking point per employee using a subquery (MySQL-compatible)
     const latestPerEmployee = await prisma.$queryRaw`
-      SELECT DISTINCT ON ("employeeId")
-        "id",
-        "employeeId",
-        "attendanceId",
-        "latitude",
-        "longitude",
-        "speed",
-        "accuracy",
-        "recordedAt"
-      FROM "SalesmanTrackingPoint"
-      ORDER BY "employeeId", "recordedAt" DESC;
+      SELECT t.id, t.employeeId, t.attendanceId,
+             t.latitude, t.longitude, t.speed,
+             t.accuracy, t.recordedAt
+      FROM SalesmanTrackingPoint t
+      INNER JOIN (
+        SELECT employeeId, MAX(recordedAt) AS maxRecordedAt
+        FROM SalesmanTrackingPoint
+        GROUP BY employeeId
+      ) sub ON t.employeeId = sub.employeeId
+           AND t.recordedAt = sub.maxRecordedAt;
     `;
 
     return res.json({
       success: true,
       data: latestPerEmployee,
-      source: 'postgres',
+      source: 'database',
     });
   } catch (error) {
     return res.status(500).json({

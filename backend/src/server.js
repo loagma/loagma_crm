@@ -145,13 +145,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Auto-migrate beat planning tables in production
-if (process.env.NODE_ENV === 'production') {
-    console.log('🔄 Running auto-migration for beat planning...');
-    import('./utils/autoMigrateBeatPlanning.js').catch(error => {
-        console.error('❌ Auto-migration failed:', error.message);
-    });
-}
+// Beat planning tables are managed by Prisma schema + `prisma db push`
 
 const server = httpServer.listen(PORT, HOST, () => {
     console.log(`✅ Server running on http://${HOST}:${PORT}`);

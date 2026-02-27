@@ -30,7 +30,9 @@ backend/
 Copy `.env.example` to `.env` and configure:
 
 ```env
-DATABASE_URL=postgresql://user:password@host:port/database
+# Primary application database (MySQL / TiDB)
+DATABASE_URL=mysql://user:password@host:3306/loagma_crm
+
 JWT_SECRET=your-secret-key
 TWILIO_ACCOUNT_SID=your-twilio-sid
 TWILIO_AUTH_TOKEN=your-twilio-token
@@ -41,27 +43,6 @@ CLOUDINARY_API_SECRET=your-api-secret
 PORT=5000
 NODE_ENV=production
 ```
-
-### Neon Database Configuration
-
-If using **Neon** (neon.tech) as your database provider, your `DATABASE_URL` **must** include SSL parameters:
-
-```env
-DATABASE_URL=postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/database?sslmode=require&channel_binding=require&connect_timeout=15
-```
-
-**Required parameters for Neon:**
-- `sslmode=require` - Enables SSL/TLS encryption (required by Neon)
-- `channel_binding=require` - Adds additional security layer
-- `connect_timeout=15` - Allows time for Neon's compute instance to wake up from idle state
-
-**For Render deployments:**
-1. Go to your Render dashboard
-2. Navigate to your service → Environment
-3. Update the `DATABASE_URL` variable to include the SSL parameters above
-4. Redeploy your service
-
-**Note:** Neon databases scale to zero after ~5 minutes of inactivity. The first connection may take a few seconds to wake up the compute instance. The `connect_timeout=15` parameter helps handle this gracefully.
 
 ## Installation
 
@@ -119,11 +100,13 @@ npm start
 
 ## Database
 
-Uses PostgreSQL with Prisma ORM. Run migrations:
+Uses **MySQL** (or compatible, e.g., TiDB) with Prisma ORM.
 
-```bash
-npx prisma migrate deploy
-```
+- To create/update the schema on MySQL from `schema.prisma`:
+
+  ```bash
+  npm run db:migrate   # runs: prisma db push
+  ```
 
 ## Security
 

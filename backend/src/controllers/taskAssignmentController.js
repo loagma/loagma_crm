@@ -387,10 +387,10 @@ const searchTaskAssignments = async (req, res) => {
     const { pincode, city, district, state } = req.query;
 
     const whereClause = {};
-    if (pincode) whereClause.pincode = { contains: pincode, mode: 'insensitive' };
-    if (city) whereClause.city = { contains: city, mode: 'insensitive' };
-    if (district) whereClause.district = { contains: district, mode: 'insensitive' };
-    if (state) whereClause.state = { contains: state, mode: 'insensitive' };
+    if (pincode) whereClause.pincode = { contains: pincode };
+    if (city) whereClause.city = { contains: city };
+    if (district) whereClause.district = { contains: district };
+    if (state) whereClause.state = { contains: state };
 
     const assignments = await prisma.taskAssignment.findMany({
       where: whereClause,

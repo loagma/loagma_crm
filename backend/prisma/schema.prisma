@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -90,7 +90,7 @@ model User {
   contactNumber      String        @unique
   alternativeNumber  String?
   roleId             String?
-  roles              String[]      @default([])
+  roles              Json?
   departmentId       String?
   otp                String?
   otpExpiry          DateTime?
@@ -101,7 +101,7 @@ model User {
   dateOfBirth        DateTime?
   gender             String?
   image              String?
-  preferredLanguages String[]
+  preferredLanguages Json?
   address            String?
   city               String?
   state              String?
@@ -208,7 +208,7 @@ model Account {
   
   // Assignment and approval
   assignedToId          String?
-  assignedDays          Int[]    @default([]) // 1=Mon .. 7=Sun: beat days for this salesman
+  assignedDays          Json?    // JSON array of days: [1..7] for beat days
   createdById           String?
   approvedById          String?
   approvedAt            DateTime?
@@ -302,8 +302,8 @@ model TaskAssignment {
   state           String?
   district        String?
   city            String?
-  areas           String[]  // Array of area names
-  businessTypes   String[]  // Array of business types: grocery, cafe, hotel, etc.
+  areas           Json?     // JSON array of area names
+  businessTypes   Json?     // JSON array of business types: grocery, cafe, hotel, etc.
   totalBusinesses Int?      @default(0)
   assignedDate    DateTime  @default(now())
   createdAt       DateTime  @default(now())
@@ -353,7 +353,7 @@ model Attendance {
   punchInTime         DateTime
   punchInLatitude     Float
   punchInLongitude    Float
-  punchInPhoto        String?   // Base64 or URL
+  punchInPhoto        String?   @db.LongText // Base64 or URL (can be large)
   punchInAddress      String?
   bikeKmStart         String?   // Starting bike odometer reading
   
@@ -361,7 +361,7 @@ model Attendance {
   punchOutTime        DateTime?
   punchOutLatitude    Float?
   punchOutLongitude   Float?
-  punchOutPhoto       String?   // Base64 or URL
+  punchOutPhoto       String?   @db.LongText // Base64 or URL (can be large)
   punchOutAddress     String?
   bikeKmEnd           String?   // Ending bike odometer reading
   
@@ -422,8 +422,8 @@ model AreaAssignment {
   state           String
   district        String
   city            String
-  areas           String[]  // Array of area names
-  businessTypes   String[]  // Array of business types to focus on
+  areas           Json?     // JSON array of area names
+  businessTypes   Json?     // JSON array of business types to focus on
   assignedDate    DateTime  @default(now())
   totalBusinesses Int       @default(0)
   createdAt       DateTime  @default(now())
@@ -600,7 +600,7 @@ model WeeklyBeatPlan {
   weekEndDate     DateTime  // Sunday of the week (end of beat plan)
   
   // Assignment details
-  pincodes        String[]  // Array of pincodes assigned to salesman
+  pincodes        Json?     // JSON array of pincodes assigned to salesman
   totalAreas      Int       @default(0) // Total number of areas to cover
   status          String    @default("DRAFT") // DRAFT, ACTIVE, LOCKED, COMPLETED
   
@@ -637,7 +637,7 @@ model DailyBeatPlan {
   dayDate         DateTime  // Actual date for this day
   
   // Area assignments for this day
-  assignedAreas   String[]  // Array of area names assigned for this day
+  assignedAreas   Json?     // JSON array of area names assigned for this day
   plannedVisits   Int       @default(0) // Number of planned visits/accounts
   actualVisits    Int       @default(0) // Number of actual visits completed
   

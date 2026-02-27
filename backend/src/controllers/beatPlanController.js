@@ -341,7 +341,7 @@ export const getWeeklyBeatPlanDetails = async (req, res) => {
                             assignedToId: beatPlan.salesmanId,
                             // assignedDays is an Int[] - use `has` to match current day
                             assignedDays: {
-                                has: dailyPlan.dayOfWeek
+                                array_contains: dailyPlan.dayOfWeek
                             },
                             isActive: true
                         },

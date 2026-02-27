@@ -333,7 +333,7 @@ const handleLocationUpdate = async (socket, data) => {
         console.log(`💾 Saving location point for ${employeeId} to database...`);
         const persistStartedAt = Date.now();
 
-        // Save to PostgreSQL (permanent storage)
+        // Save to database via Prisma (permanent storage)
         let savedPoint;
         let wasDuplicate = false;
         if (clientPointId) {

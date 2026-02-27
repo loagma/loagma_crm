@@ -277,9 +277,9 @@ export const getAllSalaries = async (req, res) => {
       if (departmentId) where.employee.departmentId = departmentId;
       if (search) {
         where.employee.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { employeeCode: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } }
+          { name: { contains: search } },
+          { employeeCode: { contains: search } },
+          { email: { contains: search } }
         ];
       }
     }

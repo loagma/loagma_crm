@@ -9,11 +9,11 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:seed:locations": "node prisma/seedLocations.js",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma db push --force-reset"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +28,6 @@
     "express": "^5.1.0",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.16.3",
     "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",

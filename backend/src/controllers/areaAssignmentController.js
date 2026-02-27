@@ -419,10 +419,10 @@ const searchAreaAssignments = async (req, res) => {
     const { pinCode, city, district, state } = req.query;
 
     const whereClause = {};
-    if (pinCode) whereClause.pinCode = { contains: pinCode, mode: 'insensitive' };
-    if (city) whereClause.city = { contains: city, mode: 'insensitive' };
-    if (district) whereClause.district = { contains: district, mode: 'insensitive' };
-    if (state) whereClause.state = { contains: state, mode: 'insensitive' };
+    if (pinCode) whereClause.pinCode = { contains: pinCode };
+    if (city) whereClause.city = { contains: city };
+    if (district) whereClause.district = { contains: district };
+    if (state) whereClause.state = { contains: state };
 
     const assignments = await prisma.areaAssignment.findMany({
       where: whereClause,
