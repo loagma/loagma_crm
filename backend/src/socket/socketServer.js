@@ -69,6 +69,7 @@ export const initializeSocketServer = (httpServer) => {
             }
 
             socket.userRole = user.role?.name?.toLowerCase() || 'unknown';
+            socket.userRoles = Array.isArray(user.roles) ? user.roles : [];
             socket.employeeId = user.employeeId;
 
             console.log(`✅ Socket authenticated: ${socket.userId} (${socket.userRole}) - Employee: ${socket.employeeId}`);
@@ -84,9 +85,14 @@ export const initializeSocketServer = (httpServer) => {
         console.log(`🔌 Client connected: ${socket.id} (User: ${socket.userId})`);
 
         // Handle different user types
-        if (socket.userRole === 'admin' || socket.userRole === 'manager') {
+        if (isAdminOrManagerRole(socket.userRole)) {
             handleAdminConnection(socket);
-        } else if (socket.userRole === 'salesman') {
+        } else if (isSalesmanRole(socket.userRole, socket.roleId, socket.userRoles)) {
+            handleSalesmanConnection(socket);
+        } else {
+            console.warn(
+                `⚠️ Socket role not explicitly recognized. Falling back to salesman handler: roleName=${socket.userRole}, roleId=${socket.roleId}, userId=${socket.userId}`
+            );
             handleSalesmanConnection(socket);
         }
 
@@ -146,7 +152,7 @@ const handleAdminConnection = (socket) => {
  * Handle salesman connections
  */
 const handleSalesmanConnection = (socket) => {
-  const employeeId = socket.employeeId || socket.userId;
+    const employeeId = socket.employeeId || socket.userId;
 
     // Store connection info
     activeConnections.set(employeeId, {

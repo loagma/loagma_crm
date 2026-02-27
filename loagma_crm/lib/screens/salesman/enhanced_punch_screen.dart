@@ -1215,6 +1215,34 @@ class _EnhancedPunchScreenState extends State<EnhancedPunchScreen>
                                 : Colors.red,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Builder(
+                          builder: (_) {
+                            final trackingStatus =
+                                SocketTrackingService.instance.getStatus();
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'tracking.connected: ${trackingStatus['connected']}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                Text(
+                                  'tracking.active: ${trackingStatus['tracking']}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                Text(
+                                  'tracking.emitted/acked/flushed: ${trackingStatus['emitted']}/${trackingStatus['acked']}/${trackingStatus['flushed']}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                Text(
+                                  'tracking.queued: ${trackingStatus['queued']}',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),

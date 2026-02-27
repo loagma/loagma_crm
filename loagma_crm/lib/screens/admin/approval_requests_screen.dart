@@ -1179,7 +1179,7 @@ class _ApprovalRequestsScreenState extends State<ApprovalRequestsScreen>
                     onPressed: () => _showDetailsDialog(request, type),
                     icon: const Icon(Icons.visibility, size: 18),
                     label: const Text(
-                      'View\nDetails',
+                      'View',
                       textAlign: TextAlign.center,
                     ),
                     style: ElevatedButton.styleFrom(

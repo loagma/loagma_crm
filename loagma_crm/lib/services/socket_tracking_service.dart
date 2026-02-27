@@ -9,7 +9,6 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import 'api_config.dart';
 import 'location_service.dart';
-import 'network_service.dart';
 import 'user_service.dart';
 
 class _PendingTrackingPoint {
@@ -344,11 +343,6 @@ class SocketTrackingService {
       return;
     }
     if (_employeeId == null || _attendanceId == null) {
-      return;
-    }
-
-    final hasNetwork = await NetworkService.checkConnectivity();
-    if (!hasNetwork) {
       return;
     }
 
