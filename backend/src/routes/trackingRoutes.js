@@ -1,4 +1,5 @@
 import express from 'express';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 import {
   createTrackingPoint,
   createTrackingPointsBatch,
@@ -10,11 +11,11 @@ import {
 
 const router = express.Router();
 
-router.post('/point', createTrackingPoint);
-router.post('/points/batch', createTrackingPointsBatch);
-router.get('/route', getTrackingRoute);
-router.get('/route-stats', getTrackingRouteStats);
-router.get('/live', getLiveTracking);
-router.get('/debug/session', getTrackingDebugSession);
+router.post('/point', authMiddleware, createTrackingPoint);
+router.post('/points/batch', authMiddleware, createTrackingPointsBatch);
+router.get('/route', authMiddleware, getTrackingRoute);
+router.get('/route-stats', authMiddleware, getTrackingRouteStats);
+router.get('/live', authMiddleware, getLiveTracking);
+router.get('/debug/session', authMiddleware, getTrackingDebugSession);
 
 export default router;

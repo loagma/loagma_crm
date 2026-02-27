@@ -26,6 +26,26 @@ const MAX_ACCEPTABLE_ACCURACY_METERS = 50;
 // 0.003 km = 3 meters - helps keep routes clean by ignoring micro-movements
 const MIN_MOVEMENT_KM = 0.003;
 
+const ADMIN_ROLE_NAMES = new Set(['admin', 'manager', 'superadmin']);
+const SALESMAN_ROLE_NAMES = new Set(['salesman', 'sales', 'field_executive', 'executive']);
+
+const isAdminOrManagerRole = (roleName) => {
+    if (!roleName) return false;
+    return ADMIN_ROLE_NAMES.has(roleName.toLowerCase().trim());
+};
+
+const isSalesmanRole = (roleName, roleId, userRoles) => {
+    if (roleName && SALESMAN_ROLE_NAMES.has(roleName.toLowerCase().trim())) {
+        return true;
+    }
+    if (Array.isArray(userRoles)) {
+        return userRoles.some(
+            (r) => typeof r === 'string' && SALESMAN_ROLE_NAMES.has(r.toLowerCase().trim())
+        );
+    }
+    return false;
+};
+
 /**
  * Initialize Socket.IO server
  * @param {Object} httpServer - HTTP server instance

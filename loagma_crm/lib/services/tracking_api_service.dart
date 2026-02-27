@@ -105,9 +105,16 @@ class TrackingApiService {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        // /live returns a list keyed by employee; grab the first entry for this employee
-        final list = data['data'] as List?;
-        final point = (list != null && list.isNotEmpty) ? list.first : null;
+        final raw = data['data'];
+        // When employeeId is provided, backend returns a single Map (not a list)
+        final Map<String, dynamic>? point;
+        if (raw is Map) {
+          point = Map<String, dynamic>.from(raw);
+        } else if (raw is List && raw.isNotEmpty) {
+          point = Map<String, dynamic>.from(raw.first as Map);
+        } else {
+          point = null;
+        }
         return {'success': point != null, 'data': point};
       }
 

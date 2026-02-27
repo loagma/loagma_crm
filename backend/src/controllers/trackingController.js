@@ -30,7 +30,7 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-const MAX_ACCEPTABLE_ACCURACY_METERS = 20;
+const MAX_ACCEPTABLE_ACCURACY_METERS = 50;
 
 const persistLatestToRedis = async ({
   employeeId,
