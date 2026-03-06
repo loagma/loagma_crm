@@ -262,6 +262,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab>
                   );
 
                   _safeSetState(() {
+                    final lastSeenRaw = locationData['lastSeenAt'] ??
+                        locationData['recordedAt'];
                     _activeEmployees[employeeId] = _EmployeeLocation(
                       employeeId: employeeId,
                       employeeName: employeeName,
@@ -284,22 +286,16 @@ class _LiveTrackingTabState extends State<LiveTrackingTab>
                                 .toDouble()
                           : 0,
                       attendanceId: locationData['attendanceId']?.toString(),
+                      status: locationData['status']?.toString(),
                       lastUpdate: DateTime.parse(
-                        locationData['recordedAt'] ??
-                            DateTime.now().toIso8601String(),
+                        lastSeenRaw ?? DateTime.now().toIso8601String(),
                       ),
                     );
 
-                    // Add current location to route (after punch-in location)
-                    if (_employeeRoutes.containsKey(employeeId) &&
-                        !_employeeRoutes[employeeId]!.contains(latLng)) {
-                      _employeeRoutes[employeeId]!.add(latLng);
-                    }
                   });
                   debugPrint('✅ Loaded location for $employeeName');
                 }
               } else {
-                // No location data yet, but still add employee to list with default location
                 _safeSetState(() {
                   _activeEmployees[employeeId] = _EmployeeLocation(
                     employeeId: employeeId,
@@ -314,6 +310,9 @@ class _LiveTrackingTabState extends State<LiveTrackingTab>
                 });
                 debugPrint('⚠️ No location data yet for $employeeName');
               }
+
+              // Load today's full route so polylines render immediately
+              await _loadTodayRouteForEmployee(employeeId);
             }
           }
         }
@@ -324,6 +323,53 @@ class _LiveTrackingTabState extends State<LiveTrackingTab>
       );
     } catch (e) {
       debugPrint('❌ Error loading punched-in employees: $e');
+    }
+  }
+
+  /// Load today's full tracking route for an employee so polylines render on load.
+  Future<void> _loadTodayRouteForEmployee(String employeeId) async {
+    if (!mounted) return;
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      final result = await TrackingApiService.getRoute(
+        employeeId: employeeId,
+        start: startOfDay,
+        end: endOfDay,
+      );
+
+      if (!mounted) return;
+
+      if (result['success'] == true && result['data'] is List) {
+        final data = result['data'] as List;
+        final points = <LatLng>[];
+        for (final item in data) {
+          if (item is Map) {
+            final lat = item['latitude'];
+            final lng = item['longitude'];
+            if (lat != null && lng != null) {
+              points.add(LatLng(
+                (lat is num ? lat : num.parse(lat.toString())).toDouble(),
+                (lng is num ? lng : num.parse(lng.toString())).toDouble(),
+              ));
+            }
+          }
+        }
+
+        if (points.isNotEmpty) {
+          _safeSetState(() {
+            _employeeRoutes[employeeId] = points;
+            _recalculateDistance(employeeId);
+          });
+          debugPrint(
+            '📍 Loaded ${points.length} route points for $employeeId',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading route for $employeeId: $e');
     }
   }
 
@@ -1131,8 +1177,8 @@ class _LiveTrackingTabState extends State<LiveTrackingTab>
     }
     final age = DateTime.now().difference(lastUpdate);
     if (age.isNegative) return 'LIVE';
-    if (age.inSeconds <= 20) return 'LIVE';
-    if (age.inSeconds <= 120) return 'DEGRADED';
+    if (age.inSeconds <= 45) return 'LIVE';
+    if (age.inSeconds <= 180) return 'DEGRADED';
     return 'OFFLINE';
   }
 
@@ -1293,6 +1339,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
   DateTime _selectedDate = DateTime.now();
 
   List<LatLng> _routePoints = [];
+  List<DateTime> _routeTimestamps = [];
   bool _isLoadingRoute = false;
   String? _errorMessage;
 
@@ -1383,27 +1430,32 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
       if (result['success'] == true) {
         final data = result['data'];
         if (data != null && data is List && data.isNotEmpty) {
-          final points = data
-              .map((item) {
-                try {
-                  final lat = item['latitude'];
-                  final lng = item['longitude'];
-                  if (lat != null && lng != null) {
-                    return LatLng(
-                      (lat is num ? lat : num.parse(lat.toString())).toDouble(),
-                      (lng is num ? lng : num.parse(lng.toString())).toDouble(),
-                    );
-                  }
-                } catch (e) {
-                  debugPrint('Error parsing point: $e');
+          final points = <LatLng>[];
+          final timestamps = <DateTime>[];
+          for (final item in data) {
+            try {
+              final lat = item['latitude'];
+              final lng = item['longitude'];
+              if (lat != null && lng != null) {
+                points.add(LatLng(
+                  (lat is num ? lat : num.parse(lat.toString())).toDouble(),
+                  (lng is num ? lng : num.parse(lng.toString())).toDouble(),
+                ));
+                final recordedAt = item['recordedAt'];
+                if (recordedAt != null) {
+                  timestamps.add(DateTime.parse(recordedAt.toString()));
+                } else {
+                  timestamps.add(DateTime.now());
                 }
-                return null;
-              })
-              .whereType<LatLng>()
-              .toList();
+              }
+            } catch (e) {
+              debugPrint('Error parsing point: $e');
+            }
+          }
 
           setState(() {
             _routePoints = points;
+            _routeTimestamps = timestamps;
             _isLoadingRoute = false;
           });
 
@@ -1422,6 +1474,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
         } else {
           setState(() {
             _routePoints = [];
+            _routeTimestamps = [];
             _isLoadingRoute = false;
             _errorMessage = 'No route data for selected date';
           });
@@ -1429,6 +1482,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
       } else {
         setState(() {
           _routePoints = [];
+          _routeTimestamps = [];
           _isLoadingRoute = false;
           _errorMessage = result['message'] ?? 'Failed to load route';
         });
@@ -1438,6 +1492,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
       if (mounted) {
         setState(() {
           _routePoints = [];
+          _routeTimestamps = [];
           _isLoadingRoute = false;
           _errorMessage = 'Error: $e';
         });
@@ -1569,6 +1624,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
         zoom: 13,
         onMapReady: () {
           _isMapReady = true;
+          if (!mounted) return;
           if (_pendingMapCenter != null) {
             final queued = _pendingMapCenter!;
             _pendingMapCenter = null;
@@ -1649,7 +1705,7 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
   }
 
   void _moveOrQueueMapCenter(LatLng center) {
-    if (_isMapReady) {
+    if (_isMapReady && mounted) {
       _mapController.move(center, 13);
       return;
     }
@@ -1721,13 +1777,19 @@ class _HistoricalRoutesTabState extends State<HistoricalRoutesTab> {
   double _toRadians(double degrees) => degrees * (math.pi / 180);
 
   String _calculateDuration() {
+    if (_routeTimestamps.length >= 2) {
+      final totalSeconds = _routeTimestamps.last
+          .difference(_routeTimestamps.first)
+          .inSeconds
+          .abs();
+      final hours = totalSeconds ~/ 3600;
+      final minutes = (totalSeconds % 3600) ~/ 60;
+      return '${hours}h ${minutes}m';
+    }
     if (_routePoints.length < 2) return '0h 0m';
-
-    // Assuming 5-second intervals between points
     final totalSeconds = _routePoints.length * 5;
     final hours = totalSeconds ~/ 3600;
     final minutes = (totalSeconds % 3600) ~/ 60;
-
     return '${hours}h ${minutes}m';
   }
 

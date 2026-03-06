@@ -109,7 +109,8 @@ class AdminSocketService {
       _socket = IO.io(
         socketUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket'])
+            .setTransports(['polling', 'websocket'])
+            .enableForceNew()
             .disableAutoConnect()
             .setAuth({'token': token})
             .setReconnectionAttempts(_maxReconnectAttempts)
@@ -151,6 +152,7 @@ class AdminSocketService {
     });
 
     _socket!.on('location-update', (data) {
+      debugPrint('📡 AdminSocket RX location-update: employeeId=${data is Map ? data['employeeId'] : '?'}, status=${data is Map ? data['status'] : '?'}');
       if (data is Map<String, dynamic>) {
         _locationUpdateController.add(data);
       } else if (data is Map) {
@@ -159,6 +161,7 @@ class AdminSocketService {
     });
 
     _socket!.on('employee-connected', (data) {
+      debugPrint('📡 AdminSocket RX employee-connected: $data');
       if (data is Map<String, dynamic>) {
         _employeeConnectedController.add(data);
       } else if (data is Map) {
@@ -167,6 +170,7 @@ class AdminSocketService {
     });
 
     _socket!.on('employee-disconnected', (data) {
+      debugPrint('📡 AdminSocket RX employee-disconnected: $data');
       if (data is Map<String, dynamic>) {
         _employeeDisconnectedController.add(data);
       } else if (data is Map) {
@@ -175,6 +179,7 @@ class AdminSocketService {
     });
 
     _socket!.on('employee-session-started', (data) {
+      debugPrint('📡 AdminSocket RX employee-session-started: $data');
       if (data is Map<String, dynamic>) {
         _employeeConnectedController.add(data);
       } else if (data is Map) {
@@ -183,6 +188,7 @@ class AdminSocketService {
     });
 
     _socket!.on('employee-session-ended', (data) {
+      debugPrint('📡 AdminSocket RX employee-session-ended: $data');
       if (data is Map<String, dynamic>) {
         _employeeDisconnectedController.add(data);
       } else if (data is Map) {
@@ -191,9 +197,24 @@ class AdminSocketService {
     });
 
     _socket!.on('active-employees', (data) {
+      debugPrint('📡 AdminSocket RX active-employees: ${data is List ? data.length : 0} employees');
       if (data is List) {
         _activeEmployeesController.add(List<String>.from(data));
       }
+    });
+
+    _socket!.onReconnect((attempt) {
+      debugPrint('🔄 AdminSocketService reconnected (attempt $attempt)');
+      _isConnected = true;
+      _connectionStatusController.add(true);
+    });
+
+    _socket!.onReconnectError((error) {
+      debugPrint('❌ AdminSocketService reconnect error: $error');
+    });
+
+    _socket!.onReconnectFailed((_) {
+      debugPrint('❌ AdminSocketService reconnect failed after $_maxReconnectAttempts attempts');
     });
   }
 

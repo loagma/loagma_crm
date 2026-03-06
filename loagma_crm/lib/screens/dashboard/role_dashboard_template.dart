@@ -225,6 +225,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.call_outlined,
             "/dashboard/telecaller/call-history",
           ),
+           SidebarItem(
+            "Follow up Management",
+            Icons.follow_the_signs_sharp,
+            "/dashboard/telecaller/follow-up",
+          ),
         ];
 
       case "manager":

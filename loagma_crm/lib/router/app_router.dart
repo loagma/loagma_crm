@@ -58,6 +58,8 @@ import '../screens/salesman/todays_beat_plan_screen.dart';
 
 // Telecaller screens
 import '../screens/telecaller/verify_account_master_screen.dart';
+import '../screens/telecaller/telecaller_followup_screen.dart';
+import '../screens/telecaller/telecaller_call_history_screen.dart';
 
 // Edit Account Master Screen
 import '../screens/shared/edit_account_master_screen.dart';
@@ -324,53 +326,11 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: 'call-history',
-          builder: (_, __) => Scaffold(
-            appBar: AppBar(
-              title: const Text('Call History'),
-              backgroundColor: const Color(0xFFD7BE69),
-            ),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Call History – Coming Soon',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Verification tracking today:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '• Each verified account stores who verified it (telecaller), when, and optional notes.\n'
-                    '• Use “Verify Accounts” → filter “Verified by” (admin) to see which telecaller verified which accounts.\n'
-                    '• Account details show “Verified by” and “Verification notes”.',
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Future call history could log each call (account, telecaller, time, duration, outcome) in a separate table for full audit and reporting.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          builder: (_, __) => const TelecallerCallHistoryScreen(),
+        ),
+        GoRoute(
+          path: 'follow-up',
+          builder: (_, __) => const TelecallerFollowupScreen(),
         ),
       ],
     ),

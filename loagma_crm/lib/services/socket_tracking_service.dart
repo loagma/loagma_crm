@@ -110,7 +110,8 @@ class SocketTrackingService {
       _socket = IO.io(
         ApiConfig.baseUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket'])
+            .setTransports(['polling', 'websocket'])
+            .enableForceNew()
             .disableAutoConnect()
             .setAuth({'token': token})
             .setReconnectionAttempts(_maxReconnectAttempts)

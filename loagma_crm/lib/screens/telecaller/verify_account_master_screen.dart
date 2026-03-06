@@ -1,13 +1,49 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
+import '../../services/telecaller_api_service.dart';
 import '../../services/user_service.dart';
 import '../../utils/custom_toast.dart';
 
 enum _StatusFilter { all, pending, verified }
+
+// Call outcome statuses for telecaller
+enum _CallStatus {
+  dnpNotReachable,
+  dnpRnr,
+  followupInterested,
+  wrongNumber,
+  notInterested,
+  callBackLater,
+  saleClosed,
+}
+
+const Map<_CallStatus, String> _callStatusLabels = {
+  _CallStatus.dnpNotReachable: 'DNP – Not Reachable',
+  _CallStatus.dnpRnr: 'DNP – RNR (Ring No Response)',
+  _CallStatus.followupInterested: 'Follow-up – Interested',
+  _CallStatus.wrongNumber: 'Wrong Number',
+  _CallStatus.notInterested: 'Not Interested',
+  _CallStatus.callBackLater: 'Call Back Later',
+  _CallStatus.saleClosed: 'Done / Sale Closed',
+};
+
+const Map<_CallStatus, String> _callStatusApiValues = {
+  _CallStatus.dnpNotReachable: 'DNP_NOT_REACHABLE',
+  _CallStatus.dnpRnr: 'DNP_RNR',
+  _CallStatus.followupInterested: 'FOLLOWUP_INTERESTED',
+  _CallStatus.wrongNumber: 'WRONG_NUMBER',
+  _CallStatus.notInterested: 'NOT_INTERESTED',
+  _CallStatus.callBackLater: 'CALL_BACK_LATER',
+  _CallStatus.saleClosed: 'SALE_CLOSED',
+};
+
+bool _callStatusRequiresFollowup(_CallStatus s) =>
+    s == _CallStatus.followupInterested || s == _CallStatus.callBackLater;
 
 class VerifyAccountMasterScreen extends StatefulWidget {
   const VerifyAccountMasterScreen({super.key});
@@ -258,8 +294,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
     }
   }
 
-  Future<void> _confirmAndCall(String phoneNumber) async {
+  Future<void> _confirmAndCall(Account account) async {
     if (!mounted) return;
+    final phoneNumber = account.contactNumber;
     final shouldCall = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -300,6 +337,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
 
     if (shouldCall == true && mounted) {
       await _launchDialer(phoneNumber);
+      if (mounted) {
+        await _showCallOutcomeSheet(account);
+      }
     }
   }
 
@@ -1051,12 +1091,323 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
       await _approveAccount(account);
     }
   }
+
+  /// Bottom sheet for telecaller call outcome + optional follow-up.
+  Future<void> _showCallOutcomeSheet(Account account) async {
+    if (!mounted) return;
+
+    const primaryColor = Color(0xFFD7BE69);
+
+    final notesController = TextEditingController();
+    final durationController = TextEditingController();
+    final followupNotesController = TextEditingController();
+    DateTime? followupDate;
+    TimeOfDay? followupTime;
+    _CallStatus? selectedStatus;
+    String? errorText;
+    bool isSaving = false;
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final mediaQuery = MediaQuery.of(ctx);
+        final bottomInset = mediaQuery.viewInsets.bottom;
+        final dateFormat = DateFormat('dd MMM yyyy');
+
+        Future<void> pickDate() async {
+          final now = DateTime.now();
+          final picked = await showDatePicker(
+            context: ctx,
+            initialDate: followupDate ?? now,
+            firstDate: now,
+            lastDate: now.add(const Duration(days: 365)),
+          );
+          if (picked != null) {
+            followupDate = picked;
+          }
+        }
+
+        Future<void> pickTime() async {
+          final picked = await showTimePicker(
+            context: ctx,
+            initialTime: followupTime ?? TimeOfDay.now(),
+          );
+          if (picked != null) {
+            followupTime = picked;
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            Future<void> save() async {
+              if (selectedStatus == null) {
+                setSheetState(() {
+                  errorText = 'Please select call outcome.';
+                });
+                return;
+              }
+
+              final needsFollowup =
+                  _callStatusRequiresFollowup(selectedStatus!);
+              if (needsFollowup) {
+                if (followupDate == null || followupTime == null) {
+                  setSheetState(() {
+                    errorText =
+                        'Follow-up date and time are required for this status.';
+                  });
+                  return;
+                }
+                if (followupNotesController.text.trim().isEmpty) {
+                  setSheetState(() {
+                    errorText = 'Follow-up notes are required.';
+                  });
+                  return;
+                }
+              }
+
+              setSheetState(() {
+                errorText = null;
+                isSaving = true;
+              });
+
+              DateTime? nextFollowupAt;
+              if (needsFollowup && followupDate != null && followupTime != null) {
+                nextFollowupAt = DateTime(
+                  followupDate!.year,
+                  followupDate!.month,
+                  followupDate!.day,
+                  followupTime!.hour,
+                  followupTime!.minute,
+                );
+              }
+
+              final durationText = durationController.text.trim();
+              int? durationSec;
+              if (durationText.isNotEmpty) {
+                final parsed = int.tryParse(durationText);
+                if (parsed != null && parsed >= 0) {
+                  durationSec = parsed;
+                }
+              }
+
+              final apiStatus = _callStatusApiValues[selectedStatus]!;
+
+              final result = await TelecallerApiService.createCallLog(
+                accountId: account.id,
+                status: apiStatus,
+                durationSec: durationSec,
+                notes: notesController.text.trim().isEmpty
+                    ? null
+                    : notesController.text.trim(),
+                nextFollowupAt: nextFollowupAt,
+                followupNotes: followupNotesController.text.trim().isEmpty
+                    ? null
+                    : followupNotesController.text.trim(),
+              );
+
+              if (!mounted) return;
+
+              if (result['success'] == true) {
+                Navigator.of(ctx).pop(true);
+              } else {
+                setSheetState(() {
+                  isSaving = false;
+                  errorText = result['message']?.toString() ??
+                      'Failed to save call outcome';
+                });
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: bottomInset + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Call Outcome – ${account.personName}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _callStatusLabels.entries.map((entry) {
+                        final status = entry.key;
+                        final label = entry.value;
+                        final isSelected = selectedStatus == status;
+                        return ChoiceChip(
+                          label: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isSelected ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: primaryColor,
+                          onSelected: (val) {
+                            setSheetState(() {
+                              selectedStatus = status;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: durationController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Call Duration (seconds)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Call Notes',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (selectedStatus != null &&
+                        _callStatusRequiresFollowup(selectedStatus!)) ...[
+                      const Text(
+                        'Follow-up Details (required for this status)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await pickDate();
+                                setSheetState(() {});
+                              },
+                              icon: const Icon(Icons.calendar_today, size: 16),
+                              label: Text(
+                                followupDate != null
+                                    ? dateFormat.format(followupDate!)
+                                    : 'Follow-up Date',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await pickTime();
+                                setSheetState(() {});
+                              },
+                              icon: const Icon(Icons.schedule, size: 16),
+                              label: Text(
+                                followupTime != null
+                                    ? followupTime!.format(ctx)
+                                    : 'Follow-up Time',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: followupNotesController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Follow-up Notes',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (errorText != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        errorText!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isSaving ? null : save,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.black87,
+                        ),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text('Save Outcome'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Call outcome saved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
 }
 
 class _AccountCard extends StatelessWidget {
   final Account account;
   final bool isNarrow;
-  final void Function(String) onCall;
+  final void Function(Account) onCall;
   final VoidCallback onViewDetails;
   final VoidCallback? onVerify;
   final VoidCallback? onReject;
@@ -1310,7 +1661,7 @@ class _AccountCard extends StatelessWidget {
                 /// Call
                 IconButton(
                   tooltip: 'Call',
-                  onPressed: () => onCall(account.contactNumber),
+                  onPressed: () => onCall(account),
                   icon: const Icon(Icons.call),
                   color: Colors.green.shade700,
                   style: IconButton.styleFrom(

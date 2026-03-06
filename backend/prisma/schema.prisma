@@ -151,6 +151,9 @@ model User {
 
   // Live Tracking Relations
   trackingPoints SalesmanTrackingPoint[] @relation("EmployeeTrackingPoints")
+
+  // Telecaller call logs
+  telecallerLogs TelecallerCallLog[]
 }
 
 model EmployeeArea {
@@ -225,6 +228,7 @@ model Account {
   assignedTo            User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
   createdBy             User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
   approvedBy            User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
+  callLogs              TelecallerCallLog[]
   
   @@index([pincode])
   @@index([isActive])
@@ -232,6 +236,27 @@ model Account {
   @@index([createdAt])
   @@index([businessType])
   @@index([businessSize])
+}
+
+model TelecallerCallLog {
+  id             String   @id @default(cuid())
+  accountId      String
+  telecallerId   String
+  calledAt       DateTime @default(now())
+  durationSec    Int?
+  status         String
+  notes          String?
+  recordingUrl   String?
+  nextFollowupAt DateTime?
+  followupNotes  String?
+
+  account    Account @relation(fields: [accountId], references: [id])
+  telecaller User    @relation(fields: [telecallerId], references: [id])
+
+  @@index([telecallerId, calledAt])
+  @@index([accountId, calledAt])
+  @@index([nextFollowupAt])
+  @@index([status])
 }
 
 model SalaryInformation {

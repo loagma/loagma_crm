@@ -57,7 +57,7 @@ export const initializeSocketServer = (httpServer) => {
             methods: ['GET', 'POST'],
             credentials: true,
         },
-        transports: ['websocket'], // Force WebSocket only (no polling)
+        transports: ['websocket', 'polling'],
         pingTimeout: 60000,
         pingInterval: 25000,
     });
@@ -349,10 +349,38 @@ const handleLocationUpdate = async (socket, data) => {
                 longitudeValue
             );
             
-            // Filter micro-movements (< 3 meters) to keep routes clean
+            // For micro-movements (< 3 meters): skip DB save but still broadcast
+            // so admin sees the employee is alive (heartbeat).
             if (lastSegmentKm < MIN_MOVEMENT_KM) {
-                console.log(`🚶 Ignored micro-movement (${(lastSegmentKm * 1000).toFixed(1)}m) for ${employeeId}`);
-                return; // silently ignore - position unchanged
+                // Update connection timestamp so rate limiter works
+                connectionInfo.lastUpdate = now;
+                activeConnections.set(employeeId, connectionInfo);
+
+                // Broadcast a lightweight "still alive" update to admins
+                const alivePayload = {
+                    employeeId,
+                    employeeName: data.employeeName || employeeId,
+                    latitude: latitudeValue,
+                    longitude: longitudeValue,
+                    speed: Number.isFinite(speedValue) ? speedValue : 0,
+                    accuracy: Number.isFinite(accuracyValue) ? accuracyValue : 0,
+                    recordedAt: persistedAt.toISOString(),
+                    attendanceId,
+                    lastSeenAt: new Date().toISOString(),
+                    status: 'LIVE',
+                    totalDistanceKm: metric ? Number(metric.totalDistanceKm.toFixed(3)) : 0,
+                };
+                io.to('admin-room').emit('location-update', alivePayload);
+
+                // Ack the client so it clears its pending queue
+                if (data.clientPointId) {
+                    socket.emit('location-ack', {
+                        accepted: true,
+                        clientPointId: data.clientPointId.toString(),
+                        recordedAt: persistedAt.toISOString(),
+                    });
+                }
+                return;
             }
         }
 
@@ -450,8 +478,8 @@ const handleLocationUpdate = async (socket, data) => {
             clientPointId: clientPointId ? clientPointId.toString() : null,
             totalDistanceKm: Number(metric.totalDistanceKm.toFixed(3)),
             lastSegmentMeters: Number((lastSegmentKm * 1000).toFixed(1)),
-            lastSeenAt: savedPoint.recordedAt.toISOString(),
-            status: _deriveFreshnessStatus(savedPoint.recordedAt),
+            lastSeenAt: new Date().toISOString(),
+            status: 'LIVE',
         };
 
         // Best-effort Redis latest snapshot for fast live reads.
@@ -545,8 +573,8 @@ const _sessionKey = (employeeId, attendanceId) =>
 
 const _deriveFreshnessStatus = (lastSeenAt) => {
     const ageMs = Date.now() - new Date(lastSeenAt).getTime();
-    if (ageMs <= 20 * 1000) return 'LIVE';
-    if (ageMs <= 120 * 1000) return 'DEGRADED';
+    if (ageMs <= 45 * 1000) return 'LIVE';
+    if (ageMs <= 180 * 1000) return 'DEGRADED';
     return 'OFFLINE';
 };
 

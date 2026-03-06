@@ -230,12 +230,15 @@ export const createTrackingPointsBatch = async (req, res) => {
         try {
           getIO().to('admin-room').emit('location-update', {
             employeeId,
+            employeeName: point?.employeeName || employeeId,
             attendanceId,
             latitude: created.latitude,
             longitude: created.longitude,
             speed: created.speed ?? 0,
             accuracy: created.accuracy ?? 0,
             recordedAt: created.recordedAt.toISOString(),
+            lastSeenAt: new Date().toISOString(),
+            status: 'LIVE',
             source: 'rest-batch',
           });
         } catch (_) {

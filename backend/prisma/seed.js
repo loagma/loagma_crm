@@ -7,7 +7,7 @@ async function main() {
   console.log('🌱 Starting database seeding...');
 
   // Seed Admin User (one-time)
-  const adminPhone = '+919876543210'; // Change this to your admin phone
+  const adminPhone = '8019500007'; // Change this to your admin phone
   
   const existingAdmin = await prisma.user.findUnique({
     where: { contactNumber: adminPhone },
@@ -30,7 +30,7 @@ async function main() {
         id: randomUUID(),
         contactNumber: adminPhone,
         roleId: adminRole.id,
-        name: 'Admin',
+        name: 'Lohiya Admin ',
         isActive: true,
       },
     });
