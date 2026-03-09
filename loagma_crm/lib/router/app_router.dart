@@ -21,13 +21,11 @@ import '../screens/admin/modern_task_assignment_screen.dart';
 import '../screens/manager/manager_reminder_calls_screen.dart';
 import '../screens/admin/enhanced_attendance_management_screen.dart';
 import '../screens/admin/approval_requests_screen.dart';
-import '../screens/admin/live_tracking_screen.dart';
-import '../screens/admin/enhanced_live_tracking_screen.dart';
 import '../screens/admin/socket_live_tracking_screen.dart';
 
-// Shared screens
+// Shared screens (account_list_screen with prefix to avoid clash with teleadmin AccountListScreen)
 import '../screens/shared/account_master_screen.dart';
-import '../screens/shared/account_list_screen.dart';
+import '../screens/shared/account_list_screen.dart' as shared;
 import '../screens/shared/account_detail_screen.dart';
 import '../screens/shared/create_expense_screen.dart';
 import '../screens/shared/my_expenses_screen.dart';
@@ -60,8 +58,14 @@ import '../screens/salesman/todays_beat_plan_screen.dart';
 import '../screens/telecaller/verify_account_master_screen.dart';
 import '../screens/telecaller/telecaller_followup_screen.dart';
 import '../screens/telecaller/telecaller_call_history_screen.dart';
+import '../screens/telecaller/telecaller_assigned_pincodes_screen.dart';
 
-// Edit Account Master Screen
+// Teleadmin screens (alias to avoid clash with shared AccountListScreen)
+import '../screens/teleadmin/account_list_ta.dart' as teleadmin;
+import '../screens/teleadmin/assign_account_screen.dart';
+
+
+    // Edit Account Master Screen
 import '../screens/shared/edit_account_master_screen.dart';
 import '../services/account_service.dart';
 import '../models/account_model.dart';
@@ -250,12 +254,22 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: 'account/all',
-          builder: (_, __) => const AccountListScreen(),
+          builder: (context, state) {
+            final role = state.pathParameters['role']?.toLowerCase();
+            if (role == 'teleadmin') {
+              return const teleadmin.AccountListScreen();
+            }
+            return const shared.AccountListScreen();
+          },
+        ),
+        GoRoute(
+          path: 'assign',
+          builder: (context, state) => const AssignAccountScreen(),
         ),
         // Admin "Customer List" – shows only telecaller‑approved accounts
         GoRoute(
           path: 'customers',
-          builder: (_, __) => const AccountListScreen(
+          builder: (_, __) => const shared.AccountListScreen(
             onlyApproved: true,
             appBarTitle: 'SR Customer List',
           ),
@@ -331,6 +345,10 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'follow-up',
           builder: (_, __) => const TelecallerFollowupScreen(),
+        ),
+        GoRoute(
+          path: 'assigned-pincodes',
+          builder: (_, __) => const TelecallerAssignedPincodesScreen(),
         ),
       ],
     ),

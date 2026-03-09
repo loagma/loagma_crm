@@ -18,6 +18,7 @@ export const getAllAccounts = async (req, res) => {
       createdById,
       approvedById,
       search,
+      pincode,
       startDate,
       endDate,
       page = 1,
@@ -41,6 +42,11 @@ export const getAllAccounts = async (req, res) => {
     if (isApproved !== undefined) where.isApproved = isApproved === 'true';
     if (createdById) where.createdById = createdById;
     if (approvedById) where.approvedById = approvedById;
+    if (pincode && String(pincode).trim()) {
+      const pin = String(pincode).trim();
+      // Allow partial match so short prefixes still work, but index on pincode keeps it fast.
+      where.pincode = { contains: pin };
+    }
 
     // Date range filtering
     if (startDate || endDate) {
@@ -349,6 +355,27 @@ export const createAccount = async (req, res) => {
     // Get user ID from auth middleware (req.user.id)
     const userId = req.user?.id || createdById;
 
+    // Auto-assign telecaller based on pincode/day mapping when not explicitly provided
+    let finalAssignedToId = assignedToId || null;
+    try {
+      if (!finalAssignedToId && pincode) {
+        const today = new Date();
+        const day = today.getDay() === 0 ? 7 : today.getDay(); // JS Sunday=0 → 7
+        const mapping = await prisma.telecallerPincodeAssignment.findFirst({
+          where: {
+            pincode,
+            isActive: true,
+            OR: [{ dayOfWeek: 0 }, { dayOfWeek: day }],
+          },
+        });
+        if (mapping) {
+          finalAssignedToId = mapping.telecallerId;
+        }
+      }
+    } catch (e) {
+      console.error('⚠️ Telecaller pincode auto-assignment failed:', e);
+    }
+
     // Upload images to Cloudinary if provided
     let ownerImageUrl = null;
     let shopImageUrl = null;
@@ -428,7 +455,7 @@ export const createAccount = async (req, res) => {
         address,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
-        assignedToId,
+        assignedToId: finalAssignedToId,
         areaId: areaId ? parseInt(areaId) : null,
         createdById: userId,
         isApproved: false

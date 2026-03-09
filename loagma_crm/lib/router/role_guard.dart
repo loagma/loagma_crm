@@ -1,6 +1,10 @@
 import 'package:go_router/go_router.dart';
 import '../services/user_service.dart';
 
+/// Normalize role for comparison: "tele admin" and "teleadmin" match.
+String _normalizeRole(String? r) =>
+    (r ?? '').toLowerCase().trim().replaceAll(' ', '');
+
 String? roleGuard(context, GoRouterState state) {
   final urlRole = state.pathParameters['role']?.toLowerCase().trim();
   final savedRole = UserService.currentRole?.toLowerCase().trim();
@@ -20,8 +24,8 @@ String? roleGuard(context, GoRouterState state) {
     return '/dashboard/$savedRole';
   }
 
-  // URL trying to access a DIFFERENT role → fix it
-  if (urlRole != savedRole) {
+  // URL trying to access a DIFFERENT role → fix it (compare normalized so "tele admin" == "teleadmin")
+  if (_normalizeRole(urlRole) != _normalizeRole(savedRole)) {
     return '/dashboard/$savedRole';
   }
 

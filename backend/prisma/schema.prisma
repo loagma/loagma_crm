@@ -154,6 +154,7 @@ model User {
 
   // Telecaller call logs
   telecallerLogs TelecallerCallLog[]
+  telecallerPincodeAssignments TelecallerPincodeAssignment[] @relation("TelecallerPincodeAssignments")
 }
 
 model EmployeeArea {
@@ -257,6 +258,25 @@ model TelecallerCallLog {
   @@index([accountId, calledAt])
   @@index([nextFollowupAt])
   @@index([status])
+}
+
+/// Mapping of pincodes and days to telecallers.
+/// Used so Tele Admin can assign which telecaller owns which pincode on which day.
+model TelecallerPincodeAssignment {
+  id           String   @id @default(cuid())
+  telecallerId String
+  pincode      String
+  /// 0 = all days, 1 = Monday .. 7 = Sunday
+  dayOfWeek    Int
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  telecaller User @relation("TelecallerPincodeAssignments", fields: [telecallerId], references: [id])
+
+  @@index([telecallerId])
+  @@index([pincode, dayOfWeek])
 }
 
 model SalaryInformation {

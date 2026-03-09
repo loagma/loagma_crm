@@ -6,6 +6,7 @@ import {
   getTelecallerDashboardSummary,
   getTelecallerCallHistory,
 } from '../controllers/telecallerController.js';
+import { getMyPincodeAssignments } from '../controllers/telecallerAssignmentController.js';
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ router.post('/leads/:id/calls', createTelecallerCallLog);
 router.get('/followups', getTelecallerFollowups);
 router.get('/dashboard/summary', getTelecallerDashboardSummary);
 router.get('/call-history', getTelecallerCallHistory);
+router.get('/pincode-assignments', getMyPincodeAssignments);
 
 export default router;
 

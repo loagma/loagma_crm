@@ -220,5 +220,52 @@ class TelecallerApiService {
       };
     }
   }
+
+  /// GET /telecaller/pincode-assignments
+  /// Returns a flat list of { pincode, dayOfWeek } for the logged-in telecaller.
+  static Future<Map<String, dynamic>> getPincodeAssignments() async {
+    try {
+      final hasNet = await NetworkService.checkConnectivity();
+      if (!hasNet) {
+        throw Exception(
+          'No internet connection. Please check your network and try again.',
+        );
+      }
+
+      final response = await NetworkService.retryApiCall(
+        () async {
+          final headers = await _headers();
+          return http
+              .get(
+                _buildUri('/telecaller/pincode-assignments'),
+                headers: headers,
+              )
+              .timeout(const Duration(seconds: 15));
+        },
+        maxRetries: 2,
+        delay: const Duration(seconds: 2),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'data': data['data'] ?? const [],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to load pincode assignments',
+        'data': const [],
+      };
+    } catch (e) {
+      debugPrint('❌ getPincodeAssignments error: $e');
+      return {
+        'success': false,
+        'message': NetworkService.getNetworkErrorMessage(e),
+        'data': const [],
+      };
+    }
+  }
 }
 

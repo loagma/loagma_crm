@@ -55,7 +55,9 @@ class RoleDashboardTemplate extends StatelessWidget {
   // Sidebar menu definitions (with nested GoRouter paths)
   // ------------------------------------------------------------
   List<SidebarItem> getSidebarMenu() {
-    switch (roleName.toLowerCase()) {
+    // Normalize role: "tele admin" / "Tele Admin" -> "teleadmin" for matching
+    final roleKey = roleName.toLowerCase().replaceAll(' ', '');
+    switch (roleKey) {
       case "admin":
         return [
           SidebarItem(
@@ -88,7 +90,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.folder_special_outlined, // cleaner than list_alt
             "/dashboard/admin/account/all",
           ),
-          
+
           SidebarItem(
             "SR Area Allotment",
             Icons.map_outlined, // visually represents allotment/area
@@ -225,10 +227,15 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.call_outlined,
             "/dashboard/telecaller/call-history",
           ),
-           SidebarItem(
+          SidebarItem(
             "Follow up Management",
             Icons.follow_the_signs_sharp,
             "/dashboard/telecaller/follow-up",
+          ),
+          SidebarItem(
+            "Assigned Pincodes",
+            Icons.pin_drop_outlined,
+            "/dashboard/telecaller/assigned-pincodes",
           ),
         ];
 
@@ -250,11 +257,24 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.people_outline,
             "/dashboard/manager/account/all",
           ),
+          
+        ];
+      case "teleadmin":
+        return [
+          SidebarItem("Dashboard", Icons.dashboard, "/dashboard/teleadmin"),
+
           SidebarItem(
-            "Task Allotments",
+           "Accounts Master Management",
             Icons.route_outlined,
-            "/dashboard/manager/tasks/view",
+            "/dashboard/teleadmin/account/all",
           ),
+ SidebarItem(
+           "Assign Account",
+            Icons.route_outlined,
+            "/dashboard/teleadmin/assign",
+          ),
+         
+        
         ];
 
       default:

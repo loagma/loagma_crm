@@ -128,6 +128,7 @@ class AccountService {
     String? createdById,
     String? approvedById,
     String? search,
+    String? pincode,
     DateTime? startDate,
     DateTime? endDate,
     String? salesmanId, // Helper: filters by createdById (for salesman accounts)
@@ -157,6 +158,7 @@ class AccountService {
         if (effectiveCreatedById != null) 'createdById': effectiveCreatedById,
         if (approvedById != null) 'approvedById': approvedById,
         if (search != null) 'search': search,
+        if (pincode != null && pincode.trim().isNotEmpty) 'pincode': pincode.trim(),
         if (startDate != null)
           'startDate': startDate
               .toIso8601String(), // Send full ISO string with time
