@@ -120,6 +120,25 @@ class MapTaskAssignmentService {
     }
   }
 
+  Future<Map<String, dynamic>> getAccountCountByPincode(String pincode) async {
+    try {
+      final headers = _getHeaders();
+      final url = '$baseUrl/accounts/pincode/$pincode/count';
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data;
+      }
+      return {
+        'success': false,
+        'message': 'Failed to fetch account count (Status: ${response.statusCode})',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
   Future<Map<String, dynamic>> assignAreasToSalesman(
     String salesmanId,
     String salesmanName,

@@ -11,7 +11,8 @@ import {
   bulkAssignAccounts,
   bulkApproveAccounts,
   checkContactNumber,
-  debugDateFiltering
+  debugDateFiltering,
+  getAccountCountByPincode,
 } from '../controllers/accountController.js';
 // import {  } from '../middleware/.js';
 
@@ -22,6 +23,7 @@ router.get('/', getAllAccounts);
 router.get('/stats', getAccountStats);
 router.get('/debug-date-filtering', debugDateFiltering); // DEBUG ENDPOINT
 router.post('/check-contact', checkContactNumber);
+router.get('/pincode/:pincode/count', getAccountCountByPincode);
 router.get('/:id', getAccountById);
 router.post('/', createAccount);
 router.put('/:id', updateAccount);

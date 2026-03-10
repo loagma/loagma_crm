@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/user_service.dart';
-import '../../services/account_service.dart';
-import '../../models/account_model.dart';
 import '../../services/api_config.dart';
 import '../../services/network_service.dart';
 
@@ -19,16 +17,21 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
   String? _error;
 
   List<Map<String, dynamic>> _telecallers = [];
-  List<String> _pincodes = [];
 
   String? _selectedTelecallerId;
-  final Set<String> _selectedPincodes = {};
   final Set<int> _selectedDays = {1, 2, 3, 4, 5, 6}; // Mon‑Sat by default
+  final TextEditingController _pincodeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _pincodeController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -47,25 +50,10 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
         return role.contains('telecaller');
       }).toList();
 
-      // Load some accounts and extract distinct pincodes
-      final accountsResult =
-          await AccountService.fetchAccounts(page: 1, limit: 500);
-      final accounts =
-          List<Account>.from(accountsResult['accounts'] ?? const []);
-      final pincodeSet = <String>{};
-      for (final acc in accounts) {
-        final pin = acc.pincode?.trim();
-        if (pin != null && pin.isNotEmpty) {
-          pincodeSet.add(pin);
-        }
-      }
-      final pincodes = pincodeSet.toList()..sort();
-
       if (!mounted) return;
 
       setState(() {
         _telecallers = telecallers;
-        _pincodes = pincodes;
         if (_telecallers.isNotEmpty) {
           _selectedTelecallerId = _telecallers.first['id'] ??
               _telecallers.first['_id']; // default selection
@@ -81,16 +69,6 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
     }
   }
 
-  void _togglePincode(String pin) {
-    setState(() {
-      if (_selectedPincodes.contains(pin)) {
-        _selectedPincodes.remove(pin);
-      } else {
-        _selectedPincodes.add(pin);
-      }
-    });
-  }
-
   void _toggleDay(int day) {
     setState(() {
       if (_selectedDays.contains(day)) {
@@ -102,10 +80,43 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
   }
 
   Future<void> _saveAssignment() async {
-    if (_selectedTelecallerId == null || _selectedPincodes.isEmpty) {
+    if (_selectedTelecallerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Select a telecaller and at least one pincode'),
+          content: Text('Select a telecaller first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one day'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Parse manual pincode input: comma / space / newline separated 6‑digit values
+    final raw = _pincodeController.text;
+    final tokens = raw.split(RegExp(r'[,\s]+'));
+    final pinSet = <String>{};
+    final pinRegex = RegExp(r'^\d{6}$');
+    for (final t in tokens) {
+      final trimmed = t.trim();
+      if (trimmed.isEmpty) continue;
+      if (pinRegex.hasMatch(trimmed)) {
+        pinSet.add(trimmed);
+      }
+    }
+
+    if (pinSet.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter at least one valid 6‑digit pincode'),
           backgroundColor: Colors.red,
         ),
       );
@@ -122,8 +133,12 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
       };
 
       final body = {
-        'assignments': _selectedPincodes
-            .expand((pin) => days.map((d) => {'pincode': pin, 'dayOfWeek': d}))
+        'assignments': pinSet
+            .expand(
+              (pin) => days.map(
+                (d) => {'pincode': pin, 'dayOfWeek': d},
+              ),
+            )
             .toList(),
       };
 
@@ -145,7 +160,7 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
           SnackBar(
             backgroundColor: const Color(0xFFD7BE69),
             content: Text(
-              'Assignments saved for telecaller. Total: ${data['data']?['count'] ?? _selectedPincodes.length * days.length}',
+              'Assignments saved for telecaller. Total: ${data['data']?['count'] ?? pinSet.length * days.length}',
             ),
             duration: const Duration(seconds: 2),
           ),
@@ -231,7 +246,7 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'Pincodes',
+                        'Pincodes (comma / space separated)',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
@@ -239,26 +254,16 @@ class _AssignAccountScreenState extends State<AssignAccountScreen> {
                       ),
                       const SizedBox(height: 8),
                       Expanded(
-                        child: _pincodes.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No pincodes found. Create some accounts first.',
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
-                            : ListView.builder(
-                                itemCount: _pincodes.length,
-                                itemBuilder: (context, index) {
-                                  final pin = _pincodes[index];
-                                  final selected =
-                                      _selectedPincodes.contains(pin);
-                                  return CheckboxListTile(
-                                    value: selected,
-                                    title: Text(pin),
-                                    onChanged: (_) => _togglePincode(pin),
-                                  );
-                                },
-                              ),
+                        child: TextFormField(
+                          controller: _pincodeController,
+                          maxLines: null,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'e.g. 482002, 483001 483220',
+                            alignLabelWithHint: true,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       SizedBox(

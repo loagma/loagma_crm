@@ -355,17 +355,15 @@ export const createAccount = async (req, res) => {
     // Get user ID from auth middleware (req.user.id)
     const userId = req.user?.id || createdById;
 
-    // Auto-assign telecaller based on pincode/day mapping when not explicitly provided
+    // Auto-assign telecaller based on pincode mapping (all days) when not explicitly provided
     let finalAssignedToId = assignedToId || null;
     try {
       if (!finalAssignedToId && pincode) {
-        const today = new Date();
-        const day = today.getDay() === 0 ? 7 : today.getDay(); // JS Sunday=0 → 7
         const mapping = await prisma.telecallerPincodeAssignment.findFirst({
           where: {
             pincode,
             isActive: true,
-            OR: [{ dayOfWeek: 0 }, { dayOfWeek: day }],
+            dayOfWeek: 0,
           },
         });
         if (mapping) {
@@ -895,6 +893,35 @@ export const rejectAccount = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Account not found' });
     }
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /accounts/pincode/:pincode/count
+export const getAccountCountByPincode = async (req, res) => {
+  try {
+    const { pincode } = req.params;
+    const pin = String(pincode || '').trim();
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pincode must be a 6-digit number',
+      });
+    }
+
+    const count = await prisma.account.count({
+      where: { pincode: pin },
+    });
+
+    return res.json({
+      success: true,
+      data: { pincode: pin, count },
+    });
+  } catch (error) {
+    console.error('getAccountCountByPincode error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get account count',
+    });
   }
 };
 

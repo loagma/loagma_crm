@@ -44,7 +44,7 @@ class _TelecallerAssignedPincodesScreenState
         };
         if (pin.isEmpty) continue;
         grouped.putIfAbsent(pin, () => []);
-        if (day >= 1 && day <= 7 && !grouped[pin]!.contains(day)) {
+        if (!grouped[pin]!.contains(day)) {
           grouped[pin]!.add(day);
         }
       }

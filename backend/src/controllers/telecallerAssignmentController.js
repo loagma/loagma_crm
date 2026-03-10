@@ -278,3 +278,84 @@ export const upsertTelecallerPincodeAssignmentsForDay = async (req, res) => {
   }
 };
 
+// PUT /teleadmin/telecallers/:id/pincodes
+// Body: { pincodes: string[] } – assign pincodes to telecaller for ALL days (dayOfWeek = 0)
+export const upsertTelecallerPincodes = async (req, res) => {
+  try {
+    if (!isTeleAdmin(req.user)) {
+      return res
+        .status(403)
+        .json({ success: false, message: 'Only Tele Admin / Admin can update assignments' });
+    }
+
+    const { id } = req.params;
+    const { pincodes } = req.body || {};
+
+    if (!Array.isArray(pincodes)) {
+      return res.status(400).json({
+        success: false,
+        message: 'pincodes must be an array of 6-digit strings',
+      });
+    }
+
+    const dedupPins = new Set();
+    const cleaned = [];
+    for (const raw of pincodes) {
+      const pinRaw = String(raw || '').trim();
+      if (!/^\d{6}$/.test(pinRaw)) continue;
+      if (dedupPins.has(pinRaw)) continue;
+      dedupPins.add(pinRaw);
+      cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: 0 });
+    }
+
+    // Conflict detection: same pincode already assigned (all days) to another telecaller
+    if (cleaned.length > 0) {
+      const pins = cleaned.map((a) => a.pincode);
+      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
+        where: {
+          telecallerId: { not: id },
+          dayOfWeek: 0,
+          pincode: { in: pins },
+        },
+        select: { telecallerId: true, pincode: true },
+        orderBy: [{ pincode: 'asc' }],
+      });
+
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'Some pincodes are already assigned to another telecaller',
+          conflicts,
+        });
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.telecallerPincodeAssignment.deleteMany({
+        where: { telecallerId: id, dayOfWeek: 0 },
+      });
+      if (cleaned.length === 0) return { createdCount: 0 };
+      const created = await tx.telecallerPincodeAssignment.createMany({ data: cleaned });
+      return { createdCount: created.count };
+    });
+
+    return res.json({
+      success: true,
+      message: 'Pincode assignments updated',
+      data: { count: result.createdCount },
+    });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        message: 'Conflict: pincode already assigned to another telecaller',
+      });
+    }
+    console.error('❌ upsertTelecallerPincodes error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to save assignments',
+    });
+  }
+};
+
