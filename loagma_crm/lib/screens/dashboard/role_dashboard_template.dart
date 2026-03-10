@@ -92,7 +92,7 @@ class RoleDashboardTemplate extends StatelessWidget {
           ),
 
           SidebarItem(
-            "SR Area Allotment",
+            "Task Assignment",
             Icons.map_outlined, // visually represents allotment/area
             "/dashboard/admin/task-assignment",
           ),
@@ -213,7 +213,7 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/telecaller/account/master",
           ),
           SidebarItem(
-            "Manage Accounts",
+            "To Verify Accounts",
             Icons.manage_accounts_outlined,
             "/dashboard/telecaller/account/all",
           ),

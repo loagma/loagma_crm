@@ -35,10 +35,16 @@ class _TelecallerAssignedPincodesScreenState
       for (final row in data) {
         final map = Map<String, dynamic>.from(row as Map);
         final pin = (map['pincode'] ?? '').toString();
-        final int day = (map['dayOfWeek'] ?? 0) as int;
+        final dynamic rawDay = map['dayOfWeek'];
+        final int day = switch (rawDay) {
+          int v => v,
+          String v => int.tryParse(v) ?? 0,
+          num v => v.toInt(),
+          _ => 0,
+        };
         if (pin.isEmpty) continue;
         grouped.putIfAbsent(pin, () => []);
-        if (day >= 0 && day <= 7 && !grouped[pin]!.contains(day)) {
+        if (day >= 1 && day <= 7 && !grouped[pin]!.contains(day)) {
           grouped[pin]!.add(day);
         }
       }

@@ -3,12 +3,22 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 import '../../services/map_task_assignment_service.dart';
 import '../../services/google_places_service.dart';
 import '../../models/shop_model.dart';
 import '../../models/place_model.dart';
 import '../../widgets/place_details_widget.dart';
+import '../../services/user_service.dart';
+import '../../services/account_service.dart';
+import '../../models/account_model.dart';
+import '../../services/api_config.dart';
+import '../../services/network_service.dart';
 import 'assignment_map_detail_screen.dart';
+
+enum AssignmentRole { salesman, telecaller }
 
 class ModernTaskAssignmentScreen extends StatefulWidget {
   final int? initialStep;
@@ -24,6 +34,9 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     with SingleTickerProviderStateMixin {
   final _service = MapTaskAssignmentService();
   late TabController _tabController;
+
+  // Role toggle: default to salesman (existing behavior)
+  AssignmentRole _assignmentRole = AssignmentRole.salesman;
 
   // Step tracking
   int _currentStep = 0;
@@ -53,6 +66,24 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   bool _mapHelpShown = false;
   bool _isFilterExpanded = true; // Add filter collapse state
   Set<String> _expandedPincodes = {}; // Track which pincodes are expanded
+
+  // Telecaller pincode assignment state
+  bool _isLoadingTelecaller = false;
+  String? _telecallerError;
+  List<Map<String, dynamic>> _telecallers = [];
+  List<String> _telecallerPincodes = [];
+  String? _selectedTelecallerId;
+  // Per-day assignments: day (1-7) -> set of pincodes
+  final Map<int, Set<String>> _pincodesByDay = {
+    1: <String>{},
+    2: <String>{},
+    3: <String>{},
+    4: <String>{},
+    5: <String>{},
+    6: <String>{},
+    7: <String>{},
+  };
+  int _selectedTelecallerDay = DateTime.now().weekday.clamp(1, 7);
 
   // Place details overlay state (for Google Maps-like interface)
   PlaceInfo? _selectedPlace;
@@ -835,7 +866,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         backgroundColor: primaryColor,
         elevation: 0,
         actions: [
-          if (_selectedSalesmanName != null)
+          if (_assignmentRole == AssignmentRole.salesman &&
+              _selectedSalesmanName != null)
             Container(
               margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -884,8 +916,45 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   Widget _buildAssignTab() {
     return Column(
       children: [
-        // Progress indicator
-        Container(
+        // Role toggle
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ChoiceChip(
+                label: const Text('Salesman'),
+                selected: _assignmentRole == AssignmentRole.salesman,
+                onSelected: (_) {
+                  setState(() {
+                    _assignmentRole = AssignmentRole.salesman;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Telecaller'),
+                selected: _assignmentRole == AssignmentRole.telecaller,
+                onSelected: (_) {
+                  setState(() {
+                    _assignmentRole = AssignmentRole.telecaller;
+                  });
+                  if (_assignmentRole == AssignmentRole.telecaller &&
+                      _telecallers.isEmpty &&
+                      !_isLoadingTelecaller) {
+                    _loadTelecallerData();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        if (_assignmentRole == AssignmentRole.telecaller)
+          // Telecaller pincode/day assignment view
+          Expanded(child: _buildTelecallerAssignmentBody())
+        else ...[
+          // Progress indicator
+          Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
           child: Row(
@@ -1003,6 +1072,323 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           ),
         ),
       ],
+      ],
+    );
+  }
+
+  // ---------------- Telecaller assignment helpers ----------------
+
+  Future<void> _loadTelecallerData() async {
+    setState(() {
+      _isLoadingTelecaller = true;
+      _telecallerError = null;
+    });
+    try {
+      // Load all users and filter telecallers
+      final usersResult = await UserService.getAllUsers();
+      final users =
+          List<Map<String, dynamic>>.from(usersResult['data'] ?? const []);
+      final telecallers = users.where((u) {
+        final role =
+            (u['role'] ?? u['roleId'] ?? '').toString().toLowerCase();
+        return role.contains('telecaller');
+      }).toList();
+
+      // Load accounts and extract distinct pincodes
+      final accountsResult =
+          await AccountService.fetchAccounts(page: 1, limit: 500);
+      final accounts =
+          List<Account>.from(accountsResult['accounts'] ?? const []);
+      final pincodeSet = <String>{};
+      for (final acc in accounts) {
+        final pin = acc.pincode?.trim();
+        if (pin != null && pin.isNotEmpty) {
+          pincodeSet.add(pin);
+        }
+      }
+      final pincodes = pincodeSet.toList()..sort();
+
+      if (!mounted) return;
+      setState(() {
+        _telecallers = telecallers.cast<Map<String, dynamic>>();
+        _telecallerPincodes = pincodes;
+        if (_telecallers.isNotEmpty) {
+          _selectedTelecallerId =
+              _telecallers.first['id'] ?? _telecallers.first['_id'];
+        }
+        // reset per-day state
+        for (var d = 1; d <= 7; d++) {
+          _pincodesByDay[d] = <String>{};
+        }
+      });
+
+      // Load summary for default telecaller
+      if (_selectedTelecallerId != null) {
+        await _loadTelecallerAssignmentsSummary(_selectedTelecallerId!);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _telecallerError = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingTelecaller = false;
+        });
+      }
+    }
+  }
+
+  void _toggleTelecallerPincode(String pin) {
+    final current = _pincodesByDay[_selectedTelecallerDay] ?? <String>{};
+    setState(() {
+      if (current.contains(pin)) {
+        current.remove(pin);
+      } else {
+        current.add(pin);
+      }
+      _pincodesByDay[_selectedTelecallerDay] = current;
+    });
+  }
+
+  Future<void> _loadTelecallerAssignmentsSummary(String telecallerId) async {
+    try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final uri = Uri.parse(
+        '${ApiConfig.teleadminUrl}/telecallers/$telecallerId/pincode-assignments/summary',
+      );
+
+      final response = await NetworkService.retryApiCall(
+        () => http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 15)),
+        maxRetries: 1,
+        delay: const Duration(seconds: 2),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        final Map<String, dynamic> summary =
+            Map<String, dynamic>.from(data['data'] ?? {});
+        if (!mounted) return;
+        setState(() {
+          for (var d = 1; d <= 7; d++) {
+            final key = d.toString();
+            final entry = summary[key];
+            if (entry != null) {
+              final pins = List<String>.from(entry['pincodes'] ?? const []);
+              _pincodesByDay[d] = pins.toSet();
+            } else {
+              _pincodesByDay[d] = <String>{};
+            }
+          }
+        });
+      }
+    } catch (_) {
+      // Silent fail: if this call fails, we just won't pre-select anything
+    }
+  }
+
+  Future<void> _saveTelecallerAssignments() async {
+    if (_selectedTelecallerId == null) {
+      Fluttertoast.showToast(
+        msg: 'Select a telecaller',
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
+    final currentPins = _pincodesByDay[_selectedTelecallerDay]?.toList() ?? [];
+
+    try {
+      final token = UserService.token;
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final body = {
+        'pincodes': currentPins,
+      };
+
+      final uri = Uri.parse(
+        '${ApiConfig.teleadminUrl}/telecallers/$_selectedTelecallerId/pincode-assignments/day/$_selectedTelecallerDay',
+      );
+
+      final response = await NetworkService.retryApiCall(
+        () => http
+            .put(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 15)),
+        maxRetries: 1,
+        delay: const Duration(seconds: 2),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        if (!mounted) return;
+        Fluttertoast.showToast(
+          msg:
+              'Assignments saved for day $_selectedTelecallerDay. Total: ${data['data']?['count'] ?? currentPins.length}',
+          backgroundColor: primaryColor,
+        );
+      } else {
+        throw Exception(data['message'] ?? 'Failed to save assignments');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Fluttertoast.showToast(
+        msg: 'Failed to save assignments: $e',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  Widget _buildTelecallerDayChip(int day, String label) {
+    final selected = _selectedTelecallerDay == day;
+    final count = _pincodesByDay[day]?.length ?? 0;
+    final text = count > 0 ? '$label ($count)' : label;
+    return FilterChip(
+      label: Text(text),
+      selected: selected,
+      onSelected: (_) {
+        setState(() {
+          _selectedTelecallerDay = day;
+        });
+      },
+      selectedColor: primaryColor.withOpacity(0.2),
+      checkmarkColor: primaryColor,
+    );
+  }
+
+  Widget _buildTelecallerAssignmentBody() {
+    if (_isLoadingTelecaller) {
+      return const Center(
+        child: CircularProgressIndicator(color: primaryColor),
+      );
+    }
+
+    if (_telecallerError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _telecallerError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            value: _selectedTelecallerId,
+            decoration: const InputDecoration(
+              labelText: 'Telecaller',
+              border: OutlineInputBorder(),
+            ),
+            items: _telecallers
+                .map(
+                  (u) => DropdownMenuItem<String>(
+                    value: u['id'] ?? u['_id'],
+                    child: Text(u['name'] ?? 'Unknown'),
+                  ),
+                )
+                .toList(),
+            onChanged: (val) async {
+              setState(() {
+                _selectedTelecallerId = val;
+                // reset per-day state when telecaller changes
+                for (var d = 1; d <= 7; d++) {
+                  _pincodesByDay[d] = <String>{};
+                }
+              });
+              if (val != null) {
+                await _loadTelecallerAssignmentsSummary(val);
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Days',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              _buildTelecallerDayChip(1, 'Mon'),
+              _buildTelecallerDayChip(2, 'Tue'),
+              _buildTelecallerDayChip(3, 'Wed'),
+              _buildTelecallerDayChip(4, 'Thu'),
+              _buildTelecallerDayChip(5, 'Fri'),
+              _buildTelecallerDayChip(6, 'Sat'),
+              _buildTelecallerDayChip(7, 'Sun'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Pincodes',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _telecallerPincodes.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No pincodes found. Create some accounts first.',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _telecallerPincodes.length,
+                    itemBuilder: (context, index) {
+                      final pin = _telecallerPincodes[index];
+                      final selected =
+                          _pincodesByDay[_selectedTelecallerDay]
+                              ?.contains(pin) ??
+                          false;
+                      return CheckboxListTile(
+                        value: selected,
+                        title: Text(pin),
+                        onChanged: (_) => _toggleTelecallerPincode(pin),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _saveTelecallerAssignments,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                'Save ${_selectedTelecallerDay == 1 ? 'Mon' : _selectedTelecallerDay == 2 ? 'Tue' : _selectedTelecallerDay == 3 ? 'Wed' : _selectedTelecallerDay == 4 ? 'Thu' : _selectedTelecallerDay == 5 ? 'Fri' : _selectedTelecallerDay == 6 ? 'Sat' : 'Sun'} Assignments',
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -20,7 +20,7 @@ export const getMyPincodeAssignments = async (req, res) => {
     }
 
     const rows = await prisma.telecallerPincodeAssignment.findMany({
-      where: { telecallerId, isActive: true },
+      where: { telecallerId },
       orderBy: [{ pincode: 'asc' }, { dayOfWeek: 'asc' }],
     });
 
@@ -45,7 +45,7 @@ export const getTelecallerPincodeAssignments = async (req, res) => {
 
     const { id } = req.params;
     const assignments = await prisma.telecallerPincodeAssignment.findMany({
-      where: { telecallerId: id, isActive: true },
+      where: { telecallerId: id },
       orderBy: [{ pincode: 'asc' }, { dayOfWeek: 'asc' }],
     });
 
@@ -79,20 +79,49 @@ export const upsertTelecallerPincodeAssignments = async (req, res) => {
       });
     }
 
-    // Soft-disable existing assignments for this telecaller
-    await prisma.telecallerPincodeAssignment.updateMany({
-      where: { telecallerId: id, isActive: true },
-      data: { isActive: false },
-    });
-
+    // Normalize + validate + de-duplicate incoming payload
+    const dedup = new Set();
     const cleaned = [];
     for (const item of assignments) {
       const pinRaw = String(item.pincode || '').trim();
-      const day = Number(item.dayOfWeek ?? 0);
+      const day = Number(item.dayOfWeek);
       if (!/^\d{6}$/.test(pinRaw)) continue;
-      if (!Number.isInteger(day) || day < 0 || day > 7) continue;
+      // Tele Admin UI sends 1=Mon..7=Sun (we disallow 0 here for clarity)
+      if (!Number.isInteger(day) || day < 1 || day > 7) continue;
+      const key = `${pinRaw}-${day}`;
+      if (dedup.has(key)) continue;
+      dedup.add(key);
       cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: day });
     }
+
+    // Conflict detection (same pincode+day already assigned to another telecaller)
+    if (cleaned.length > 0) {
+      const orPairs = cleaned.map((a) => ({ pincode: a.pincode, dayOfWeek: a.dayOfWeek }));
+      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
+        where: {
+          telecallerId: { not: id },
+          OR: orPairs,
+        },
+        select: { telecallerId: true, pincode: true, dayOfWeek: true },
+        orderBy: [{ pincode: 'asc' }, { dayOfWeek: 'asc' }],
+      });
+
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'Some pincodes are already assigned to another telecaller for the same day',
+          conflicts,
+        });
+      }
+    }
+
+    // Replace-all semantics, but done transactionally.
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.telecallerPincodeAssignment.deleteMany({ where: { telecallerId: id } });
+      if (cleaned.length === 0) return { createdCount: 0 };
+      const created = await tx.telecallerPincodeAssignment.createMany({ data: cleaned });
+      return { createdCount: created.count };
+    });
 
     if (cleaned.length === 0) {
       return res.json({
@@ -102,20 +131,149 @@ export const upsertTelecallerPincodeAssignments = async (req, res) => {
       });
     }
 
-    const created = await prisma.telecallerPincodeAssignment.createMany({
-      data: cleaned,
-    });
-
     return res.json({
       success: true,
       message: 'Assignments updated',
-      data: { count: created.count },
+      data: { count: result.createdCount },
     });
   } catch (error) {
+    // Prisma unique constraint violation (e.g., race condition) → treat as conflict
+    if (error?.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        message: 'Conflict: pincode already assigned to another telecaller for the same day',
+      });
+    }
     console.error('❌ upsertTelecallerPincodeAssignments error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to save assignments',
+    });
+  }
+};
+
+// GET /teleadmin/telecallers/:id/pincode-assignments/summary
+// Returns per-day counts and pincode lists for a telecaller
+export const getTelecallerPincodeAssignmentsSummary = async (req, res) => {
+  try {
+    if (!isTeleAdmin(req.user)) {
+      return res
+        .status(403)
+        .json({ success: false, message: 'Only Tele Admin / Admin can view assignments' });
+    }
+
+    const { id } = req.params;
+
+    const rows = await prisma.telecallerPincodeAssignment.findMany({
+      where: { telecallerId: id },
+      orderBy: [{ dayOfWeek: 'asc' }, { pincode: 'asc' }],
+    });
+
+    const summary = {};
+    for (const row of rows) {
+      const day = row.dayOfWeek;
+      if (!summary[day]) {
+        summary[day] = { count: 0, pincodes: [] };
+      }
+      if (!summary[day].pincodes.includes(row.pincode)) {
+        summary[day].pincodes.push(row.pincode);
+        summary[day].count += 1;
+      }
+    }
+
+    return res.json({ success: true, data: summary });
+  } catch (error) {
+    console.error('❌ getTelecallerPincodeAssignmentsSummary error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to load assignments summary',
+    });
+  }
+};
+
+// PUT /teleadmin/telecallers/:id/pincode-assignments/day/:day
+// Body: { pincodes: string[] }
+export const upsertTelecallerPincodeAssignmentsForDay = async (req, res) => {
+  try {
+    if (!isTeleAdmin(req.user)) {
+      return res
+        .status(403)
+        .json({ success: false, message: 'Only Tele Admin / Admin can update assignments' });
+    }
+
+    const { id, day } = req.params;
+    const numericDay = Number(day);
+    if (!Number.isInteger(numericDay) || numericDay < 1 || numericDay > 7) {
+      return res.status(400).json({
+        success: false,
+        message: 'day must be an integer between 1 and 7',
+      });
+    }
+
+    const { pincodes } = req.body || {};
+    if (!Array.isArray(pincodes)) {
+      return res.status(400).json({
+        success: false,
+        message: 'pincodes must be an array of 6-digit strings',
+      });
+    }
+
+    const dedupPins = new Set();
+    const cleaned = [];
+    for (const raw of pincodes) {
+      const pinRaw = String(raw || '').trim();
+      if (!/^\d{6}$/.test(pinRaw)) continue;
+      if (dedupPins.has(pinRaw)) continue;
+      dedupPins.add(pinRaw);
+      cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: numericDay });
+    }
+
+    // Conflict detection with other telecallers for same (pincode, dayOfWeek)
+    if (cleaned.length > 0) {
+      const orPairs = cleaned.map((a) => ({ pincode: a.pincode, dayOfWeek: a.dayOfWeek }));
+      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
+        where: {
+          telecallerId: { not: id },
+          OR: orPairs,
+        },
+        select: { telecallerId: true, pincode: true, dayOfWeek: true },
+        orderBy: [{ pincode: 'asc' }],
+      });
+
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'Some pincodes are already assigned to another telecaller for this day',
+          conflicts,
+        });
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.telecallerPincodeAssignment.deleteMany({
+        where: { telecallerId: id, dayOfWeek: numericDay },
+      });
+      if (cleaned.length === 0) return { createdCount: 0 };
+      const created = await tx.telecallerPincodeAssignment.createMany({ data: cleaned });
+      return { createdCount: created.count };
+    });
+
+    return res.json({
+      success: true,
+      message: 'Day assignments updated',
+      data: { count: result.createdCount },
+    });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        message: 'Conflict: pincode already assigned to another telecaller for this day',
+      });
+    }
+    console.error('❌ upsertTelecallerPincodeAssignmentsForDay error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to save day assignments',
     });
   }
 };

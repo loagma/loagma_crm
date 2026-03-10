@@ -21,6 +21,8 @@ model State {
   employeeAreas EmployeeArea[]
   regions       Region[]
   country       Country        @relation(fields: [country_id], references: [country_id], onDelete: Cascade)
+
+  @@index([country_id], map: "State_country_id_fkey")
 }
 
 model Region {
@@ -30,6 +32,8 @@ model Region {
   districts     District[]
   employeeAreas EmployeeArea[]
   state         State          @relation(fields: [state_id], references: [state_id], onDelete: Cascade)
+
+  @@index([state_id], map: "Region_state_id_fkey")
 }
 
 model District {
@@ -39,6 +43,8 @@ model District {
   cities        City[]
   region        Region         @relation(fields: [region_id], references: [region_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
+
+  @@index([region_id], map: "District_region_id_fkey")
 }
 
 model City {
@@ -48,6 +54,8 @@ model City {
   district      District       @relation(fields: [district_id], references: [district_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
   zones         Zone[]
+
+  @@index([district_id], map: "City_district_id_fkey")
 }
 
 model Zone {
@@ -57,6 +65,8 @@ model Zone {
   areas         Area[]
   employeeAreas EmployeeArea[]
   city          City           @relation(fields: [city_id], references: [city_id], onDelete: Cascade)
+
+  @@index([city_id], map: "Zone_city_id_fkey")
 }
 
 model Area {
@@ -66,6 +76,8 @@ model Area {
   accounts      Account[]
   zone          Zone           @relation(fields: [zone_id], references: [zone_id], onDelete: Cascade)
   employeeAreas EmployeeArea[]
+
+  @@index([zone_id], map: "Area_zone_id_fkey")
 }
 
 model Department {
@@ -83,78 +95,72 @@ model Role {
 }
 
 model User {
-  id                 String        @id
-  employeeCode       String?       @unique
-  name               String?
-  email              String?       @unique
-  contactNumber      String        @unique
-  alternativeNumber  String?
-  roleId             String?
-  roles              Json?
-  departmentId       String?
-  otp                String?
-  otpExpiry          DateTime?
-  lastLogin          DateTime?
-  isActive           Boolean       @default(true)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  dateOfBirth        DateTime?
-  gender             String?
-  image              String?
-  preferredLanguages Json?
-  address            String?
-  city               String?
-  state              String?
-  pincode            String?
-  country            String?
-  district           String?
-  area               String?
-  latitude           Float?
-  longitude          Float?
-  aadharCard         String?
-  panCard            String?
-  password           String?
-  notes              String?
-  
-  // Working Hours Configuration (added via migration - DO NOT UNCOMMENT until migration is run)
-  workStartTime              String?   @default("09:00:00") // Work start time (HH:MM:SS format)
-  workEndTime                String?   @default("18:00:00") // Work end time (HH:MM:SS format)
-  latePunchInGraceMinutes    Int?      @default(45)         // Minutes after work start time before requiring approval
-  earlyPunchOutGraceMinutes  Int?      @default(30)         // Minutes before work end time that require approval
-  
-  assignedAccounts   Account[]           @relation("AccountAssignedTo")
-  createdAccounts    Account[]           @relation("AccountCreatedBy")
-  approvedAccounts   Account[]           @relation("AccountApprovedBy")
-  employeeArea       EmployeeArea?
-  salaryInformation  SalaryInformation?
-  expenses           Expense[]           @relation("EmployeeExpenses")
-  approvedExpenses   Expense[]           @relation("ApprovedExpenses")
-  department         Department?         @relation(fields: [departmentId], references: [id])
-  role               Role?               @relation(fields: [roleId], references: [id])
-  areaAssignments    AreaAssignment[]
-  notifications      Notification[]      // Notifications targeted to this user
-  lateApprovalRequests LatePunchApproval[] @relation("EmployeeLateApprovals") // Late punch-in requests by this employee
-  approvedLateRequests LatePunchApproval[] @relation("AdminLateApprovals") // Late punch-in requests approved by this admin
-  earlyPunchOutRequests EarlyPunchOutApproval[] @relation("EmployeeEarlyPunchOutApprovals") // Early punch-out requests by this employee
-  approvedEarlyPunchOutRequests EarlyPunchOutApproval[] @relation("AdminEarlyPunchOutApprovals") // Early punch-out requests approved by this admin
-  leaveRequests Leave[] @relation("EmployeeLeaves") // Leave requests by this employee
-  approvedLeaves Leave[] @relation("ApprovedLeaves") // Leave requests approved by this admin
-  leaveBalance LeaveBalance? // Leave balance for this employee
-  
-  // Beat Planning Relations
-  salesmanBeatPlans WeeklyBeatPlan[] @relation("SalesmanBeatPlans") // Beat plans assigned to this salesman
-  generatedBeatPlans WeeklyBeatPlan[] @relation("GeneratedBeatPlans") // Beat plans generated by this admin
-  approvedBeatPlans WeeklyBeatPlan[] @relation("ApprovedBeatPlans") // Beat plans approved by this admin
-  lockedBeatPlans WeeklyBeatPlan[] @relation("LockedBeatPlans") // Beat plans locked by this admin
-  completedBeats BeatCompletion[] @relation("CompletedBeats") // Beat completions by this salesman
-  verifiedBeats BeatCompletion[] @relation("VerifiedBeats") // Beat completions verified by this admin
+  id                            String                        @id
+  employeeCode                  String?                       @unique
+  name                          String?
+  email                         String?                       @unique
+  contactNumber                 String                        @unique
+  alternativeNumber             String?
+  roleId                        String?
+  roles                         Json?
+  departmentId                  String?
+  otp                           String?
+  otpExpiry                     DateTime?
+  lastLogin                     DateTime?
+  isActive                      Boolean                       @default(true)
+  createdAt                     DateTime                      @default(now())
+  updatedAt                     DateTime                      @updatedAt
+  dateOfBirth                   DateTime?
+  gender                        String?
+  image                         String?
+  preferredLanguages            Json?
+  address                       String?
+  city                          String?
+  state                         String?
+  pincode                       String?
+  country                       String?
+  district                      String?
+  area                          String?
+  latitude                      Float?
+  longitude                     Float?
+  aadharCard                    String?
+  panCard                       String?
+  password                      String?
+  notes                         String?
+  workStartTime                 String?                       @default("09:00:00")
+  workEndTime                   String?                       @default("18:00:00")
+  latePunchInGraceMinutes       Int?                          @default(45)
+  earlyPunchOutGraceMinutes     Int?                          @default(30)
+  approvedAccounts              Account[]                     @relation("AccountApprovedBy")
+  assignedAccounts              Account[]                     @relation("AccountAssignedTo")
+  createdAccounts               Account[]                     @relation("AccountCreatedBy")
+  areaAssignments               AreaAssignment[]
+  completedBeats                BeatCompletion[]              @relation("CompletedBeats")
+  verifiedBeats                 BeatCompletion[]              @relation("VerifiedBeats")
+  approvedEarlyPunchOutRequests EarlyPunchOutApproval[]       @relation("AdminEarlyPunchOutApprovals")
+  earlyPunchOutRequests         EarlyPunchOutApproval[]       @relation("EmployeeEarlyPunchOutApprovals")
+  employeeArea                  EmployeeArea?
+  approvedExpenses              Expense[]                     @relation("ApprovedExpenses")
+  expenses                      Expense[]                     @relation("EmployeeExpenses")
+  approvedLateRequests          LatePunchApproval[]           @relation("AdminLateApprovals")
+  lateApprovalRequests          LatePunchApproval[]           @relation("EmployeeLateApprovals")
+  approvedLeaves                Leave[]                       @relation("ApprovedLeaves")
+  leaveRequests                 Leave[]                       @relation("EmployeeLeaves")
+  leaveBalance                  LeaveBalance?
+  notifications                 Notification[]
+  salaryInformation             SalaryInformation?
+  trackingPoints                SalesmanTrackingPoint[]       @relation("EmployeeTrackingPoints")
+  telecallerLogs                TelecallerCallLog[]
+  telecallerPincodeAssignments  TelecallerPincodeAssignment[] @relation("TelecallerPincodeAssignments")
+  department                    Department?                   @relation(fields: [departmentId], references: [id])
+  role                          Role?                         @relation(fields: [roleId], references: [id])
+  approvedBeatPlans             WeeklyBeatPlan[]              @relation("ApprovedBeatPlans")
+  generatedBeatPlans            WeeklyBeatPlan[]              @relation("GeneratedBeatPlans")
+  lockedBeatPlans               WeeklyBeatPlan[]              @relation("LockedBeatPlans")
+  salesmanBeatPlans             WeeklyBeatPlan[]              @relation("SalesmanBeatPlans")
 
-  // Live Tracking Relations
-  trackingPoints SalesmanTrackingPoint[] @relation("EmployeeTrackingPoints")
-
-  // Telecaller call logs
-  telecallerLogs TelecallerCallLog[]
-  telecallerPincodeAssignments TelecallerPincodeAssignment[] @relation("TelecallerPincodeAssignments")
+  @@index([departmentId], map: "User_departmentId_fkey")
+  @@index([roleId], map: "User_roleId_fkey")
 }
 
 model EmployeeArea {
@@ -177,82 +183,83 @@ model EmployeeArea {
   region      Region?   @relation(fields: [region_id], references: [region_id])
   state       State?    @relation(fields: [state_id], references: [state_id])
   zone        Zone?     @relation(fields: [zone_id], references: [zone_id])
+
+  @@index([area_id], map: "EmployeeArea_area_id_fkey")
+  @@index([city_id], map: "EmployeeArea_city_id_fkey")
+  @@index([country_id], map: "EmployeeArea_country_id_fkey")
+  @@index([district_id], map: "EmployeeArea_district_id_fkey")
+  @@index([region_id], map: "EmployeeArea_region_id_fkey")
+  @@index([state_id], map: "EmployeeArea_state_id_fkey")
+  @@index([zone_id], map: "EmployeeArea_zone_id_fkey")
 }
 
 model Account {
-  id                    String    @id
-  accountCode           String    @unique
-  businessName          String?   // Made optional to handle existing data
-  businessType          String?
-  businessSize          String?   // New field: Semi Retailer, Retailer, Semi Wholesaler, Wholesaler, Home Buyer
-  personName            String
-  contactNumber         String
-  dateOfBirth           DateTime?
-  customerStage         String?
-  funnelStage           String?
-  gstNumber             String?
-  panCard               String?
-  ownerImage            String?   // URL to business owner personal image
-  shopImage             String?   // URL to shop image
-  isActive              Boolean   @default(true)
-  
-  // Location fields (pincode-based)
-  pincode               String?
-  country               String?
-  state                 String?
-  district              String?
-  city                  String?
-  area                  String?
-  address               String?   // Manual address field
-  latitude              Float?    // Geolocation latitude
-  longitude             Float?    // Geolocation longitude
-  
-  // Legacy area relation (kept for backward compatibility)
-  areaId                Int?
-  
-  // Assignment and approval
-  assignedToId          String?
-  assignedDays          Json?    // JSON array of days: [1..7] for beat days
-  createdById           String?
-  approvedById          String?
-  approvedAt            DateTime?
-  isApproved            Boolean   @default(false)
-  verificationNotes     String?   // Notes from telecaller when verifying
-  rejectionNotes        String?   // Notes when rejecting (optional)
-  
-  // Timestamps
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  
-  // Relations
-  areaRelation          Area?     @relation(fields: [areaId], references: [area_id])
-  assignedTo            User?     @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
-  createdBy             User?     @relation("AccountCreatedBy", fields: [createdById], references: [id])
-  approvedBy            User?     @relation("AccountApprovedBy", fields: [approvedById], references: [id])
-  callLogs              TelecallerCallLog[]
-  
+  id                String              @id
+  accountCode       String              @unique
+  businessName      String?
+  businessType      String?
+  businessSize      String?
+  personName        String
+  contactNumber     String
+  dateOfBirth       DateTime?
+  customerStage     String?
+  funnelStage       String?
+  gstNumber         String?
+  panCard           String?
+  ownerImage        String?
+  shopImage         String?
+  isActive          Boolean             @default(true)
+  pincode           String?
+  country           String?
+  state             String?
+  district          String?
+  city              String?
+  area              String?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  areaId            Int?
+  assignedToId      String?
+  assignedDays      Json?
+  createdById       String?
+  approvedById      String?
+  approvedAt        DateTime?
+  isApproved        Boolean             @default(false)
+  verificationNotes String?
+  rejectionNotes    String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  approvedBy        User?               @relation("AccountApprovedBy", fields: [approvedById], references: [id])
+  areaRelation      Area?               @relation(fields: [areaId], references: [area_id])
+  assignedTo        User?               @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
+  createdBy         User?               @relation("AccountCreatedBy", fields: [createdById], references: [id])
+  callLogs          TelecallerCallLog[]
+
   @@index([pincode])
   @@index([isActive])
   @@index([customerStage])
   @@index([createdAt])
   @@index([businessType])
   @@index([businessSize])
+  @@index([approvedById], map: "Account_approvedById_fkey")
+  @@index([areaId], map: "Account_areaId_fkey")
+  @@index([assignedToId], map: "Account_assignedToId_fkey")
+  @@index([createdById], map: "Account_createdById_fkey")
 }
 
 model TelecallerCallLog {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   accountId      String
   telecallerId   String
-  calledAt       DateTime @default(now())
+  calledAt       DateTime  @default(now())
   durationSec    Int?
   status         String
   notes          String?
   recordingUrl   String?
   nextFollowupAt DateTime?
   followupNotes  String?
-
-  account    Account @relation(fields: [accountId], references: [id])
-  telecaller User    @relation(fields: [telecallerId], references: [id])
+  account        Account   @relation(fields: [accountId], references: [id])
+  telecaller     User      @relation(fields: [telecallerId], references: [id])
 
   @@index([telecallerId, calledAt])
   @@index([accountId, calledAt])
@@ -269,43 +276,41 @@ model TelecallerPincodeAssignment {
   /// 0 = all days, 1 = Monday .. 7 = Sunday
   dayOfWeek    Int
   isActive     Boolean  @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  telecaller User @relation("TelecallerPincodeAssignments", fields: [telecallerId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  telecaller   User     @relation("TelecallerPincodeAssignments", fields: [telecallerId], references: [id])
 
   @@index([telecallerId])
   @@index([pincode, dayOfWeek])
 }
 
 model SalaryInformation {
-  id                    String    @id @default(cuid())
-  employeeId            String    @unique
-  basicSalary           Float
-  hra                   Float?    @default(0)
-  travelAllowance       Float?    @default(0)
-  dailyAllowance        Float?    @default(0)
-  medicalAllowance      Float?    @default(0)
-  specialAllowance      Float?    @default(0)
-  otherAllowances       Float?    @default(0)
-  providentFund         Float?    @default(0)
-  professionalTax       Float?    @default(0)
-  incomeTax             Float?    @default(0)
-  otherDeductions       Float?    @default(0)
-  effectiveFrom         DateTime
-  effectiveTo           DateTime?
-  currency              String    @default("INR")
-  paymentFrequency      String    @default("Monthly")
-  bankName              String?
-  accountNumber         String?
-  ifscCode              String?
-  panNumber             String?
-  remarks               String?
-  isActive              Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  employee              User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  employeeId       String    @unique
+  basicSalary      Float
+  hra              Float?    @default(0)
+  travelAllowance  Float?    @default(0)
+  dailyAllowance   Float?    @default(0)
+  medicalAllowance Float?    @default(0)
+  specialAllowance Float?    @default(0)
+  otherAllowances  Float?    @default(0)
+  providentFund    Float?    @default(0)
+  professionalTax  Float?    @default(0)
+  incomeTax        Float?    @default(0)
+  otherDeductions  Float?    @default(0)
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  currency         String    @default("INR")
+  paymentFrequency String    @default("Monthly")
+  bankName         String?
+  accountNumber    String?
+  ifscCode         String?
+  panNumber        String?
+  remarks          String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  employee         User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@index([effectiveFrom])
@@ -315,13 +320,13 @@ model SalaryInformation {
 model Expense {
   id              String    @id @default(cuid())
   employeeId      String
-  expenseType     String    // Travel, Food, Accommodation, Fuel, Other
+  expenseType     String
   amount          Float
   expenseDate     DateTime
   description     String?
   billNumber      String?
-  attachmentUrl   String?   // For bill/receipt image
-  status          String    @default("Pending") // Pending, Approved, Rejected, Paid
+  attachmentUrl   String?
+  status          String    @default("Pending")
   approvedBy      String?
   approvedAt      DateTime?
   rejectionReason String?
@@ -329,17 +334,18 @@ model Expense {
   remarks         String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  employee        User      @relation("EmployeeExpenses", fields: [employeeId], references: [id], onDelete: Cascade)
   approver        User?     @relation("ApprovedExpenses", fields: [approvedBy], references: [id])
+  employee        User      @relation("EmployeeExpenses", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@index([status])
   @@index([expenseDate])
   @@index([expenseType])
+  @@index([approvedBy], map: "Expense_approvedBy_fkey")
 }
 
 model TaskAssignment {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   salesmanId      String
   salesmanName    String
   pincode         String
@@ -347,12 +353,12 @@ model TaskAssignment {
   state           String?
   district        String?
   city            String?
-  areas           Json?     // JSON array of area names
-  businessTypes   Json?     // JSON array of business types: grocery, cafe, hotel, etc.
-  totalBusinesses Int?      @default(0)
-  assignedDate    DateTime  @default(now())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  areas           Json?
+  businessTypes   Json?
+  totalBusinesses Int?     @default(0)
+  assignedDate    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([salesmanId])
   @@index([pincode])
@@ -361,9 +367,9 @@ model TaskAssignment {
 
 model Shop {
   id              String    @id @default(cuid())
-  placeId         String?   @unique // Google Places ID
+  placeId         String?   @unique
   name            String
-  businessType    String    // grocery, cafe, hotel, dairy, restaurant, bakery, pharmacy, supermarket, others
+  businessType    String
   address         String?
   pincode         String
   area            String?
@@ -374,8 +380,8 @@ model Shop {
   longitude       Float?
   phoneNumber     String?
   rating          Float?
-  stage           String    @default("new") // new, follow-up, converted, lost
-  assignedTo      String?   // Salesman ID
+  stage           String    @default("new")
+  assignedTo      String?
   notes           String?
   lastContactDate DateTime?
   createdAt       DateTime  @default(now())
@@ -389,49 +395,35 @@ model Shop {
 }
 
 model Attendance {
-  id                  String    @id @default(cuid())
-  employeeId          String
-  employeeName        String
-  date                DateTime  @default(now())
-  
-  // Punch In Details
-  punchInTime         DateTime
-  punchInLatitude     Float
-  punchInLongitude    Float
-  punchInPhoto        String?   @db.LongText // Base64 or URL (can be large)
-  punchInAddress      String?
-  bikeKmStart         String?   // Starting bike odometer reading
-  
-  // Punch Out Details
-  punchOutTime        DateTime?
-  punchOutLatitude    Float?
-  punchOutLongitude   Float?
-  punchOutPhoto       String?   @db.LongText // Base64 or URL (can be large)
-  punchOutAddress     String?
-  bikeKmEnd           String?   // Ending bike odometer reading
-  
-  // Calculated Fields
-  totalWorkHours      Float?    // In hours
-  totalDistanceKm     Float?    // Distance between punch in and punch out
-  status              String    @default("active") // active, completed
-  
-  // Late Punch-In Approval Fields
-  isLatePunchIn       Boolean   @default(false) // Whether this was a late punch-in
-  lateApprovalId      String?   // Reference to the approval request
-  approvalCode        String?   // The code used for late punch-in
-  
-  // Early Punch-Out Approval Fields
-  isEarlyPunchOut     Boolean   @default(false) // Whether this was an early punch-out
-  earlyPunchOutApprovalId String? // Reference to the early punch-out approval request
-  earlyPunchOutCode   String?   // The code used for early punch-out
-  
-  // Metadata
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                      String                  @id @default(cuid())
+  employeeId              String
+  employeeName            String
+  date                    DateTime                @default(now())
+  punchInTime             DateTime
+  punchInLatitude         Float
+  punchInLongitude        Float
+  punchInPhoto            String?                 @db.LongText
+  punchInAddress          String?
+  bikeKmStart             String?
+  punchOutTime            DateTime?
+  punchOutLatitude        Float?
+  punchOutLongitude       Float?
+  punchOutPhoto           String?                 @db.LongText
+  punchOutAddress         String?
+  bikeKmEnd               String?
+  totalWorkHours          Float?
+  totalDistanceKm         Float?
+  status                  String                  @default("active")
+  isLatePunchIn           Boolean                 @default(false)
+  lateApprovalId          String?
+  approvalCode            String?
+  isEarlyPunchOut         Boolean                 @default(false)
+  earlyPunchOutApprovalId String?
+  earlyPunchOutCode       String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  trackingPoints          SalesmanTrackingPoint[] @relation("AttendanceTrackingPoints")
 
-  // Live Tracking Relations
-  trackingPoints      SalesmanTrackingPoint[] @relation("AttendanceTrackingPoints")
-  
   @@index([employeeId])
   @@index([date])
   @@index([status])
@@ -440,18 +432,17 @@ model Attendance {
 }
 
 model SalesmanTrackingPoint {
-  id           String   @id @default(cuid())
-  clientPointId String?  @unique
-  employeeId   String
-  attendanceId String
-  latitude     Float
-  longitude    Float
-  speed        Float?
-  accuracy     Float?
-  recordedAt   DateTime @default(now())
-
-  employee     User       @relation("EmployeeTrackingPoints", fields: [employeeId], references: [id], onDelete: Cascade)
-  attendance   Attendance @relation("AttendanceTrackingPoints", fields: [attendanceId], references: [id], onDelete: Cascade)
+  id            String     @id @default(cuid())
+  clientPointId String?    @unique
+  employeeId    String
+  attendanceId  String
+  latitude      Float
+  longitude     Float
+  speed         Float?
+  accuracy      Float?
+  recordedAt    DateTime   @default(now())
+  attendance    Attendance @relation("AttendanceTrackingPoints", fields: [attendanceId], references: [id], onDelete: Cascade)
+  employee      User       @relation("EmployeeTrackingPoints", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@index([attendanceId])
@@ -460,22 +451,20 @@ model SalesmanTrackingPoint {
 }
 
 model AreaAssignment {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   salesmanId      String
   pinCode         String
   country         String
   state           String
   district        String
   city            String
-  areas           Json?     // JSON array of area names
-  businessTypes   Json?     // JSON array of business types to focus on
-  assignedDate    DateTime  @default(now())
-  totalBusinesses Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Relations
-  salesman        User      @relation(fields: [salesmanId], references: [id], onDelete: Cascade)
+  areas           Json?
+  businessTypes   Json?
+  assignedDate    DateTime @default(now())
+  totalBusinesses Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  salesman        User     @relation(fields: [salesmanId], references: [id], onDelete: Cascade)
 
   @@index([salesmanId])
   @@index([pinCode])
@@ -483,22 +472,20 @@ model AreaAssignment {
 }
 
 model Notification {
-  id          String    @id @default(cuid())
-  title       String
-  message     String
-  type        String    // punch_in, punch_out, general, alert, late_punch_approval
-  priority    String    @default("normal") // low, normal, high, urgent
-  targetRole  String?   // admin, salesman, telecaller, etc. (null means all)
-  targetUserId String?  // specific user (null means all users with targetRole)
-  data        Json?     // additional data (attendance info, etc.)
-  isRead      Boolean   @default(false)
-  readAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relations
-  targetUser  User?     @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
-  
+  id           String    @id @default(cuid())
+  title        String
+  message      String
+  type         String
+  priority     String    @default("normal")
+  targetRole   String?
+  targetUserId String?
+  data         Json?
+  isRead       Boolean   @default(false)
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  targetUser   User?     @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+
   @@index([targetRole])
   @@index([targetUserId])
   @@index([type])
@@ -506,239 +493,186 @@ model Notification {
   @@index([createdAt])
 }
 
-// NEW MODEL: Late Punch-In Approval Requests
 model LatePunchApproval {
-  id              String    @id @default(cuid())
-  employeeId      String    // Salesman requesting approval
-  employeeName    String    // Salesman name for easy reference
-  requestDate     DateTime  @default(now()) // Date of the request
-  punchInDate     DateTime  // Intended punch-in date
-  reason          String    // Reason for late punch-in
-  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
-  
-  // Admin response
-  approvedBy      String?   // Admin who approved/rejected
-  approvedAt      DateTime? // When the decision was made
-  adminRemarks    String?   // Admin's remarks/comments
-  approvalCode    String?   // Generated OTP/code for approved requests
-  codeExpiresAt   DateTime? // When the approval code expires
-  codeUsed        Boolean   @default(false) // Whether the code has been used
-  codeUsedAt      DateTime? // When the code was used for punch-in
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  employee        User      @relation("EmployeeLateApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
-  approver        User?     @relation("AdminLateApprovals", fields: [approvedBy], references: [id])
-  
+  id            String    @id @default(cuid())
+  employeeId    String
+  employeeName  String
+  requestDate   DateTime  @default(now())
+  punchInDate   DateTime
+  reason        String
+  status        String    @default("PENDING")
+  approvedBy    String?
+  approvedAt    DateTime?
+  adminRemarks  String?
+  approvalCode  String?
+  codeExpiresAt DateTime?
+  codeUsed      Boolean   @default(false)
+  codeUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  approver      User?     @relation("AdminLateApprovals", fields: [approvedBy], references: [id])
+  employee      User      @relation("EmployeeLateApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@index([employeeId])
   @@index([status])
   @@index([requestDate])
   @@index([approvalCode])
+  @@index([approvedBy], map: "LatePunchApproval_approvedBy_fkey")
 }
 
-// NEW MODEL: Early Punch-Out Approval Requests
 model EarlyPunchOutApproval {
-  id              String    @id @default(cuid())
-  employeeId      String    // Salesman requesting approval
-  employeeName    String    // Salesman name for easy reference
-  attendanceId    String    // Current attendance session ID
-  requestDate     DateTime  @default(now()) // Date of the request
-  punchOutDate    DateTime  // Intended punch-out date
-  reason          String    // Reason for early punch-out
-  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
-  
-  // Admin response
-  approvedBy      String?   // Admin who approved/rejected
-  approvedAt      DateTime? // When the decision was made
-  adminRemarks    String?   // Admin's remarks/comments
-  approvalCode    String?   // Generated OTP/code for approved requests
-  codeExpiresAt   DateTime? // When the approval code expires
-  codeUsed        Boolean   @default(false) // Whether the code has been used
-  codeUsedAt      DateTime? // When the code was used for punch-out
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  employee        User      @relation("EmployeeEarlyPunchOutApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
-  approver        User?     @relation("AdminEarlyPunchOutApprovals", fields: [approvedBy], references: [id])
-  
+  id            String    @id @default(cuid())
+  employeeId    String
+  employeeName  String
+  attendanceId  String
+  requestDate   DateTime  @default(now())
+  punchOutDate  DateTime
+  reason        String
+  status        String    @default("PENDING")
+  approvedBy    String?
+  approvedAt    DateTime?
+  adminRemarks  String?
+  approvalCode  String?
+  codeExpiresAt DateTime?
+  codeUsed      Boolean   @default(false)
+  codeUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  approver      User?     @relation("AdminEarlyPunchOutApprovals", fields: [approvedBy], references: [id])
+  employee      User      @relation("EmployeeEarlyPunchOutApprovals", fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@index([employeeId])
   @@index([attendanceId])
   @@index([status])
   @@index([requestDate])
   @@index([approvalCode])
+  @@index([approvedBy], map: "EarlyPunchOutApproval_approvedBy_fkey")
 }
 
-// NEW MODEL: Leave Management
 model Leave {
   id              String    @id @default(cuid())
-  employeeId      String    // Employee requesting leave
-  employeeName    String    // Employee name for easy reference
-  leaveType       String    // Sick, Casual, Earned, Unpaid, Emergency, Maternity, Paternity
-  startDate       DateTime  // Leave start date
-  endDate         DateTime  // Leave end date
-  numberOfDays    Int       // Total number of leave days
-  reason          String?   // Reason for leave
-  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
-  
-  // Approval workflow
-  requestedAt     DateTime  @default(now()) // When leave was requested
-  approvedBy      String?   // Admin who approved/rejected
-  approvedAt      DateTime? // When the decision was made
-  rejectionReason String?   // Admin's reason for rejection
-  adminRemarks    String?   // Additional admin comments
-  
-  // Metadata
+  employeeId      String
+  employeeName    String
+  leaveType       String
+  startDate       DateTime
+  endDate         DateTime
+  numberOfDays    Int
+  reason          String?
+  status          String    @default("PENDING")
+  requestedAt     DateTime  @default(now())
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  adminRemarks    String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  employee        User      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
   approver        User?     @relation("ApprovedLeaves", fields: [approvedBy], references: [id])
-  
+  employee        User      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@index([employeeId])
   @@index([status])
   @@index([startDate])
   @@index([endDate])
   @@index([leaveType])
   @@index([requestedAt])
+  @@index([approvedBy], map: "Leave_approvedBy_fkey")
 }
 
-// NEW MODEL: Leave Balance Management
 model LeaveBalance {
-  id              String    @id @default(cuid())
-  employeeId      String    @unique // One balance record per employee
-  year            Int       // Leave balance year (e.g., 2024)
-  
-  // Leave allocations (annual)
-  sickLeaves      Int       @default(12)    // Sick leave allocation
-  casualLeaves    Int       @default(10)    // Casual leave allocation
-  earnedLeaves    Int       @default(20)    // Earned leave allocation
-  
-  // Used leaves (current year)
-  usedSickLeaves  Int       @default(0)     // Used sick leaves
-  usedCasualLeaves Int      @default(0)     // Used casual leaves
-  usedEarnedLeaves Int      @default(0)     // Used earned leaves
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  employee        User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
+  id               String   @id @default(cuid())
+  employeeId       String   @unique
+  year             Int
+  sickLeaves       Int      @default(12)
+  casualLeaves     Int      @default(10)
+  earnedLeaves     Int      @default(20)
+  usedSickLeaves   Int      @default(0)
+  usedCasualLeaves Int      @default(0)
+  usedEarnedLeaves Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  employee         User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@index([employeeId])
   @@index([year])
 }
 
-// NEW MODEL: Weekly Beat Planning
 model WeeklyBeatPlan {
-  id              String    @id @default(cuid())
-  salesmanId      String    // Salesman assigned to this beat plan
-  salesmanName    String    // Salesman name for easy reference
-  weekStartDate   DateTime  // Monday of the week (start of beat plan)
-  weekEndDate     DateTime  // Sunday of the week (end of beat plan)
-  
-  // Assignment details
-  pincodes        Json?     // JSON array of pincodes assigned to salesman
-  totalAreas      Int       @default(0) // Total number of areas to cover
-  status          String    @default("DRAFT") // DRAFT, ACTIVE, LOCKED, COMPLETED
-  
-  // Admin control
-  generatedBy     String?   // Admin who generated this plan
-  approvedBy      String?   // Admin who approved this plan
-  approvedAt      DateTime? // When the plan was approved
-  lockedBy        String?   // Admin who locked the plan
-  lockedAt        DateTime? // When the plan was locked
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  salesman        User      @relation("SalesmanBeatPlans", fields: [salesmanId], references: [id], onDelete: Cascade)
-  generator       User?     @relation("GeneratedBeatPlans", fields: [generatedBy], references: [id])
-  approver        User?     @relation("ApprovedBeatPlans", fields: [approvedBy], references: [id])
-  locker          User?     @relation("LockedBeatPlans", fields: [lockedBy], references: [id])
-  dailyPlans      DailyBeatPlan[] // Daily breakdown of the weekly plan
-  
-  @@unique([salesmanId, weekStartDate]) // One plan per salesman per week
+  id            String          @id @default(cuid())
+  salesmanId    String
+  salesmanName  String
+  weekStartDate DateTime
+  weekEndDate   DateTime
+  pincodes      Json?
+  totalAreas    Int             @default(0)
+  status        String          @default("DRAFT")
+  generatedBy   String?
+  approvedBy    String?
+  approvedAt    DateTime?
+  lockedBy      String?
+  lockedAt      DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  dailyPlans    DailyBeatPlan[]
+  approver      User?           @relation("ApprovedBeatPlans", fields: [approvedBy], references: [id])
+  generator     User?           @relation("GeneratedBeatPlans", fields: [generatedBy], references: [id])
+  locker        User?           @relation("LockedBeatPlans", fields: [lockedBy], references: [id])
+  salesman      User            @relation("SalesmanBeatPlans", fields: [salesmanId], references: [id], onDelete: Cascade)
+
+  @@unique([salesmanId, weekStartDate])
   @@index([salesmanId])
   @@index([weekStartDate])
   @@index([status])
   @@index([generatedBy])
+  @@index([approvedBy], map: "WeeklyBeatPlan_approvedBy_fkey")
+  @@index([lockedBy], map: "WeeklyBeatPlan_lockedBy_fkey")
 }
 
-// NEW MODEL: Daily Beat Plan (Day-wise area assignments)
 model DailyBeatPlan {
-  id              String    @id @default(cuid())
-  weeklyBeatId    String    // Reference to weekly beat plan
-  dayOfWeek       Int       // 1=Monday, 2=Tuesday, ..., 7=Sunday
-  dayDate         DateTime  // Actual date for this day
-  
-  // Area assignments for this day
-  assignedAreas   Json?     // JSON array of area names assigned for this day
-  plannedVisits   Int       @default(0) // Number of planned visits/accounts
-  actualVisits    Int       @default(0) // Number of actual visits completed
-  
-  // Status tracking
-  status          String    @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, MISSED
-  completedAt     DateTime? // When the day was marked complete
-  
-  // Carry forward from missed beats
-  carriedFromDate DateTime? // If areas were carried from a missed day
-  carriedToDate   DateTime? // If areas were carried to another day
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  weeklyBeat      WeeklyBeatPlan @relation(fields: [weeklyBeatId], references: [id], onDelete: Cascade)
-  beatCompletions BeatCompletion[] // Track individual area completions
-  
-  @@unique([weeklyBeatId, dayOfWeek]) // One plan per day per weekly beat
+  id              String           @id @default(cuid())
+  weeklyBeatId    String
+  dayOfWeek       Int
+  dayDate         DateTime
+  assignedAreas   Json?
+  plannedVisits   Int              @default(0)
+  actualVisits    Int              @default(0)
+  status          String           @default("PLANNED")
+  completedAt     DateTime?
+  carriedFromDate DateTime?
+  carriedToDate   DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  beatCompletions BeatCompletion[]
+  weeklyBeat      WeeklyBeatPlan   @relation(fields: [weeklyBeatId], references: [id], onDelete: Cascade)
+
+  @@unique([weeklyBeatId, dayOfWeek])
   @@index([weeklyBeatId])
   @@index([dayOfWeek])
   @@index([dayDate])
   @@index([status])
 }
 
-// NEW MODEL: Beat Completion Tracking
 model BeatCompletion {
-  id              String    @id @default(cuid())
-  dailyBeatId     String    // Reference to daily beat plan
-  salesmanId      String    // Salesman who completed the beat
-  areaName        String    // Area that was visited
-  accountsVisited Int       @default(0) // Number of accounts visited in this area
-  
-  // Completion details
-  completedAt     DateTime  @default(now()) // When the area was marked complete
-  latitude        Float?    // GPS location when marked complete
-  longitude       Float?    // GPS location when marked complete
-  notes           String?   // Optional notes from salesman
-  
-  // Verification
-  isVerified      Boolean   @default(false) // Admin verification
-  verifiedBy      String?   // Admin who verified
-  verifiedAt      DateTime? // When it was verified
-  
-  // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
+  id              String        @id @default(cuid())
+  dailyBeatId     String
+  salesmanId      String
+  areaName        String
+  accountsVisited Int           @default(0)
+  completedAt     DateTime      @default(now())
+  latitude        Float?
+  longitude       Float?
+  notes           String?
+  isVerified      Boolean       @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   dailyBeat       DailyBeatPlan @relation(fields: [dailyBeatId], references: [id], onDelete: Cascade)
-  salesman        User      @relation("CompletedBeats", fields: [salesmanId], references: [id], onDelete: Cascade)
-  verifier        User?     @relation("VerifiedBeats", fields: [verifiedBy], references: [id])
-  
+  salesman        User          @relation("CompletedBeats", fields: [salesmanId], references: [id], onDelete: Cascade)
+  verifier        User?         @relation("VerifiedBeats", fields: [verifiedBy], references: [id])
+
   @@index([dailyBeatId])
   @@index([salesmanId])
   @@index([completedAt])
   @@index([areaName])
+  @@index([verifiedBy], map: "BeatCompletion_verifiedBy_fkey")
 }
