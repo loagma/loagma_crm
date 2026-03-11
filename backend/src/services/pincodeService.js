@@ -1,5 +1,25 @@
 import axios from 'axios';
 
+async function fetchIndiaPost(pincode, { retries = 3, timeoutMs = 12000 } = {}) {
+  const url = `https://api.postalpincode.in/pincode/${pincode}`;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await axios.get(url, { timeout: timeoutMs });
+    } catch (e) {
+      lastError = e;
+      const code = e?.code;
+      const isRetryable =
+        code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNABORTED';
+      if (!isRetryable || attempt === retries) break;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
+}
+
 /**
  * Fetch location details from Indian Postal Pincode API
  * @param {string} pincode - 6-digit pincode
@@ -13,10 +33,7 @@ export const getLocationByPincode = async (pincode) => {
     }
 
     // Use India Post API
-    const response = await axios.get(
-      `https://api.postalpincode.in/pincode/${pincode}`,
-      { timeout: 5000 }
-    );
+    const response = await fetchIndiaPost(pincode, { retries: 2, timeoutMs: 7000 });
 
     if (response.data && response.data[0]?.Status === 'Success') {
       const postOffices = response.data[0].PostOffice;
@@ -48,7 +65,8 @@ export const getLocationByPincode = async (pincode) => {
       };
     }
   } catch (error) {
-    console.error('Pincode lookup error:', error.message);
+    const code = error?.code;
+    console.error('Pincode lookup error:', code || error.message);
     return {
       success: false,
       message: 'Failed to fetch location details',
@@ -70,10 +88,7 @@ export const getAreasByPincode = async (pincode) => {
     }
 
     // Use India Post API
-    const response = await axios.get(
-      `https://api.postalpincode.in/pincode/${pincode}`,
-      { timeout: 5000 }
-    );
+    const response = await fetchIndiaPost(pincode, { retries: 2, timeoutMs: 7000 });
 
     if (response.data && response.data[0]?.Status === 'Success') {
       const postOffices = response.data[0].PostOffice;
@@ -103,7 +118,8 @@ export const getAreasByPincode = async (pincode) => {
       };
     }
   } catch (error) {
-    console.error('Areas lookup error:', error.message);
+    const code = error?.code;
+    console.error('Areas lookup error:', code || error.message);
     return {
       success: false,
       message: 'Failed to fetch areas',

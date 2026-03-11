@@ -3,6 +3,11 @@ import { getLocationByPincode, getAreasByPincode } from '../services/pincodeServ
 
 const router = express.Router();
 
+function isNotFoundResult(result) {
+  const msg = (result?.message || '').toString().toLowerCase();
+  return msg.includes('not found') || msg.includes('invalid');
+}
+
 // GET /pincode/:pincode - Lookup location by pincode
 router.get('/:pincode', async (req, res) => {
   try {
@@ -13,7 +18,9 @@ router.get('/:pincode', async (req, res) => {
     if (result.success) {
       res.json(result);
     } else {
-      res.status(404).json(result);
+      // 404 only when the pincode truly doesn't exist.
+      // Network / upstream failures should not be treated as "not found".
+      res.status(isNotFoundResult(result) ? 404 : 502).json(result);
     }
   } catch (error) {
     console.error('Pincode route error:', error);
@@ -35,7 +42,7 @@ router.get('/:pincode/areas', async (req, res) => {
     if (result.success) {
       res.json(result);
     } else {
-      res.status(404).json(result);
+      res.status(isNotFoundResult(result) ? 404 : 502).json(result);
     }
   } catch (error) {
     console.error('Areas route error:', error);

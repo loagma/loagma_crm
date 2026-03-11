@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
@@ -70,9 +71,10 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   String? _telecallerError;
   List<Map<String, dynamic>> _telecallers = [];
   String? _selectedTelecallerId;
-  // All-day pincodes with optional cached account count
-  final Map<String, int> _telecallerPincodesAll = {};
+  // All-day pincodes: pincode -> { count, city?, state?, district?, region? }
+  final Map<String, Map<String, dynamic>> _telecallerPincodesAll = {};
   int _telecallerStep = 0; // 0: select telecaller, 1: pincodes
+  String? _pincodeFieldError; // validation message for pincode input
 
   // Place details overlay state (for Google Maps-like interface)
   PlaceInfo? _selectedPlace;
@@ -1242,18 +1244,34 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
 
   void _addTelecallerPincodeForDay() {
     final pin = _pincodeController.text.trim();
-    if (pin.length != 6 || int.tryParse(pin) == null) {
-      _showError('Please enter a valid 6-digit pincode');
+    if (pin.isEmpty) {
+      setState(() => _pincodeFieldError = 'Enter a 6-digit pincode');
       return;
     }
-
+    if (pin.length != 6 || int.tryParse(pin) == null) {
+      setState(() => _pincodeFieldError = 'Pincode must be exactly 6 digits');
+      return;
+    }
+    setState(() => _pincodeFieldError = null);
     if (_telecallerPincodesAll.containsKey(pin)) {
       _showError('Pincode already added for this telecaller');
       return;
     }
-
-    // Validate pincode using same backend lookup as salesman flow
     _fetchTelecallerPincodeLocation(pin);
+  }
+
+  void _onTelecallerPincodeFieldChanged(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _pincodeFieldError = null);
+      return;
+    }
+    if (trimmed.length > 6) return;
+    setState(() {
+      _pincodeFieldError = trimmed.length < 6
+          ? 'Enter ${6 - trimmed.length} more digit(s)'
+          : (int.tryParse(trimmed) == null ? 'Pincode must be numeric' : null);
+    });
   }
 
   Future<void> _fetchTelecallerPincodeLocation(String pincode) async {
@@ -1261,7 +1279,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     try {
       final result = await _service.fetchLocationByPincode(pincode);
       if (result['success'] == true && result['data'] != null) {
-        // Also fetch account count for this pincode
+        final data = result['data'] as Map<String, dynamic>;
         int count = 0;
         try {
           final countResult =
@@ -1278,11 +1296,25 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         }
 
         setState(() {
-          _telecallerPincodesAll[pincode] = count;
+          _telecallerPincodesAll[pincode] = {
+            'count': count,
+            'city': data['city']?.toString(),
+            'state': data['state']?.toString(),
+            'district': data['district']?.toString(),
+            'region': data['region']?.toString(),
+            'country': data['country']?.toString(),
+            'areas': data['areas'],
+          };
           _pincodeController.clear();
+          _pincodeFieldError = null;
         });
+        final loc = [
+          data['city'],
+          data['district'],
+          data['state'],
+        ].where((e) => e != null && e.toString().isNotEmpty).join(', ');
         _showSuccess(
-            'Pincode $pincode added. Accounts on this pincode: $count');
+            'Pincode $pincode added. Accounts: $count${loc.isNotEmpty ? ' • $loc' : ''}');
       } else {
         _showError(result['message'] ?? 'Pincode not found');
       }
@@ -1330,31 +1362,29 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           }
         }
 
-        // Fetch counts for each pincode
-        final Map<String, int> counts = {};
+        // Fetch counts for each pincode (details loaded when user adds pincode)
+        final Map<String, Map<String, dynamic>> updated = {};
         for (final pin in pins) {
+          int count = 0;
           try {
             final countResult =
                 await _service.getAccountCountByPincode(pin);
             if (countResult['success'] == true &&
                 countResult['data'] != null &&
                 countResult['data']['count'] != null) {
-              counts[pin] = int.tryParse(
+              count = int.tryParse(
                       countResult['data']['count'].toString()) ??
                   0;
-            } else {
-              counts[pin] = 0;
             }
-          } catch (_) {
-            counts[pin] = 0;
-          }
+          } catch (_) {}
+          updated[pin] = {'count': count};
         }
 
         if (!mounted) return;
         setState(() {
           _telecallerPincodesAll
             ..clear()
-            ..addAll(counts);
+            ..addAll(updated);
         });
       }
     } catch (e) {
@@ -1362,84 +1392,6 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       debugPrint('⚠️ _loadTelecallerAllPincodes error: $e');
     }
   }
-
-  String _getTelecallerStepTitle(int step) {
-    switch (step) {
-      case 0:
-        return 'Select Telecaller';
-      case 1:
-      default:
-        return 'Pincodes';
-    }
-  }
-
-  bool _isTelecallerStepValid() {
-    if (_telecallerStep == 0) {
-      return _selectedTelecallerId != null;
-    }
-    // Step 1 (pincodes) – allow save even with zero pincodes (handled in save)
-    return true;
-  }
-
-  void _nextTelecallerStep() {
-    if (_telecallerStep < 1 && _isTelecallerStepValid()) {
-      setState(() {
-        _telecallerStep++;
-      });
-    }
-  }
-
-  void _previousTelecallerStep() {
-    if (_telecallerStep > 0) {
-      setState(() {
-        _telecallerStep--;
-      });
-    }
-  }
-
-  Future<void> _loadTelecallerAssignmentsSummary(String telecallerId) async {
-    try {
-      final token = UserService.token;
-      final headers = {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      };
-
-      final uri = Uri.parse(
-        '${ApiConfig.teleadminUrl}/telecallers/$telecallerId/pincode-assignments/summary',
-      );
-
-      final response = await NetworkService.retryApiCall(
-        () => http
-            .get(uri, headers: headers)
-            .timeout(const Duration(seconds: 15)),
-        maxRetries: 1,
-        delay: const Duration(seconds: 2),
-      );
-
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        final Map<String, dynamic> summary =
-            Map<String, dynamic>.from(data['data'] ?? {});
-        if (!mounted) return;
-        setState(() {
-          for (var d = 1; d <= 7; d++) {
-            final key = d.toString();
-            final entry = summary[key];
-            if (entry != null) {
-              final pins = List<String>.from(entry['pincodes'] ?? const []);
-              _pincodesByDay[d] = pins.toSet();
-            } else {
-              _pincodesByDay[d] = <String>{};
-            }
-          }
-        });
-      }
-    } catch (_) {
-      // Silent fail: if this call fails, we just won't pre-select anything
-    }
-  }
-
   Future<void> _saveTelecallerAssignments() async {
     if (_selectedTelecallerId == null) {
       Fluttertoast.showToast(
@@ -1450,6 +1402,13 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     }
 
     final currentPins = _telecallerPincodesAll.keys.toList()..sort();
+    if (currentPins.isEmpty) {
+      Fluttertoast.showToast(
+        msg: 'Add at least one pincode to save',
+        backgroundColor: Colors.orange,
+      );
+      return;
+    }
 
     try {
       final token = UserService.token;
@@ -1494,21 +1453,38 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     }
   }
 
-  Widget _buildTelecallerDayChip(int day, String label) {
-    final selected = _selectedTelecallerDay == day;
-    final count = _pincodesByDay[day]?.length ?? 0;
-    final text = count > 0 ? '$label ($count)' : label;
-    return FilterChip(
-      label: Text(text),
-      selected: selected,
-      onSelected: (_) {
-        setState(() {
-          _selectedTelecallerDay = day;
-        });
-      },
-      selectedColor: primaryColor.withOpacity(0.2),
-      checkmarkColor: primaryColor,
-    );
+  String _getTelecallerStepTitle(int step) {
+    switch (step) {
+      case 0:
+        return 'Select Telecaller';
+      case 1:
+      default:
+        return 'Pincodes';
+    }
+  }
+
+  bool _isTelecallerStepValid() {
+    if (_telecallerStep == 0) {
+      return _selectedTelecallerId != null;
+    }
+    // Step 1 (pincodes) – allow save even with zero pincodes (handled in save)
+    return true;
+  }
+
+  void _nextTelecallerStep() {
+    if (_telecallerStep < 1 && _isTelecallerStepValid()) {
+      setState(() {
+        _telecallerStep++;
+      });
+    }
+  }
+
+  void _previousTelecallerStep() {
+    if (_telecallerStep > 0) {
+      setState(() {
+        _telecallerStep--;
+      });
+    }
   }
 
   Widget _buildTelecallerAssignmentBody() {
@@ -1559,13 +1535,10 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                   onChanged: (val) async {
                     setState(() {
                       _selectedTelecallerId = val;
-                      // reset per-day state when telecaller changes
-                      for (var d = 1; d <= 7; d++) {
-                        _pincodesByDay[d] = <String>{};
-                      }
+                      _telecallerPincodesAll.clear();
                     });
                     if (val != null) {
-                      await _loadTelecallerAssignmentsSummary(val);
+                      await _loadTelecallerAllPincodes(val);
                     }
                   },
                 ),
@@ -1588,15 +1561,23 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                       child: TextField(
                         controller: _pincodeController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
+                        maxLength: 6,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: _onTelecallerPincodeFieldChanged,
+                        decoration: InputDecoration(
                           labelText: 'Enter 6-digit pincode',
-                          border: OutlineInputBorder(),
+                          hintText: 'e.g. 123456',
+                          border: const OutlineInputBorder(),
+                          errorText: _pincodeFieldError,
+                          counterText: '',
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: _addTelecallerPincodeForDay,
+                      onPressed: _isLoadingTelecaller ? null : _addTelecallerPincodeForDay,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
@@ -1635,18 +1616,69 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                         itemBuilder: (context, index) {
                           final entry = entries[index];
                           final pin = entry.key;
-                          final count = entry.value;
-                          return ListTile(
-                            title: Text(pin),
-                            subtitle: Text('Accounts: $count'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () {
-                                setState(() {
-                                  _pincodesByDay[_selectedTelecallerDay]
-                                      ?.remove(pin);
-                                });
-                              },
+                          final info = entry.value;
+                          final count = (info['count'] is int)
+                              ? info['count'] as int
+                              : int.tryParse(info['count']?.toString() ?? '0') ?? 0;
+                          final city = info['city']?.toString();
+                          final state = info['state']?.toString();
+                          final district = info['district']?.toString();
+                          final region = info['region']?.toString();
+                          final areas = info['areas'];
+                          final areaCount = areas is List ? areas.length : 0;
+                          final locationParts = [
+                            if (city != null && city.isNotEmpty) city,
+                            if (district != null && district.isNotEmpty) district,
+                            if (state != null && state.isNotEmpty) state,
+                           
+                          ];
+                          final locationLine = locationParts.join(' • ');
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: primaryColor.withOpacity(0.2),
+                                child: const Icon(Icons.pin_drop, color: primaryColor),
+                              ),
+                              title: Text(
+                                pin,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('Accounts: $count'),
+                                    if (locationLine.isNotEmpty)
+                                      Text(
+                                        locationLine,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    if (areaCount > 0)
+                                      Text(
+                                        '$areaCount area(s)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey[600],
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                  ],
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () {
+                                  setState(() {
+                                    _telecallerPincodesAll.remove(pin);
+                                  });
+                                },
+                              ),
                             ),
                           );
                         },
@@ -1665,7 +1697,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: Text(
-                      'Save ${_selectedTelecallerDay == 1 ? 'Mon' : _selectedTelecallerDay == 2 ? 'Tue' : _selectedTelecallerDay == 3 ? 'Wed' : _selectedTelecallerDay == 4 ? 'Thu' : _selectedTelecallerDay == 5 ? 'Fri' : _selectedTelecallerDay == 6 ? 'Sat' : 'Sun'} Assignments',
+                      'Save Assignments',
                     ),
                   ),
                 ),

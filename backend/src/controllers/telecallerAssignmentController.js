@@ -94,26 +94,7 @@ export const upsertTelecallerPincodeAssignments = async (req, res) => {
       cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: day });
     }
 
-    // Conflict detection (same pincode+day already assigned to another telecaller)
-    if (cleaned.length > 0) {
-      const orPairs = cleaned.map((a) => ({ pincode: a.pincode, dayOfWeek: a.dayOfWeek }));
-      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
-        where: {
-          telecallerId: { not: id },
-          OR: orPairs,
-        },
-        select: { telecallerId: true, pincode: true, dayOfWeek: true },
-        orderBy: [{ pincode: 'asc' }, { dayOfWeek: 'asc' }],
-      });
-
-      if (conflicts.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: 'Some pincodes are already assigned to another telecaller for the same day',
-          conflicts,
-        });
-      }
-    }
+    // Admin can assign any pincode to any telecaller; same pincode may be assigned to multiple telecallers.
 
     // Replace-all semantics, but done transactionally.
     const result = await prisma.$transaction(async (tx) => {
@@ -137,13 +118,6 @@ export const upsertTelecallerPincodeAssignments = async (req, res) => {
       data: { count: result.createdCount },
     });
   } catch (error) {
-    // Prisma unique constraint violation (e.g., race condition) → treat as conflict
-    if (error?.code === 'P2002') {
-      return res.status(409).json({
-        success: false,
-        message: 'Conflict: pincode already assigned to another telecaller for the same day',
-      });
-    }
     console.error('❌ upsertTelecallerPincodeAssignments error:', error);
     return res.status(500).json({
       success: false,
@@ -228,26 +202,7 @@ export const upsertTelecallerPincodeAssignmentsForDay = async (req, res) => {
       cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: numericDay });
     }
 
-    // Conflict detection with other telecallers for same (pincode, dayOfWeek)
-    if (cleaned.length > 0) {
-      const orPairs = cleaned.map((a) => ({ pincode: a.pincode, dayOfWeek: a.dayOfWeek }));
-      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
-        where: {
-          telecallerId: { not: id },
-          OR: orPairs,
-        },
-        select: { telecallerId: true, pincode: true, dayOfWeek: true },
-        orderBy: [{ pincode: 'asc' }],
-      });
-
-      if (conflicts.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: 'Some pincodes are already assigned to another telecaller for this day',
-          conflicts,
-        });
-      }
-    }
+    // Admin can assign any pincode to any telecaller; same pincode may be assigned to multiple telecallers.
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.telecallerPincodeAssignment.deleteMany({
@@ -264,12 +219,6 @@ export const upsertTelecallerPincodeAssignmentsForDay = async (req, res) => {
       data: { count: result.createdCount },
     });
   } catch (error) {
-    if (error?.code === 'P2002') {
-      return res.status(409).json({
-        success: false,
-        message: 'Conflict: pincode already assigned to another telecaller for this day',
-      });
-    }
     console.error('❌ upsertTelecallerPincodeAssignmentsForDay error:', error);
     return res.status(500).json({
       success: false,
@@ -308,27 +257,7 @@ export const upsertTelecallerPincodes = async (req, res) => {
       cleaned.push({ telecallerId: id, pincode: pinRaw, dayOfWeek: 0 });
     }
 
-    // Conflict detection: same pincode already assigned (all days) to another telecaller
-    if (cleaned.length > 0) {
-      const pins = cleaned.map((a) => a.pincode);
-      const conflicts = await prisma.telecallerPincodeAssignment.findMany({
-        where: {
-          telecallerId: { not: id },
-          dayOfWeek: 0,
-          pincode: { in: pins },
-        },
-        select: { telecallerId: true, pincode: true },
-        orderBy: [{ pincode: 'asc' }],
-      });
-
-      if (conflicts.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: 'Some pincodes are already assigned to another telecaller',
-          conflicts,
-        });
-      }
-    }
+    // Admin can assign any pincode to any telecaller; same pincode may be assigned to multiple telecallers.
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.telecallerPincodeAssignment.deleteMany({
@@ -345,12 +274,6 @@ export const upsertTelecallerPincodes = async (req, res) => {
       data: { count: result.createdCount },
     });
   } catch (error) {
-    if (error?.code === 'P2002') {
-      return res.status(409).json({
-        success: false,
-        message: 'Conflict: pincode already assigned to another telecaller',
-      });
-    }
     console.error('❌ upsertTelecallerPincodes error:', error);
     return res.status(500).json({
       success: false,
