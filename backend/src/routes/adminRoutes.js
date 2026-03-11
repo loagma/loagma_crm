@@ -4,6 +4,7 @@ import {
   getAllUsersByAdmin,
   updateUserByAdmin,
   deleteUserByAdmin,
+  bulkCreateUsersByAdmin,
 } from '../controllers/adminController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { roleGuard } from '../middleware/roleGuard.js';
@@ -16,6 +17,7 @@ const router = express.Router();
 // router.put('/users/:id', authMiddleware, roleGuard(['Admin']), updateUserByAdmin);
 // router.delete('/users/:id', authMiddleware, roleGuard(['Admin']), deleteUserByAdmin);
 router.post('/users' ,  createUserByAdmin);
+router.post('/users/bulk', bulkCreateUsersByAdmin);
 router.get('/users',  getAllUsersByAdmin);
 router.put('/users/:id', updateUserByAdmin);
 router.delete('/users/:id',  deleteUserByAdmin);

@@ -5,23 +5,125 @@ import { generateUserIdentifiers } from '../utils/idGenerator.js';
 import { cascadeDeleteUser } from '../utils/userCascadeDelete.js';
 
 
+async function createUserWithSalaryFromPayload(payload) {
+  let {
+    contactNumber,
+    roleId,
+    roles,
+    name,
+    email,
+    alternativeNumber,
+    gender,
+    dateOfBirth,
+    preferredLanguages,
+    departmentId,
+    isActive,
+    password,
+    address,
+    city,
+    state,
+    pincode,
+    country,
+    district,
+    area,
+    latitude,
+    longitude,
+    image,
+    notes,
+    aadharCard,
+    panCard,
+    salaryPerMonth,
+  } = payload || {};
 
+  const throwValidation = (message) => {
+    const err = new Error(message);
+    err.statusCode = 400;
+    err.userMessage = message;
+    return err;
+  };
 
-// Admin creates a user with contact number and role
-export const createUserByAdmin = async (req, res) => {
-  try {
-    let {
+  // Validate required fields
+  if (!contactNumber) {
+    throw throwValidation('Contact number is required');
+  }
+
+  if (!salaryPerMonth || parseFloat(salaryPerMonth) <= 0) {
+    throw throwValidation(
+      'Salary per month is required and must be greater than 0',
+    );
+  }
+
+  // Clean phone numbers
+  contactNumber = cleanPhoneNumber(contactNumber);
+  if (alternativeNumber) {
+    alternativeNumber = cleanPhoneNumber(alternativeNumber);
+  }
+
+  // Check if user already exists by contact
+  const existingUser = await prisma.user.findUnique({
+    where: { contactNumber },
+  });
+
+  if (existingUser) {
+    throw throwValidation('User with this contact number already exists');
+  }
+
+  // Check if email exists
+  if (email) {
+    const existingEmail = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingEmail) {
+      throw throwValidation('User with this email already exists');
+    }
+  }
+
+  // Upload image to Cloudinary if provided
+  let imageUrl = null;
+  if (image && image.startsWith('data:image')) {
+    try {
+      console.log('📸 Processing image upload...');
+      console.log('📦 Image size:', image.length, 'characters');
+      imageUrl = await uploadBase64Image(image, 'users');
+      console.log('✅ Image uploaded to Cloudinary:', imageUrl);
+    } catch (error) {
+      console.error('❌ Image upload failed:', error.message);
+      console.error('❌ Full error:', error);
+      // Don't save base64 to database if upload fails
+      imageUrl = null;
+    }
+  } else if (
+    image &&
+    !image.startsWith('data:image') &&
+    !image.startsWith('http')
+  ) {
+    // If image is provided but not base64 or URL, don't save it
+    console.log('⚠️ Invalid image format, skipping');
+    imageUrl = null;
+  } else if (image && image.startsWith('http')) {
+    // If it's already a URL, keep it
+    imageUrl = image;
+  }
+
+  // Create user with sequential ID and employee code using shared utility
+  const { userId, employeeCode } = await generateUserIdentifiers();
+
+  const user = await prisma.user.create({
+    data: {
+      id: userId,
+      employeeCode,
       contactNumber,
-      roleId,
-      roles,
+      alternativeNumber,
       name,
       email,
-      alternativeNumber,
+      roleId,
+      roles: roles || [],
       gender,
-      dateOfBirth,
-      preferredLanguages,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      preferredLanguages: preferredLanguages || [],
       departmentId,
-      isActive,
+      isActive: isActive !== undefined ? isActive : true,
       password,
       address,
       city,
@@ -30,135 +132,41 @@ export const createUserByAdmin = async (req, res) => {
       country,
       district,
       area,
-      latitude,
-      longitude,
-      image,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+      image: imageUrl, // Only save Cloudinary URL or existing URL
       notes,
       aadharCard,
       panCard,
-      salaryPerMonth
-    } = req.body;
+    },
+    include: {
+      role: { select: { name: true } },
+      department: { select: { name: true } },
+    },
+  });
 
-    // Validate required fields
-    if (!contactNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'Contact number is required',
-      });
-    }
+  // Create salary information (now mandatory)
+  const salaryInfo = await prisma.salaryInformation.create({
+    data: {
+      employeeId: userId,
+      basicSalary: parseFloat(salaryPerMonth),
+      effectiveFrom: new Date(),
+      currency: 'INR',
+      paymentFrequency: 'Monthly',
+      isActive: true,
+    },
+  });
 
-    if (!salaryPerMonth || parseFloat(salaryPerMonth) <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Salary per month is required and must be greater than 0',
-      });
-    }
+  return { user, salaryInfo };
+}
 
-    // Clean phone numbers
-    contactNumber = cleanPhoneNumber(contactNumber);
-    if (alternativeNumber) {
-      alternativeNumber = cleanPhoneNumber(alternativeNumber);
-    }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { contactNumber },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User with this contact number already exists',
-      });
-    }
-
-    // Check if email exists
-    if (email) {
-      const existingEmail = await prisma.user.findUnique({
-        where: { email },
-      });
-
-      if (existingEmail) {
-        return res.status(400).json({
-          success: false,
-          message: 'User with this email already exists',
-        });
-      }
-    }
-
-    // Upload image to Cloudinary if provided
-    let imageUrl = null;
-    if (image && image.startsWith('data:image')) {
-      try {
-        console.log('📸 Processing image upload...');
-        console.log('📦 Image size:', image.length, 'characters');
-        imageUrl = await uploadBase64Image(image, 'users');
-        console.log('✅ Image uploaded to Cloudinary:', imageUrl);
-      } catch (error) {
-        console.error('❌ Image upload failed:', error.message);
-        console.error('❌ Full error:', error);
-        // Don't save base64 to database if upload fails
-        imageUrl = null;
-      }
-    } else if (image && !image.startsWith('data:image') && !image.startsWith('http')) {
-      // If image is provided but not base64 or URL, don't save it
-      console.log('⚠️ Invalid image format, skipping');
-      imageUrl = null;
-    } else if (image && image.startsWith('http')) {
-      // If it's already a URL, keep it
-      imageUrl = image;
-    }
-
-    // Create user with sequential ID and employee code using shared utility
-    const { userId, employeeCode } = await generateUserIdentifiers();
-
-    const user = await prisma.user.create({
-      data: {
-        id: userId,
-        employeeCode,
-        contactNumber,
-        alternativeNumber,
-        name,
-        email,
-        roleId,
-        roles: roles || [],
-        gender,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        preferredLanguages: preferredLanguages || [],
-        departmentId,
-        isActive: isActive !== undefined ? isActive : true,
-        password,
-        address,
-        city,
-        state,
-        pincode,
-        country,
-        district,
-        area,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        image: imageUrl, // Only save Cloudinary URL or existing URL
-        notes,
-        aadharCard,
-        panCard,
-      },
-      include: {
-        role: { select: { name: true } },
-        department: { select: { name: true } },
-      },
-    });
-
-    // Create salary information (now mandatory)
-    const salaryInfo = await prisma.salaryInformation.create({
-      data: {
-        employeeId: userId,
-        basicSalary: parseFloat(salaryPerMonth),
-        effectiveFrom: new Date(),
-        currency: 'INR',
-        paymentFrequency: 'Monthly',
-        isActive: true,
-      },
-    });
+// Admin creates a user with contact number and role
+export const createUserByAdmin = async (req, res) => {
+  try {
+    const { user, salaryInfo } = await createUserWithSalaryFromPayload(
+      req.body,
+    );
 
     // Calculate salary totals
     const grossSalary = salaryInfo.basicSalary;
@@ -221,6 +229,12 @@ export const createUserByAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Create User Error:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.userMessage || error.message,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to create user',
@@ -327,6 +341,69 @@ export const getAllUsersByAdmin = async (req, res) => {
     });
   }
 };
+
+// Bulk create users (admin)
+export const bulkCreateUsersByAdmin = async (req, res) => {
+  try {
+    const { users } = req.body || {};
+    if (!Array.isArray(users) || users.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Body must include a non-empty \"users\" array',
+      });
+    }
+
+    const results = [];
+    let created = 0;
+
+    for (let i = 0; i < users.length; i += 1) {
+      const payload = users[i] || {};
+      const contactNumber = payload.contactNumber;
+      const email = payload.email;
+
+      try {
+        const { user } = await createUserWithSalaryFromPayload(payload);
+        created += 1;
+        results.push({
+          index: i,
+          contactNumber: user.contactNumber,
+          email: user.email,
+          success: true,
+          userId: user.id,
+          employeeCode: user.employeeCode,
+        });
+      } catch (err) {
+        const reason =
+          err?.userMessage || err?.message || 'Failed to create user';
+        results.push({
+          index: i,
+          contactNumber,
+          email,
+          success: false,
+          reason,
+        });
+      }
+    }
+
+    const failed = results.length - created;
+
+    return res.json({
+      success: failed === 0,
+      message: 'Bulk user import completed',
+      data: {
+        created,
+        failed,
+        results,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Bulk Create Users Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to import users in bulk',
+    });
+  }
+}
 
 // Update user
 export const updateUserByAdmin = async (req, res) => {
