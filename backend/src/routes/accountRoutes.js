@@ -8,6 +8,7 @@ import {
   approveAccount,
   rejectAccount,
   getAccountStats,
+  bulkCreateAccounts,
   bulkAssignAccounts,
   bulkApproveAccounts,
   checkContactNumber,
@@ -34,6 +35,7 @@ router.post('/:id/approve', approveAccount);
 router.post('/:id/reject', rejectAccount);
 
 // ==================== BULK OPERATIONS ====================
+router.post('/bulk', bulkCreateAccounts);
 router.post('/bulk/assign', bulkAssignAccounts);
 router.post('/bulk/approve', bulkApproveAccounts);
 

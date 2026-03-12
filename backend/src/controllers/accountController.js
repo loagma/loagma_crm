@@ -22,7 +22,7 @@ export const getAllAccounts = async (req, res) => {
       startDate,
       endDate,
       page = 1,
-      limit = 50
+      limit = 20
     } = req.query;
 
     const where = {};
@@ -241,262 +241,33 @@ export const getAccountById = async (req, res) => {
 
 export const createAccount = async (req, res) => {
   try {
-    const {
-      businessName,
-      businessType,
-      businessSize,
-      personName,
-      contactNumber,
-      dateOfBirth,
-      customerStage,
-      funnelStage,
-      gstNumber,
-      panCard,
-      ownerImage,
-      shopImage,
-      isActive,
-      pincode,
-      country,
-      state,
-      district,
-      city,
-      area,
-      address,
-      latitude,
-      longitude,
-      assignedToId,
-      areaId,
-      createdById
-    } = req.body;
-
-    console.log('📥 CREATE ACCOUNT REQUEST:', {
-      personName,
-      contactNumber,
-      businessName
+    console.log('📥 CREATE ACCOUNT REQUEST (single):', {
+      personName: req.body?.personName,
+      contactNumber: req.body?.contactNumber,
+      businessName: req.body?.businessName,
     });
 
-    // Validation
-    if (!personName || !contactNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'Person name and contact number are required'
-      });
-    }
-
-    // Validate contact number format (10 digits)
-    if (!/^\d{10}$/.test(contactNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Contact number must be exactly 10 digits'
-      });
-    }
-
-    // Note: Duplicate contact numbers are allowed as per business requirements
-    // Multiple accounts can share the same contact number
-    console.log('✅ Validation passed, generating account code...');
-
-    // Validate GST format if provided
-    // if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstNumber)) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: 'Invalid GST number format'
-    //   });
-    // }
-
-    // Validate PAN format if provided
-    if (panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panCard)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid PAN card format'
-      });
-    }
-
-    // Validate pincode format if provided
-    if (pincode && !/^\d{6}$/.test(pincode)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Pincode must be exactly 6 digits'
-      });
-    }
-
-    // Validate coordinates if provided
-    if (latitude !== undefined && latitude !== null) {
-      const lat = parseFloat(latitude);
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid latitude. Must be between -90 and 90'
-        });
-      }
-    }
-
-    if (longitude !== undefined && longitude !== null) {
-      const lng = parseFloat(longitude);
-      if (isNaN(lng) || lng < -180 || lng > 180) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid longitude. Must be between -180 and 180'
-        });
-      }
-    }
-
-    // Ensure both coordinates are provided together or both are null
-    if ((latitude !== undefined && latitude !== null) !== (longitude !== undefined && longitude !== null)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Both latitude and longitude must be provided together'
-      });
-    }
-
-    // Generate unique account code
-    const accountCode = await generateAccountCode();
-    console.log('✅ Generated account code:', accountCode);
-
-    // Get user ID from auth middleware (req.user.id)
-    const userId = req.user?.id || createdById;
-
-    // Auto-assign telecaller based on pincode mapping (all days) when not explicitly provided
-    let finalAssignedToId = assignedToId || null;
-    try {
-      if (!finalAssignedToId && pincode) {
-        const mapping = await prisma.telecallerPincodeAssignment.findFirst({
-          where: {
-            pincode,
-            isActive: true,
-            dayOfWeek: 0,
-          },
-        });
-        if (mapping) {
-          finalAssignedToId = mapping.telecallerId;
-        }
-      }
-    } catch (e) {
-      console.error('⚠️ Telecaller pincode auto-assignment failed:', e);
-    }
-
-    // Upload images to Cloudinary if provided
-    let ownerImageUrl = null;
-    let shopImageUrl = null;
-
-    console.log('🖼️ Image upload check:');
-    console.log('  - Owner image provided:', !!ownerImage);
-    console.log('  - Shop image provided:', !!shopImage);
-    if (ownerImage) {
-      console.log('  - Owner image starts with data:image:', ownerImage.startsWith('data:image'));
-      console.log('  - Owner image length:', ownerImage.length);
-    }
-    if (shopImage) {
-      console.log('  - Shop image starts with data:image:', shopImage.startsWith('data:image'));
-      console.log('  - Shop image length:', shopImage.length);
-    }
-
-    if (ownerImage && ownerImage.startsWith('data:image')) {
-      try {
-        console.log('📸 Uploading owner image to Cloudinary...');
-        console.log('📦 Owner image size:', ownerImage.length, 'characters');
-        ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
-        console.log('✅ Owner image uploaded:', ownerImageUrl);
-      } catch (error) {
-        console.error('❌ Owner image upload failed:', error.message);
-        console.error('❌ Full error:', error);
-        ownerImageUrl = null;
-      }
-    } else if (ownerImage && ownerImage.startsWith('http')) {
-      console.log('📎 Using existing owner image URL');
-      ownerImageUrl = ownerImage;
-    }
-
-    if (shopImage && shopImage.startsWith('data:image')) {
-      try {
-        console.log('📸 Uploading shop image to Cloudinary...');
-        console.log('📦 Shop image size:', shopImage.length, 'characters');
-        shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
-        console.log('✅ Shop image uploaded:', shopImageUrl);
-      } catch (error) {
-        console.error('❌ Shop image upload failed:', error.message);
-        console.error('❌ Full error:', error);
-        shopImageUrl = null;
-      }
-    } else if (shopImage && shopImage.startsWith('http')) {
-      console.log('📎 Using existing shop image URL');
-      shopImageUrl = shopImage;
-    }
-
-    console.log('🖼️ Final image URLs:');
-    console.log('  - Owner image URL:', ownerImageUrl);
-    console.log('  - Shop image URL:', shopImageUrl);
-
-    console.log('✅ Creating account in database...');
-    const account = await prisma.account.create({
-      data: {
-        id: randomUUID(),
-        accountCode,
-        businessName,
-        businessType,
-        businessSize,
-        personName,
-        contactNumber,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        customerStage,
-        funnelStage,
-        gstNumber: gstNumber?.toUpperCase(),
-        panCard: panCard?.toUpperCase(),
-        ownerImage: ownerImageUrl,
-        shopImage: shopImageUrl,
-        isActive: isActive !== undefined ? isActive : true,
-        pincode,
-        country,
-        state,
-        district,
-        city,
-        area,
-        address,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        assignedToId: finalAssignedToId,
-        areaId: areaId ? parseInt(areaId) : null,
-        createdById: userId,
-        isApproved: false
-      },
-      include: {
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            contactNumber: true,
-            roleId: true
-          }
-        },
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            contactNumber: true,
-            roleId: true
-          }
-        },
-        areaRelation: {
-          include: {
-            zone: {
-              include: {
-                city: true
-              }
-            }
-          }
-        }
-      }
+    const account = await createAccountFromPayload(req.body, req.user?.id, {
+      includeRelations: true,
     });
 
     console.log('✅ Account created successfully:', account.accountCode);
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Account created successfully',
-      data: account
+      data: account,
     });
   } catch (error) {
     console.error('❌ Create account error:', error.message);
     console.error('Error code:', error.code);
     console.error('Error meta:', error.meta);
+
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.userMessage || error.message,
+      });
+    }
 
     if (error.code === 'P2002') {
       // P2002 is Prisma's unique constraint violation error
@@ -504,12 +275,214 @@ export const createAccount = async (req, res) => {
       console.error(`Duplicate field detected: ${field}`);
       return res.status(400).json({
         success: false,
-        message: `Duplicate ${field} - this value already exists`
+        message: `Duplicate ${field} - this value already exists`,
       });
     }
-    res.status(500).json({ success: false, message: error.message });
+
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || 'Failed to create account' });
   }
 };
+
+async function createAccountFromPayload(payload, authUserId, options = {}) {
+  const {
+    businessName,
+    businessType,
+    businessSize,
+    personName,
+    contactNumber,
+    dateOfBirth,
+    customerStage,
+    funnelStage,
+    gstNumber,
+    panCard,
+    ownerImage,
+    shopImage,
+    isActive,
+    pincode,
+    country,
+    state,
+    district,
+    city,
+    area,
+    address,
+    latitude,
+    longitude,
+    assignedToId,
+    areaId,
+    createdById,
+  } = payload || {};
+
+  const { includeRelations = false } = options;
+
+  const validationError = (message) => {
+    const err = new Error(message);
+    err.statusCode = 400;
+    err.userMessage = message;
+    return err;
+  };
+
+  // Required fields
+  if (!personName || !contactNumber) {
+    throw validationError('Person name and contact number are required');
+  }
+
+  // Contact number: 10 digits
+  if (!/^\d{10}$/.test(contactNumber)) {
+    throw validationError('Contact number must be exactly 10 digits');
+  }
+
+  // PAN format if provided
+  if (panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panCard)) {
+    throw validationError('Invalid PAN card format');
+  }
+
+  // Pincode format if provided
+  if (pincode && !/^\d{6}$/.test(pincode)) {
+    throw validationError('Pincode must be exactly 6 digits');
+  }
+
+  // Coordinates validation if provided
+  if (latitude !== undefined && latitude !== null) {
+    const lat = parseFloat(latitude);
+    if (Number.isNaN(lat) || lat < -90 || lat > 90) {
+      throw validationError('Invalid latitude. Must be between -90 and 90');
+    }
+  }
+
+  if (longitude !== undefined && longitude !== null) {
+    const lng = parseFloat(longitude);
+    if (Number.isNaN(lng) || lng < -180 || lng > 180) {
+      throw validationError('Invalid longitude. Must be between -180 and 180');
+    }
+  }
+
+  // Both coordinates together or none
+  if (
+    (latitude !== undefined && latitude !== null) !==
+    (longitude !== undefined && longitude !== null)
+  ) {
+    throw validationError('Both latitude and longitude must be provided together');
+  }
+
+  // Generate unique account code
+  const accountCode = await generateAccountCode();
+
+  // Determine creator
+  const userId = authUserId || createdById || null;
+
+  // Auto-assign telecaller based on pincode mapping (all days) when not explicitly provided
+  let finalAssignedToId = assignedToId || null;
+  try {
+    if (!finalAssignedToId && pincode) {
+      const mapping = await prisma.telecallerPincodeAssignment.findFirst({
+        where: {
+          pincode,
+          isActive: true,
+          dayOfWeek: 0,
+        },
+      });
+      if (mapping) {
+        finalAssignedToId = mapping.telecallerId;
+      }
+    }
+  } catch (e) {
+    console.error('⚠️ Telecaller pincode auto-assignment failed (helper):', e);
+  }
+
+  // Upload images if provided
+  let ownerImageUrl = null;
+  let shopImageUrl = null;
+
+  if (ownerImage && ownerImage.startsWith('data:image')) {
+    try {
+      ownerImageUrl = await uploadBase64Image(ownerImage, 'accounts/owners');
+    } catch (error) {
+      console.error('❌ Owner image upload failed (helper):', error.message);
+      ownerImageUrl = null;
+    }
+  } else if (ownerImage && ownerImage.startsWith('http')) {
+    ownerImageUrl = ownerImage;
+  }
+
+  if (shopImage && shopImage.startsWith('data:image')) {
+    try {
+      shopImageUrl = await uploadBase64Image(shopImage, 'accounts/shops');
+    } catch (error) {
+      console.error('❌ Shop image upload failed (helper):', error.message);
+      shopImageUrl = null;
+    }
+  } else if (shopImage && shopImage.startsWith('http')) {
+    shopImageUrl = shopImage;
+  }
+
+  const prismaArgs = {
+    data: {
+      id: randomUUID(),
+      accountCode,
+      businessName,
+      businessType,
+      businessSize,
+      personName,
+      contactNumber,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      customerStage,
+      funnelStage,
+      gstNumber: gstNumber?.toUpperCase(),
+      panCard: panCard?.toUpperCase(),
+      ownerImage: ownerImageUrl,
+      shopImage: shopImageUrl,
+      isActive: isActive !== undefined ? isActive : true,
+      pincode,
+      country,
+      state,
+      district,
+      city,
+      area,
+      address,
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+      assignedToId: finalAssignedToId,
+      areaId: areaId ? parseInt(areaId, 10) : null,
+      createdById: userId,
+      isApproved: false,
+    },
+  };
+
+  if (includeRelations) {
+    prismaArgs.include = {
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          contactNumber: true,
+          roleId: true,
+        },
+      },
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          contactNumber: true,
+          roleId: true,
+        },
+      },
+      areaRelation: {
+        include: {
+          zone: {
+            include: {
+              city: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  const account = await prisma.account.create(prismaArgs);
+  return account;
+}
 
 export const updateAccount = async (req, res) => {
   try {
@@ -1056,6 +1029,74 @@ export const getAccountStats = async (req, res) => {
 };
 
 // ==================== BULK OPERATIONS ====================
+
+export const bulkCreateAccounts = async (req, res) => {
+  try {
+    const { accounts } = req.body || {};
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Body must include a non-empty "accounts" array',
+      });
+    }
+
+    const authUserId = req.user?.id;
+    const results = [];
+    let created = 0;
+
+    for (let i = 0; i < accounts.length; i += 1) {
+      const payload = accounts[i] || {};
+      const personName = payload.personName;
+      const contactNumber = payload.contactNumber;
+
+      try {
+        const account = await createAccountFromPayload(payload, authUserId);
+        created += 1;
+        results.push({
+          index: i,
+          success: true,
+          accountId: account.id,
+          accountCode: account.accountCode,
+          personName: account.personName,
+          contactNumber: account.contactNumber,
+          pincode: account.pincode,
+        });
+      } catch (err) {
+        let reason =
+          err?.userMessage || err?.message || 'Failed to create account';
+        if (err?.code === 'P2002') {
+          const field = err.meta?.target?.[0] || 'field';
+          reason = `Duplicate ${field} - this value already exists`;
+        }
+        results.push({
+          index: i,
+          success: false,
+          personName,
+          contactNumber,
+          reason,
+        });
+      }
+    }
+
+    const failed = results.length - created;
+
+    return res.status(201).json({
+      success: failed === 0,
+      message: 'Bulk account import completed',
+      data: {
+        created,
+        failed,
+        results,
+      },
+    });
+  } catch (error) {
+    console.error('Bulk create accounts error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create accounts in bulk',
+    });
+  }
+};
 
 export const bulkAssignAccounts = async (req, res) => {
   try {

@@ -2,6 +2,19 @@ import BeatPlanService from '../services/beatPlanService.js';
 import prisma from '../config/db.js';
 import NotificationService from '../services/notificationService.js';
 
+// Helper to determine if user has admin-level access to beat plan management
+const hasBeatPlanAdminAccess = (user) => {
+    if (!user) return false;
+    const primaryRole = (user.role || '').toString().toLowerCase();
+    const rolesArray = Array.isArray(user.roles) ? user.roles : [];
+    const normalizedRoles = rolesArray.map((r) => (r || '').toString().toLowerCase());
+
+    const allowedRoles = new Set(['admin', 'teleadmin', 'manager']);
+
+    if (allowedRoles.has(primaryRole)) return true;
+    return normalizedRoles.some((r) => allowedRoles.has(r));
+};
+
 /**
  * @desc Generate weekly beat plan for a salesman
  * @route POST /beat-plans/generate
@@ -196,11 +209,11 @@ export const getWeeklyBeatPlans = async (req, res) => {
     try {
         const { page = 1, limit = 10, salesmanId, status, weekStartDate } = req.query;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can view all beat plans'
+                message: 'You do not have permission to view beat plans'
             });
         }
 
@@ -313,70 +326,97 @@ export const getWeeklyBeatPlanDetails = async (req, res) => {
         }
 
         // Check access permissions
-        const isAdmin = req.user.roles?.includes('admin') || req.user.role === 'admin';
+        const isAdminLevel = hasBeatPlanAdminAccess(req.user);
         const isAssignedSalesman = beatPlan.salesmanId === req.user.id;
 
-        if (!isAdmin && !isAssignedSalesman) {
+        if (!isAdminLevel && !isAssignedSalesman) {
             return res.status(403).json({
                 success: false,
                 message: 'Access denied'
             });
         }
 
+        // Detect if this is a customer-based plan where accounts are explicitly
+        // allotted to the salesman with assignedDays. In that case we should NOT
+        // fall back to broad pincode-based queries, otherwise days with no
+        // assignments (Fri/Sat/Sun) will still show accounts.
+        const hasCustomerAssignments = await prisma.account.count({
+            where: {
+                assignedToId: beatPlan.salesmanId,
+                isActive: true,
+                OR: [
+                    { assignedDays: { array_contains: 1 } },
+                    { assignedDays: { array_contains: 2 } },
+                    { assignedDays: { array_contains: 3 } },
+                    { assignedDays: { array_contains: 4 } },
+                    { assignedDays: { array_contains: 5 } },
+                    { assignedDays: { array_contains: 6 } },
+                    { assignedDays: { array_contains: 7 } }
+                ]
+            }
+        });
+
         // Get accounts for each day's areas / assigned customers
         const dailyPlansWithAccounts = await Promise.all(
             beatPlan.dailyPlans.map(async (dailyPlan) => {
-                let accounts;
+                // Prefer customer-based lookup first: accounts explicitly allotted
+                // to this salesman for this specific day via Account.assignedDays.
+                let accounts = await prisma.account.findMany({
+                    where: {
+                        assignedToId: beatPlan.salesmanId,
+                        assignedDays: {
+                            array_contains: dailyPlan.dayOfWeek
+                        },
+                        isActive: true
+                    },
+                    select: {
+                        id: true,
+                        accountCode: true,
+                        personName: true,
+                        businessName: true,
+                        contactNumber: true,
+                        area: true,
+                        address: true,
+                        latitude: true,
+                        longitude: true
+                    }
+                });
 
-                // For customer-based beat plans (generated from allotted customers),
-                // we don't store pincodes on the weekly plan. Instead, customers are
-                // linked via Account.assignedToId + assignedDays.
-                const isCustomerBasedPlan =
-                    !beatPlan.pincodes || beatPlan.pincodes.length === 0;
+                // If no explicit day-wise customers found and this is NOT a
+                // customer-based plan, fall back to the original area /
+                // pincode-based plan logic for backward compatibility.
+                if ((!accounts || accounts.length === 0) && !hasCustomerAssignments) {
+                    const orConditions = [];
 
-                if (isCustomerBasedPlan) {
-                    // Fetch accounts allotted to this salesman for this specific day
-                    accounts = await prisma.account.findMany({
-                        where: {
-                            assignedToId: beatPlan.salesmanId,
-                            // assignedDays is an Int[] - use `has` to match current day
-                            assignedDays: {
-                                array_contains: dailyPlan.dayOfWeek
+                    if (dailyPlan.assignedAreas && dailyPlan.assignedAreas.length > 0) {
+                        orConditions.push({ area: { in: dailyPlan.assignedAreas } });
+                    }
+
+                    if (beatPlan.pincodes && beatPlan.pincodes.length > 0) {
+                        orConditions.push({ pincode: { in: beatPlan.pincodes } });
+                    }
+
+                    if (orConditions.length > 0) {
+                        accounts = await prisma.account.findMany({
+                            where: {
+                                OR: orConditions,
+                                isActive: true
                             },
-                            isActive: true
-                        },
-                        select: {
-                            id: true,
-                            accountCode: true,
-                            personName: true,
-                            businessName: true,
-                            contactNumber: true,
-                            area: true,
-                            address: true,
-                            latitude: true,
-                            longitude: true
-                        }
-                    });
-                } else {
-                    // Original pincode/area-based plans
-                    accounts = await prisma.account.findMany({
-                        where: {
-                            area: { in: dailyPlan.assignedAreas },
-                            pincode: { in: beatPlan.pincodes },
-                            isActive: true
-                        },
-                        select: {
-                            id: true,
-                            accountCode: true,
-                            personName: true,
-                            businessName: true,
-                            contactNumber: true,
-                            area: true,
-                            address: true,
-                            latitude: true,
-                            longitude: true
-                        }
-                    });
+                            select: {
+                                id: true,
+                                accountCode: true,
+                                personName: true,
+                                businessName: true,
+                                contactNumber: true,
+                                area: true,
+                                address: true,
+                                latitude: true,
+                                longitude: true
+                            }
+                        });
+                    } else {
+                        accounts = [];
+                    }
                 }
 
                 return {
@@ -414,11 +454,11 @@ export const updateWeeklyBeatPlan = async (req, res) => {
         const { id } = req.params;
         const { status, pincodes, dailyPlans } = req.body;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can update beat plans'
+                message: 'You do not have permission to update beat plans'
             });
         }
 
@@ -497,11 +537,11 @@ export const toggleBeatPlanLock = async (req, res) => {
         const { id } = req.params;
         const { lock = true } = req.body;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can lock/unlock beat plans'
+                message: 'You do not have permission to lock or unlock beat plans'
             });
         }
 
@@ -531,11 +571,11 @@ export const handleMissedBeat = async (req, res) => {
     try {
         const { dailyBeatId } = req.params;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can handle missed beats'
+                message: 'You do not have permission to handle missed beats'
             });
         }
 
@@ -565,11 +605,11 @@ export const getBeatPlanAnalytics = async (req, res) => {
     try {
         const { salesmanId, startDate, endDate } = req.query;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can view beat plan analytics'
+                message: 'You do not have permission to view beat plan analytics'
             });
         }
 
@@ -603,11 +643,11 @@ export const deleteWeeklyBeatPlan = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Validate admin role
-        if (!req.user.roles?.includes('admin') && req.user.role !== 'admin') {
+        // Validate admin-level role (admin / teleadmin / manager)
+        if (!hasBeatPlanAdminAccess(req.user)) {
             return res.status(403).json({
                 success: false,
-                message: 'Only admins can delete beat plans'
+                message: 'You do not have permission to delete beat plans'
             });
         }
 

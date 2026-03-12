@@ -7,7 +7,7 @@ import '../../services/user_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-/// Create beat plan by assigning allotted customers day-wise (Mon–Sat).
+/// Create beat plan by assigning allotted customers day-wise (mo-sun).
 class CustomerBeatPlanScreen extends StatefulWidget {
   final String salesmanId;
   final String salesmanName;
@@ -40,13 +40,14 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
     'Thursday',
     'Friday',
     'Saturday',
+    "Sunday"
   ];
 
   @override
   void initState() {
     super.initState();
     _weekStart = BeatPlanService.getWeekStartDate(DateTime.now());
-    for (int d = 1; d <= 6; d++) {
+    for (int d = 1; d <= 7; d++) {
       _dayAssignments[d] = [];
     }
     _loadCustomers();
@@ -73,7 +74,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
         for (final a in accounts) {
           if (a.assignedDays != null && a.assignedDays!.isNotEmpty) {
             for (final d in a.assignedDays!) {
-              if (d >= 1 && d <= 6 && !_dayAssignments[d]!.contains(a.id)) {
+              if (d >= 1 && d <= 7 && !_dayAssignments[d]!.contains(a.id)) {
                 _dayAssignments[d]!.add(a.id);
               }
             }
@@ -92,17 +93,17 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
   void _autoDistribute() {
     if (_customers.isEmpty) return;
     setState(() {
-      for (int d = 1; d <= 6; d++) {
+      for (int d = 1; d <= 7; d++) {
         _dayAssignments[d] = [];
       }
       for (int i = 0; i < _customers.length; i++) {
-        final day = (i % 6) + 1;
+        final day = (i % 7) + 1;
         _dayAssignments[day]!.add(_customers[i].id);
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Customers distributed across Mon–Sat'),
+        content: Text('Customers distributed across Mon–Sun'),
         backgroundColor: Colors.green,
       ),
     );
@@ -110,7 +111,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
 
   void _clearAll() {
     setState(() {
-      for (int d = 1; d <= 6; d++) {
+      for (int d = 1; d <= 7; d++) {
         _dayAssignments[d] = [];
       }
     });
@@ -174,10 +175,10 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
 
   void _moveCustomer(String accountId, int fromDay, int toDay) {
     setState(() {
-      if (fromDay >= 1 && fromDay <= 6) {
+      if (fromDay >= 1 && fromDay <= 7) {
         _dayAssignments[fromDay]!.remove(accountId);
       }
-      if (toDay >= 1 && toDay <= 6) {
+      if (toDay >= 1 && toDay <= 7) {
         if (!_dayAssignments[toDay]!.contains(accountId)) {
           _dayAssignments[toDay]!.add(accountId);
         }
@@ -187,10 +188,20 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
 
   int _getTotalAssigned() {
     int n = 0;
-    for (int d = 1; d <= 6; d++) {
+    for (int d = 1; d <= 7; d++) {
       n += _dayAssignments[d]!.length;
     }
     return n;
+  }
+
+  int _getAssignedDayCount() {
+    int count = 0;
+    for (int d = 1; d <= 7; d++) {
+      if (_dayAssignments[d] != null && _dayAssignments[d]!.isNotEmpty) {
+        count++;
+      }
+    }
+    return count;
   }
 
   @override
@@ -315,7 +326,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
   //         ),
   //         const SizedBox(height: 8),
   //         Text(
-  //           '1. Tap "Auto Distribute" to split customers across Mon–Sat\n'
+  //           '1. Tap "Auto Distribute" to split customers across Sun\n'
   //           '2. (Optional) Change any customer\'s day using the dropdown\n'
   //           '3. Tap "Create Beat Plan" at the bottom',
   //           style: TextStyle(
@@ -359,7 +370,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
   }
 
   Widget _buildSummary() {
-    final total = _getTotalAssigned();
+    final dayCount = _getAssignedDayCount();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -385,14 +396,14 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
           Column(
             children: [
               Text(
-                '$total',
+                '$dayCount',
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: primaryColor,
                 ),
               ),
-              const Text('Assigned to Days'),
+              const Text('Days Assigned'),
             ],
           ),
         ],
@@ -407,7 +418,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
         ElevatedButton.icon(
           onPressed: _customers.isEmpty ? null : _autoDistribute,
           icon: const Icon(Icons.auto_awesome, size: 20),
-          label: const Text('Auto Distribute (split across Mon–Sat)'),
+          label: const Text('Auto Distribute (split across Mon–Sun)'),
           style: ElevatedButton.styleFrom(
             backgroundColor: primaryColor,
             foregroundColor: Colors.white,
@@ -458,7 +469,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
                   .toList(),
             ),
           ),
-        ...List.generate(6, (index) {
+        ...List.generate(7, (index) {
         final day = index + 1;
         final accountIds = _dayAssignments[day] ?? [];
         final accounts = _customers
@@ -511,7 +522,7 @@ class _CustomerBeatPlanScreenState extends State<CustomerBeatPlanScreen> {
           items: [
             if (currentDay > 0)
               const DropdownMenuItem(value: 0, child: Text('Remove')),
-            ...List.generate(6, (i) {
+            ...List.generate(7, (i) {
               final d = i + 1;
               return DropdownMenuItem(
                 value: d,

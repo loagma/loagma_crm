@@ -47,7 +47,7 @@ class ApiConfig {
 
   /// Your computer's local WiFi IP. Update if it changes.
   /// Find it with: ipconfig (Windows) or ifconfig / ip addr (Mac/Linux).
-  static const String _localIp = '10.63';
+  static const String _localIp = '192.168.1.9';
 
   static String get baseUrl {
     if (useProduction) {

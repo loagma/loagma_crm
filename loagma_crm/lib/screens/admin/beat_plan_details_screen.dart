@@ -15,6 +15,10 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
   WeeklyBeatPlan? _beatPlan;
   bool _isLoading = true;
   String? _error;
+  bool _isEditingDistribution = false;
+  final Map<String, List<String>> _editableAreasByDayId = {};
+  final Map<String, int> _editablePlannedVisitsByDayId = {};
+  List<String> _editablePincodes = [];
 
   // Theme colors - matching existing app
   static const Color primaryColor = Color(0xFFD7BE69);
@@ -39,6 +43,16 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
       setState(() {
         _beatPlan = beatPlan;
         _isLoading = false;
+        _isEditingDistribution = false;
+        _editableAreasByDayId.clear();
+        _editablePlannedVisitsByDayId.clear();
+        _editablePincodes = List<String>.from(beatPlan.pincodes);
+        if (beatPlan.dailyPlans != null) {
+          for (final dp in beatPlan.dailyPlans!) {
+            _editableAreasByDayId[dp.id] = List<String>.from(dp.assignedAreas);
+            _editablePlannedVisitsByDayId[dp.id] = dp.plannedVisits;
+          }
+        }
       });
     } catch (e) {
       setState(() {
@@ -88,6 +102,26 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          if (_beatPlan != null && !_beatPlan!.isLocked)
+            // TextButton(
+            //   onPressed: () {
+            //     setState(() {
+            //       _isEditingDistribution = !_isEditingDistribution;
+            //     });
+            //   },
+            //   child: Text(
+            //     _isEditingDistribution ? 'Cancel' : 'Edit',
+            //     style: const TextStyle(color: Colors.white),
+            //   ),
+            // ),
+          if (_isEditingDistribution && _beatPlan != null)
+            TextButton(
+              onPressed: _saveDistributionChanges,
+              child: const Text(
+                'Save',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadBeatPlanDetails,
@@ -180,65 +214,121 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Builder(
-              builder: (context) {
-                // Calculate total accounts across all daily plans
-                int totalAccounts = 0;
-                if (beatPlan.dailyPlans != null) {
-                  for (final dailyPlan in beatPlan.dailyPlans!) {
-                    if (dailyPlan.accounts != null) {
-                      totalAccounts += dailyPlan.accounts!.length;
-                    }
-                  }
-                }
-                return Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total Areas',
-                        beatPlan.totalAreas.toString(),
-                        Icons.location_on,
-                        primaryColor,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total Accounts',
-                        totalAccounts.toString(),
-                        Icons.people,
-                        Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Completion',
-                        '${beatPlan.completionRate}%',
-                        Icons.pie_chart,
-                        Colors.green,
-                      ),
-                    ),
-                  ],
-                );
-              },
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    'Total Accounts',
+                    beatPlan.totalAreas.toString(),
+                    Icons.people,
+                    primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    'Completion',
+                    '${beatPlan.completionRate}%',
+                    Icons.pie_chart,
+                    Colors.green,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Assigned Pincodes:',
-              style: TextStyle(fontWeight: FontWeight.w500),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text(
+                  'Assigned Pincodes:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: beatPlan.pincodes.map((pincode) {
-                return Chip(
-                  label: Text(pincode),
-                  backgroundColor: primaryColor.withValues(alpha: 0.1),
-                );
-              }).toList(),
-            ),
+            if (_isEditingDistribution) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._editablePincodes.map(
+                    (pincode) => InputChip(
+                      label: Text(pincode),
+                      backgroundColor: primaryColor.withValues(alpha: 0.1),
+                      onDeleted: () {
+                        setState(() {
+                          _editablePincodes.remove(pincode);
+                        });
+                      },
+                    ),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add, size: 18),
+                    label: const Text('Add pincode'),
+                    onPressed: () async {
+                      final controller = TextEditingController();
+                      final value = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) {
+                          return AlertDialog(
+                            title: const Text('Add Pincode'),
+                            content: TextField(
+                              controller: controller,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Pincode',
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.pop(ctx, controller.text.trim()),
+                                child: const Text('Add'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                      if (value == null) return;
+                      final trimmed = value.trim();
+                      if (trimmed.length != 6 ||
+                          int.tryParse(trimmed) == null) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Enter a valid 6-digit pincode.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      setState(() {
+                        if (!_editablePincodes.contains(trimmed)) {
+                          _editablePincodes.add(trimmed);
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ] else ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: beatPlan.pincodes.map((pincode) {
+                  return Chip(
+                    label: Text(pincode),
+                    backgroundColor: primaryColor.withValues(alpha: 0.1),
+                  );
+                }).toList(),
+              ),
+            ],
           ],
         ),
       ),
@@ -336,6 +426,13 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
           'Daily Plans',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
+        if (_isEditingDistribution) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Adjust auto-distributed areas and planned visits for each day, then tap Save. Locked plans cannot be edited.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
+        ],
         const SizedBox(height: 16),
         ...dailyPlans.map((dailyPlan) => _buildDailyPlanCard(dailyPlan)),
       ],
@@ -343,6 +440,9 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
   }
 
   Widget _buildDailyPlanCard(DailyBeatPlan dailyPlan) {
+    final int accountCount =
+        dailyPlan.accounts?.length ?? dailyPlan.plannedVisits;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -356,37 +456,12 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            dailyPlan.dayName,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (dailyPlan.accounts != null && dailyPlan.accounts!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${dailyPlan.accounts!.length} accounts',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue[700],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      Text(
+                        dailyPlan.dayName,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         '${dailyPlan.dayDate.day}/${dailyPlan.dayDate.month}/${dailyPlan.dayDate.year}',
@@ -399,76 +474,15 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDayStatItem(
-                    'Areas',
-                    dailyPlan.totalAreasCount.toString(),
-                    Icons.location_on,
-                    primaryColor,
-                  ),
-                ),
-                Expanded(
-                  child: _buildDayStatItem(
-                    'Completed',
-                    dailyPlan.completedAreasCount.toString(),
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                ),
-                Expanded(
-                  child: _buildDayStatItem(
-                    'Visits',
-                    '${dailyPlan.actualVisits}/${dailyPlan.plannedVisits}',
-                    Icons.business,
-                    Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: dailyPlan.completionPercentage / 100,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                dailyPlan.completionPercentage == 100
-                    ? Colors.green
-                    : primaryColor,
-              ),
-            ),
-            const SizedBox(height: 8),
             Text(
-              '${dailyPlan.completionPercentage.toStringAsFixed(1)}% Complete',
-              style: Theme.of(context).textTheme.bodySmall,
+              'Accounts: $accountCount',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            if (dailyPlan.assignedAreas.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'Assigned Areas:',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: dailyPlan.assignedAreas.map((area) {
-                  final isCompleted = dailyPlan.completedAreas.contains(area);
-                  return Chip(
-                    label: Text(area),
-                    backgroundColor: isCompleted
-                        ? Colors.green.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.1),
-                    avatar: Icon(
-                      isCompleted ? Icons.check_circle : Icons.location_on,
-                      size: 16,
-                      color: isCompleted ? Colors.green : Colors.grey,
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            // Show accounts for this day, grouped by area
+            const SizedBox(height: 16),
+            // Show accounts for this day
             if (dailyPlan.accounts != null && dailyPlan.accounts!.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Divider(),
@@ -487,190 +501,136 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Group accounts by area
-              ...dailyPlan.assignedAreas.map((areaName) {
-                final areaAccounts = dailyPlan.accounts!.where((accountMap) {
-                  final accountArea = accountMap['area']?.toString() ?? '';
-                  return accountArea.toLowerCase() == areaName.toLowerCase();
-                }).toList();
-                
-                if (areaAccounts.isEmpty) return const SizedBox.shrink();
-                
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
+                    children: dailyPlan.accounts!.map((accountMap) {
+                      final accountName = accountMap['personName'] ??
+                          accountMap['businessName'] ??
+                          'Unknown';
+                      final businessName =
+                          accountMap['businessName'] ?? '';
+                      final contactNumber =
+                          accountMap['contactNumber'] ?? '';
+                      final address = accountMap['address'] ?? '';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: primaryColor.withValues(alpha: 0.1),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(12),
-                            topRight: Radius.circular(12),
-                          ),
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey[200]!),
                         ),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.location_on, size: 18, color: primaryColor),
-                            const SizedBox(width: 8),
-                            Text(
-                              areaName,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: primaryColor,
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: primaryColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  accountName.isNotEmpty
+                                      ? accountName[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
                             ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${areaAccounts.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    accountName,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (businessName.isNotEmpty &&
+                                      businessName != accountName) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      businessName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                  if (contactNumber.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.phone,
+                                          size: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          contactNumber,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                  if (address.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.location_on,
+                                          size: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            address,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey[600],
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          children: areaAccounts.map((accountMap) {
-                            final accountName = accountMap['personName'] ?? 
-                                accountMap['businessName'] ?? 'Unknown';
-                            final businessName = accountMap['businessName'] ?? '';
-                            final contactNumber = accountMap['contactNumber'] ?? '';
-                            final address = accountMap['address'] ?? '';
-                            
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[200]!),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        accountName.isNotEmpty 
-                                            ? accountName[0].toUpperCase() 
-                                            : '?',
-                                        style: TextStyle(
-                                          color: primaryColor,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          accountName,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        if (businessName.isNotEmpty && 
-                                            businessName != accountName) ...[
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            businessName,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey[600],
-                                            ),
-                                          ),
-                                        ],
-                                        if (contactNumber.isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.phone, 
-                                                size: 12, 
-                                                color: Colors.grey[600],
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                contactNumber,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey[700],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                        if (address != null && address.isNotEmpty) ...[
-                                          const SizedBox(height: 2),
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Icon(
-                                                Icons.location_on, 
-                                                size: 12, 
-                                                color: Colors.grey[600],
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  address,
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
+                      );
+                    }).toList(),
                   ),
-                );
-              }).toList(),
+                ),
+              ),
             ],
             if (dailyPlan.isMissed && !_beatPlan!.isLocked) ...[
               const SizedBox(height: 16),
@@ -729,26 +689,47 @@ class _BeatPlanDetailsScreenState extends State<BeatPlanDetailsScreen> {
     );
   }
 
-  Widget _buildDayStatItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+  Future<void> _saveDistributionChanges() async {
+    if (_beatPlan == null) return;
+    final beatPlan = _beatPlan!;
+
+    try {
+      final dailyPlansPayload = <Map<String, dynamic>>[];
+      if (beatPlan.dailyPlans != null) {
+        for (final dp in beatPlan.dailyPlans!) {
+          final areas = _editableAreasByDayId[dp.id] ?? dp.assignedAreas;
+          final visits =
+              _editablePlannedVisitsByDayId[dp.id] ?? dp.plannedVisits;
+          dailyPlansPayload.add({
+            'id': dp.id,
+            'assignedAreas': areas,
+            'plannedVisits': visits,
+          });
+        }
+      }
+
+      await BeatPlanService.updateWeeklyBeatPlan(
+        beatPlanId: beatPlan.id,
+        pincodes: _editablePincodes,
+        dailyPlans: dailyPlansPayload,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Beat plan updated successfully.'),
+          backgroundColor: Colors.green,
         ),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-      ],
-    );
+      );
+      await _loadBeatPlanDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update beat plan: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

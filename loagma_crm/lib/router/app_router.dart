@@ -240,6 +240,13 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const GenerateBeatPlanScreen(),
         ),
         GoRoute(
+          path: 'beat-plans/select-accounts',
+          builder: (_, __) => const shared.AccountListScreen(
+            forBeatPlan: true,
+            appBarTitle: 'Beat Plan – Select accounts',
+          ),
+        ),
+        GoRoute(
           path: 'beat-plans/:id',
           builder: (context, state) {
             final beatPlanId = state.pathParameters['id']!;

@@ -17,11 +17,10 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   Position? _currentPosition;
   int _selectedDayIndex = -1; // -1 means today
 
-  // Theme colors - matching existing app
+  // Theme colors - matching existing app, but keep UI lighter here
   static const Color primaryColor = Color(0xFFD7BE69);
-  static const Color secondaryColor = Color(0xFFB8A054);
 
-  final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
   void initState() {
@@ -44,9 +43,9 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
         _weeklyPlan = weeklyPlan;
         _isLoading = false;
 
-        // Set selected day to today
+        // Set selected day to today (Mon=1..Sun=7)
         final today = DateTime.now().weekday;
-        if (today >= 1 && today <= 6) {
+        if (today >= 1 && today <= 7) {
           _selectedDayIndex = today - 1;
         }
       });
@@ -259,9 +258,6 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   }
 
   Widget _buildNoPlanState() {
-    final today = DateTime.now();
-    final isSunday = today.weekday == 7;
-
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -274,22 +270,20 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                 color: primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                isSunday ? Icons.weekend : Icons.calendar_today,
+              child: const Icon(
+                Icons.calendar_today,
                 size: 64,
                 color: primaryColor,
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              isSunday ? 'It\'s Sunday!' : 'No Beat Plan This Week',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            const Text(
+              'No Beat Plan',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              isSunday
-                  ? 'Enjoy your day off! Beat plans are for Monday-Saturday.'
-                  : 'Your admin hasn\'t assigned a beat plan for this week yet.',
+              'Your admin hasn\'t assigned a beat plan for this week or this day yet.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),
@@ -310,51 +304,57 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     final weekStart =
         _weeklyPlan?.weekStartDate ??
         BeatPlanService.getWeekStartDate(DateTime.now());
-    final weekEnd = weekStart.add(const Duration(days: 5)); // Saturday
+    final weekEnd = weekStart.add(const Duration(days: 6)); // Sunday
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryColor, secondaryColor],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'This Week\'s Beat Plan',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: primaryColor.withValues(alpha: 0.3),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '${weekStart.day}/${weekStart.month} - ${weekEnd.day}/${weekEnd.month}/${weekEnd.year}',
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _buildHeaderStat(
-                'Total Areas',
-                '${_weeklyPlan?.totalAreas ?? 0}',
-                Icons.location_on_outlined,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This Week\'s Beat Plan',
+              style: TextStyle(
+                color: Colors.grey.shade900,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: 32),
-              _buildHeaderStat('Days', '6', Icons.calendar_view_week_outlined),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${weekStart.day}/${weekStart.month} - ${weekEnd.day}/${weekEnd.month}/${weekEnd.year}',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildHeaderStat(
+                  'Total Accounts',
+                  '${_weeklyPlan?.totalAreas ?? 0}',
+                  Icons.people_alt_outlined,
+                ),
+                const SizedBox(width: 24),
+                _buildHeaderStat(
+                  'Days',
+                  '7',
+                  Icons.calendar_view_week_outlined,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -365,10 +365,10 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
+            color: primaryColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon, color: primaryColor, size: 20),
         ),
         const SizedBox(width: 12),
         Column(
@@ -376,15 +376,15 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
           children: [
             Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+              style: TextStyle(
+                color: Colors.grey.shade900,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
             ),
             Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
             ),
           ],
         ),
@@ -396,13 +396,13 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     final today = DateTime.now().weekday;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       color: Colors.white,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
-          children: List.generate(6, (index) {
+          children: List.generate(7, (index) {
             final isSelected = _selectedDayIndex == index;
             final isToday = (index + 1) == today;
             final dayNumber = index + 1;
@@ -429,18 +429,19 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
               child: GestureDetector(
                 onTap: () => setState(() => _selectedDayIndex = index),
                 child: Container(
-                  width: 60,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  width: 64,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? primaryColor
-                        : (isToday
-                              ? primaryColor.withValues(alpha: 0.1)
-                              : Colors.grey[100]),
+                        ? primaryColor.withValues(alpha: 0.15)
+                        : Colors.grey[50],
                     borderRadius: BorderRadius.circular(12),
-                    border: isToday && !isSelected
-                        ? Border.all(color: primaryColor, width: 2)
-                        : null,
+                    border: Border.all(
+                      color: isSelected
+                          ? primaryColor
+                          : (isToday ? primaryColor.withValues(alpha: 0.6) : Colors.grey.shade300),
+                      width: isSelected ? 2 : 1,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -448,40 +449,28 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                         _dayNames[index],
                         style: TextStyle(
                           color: isSelected
-                              ? Colors.white
-                              : (isToday ? primaryColor : Colors.grey[700]),
-                          fontWeight: FontWeight.bold,
+                              ? primaryColor
+                              : (isToday ? primaryColor : Colors.grey[800]),
+                          fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.2)
-                              : primaryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '$areaCount',
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : primaryColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                      Text(
+                        '$areaCount',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
                         ),
                       ),
                       if (isToday) ...[
                         const SizedBox(height: 4),
                         Container(
-                          width: 6,
-                          height: 6,
+                          width: 4,
+                          height: 4,
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : primaryColor,
+                            color: primaryColor,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -583,14 +572,14 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                 border: Border.all(
                   color: isCompleted
                       ? Colors.green.withValues(alpha: 0.3)
-                      : primaryColor.withValues(alpha: 0.2),
-                  width: 2,
+                      : Colors.grey.withValues(alpha: 0.3),
+                  width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -605,14 +594,14 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                       decoration: BoxDecoration(
                         color: isCompleted
                             ? Colors.green.withValues(alpha: 0.15)
-                            : primaryColor.withValues(alpha: 0.15),
+                            : Colors.grey.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
                         isCompleted
                             ? Icons.check_circle_rounded
                             : Icons.location_on_rounded,
-                        color: isCompleted ? Colors.green : primaryColor,
+                        color: isCompleted ? Colors.green : Colors.grey[700],
                         size: 28,
                       ),
                     ),
@@ -668,44 +657,34 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                         !isCompleted &&
                         dailyPlan?.id != null &&
                         dailyPlan!.id.isNotEmpty)
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [primaryColor, secondaryColor],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                      ElevatedButton(
+                        onPressed: () =>
+                            _markAreaComplete(area, dailyPlan.id),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
                           ),
-                          borderRadius: BorderRadius.circular(12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
                         ),
-                        child: ElevatedButton(
-                          onPressed: () =>
-                              _markAreaComplete(area, dailyPlan.id),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.check_rounded, size: 18),
-                              SizedBox(width: 6),
-                              Text(
-                                'Done',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_rounded, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              'Done',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       )
                     else if (isCompleted)

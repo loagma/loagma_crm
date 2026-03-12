@@ -8,6 +8,7 @@ import '../../services/account_service.dart';
 import '../../services/user_service.dart';
 import '../../services/network_service.dart';
 import 'edit_account_master_screen.dart';
+import '../admin/customer_beat_plan_screen.dart';
 
 class AccountListScreen extends StatefulWidget {
   /// When true, this screen will show only telecaller‑approved
@@ -17,10 +18,15 @@ class AccountListScreen extends StatefulWidget {
   /// Optional custom title for the AppBar. Falls back to "Accounts".
   final String? appBarTitle;
 
+  /// When true, used from Beat Plan module: allot assigns without day selection
+  /// and then opens CustomerBeatPlanScreen to distribute and save.
+  final bool forBeatPlan;
+
   const AccountListScreen({
     super.key,
     this.onlyApproved = false,
     this.appBarTitle,
+    this.forBeatPlan = false,
   });
 
   @override
@@ -48,6 +54,21 @@ class _AccountListScreenState extends State<AccountListScreen> {
   bool _selectionMode = false;
   final Set<String> _selectedAccountIds = {};
 
+  // Range selection (by list index) for allotment
+  final TextEditingController _rangeFromController = TextEditingController();
+  final TextEditingController _rangeToController = TextEditingController();
+  String? _rangeErrorText;
+
+  // Beat plan – pincode filter (beat-plan-only flow)
+  String? _beatPlanPincodeFilter;
+  final TextEditingController _beatPlanPincodeController =
+      TextEditingController();
+  int? _beatPlanPincodeTotal;
+  final TextEditingController _beatPlanSelectCountController =
+      TextEditingController();
+  final List<String> _beatPlanPincodes = [];
+  int _beatPlanActivePincodeIndex = -1;
+
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
@@ -61,7 +82,6 @@ class _AccountListScreenState extends State<AccountListScreen> {
   String? get _currentUserId => UserService.currentUserId;
 
   bool get _isAdmin => UserService.currentRole?.toLowerCase() == 'admin';
-  bool get _isManager => UserService.currentRole?.toLowerCase() == 'manager';
 
   /// Salesmen only (for allotment dropdown)
   List<Map<String, dynamic>> get _salesmenForAllotment {
@@ -238,6 +258,10 @@ class _AccountListScreenState extends State<AccountListScreen> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
+    _rangeFromController.dispose();
+    _rangeToController.dispose();
+    _beatPlanPincodeController.dispose();
+    _beatPlanSelectCountController.dispose();
     _searchDebounce?.cancel();
     super.dispose();
   }
@@ -265,7 +289,7 @@ class _AccountListScreenState extends State<AccountListScreen> {
 
       if (!mounted) return;
 
-      // result expected: { 'accounts': List<Account>, 'pagination': {'totalPages': n} }
+      // result expected: { 'accounts': List<Account>, 'pagination': {'totalPages': n, 'total': m} }
       final fetched = List<Account>.from(result['accounts'] ?? []);
       final pagination = result['pagination'] ?? {'totalPages': 1};
 
@@ -281,6 +305,9 @@ class _AccountListScreenState extends State<AccountListScreen> {
         // Clear network errors on successful load
         _hasNetworkError = false;
         _lastErrorMessage = null;
+        if (widget.forBeatPlan) {
+          _beatPlanPincodeTotal = (pagination['total'] as int?) ?? fetched.length;
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -297,7 +324,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
   Future<Map<String, dynamic>> _fetchAccountsInBackground() async {
     return await AccountService.fetchAccounts(
       page: _currentPage,
-      limit: 20,
+      // Load a larger chunk so admin can select more than 20 at once
+      limit: 200,
       search: _searchQuery,
       // For "Customer List", enforce final customer stage = Customer,
       // otherwise use whatever filter user selected.
@@ -305,6 +333,8 @@ class _AccountListScreenState extends State<AccountListScreen> {
       // If this screen is used as "Customer List" in admin,
       // hard‑enforce isApproved = true so only verified accounts load.
       isApproved: widget.onlyApproved ? true : _filterIsApproved,
+      // Beat plan account-first flow: allow filtering by pincode
+      pincode: widget.forBeatPlan ? _beatPlanPincodeFilter : null,
       startDate: _filterStartDate,
       endDate: _filterEndDate,
       // For non-admin users, if no salesman filter is selected, show only their accounts
@@ -1028,6 +1058,41 @@ class _AccountListScreenState extends State<AccountListScreen> {
     final salesmanName = step1['salesmanName'] as String?;
     if (salesmanId == null) return;
 
+    if (widget.forBeatPlan) {
+      try {
+        final count = await AccountService.bulkAssignAccounts(
+          accountIds: _selectedAccountIds.toList(),
+          assignedToId: salesmanId,
+          assignedDays: null,
+        );
+        if (!mounted) return;
+        _showSuccess('$count customer(s) allotted to ${salesmanName ?? 'Salesman'}. Set week and distribute days below.');
+        setState(() {
+          _selectionMode = false;
+          _selectedAccountIds.clear();
+          _rangeFromController.clear();
+          _rangeToController.clear();
+          _rangeErrorText = null;
+        });
+        _refreshAccounts();
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CustomerBeatPlanScreen(
+              salesmanId: salesmanId,
+              salesmanName: salesmanName ?? 'Salesman',
+              allottedCount: count,
+            ),
+          ),
+        );
+        if (mounted) _refreshAccounts();
+      } catch (e) {
+        if (mounted) _showError('Failed to allot: $e');
+      }
+      return;
+    }
+
     // Step 2: Beat plan – select week days, then Allot.
     await _showBeatPlanSelectDaysDialog(
       salesmanId: salesmanId,
@@ -1197,9 +1262,18 @@ class _AccountListScreenState extends State<AccountListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.appBarTitle ?? 'Accounts'),
+        title: Text(
+          widget.appBarTitle ??
+              (widget.forBeatPlan ? 'Beat Plan – Select accounts' : 'Accounts'),
+        ),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
+          if (widget.forBeatPlan)
+            IconButton(
+              icon: const Icon(Icons.calendar_view_week),
+              onPressed: () => context.push('/dashboard/admin/beat-plans'),
+              tooltip: 'Existing beat plans',
+            ),
           // Network status indicator
           if (_hasNetworkError)
             IconButton(
@@ -1235,21 +1309,33 @@ class _AccountListScreenState extends State<AccountListScreen> {
             onPressed: _refreshAccounts,
           ),
           if (_isAdmin && !_selectionMode)
-            TextButton.icon(
-              onPressed: () => setState(() {
-                _selectionMode = true;
-                _selectedAccountIds.clear();
-              }),
-              icon: const Icon(Icons.checklist_rtl, size: 20),
-              label: const Text('Select'),
-              style: TextButton.styleFrom(foregroundColor: Colors.white),
-            ),
+            // TextButton.icon(
+            //   onPressed: () => setState(() {
+            //     _selectionMode = true;
+            //     _selectedAccountIds.clear();
+            //   }),
+            //   icon: const Icon(Icons.checklist_rtl, size: 20),
+            //   label: const Text('Select'),
+            //   style: TextButton.styleFrom(foregroundColor: Colors.white),
+            // ),
           if (_selectionMode) ...[
             TextButton(
-              onPressed: () => setState(() {
-                _selectionMode = false;
-                _selectedAccountIds.clear();
-              }),
+              onPressed: () {
+                setState(() {
+                  _selectionMode = false;
+                  _selectedAccountIds.clear();
+                  _rangeFromController.clear();
+                  _rangeToController.clear();
+                  _rangeErrorText = null;
+                  _beatPlanPincodeController.clear();
+                  _beatPlanPincodeFilter = null;
+                  _beatPlanPincodeTotal = null;
+                  _beatPlanSelectCountController.clear();
+                  _beatPlanPincodes.clear();
+                  _beatPlanActivePincodeIndex = -1;
+                });
+                _refreshAccounts();
+              },
               child: const Text('Cancel'),
               style: TextButton.styleFrom(foregroundColor: Colors.white),
             ),
@@ -1367,24 +1453,311 @@ class _AccountListScreenState extends State<AccountListScreen> {
                   color: const Color(0xFFD7BE69).withValues(alpha: 0.4),
                 ),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.checklist_rtl,
-                    color: Color(0xFFD7BE69),
-                    size: 22,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.checklist_rtl,
+                        color: Color(0xFFD7BE69),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Select accounts, then tap Allot to assign to a salesman (day-wise).',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Select accounts, then tap Allot to assign to a salesman (day-wise).',
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Total in this list: ${_accounts.length}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_selectedAccountIds.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Selected: ${_selectedAccountIds.length} account(s)',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 11,
                         color: Colors.grey.shade800,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
+                  ],
+                  if (widget.forBeatPlan) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _beatPlanPincodeController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'Add pincode',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            final value =
+                                _beatPlanPincodeController.text.trim();
+                            if (value.length != 6 ||
+                                int.tryParse(value) == null) {
+                              _showError('Enter a valid 6-digit pincode');
+                              return;
+                            }
+                            setState(() {
+                              final existingIndex =
+                                  _beatPlanPincodes.indexOf(value);
+                              if (existingIndex != -1) {
+                                _beatPlanActivePincodeIndex = existingIndex;
+                                _beatPlanPincodeFilter =
+                                    _beatPlanPincodes[existingIndex];
+                              } else {
+                                _beatPlanPincodes.add(value);
+                                _beatPlanActivePincodeIndex =
+                                    _beatPlanPincodes.length - 1;
+                                _beatPlanPincodeFilter = value;
+                              }
+                            });
+                            _beatPlanPincodeController.clear();
+                            _refreshAccounts();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            backgroundColor: const Color(0xFFD7BE69),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_beatPlanPincodes.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: List.generate(
+                            _beatPlanPincodes.length,
+                            (index) {
+                              final pincode = _beatPlanPincodes[index];
+                              final isActive =
+                                  index == _beatPlanActivePincodeIndex;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InputChip(
+                                  label: Text(
+                                    pincode,
+                                    style: TextStyle(
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                  selected: isActive,
+                                  selectedColor: const Color(0xFFD7BE69)
+                                      .withValues(alpha: 0.2),
+                                  onPressed: () {
+                                    setState(() {
+                                      _beatPlanActivePincodeIndex = index;
+                                      _beatPlanPincodeFilter = pincode;
+                                    });
+                                    _refreshAccounts();
+                                  },
+                                  onDeleted: () async {
+                                    await _clearSelectionsForPincode(pincode);
+                                    setState(() {
+                                      _beatPlanPincodes.removeAt(index);
+                                      if (_beatPlanPincodes.isEmpty) {
+                                        _beatPlanActivePincodeIndex = -1;
+                                        _beatPlanPincodeFilter = null;
+                                        _beatPlanPincodeTotal = null;
+                                      } else {
+                                        if (_beatPlanActivePincodeIndex >=
+                                            _beatPlanPincodes.length) {
+                                          _beatPlanActivePincodeIndex =
+                                              _beatPlanPincodes.length - 1;
+                                        }
+                                        if (_beatPlanActivePincodeIndex < 0) {
+                                          _beatPlanActivePincodeIndex = 0;
+                                        }
+                                        _beatPlanPincodeFilter =
+                                            _beatPlanPincodes[
+                                                _beatPlanActivePincodeIndex];
+                                      }
+                                    });
+                                    _refreshAccounts();
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_beatPlanPincodeFilter != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pincode $_beatPlanPincodeFilter – ${_beatPlanPincodeTotal ?? _accounts.length} account(s)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _areAllCurrentPincodeAccountsSelected(),
+                            onChanged: (v) =>
+                                _toggleSelectAllCurrentPincode(v == true),
+                            activeColor: const Color(0xFFD7BE69),
+                          ),
+                          const SizedBox(width: 4),
+                          const Expanded(
+                            child: Text(
+                              'Select all accounts in this pincode',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 60,
+                            child: TextField(
+                              controller: _beatPlanSelectCountController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                labelText: 'N',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: _accounts.isEmpty
+                                ? null
+                                : _addFirstNFromCurrentPincode,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              backgroundColor: const Color(0xFFD7BE69),
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text(
+                              'Add',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                  if (!widget.forBeatPlan) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text(
+                          'Select by range:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 60,
+                          child: TextField(
+                            controller: _rangeFromController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'From',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 60,
+                          child: TextField(
+                            controller: _rangeToController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'To',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed:
+                              _accounts.isEmpty ? null : _applyRangeSelection,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            backgroundColor: const Color(0xFFD7BE69),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text(
+                            'Apply',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Based on current list order (1 is top card).',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    if (_rangeErrorText != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _rangeErrorText!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -1474,17 +1847,19 @@ class _AccountListScreenState extends State<AccountListScreen> {
           ),
         ],
       ),
-      floatingActionButton: _selectionMode
+      floatingActionButton: widget.forBeatPlan
           ? null
-          : FloatingActionButton(
-              onPressed: () {
-                context.push("/dashboard/admin/account/master");
-              },
-              backgroundColor: const Color(0xFFD7BE69),
-              tooltip: "Create New Account",
-              shape: const CircleBorder(),
-              child: const Icon(Icons.add),
-            ),
+          : (_selectionMode
+              ? null
+              : FloatingActionButton(
+                  onPressed: () {
+                    context.push("/dashboard/admin/account/master");
+                  },
+                  backgroundColor: const Color(0xFFD7BE69),
+                  tooltip: "Create New Account",
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.add),
+                )),
     );
   }
 
@@ -1551,6 +1926,185 @@ class _AccountListScreenState extends State<AccountListScreen> {
         ],
       ),
     );
+  }
+
+  void _applyRangeSelection() {
+    setState(() {
+      _rangeErrorText = null;
+    });
+
+    final fromText = _rangeFromController.text.trim();
+    final toText = _rangeToController.text.trim();
+
+    final from = int.tryParse(fromText);
+    final to = int.tryParse(toText);
+
+    if (from == null || to == null) {
+      setState(() {
+        _rangeErrorText = 'Enter valid numbers for From and To.';
+      });
+      return;
+    }
+
+    if (from < 1 || to < 1) {
+      setState(() {
+        _rangeErrorText = 'From and To must be at least 1.';
+      });
+      return;
+    }
+
+    if (from > to) {
+      setState(() {
+        _rangeErrorText = 'From cannot be greater than To.';
+      });
+      return;
+    }
+
+    if (_accounts.isEmpty) {
+      setState(() {
+        _rangeErrorText = 'No accounts in the current list.';
+      });
+      return;
+    }
+
+    if (from > _accounts.length || to > _accounts.length) {
+      setState(() {
+        _rangeErrorText = 'Max index is ${_accounts.length}.';
+      });
+      return;
+    }
+
+    setState(() {
+      for (var i = from - 1; i <= to - 1; i++) {
+        if (i >= 0 && i < _accounts.length) {
+          _selectedAccountIds.add(_accounts[i].id);
+        }
+      }
+      _rangeErrorText = null;
+    });
+  }
+
+  bool _areAllCurrentPincodeAccountsSelected() {
+    if (!widget.forBeatPlan || _beatPlanPincodeFilter == null) {
+      return false;
+    }
+    if (_accounts.isEmpty) return false;
+    for (final a in _accounts) {
+      if (!_selectedAccountIds.contains(a.id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _toggleSelectAllCurrentPincode(bool value) {
+    if (!widget.forBeatPlan || _beatPlanPincodeFilter == null) return;
+    setState(() {
+      if (value) {
+        for (final a in _accounts) {
+          _selectedAccountIds.add(a.id);
+        }
+      } else {
+        for (final a in _accounts) {
+          _selectedAccountIds.remove(a.id);
+        }
+      }
+      // Keep the N field in sync with how many accounts
+      // for the current pincode are selected.
+      final selectedForCurrent = _accounts
+          .where((a) => _selectedAccountIds.contains(a.id))
+          .length;
+      if (selectedForCurrent > 0) {
+        _beatPlanSelectCountController.text = selectedForCurrent.toString();
+      } else {
+        _beatPlanSelectCountController.clear();
+      }
+    });
+  }
+
+  void _addFirstNFromCurrentPincode() {
+    if (!widget.forBeatPlan || _beatPlanPincodeFilter == null) {
+      _showError('Apply a pincode filter first.');
+      return;
+    }
+    final raw = _beatPlanSelectCountController.text.trim();
+    final n = int.tryParse(raw);
+    if (n == null || n < 1) {
+      _showError('Enter a valid number (at least 1).');
+      return;
+    }
+    if (_accounts.isEmpty) {
+      _showError('No accounts for this pincode.');
+      return;
+    }
+    final available = _accounts
+        .where((a) => !_selectedAccountIds.contains(a.id))
+        .length;
+    if (available == 0) {
+      _showError('All accounts for this pincode are already selected.');
+      return;
+    }
+    int added = 0;
+    setState(() {
+      for (final a in _accounts) {
+        if (added >= n) break;
+        if (!_selectedAccountIds.contains(a.id)) {
+          _selectedAccountIds.add(a.id);
+          added++;
+        }
+      }
+      _beatPlanSelectCountController.clear();
+    });
+    if (added < n && available < n) {
+      _showError('Only $available account(s) available for this pincode.');
+    }
+    if (added > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Added $added account(s) from pincode $_beatPlanPincodeFilter',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _clearSelectionsForPincode(String pincode) async {
+    // If this pincode is currently active, use the already loaded accounts list.
+    if (_beatPlanPincodeFilter == pincode) {
+      setState(() {
+        for (final a in _accounts) {
+          _selectedAccountIds.remove(a.id);
+        }
+        _beatPlanSelectCountController.clear();
+      });
+      return;
+    }
+
+    try {
+      final result = await AccountService.fetchAccounts(
+        page: 1,
+        limit: 10000,
+        search: _searchQuery,
+        customerStage:
+            widget.onlyApproved ? 'Customer' : _filterCustomerStage,
+        isApproved: widget.onlyApproved ? true : _filterIsApproved,
+        pincode: pincode,
+        startDate: _filterStartDate,
+        endDate: _filterEndDate,
+        createdById:
+            _filterSalesmanId ?? (_shouldFilterByOwner ? _currentUserId : null),
+      );
+      final fetched = List<Account>.from(result['accounts'] ?? []);
+      setState(() {
+        for (final a in fetched) {
+          _selectedAccountIds.remove(a.id);
+        }
+      });
+    } catch (_) {
+      // If this cleanup fails, keep existing selections; avoid blocking the user.
+    }
   }
 
   Widget _buildAccountCard(Account account) {

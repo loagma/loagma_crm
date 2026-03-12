@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/beat_plan_model.dart';
 import '../../services/beat_plan_service.dart';
-import 'salesman_allotment_screen.dart';
-import 'generate_beat_plan_screen.dart';
 import 'beat_plan_details_screen.dart';
 
 class BeatPlanManagementScreen extends StatefulWidget {
@@ -80,8 +79,17 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      String message = e.toString();
+      // Friendlier message for permission issues
+      final lower = message.toLowerCase();
+      if (lower.contains('permission') ||
+          lower.contains('forbidden') ||
+          lower.contains('403')) {
+        message =
+            'You do not have access to manage beat plans. Please log in as Admin, Tele Admin, or Manager.';
+      }
       setState(() {
-        _error = e.toString();
+        _error = message;
         _isLoading = false;
       });
     }
@@ -159,20 +167,12 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
       body: _buildBody(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const SalesmanAllotmentScreen(),
-            ),
-          );
-          _loadBeatPlans(refresh: true);
+          await context.push('/dashboard/admin/beat-plans/select-accounts');
+          if (mounted) _loadBeatPlans(refresh: true);
         },
         backgroundColor: primaryColor,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          '',
-          
-        ),
+        label: const Text('Select accounts'),
       ),
     );
   }
@@ -288,7 +288,7 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
   }
 
   Widget _buildBeatPlanCard(WeeklyBeatPlan beatPlan) {
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -385,8 +385,8 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
               children: [
                 _buildStatItem(
                   '${beatPlan.totalAreas}',
-                  'Areas',
-                  Icons.location_on,
+                  'Accounts',
+                  Icons.people,
                   primaryColor,
                 ),
                 _buildStatItem(
@@ -410,15 +410,16 @@ class _BeatPlanManagementScreenState extends State<BeatPlanManagementScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
-                children: List.generate(6, (index) {
+                children: List.generate(7, (index) {
+                  final dayOfWeek = index + 1; // 1=Mon .. 7=Sun
                   final dayPlan = beatPlan.dailyPlans!.firstWhere(
-                    (dp) => dp.dayOfWeek == index + 1,
+                    (dp) => dp.dayOfWeek == dayOfWeek,
                     orElse: () => DailyBeatPlan(
                       id: '',
                       weeklyBeatId: '',
-                      dayOfWeek: index + 1,
+                      dayOfWeek: dayOfWeek,
                       dayDate: DateTime.now(),
-                      assignedAreas: [],
+                      assignedAreas: const [],
                       plannedVisits: 0,
                       actualVisits: 0,
                       status: 'PLANNED',

@@ -3,7 +3,7 @@ import prisma from '../config/db.js';
 class BeatPlanService {
     /**
      * Generate weekly beat plan for a salesman
-     * Auto-distributes areas across Monday-Saturday (6 days)
+     * Auto-distributes areas across Monday-Sunday (7 days)
      * @param {string} salesmanId - Salesman ID
      * @param {Date} weekStartDate - Monday of the week
      * @param {string[]} pincodes - Array of pincodes assigned to salesman
@@ -20,8 +20,8 @@ class BeatPlanService {
                 monday.setDate(monday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
             }
             
-            const saturday = new Date(monday);
-            saturday.setDate(saturday.getDate() + 5); // Monday + 5 = Saturday
+            const sunday = new Date(monday);
+            sunday.setDate(sunday.getDate() + 6); // Monday + 6 = Sunday
 
             // Check if plan already exists for this week
             const existingPlan = await prisma.weeklyBeatPlan.findFirst({
@@ -62,8 +62,8 @@ class BeatPlanService {
 
             console.log(`📍 Found ${areas.length} areas for distribution:`, areas);
 
-            // Auto-distribute areas across 6 days (Monday-Saturday)
-            const dailyDistribution = this.distributeAreasAcrossDays(areas, 6);
+            // Auto-distribute areas across 7 days (Monday-Sunday)
+            const dailyDistribution = this.distributeAreasAcrossDays(areas, 7);
             
             console.log('📅 Daily distribution:', dailyDistribution);
 
@@ -73,24 +73,26 @@ class BeatPlanService {
                     salesmanId,
                     salesmanName: salesman.name || 'Unknown',
                     weekStartDate: monday,
-                    weekEndDate: saturday,
+                    weekEndDate: sunday,
                     pincodes,
-                    totalAreas: areas.length,
+                    totalAreas: 0, // will be updated after creating daily plans
                     status: 'ACTIVE', // Simplified - directly active
                     generatedBy
                 }
             });
 
-            // Create daily beat plans for Monday-Saturday (6 days)
+            // Create daily beat plans for Monday-Sunday (7 days)
             const dailyPlans = [];
-            const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            let totalPlannedVisits = 0;
+            const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             
-            for (let day = 1; day <= 6; day++) {
+            for (let day = 1; day <= 7; day++) {
                 const dayDate = new Date(monday);
                 dayDate.setDate(dayDate.getDate() + (day - 1));
 
                 const assignedAreas = dailyDistribution[day - 1] || [];
                 const plannedVisits = await this.calculatePlannedVisits(assignedAreas, pincodes);
+                totalPlannedVisits += plannedVisits;
 
                 console.log(`📆 ${dayNames[day-1]}: ${assignedAreas.length} areas - ${assignedAreas.join(', ')}`);
 
@@ -108,10 +110,18 @@ class BeatPlanService {
                 dailyPlans.push(dailyPlan);
             }
 
+            // Update weekly plan with total planned visits as total accounts
+            const updatedWeeklyPlan = await prisma.weeklyBeatPlan.update({
+                where: { id: weeklyBeatPlan.id },
+                data: {
+                    totalAreas: totalPlannedVisits
+                }
+            });
+
             return {
-                weeklyPlan: weeklyBeatPlan,
+                weeklyPlan: updatedWeeklyPlan,
                 dailyPlans,
-                totalAreas: areas.length,
+                totalAreas: totalPlannedVisits,
                 distribution: dailyDistribution
             };
 
@@ -187,10 +197,10 @@ class BeatPlanService {
      * Distribute areas evenly across specified number of days
      * Ensures no area appears on multiple days
      * @param {string[]} areas - Array of area names
-     * @param {number} numDays - Number of days to distribute across (default 6 for Mon-Sat)
+     * @param {number} numDays - Number of days to distribute across (default 7 for Mon-Sun)
      * @returns {Array<string[]>} Array of arrays (one for each day)
      */
-    static distributeAreasAcrossDays(areas, numDays = 6) {
+    static distributeAreasAcrossDays(areas, numDays = 7) {
         const distribution = Array.from({ length: numDays }, () => []);
         
         if (areas.length === 0) return distribution;
@@ -241,14 +251,10 @@ class BeatPlanService {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        let dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, etc.
-        
-        // Sunday (0) has no beat plan, return null
-        if (dayOfWeek === 0) {
-            return null;
-        }
-        
-        // dayOfWeek is already 1-6 for Mon-Sat
+        // JS getDay(): 0=Sunday, 1=Monday, ..., 6=Saturday
+        const jsDay = today.getDay();
+        // Our convention in DB: 1=Mon..7=Sun
+        const dayOfWeek = jsDay === 0 ? 7 : jsDay;
 
         // Get current week's Monday
         const monday = new Date(today);
@@ -366,14 +372,14 @@ class BeatPlanService {
      * Generate beat plan from allotted customers - assign customers day-wise
      * @param {string} salesmanId - Salesman ID
      * @param {Date} weekStartDate - Monday of the week
-     * @param {Object} dayAssignments - { "1": [accountIds], "2": [accountIds], ... } (1=Mon..6=Sat)
+     * @param {Object} dayAssignments - { \"1\": [accountIds], \"2\": [accountIds], ... } (1=Mon..7=Sun)
      * @param {string} generatedBy - Admin ID
      */
     static async generateFromCustomers(salesmanId, weekStartDate, dayAssignments, generatedBy) {
         const monday = new Date(weekStartDate);
         monday.setHours(0, 0, 0, 0);
-        const saturday = new Date(monday);
-        saturday.setDate(saturday.getDate() + 5);
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate() + 6);
 
         const salesman = await prisma.user.findUnique({
             where: { id: salesmanId },
@@ -382,7 +388,7 @@ class BeatPlanService {
         if (!salesman) throw new Error('Salesman not found');
 
         const allAssignedIds = new Set();
-        for (let day = 1; day <= 6; day++) {
+        for (let day = 1; day <= 7; day++) {
             const ids = dayAssignments[day.toString()] || [];
             ids.forEach(id => allAssignedIds.add(id));
         }
@@ -398,7 +404,7 @@ class BeatPlanService {
 
         // Update Account.assignedDays for each customer (only if allotted to this salesman)
         let totalCustomers = 0;
-        for (let day = 1; day <= 6; day++) {
+        for (let day = 1; day <= 7; day++) {
             const accountIds = dayAssignments[day.toString()] || [];
             for (const accountId of accountIds) {
                 await prisma.account.updateMany({
@@ -423,24 +429,40 @@ class BeatPlanService {
             await BeatPlanService.deleteWeeklyBeatPlan(existing.id);
         }
 
+        // Build unique pincodes for all assigned accounts
+        let uniquePincodes = [];
+        if (allAssignedIds.size > 0) {
+            const accountsWithPincode = await prisma.account.findMany({
+                where: { id: { in: Array.from(allAssignedIds) } },
+                select: { pincode: true }
+            });
+            const set = new Set();
+            accountsWithPincode.forEach(a => {
+                if (a.pincode && typeof a.pincode === 'string' && a.pincode.trim() !== '') {
+                    set.add(a.pincode.trim());
+                }
+            });
+            uniquePincodes = Array.from(set);
+        }
+
         // Create WeeklyBeatPlan + DailyBeatPlans (customer-based)
         const weeklyBeatPlan = await prisma.weeklyBeatPlan.create({
             data: {
                 salesmanId,
                 salesmanName: salesman.name || 'Unknown',
                 weekStartDate: monday,
-                weekEndDate: saturday,
-                pincodes: [],
+                weekEndDate: sunday,
+                pincodes: uniquePincodes,
                 totalAreas: totalCustomers,
                 status: 'ACTIVE',
                 generatedBy
             }
         });
 
-        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         const distribution = [];
 
-        for (let day = 1; day <= 6; day++) {
+        for (let day = 1; day <= 7; day++) {
             const accountIds = dayAssignments[day.toString()] || [];
             const dayDate = new Date(monday);
             dayDate.setDate(dayDate.getDate() + (day - 1));
@@ -637,7 +659,7 @@ class BeatPlanService {
 
         const analytics = {
             totalPlans: weeklyPlans.length,
-            totalAreas: weeklyPlans.reduce((sum, wp) => sum + wp.totalAreas, 0),
+            totalAreas: weeklyPlans.reduce((sum, wp) => sum + wp.totalAreas, 0), // here totalAreas means total accounts
             completedAreas: 0,
             completionRate: 0
         };
