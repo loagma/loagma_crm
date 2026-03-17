@@ -17,8 +17,6 @@ import '../../services/api_config.dart';
 import '../../services/network_service.dart';
 import 'assignment_map_detail_screen.dart';
 
-enum AssignmentRole { salesman, telecaller }
-
 class ModernTaskAssignmentScreen extends StatefulWidget {
   final int? initialStep;
 
@@ -34,8 +32,13 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   final _service = MapTaskAssignmentService();
   late TabController _tabController;
 
-  // Role toggle: default to salesman (existing behavior)
-  AssignmentRole _assignmentRole = AssignmentRole.salesman;
+  // Role selection: default to salesman (existing behavior)
+  String _assignmentRole = 'salesman';
+  List<String> _assignmentRoles = ['salesman', 'telecaller'];
+  final Map<String, String> _assignmentRoleLabels = {
+    'salesman': 'Salesman',
+    'telecaller': 'Telecaller',
+  };
 
   // Step tracking
   int _currentStep = 0;
@@ -100,6 +103,162 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     }
 
     _loadSalesmen();
+    _loadAssignmentRoles();
+  }
+
+  String _normalizeRoleKey(String value) {
+    return value.toLowerCase().trim().replaceAll(' ', '');
+  }
+
+  String _toRoleLabel(String roleValue) {
+    final normalized = roleValue.trim().replaceAll(RegExp(r'[_-]+'), ' ');
+    if (normalized.isEmpty) return 'Role';
+    return normalized
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
+  String _getRoleFromUser(Map<String, dynamic> user) {
+    final roleValue = user['role'];
+    if (roleValue is Map && roleValue['name'] != null) {
+      final roleName = roleValue['name'].toString().trim();
+      if (roleName.isNotEmpty && roleName.toLowerCase() != 'null') {
+        return roleName;
+      }
+    }
+
+    final directRole = (roleValue ?? '').toString().trim();
+    if (directRole.isNotEmpty && directRole.toLowerCase() != 'null') {
+      return directRole;
+    }
+
+    final roleList = user['roles'];
+    if (roleList is List && roleList.isNotEmpty) {
+      final first = roleList.first;
+      if (first is Map && first['name'] != null) {
+        return first['name'].toString();
+      }
+      return first.toString();
+    }
+
+    return '';
+  }
+
+  bool get _isTelecallerRole => _assignmentRole.contains('telecaller');
+
+  String get _currentRoleLabel {
+    return _assignmentRoleLabels[_assignmentRole] ?? _toRoleLabel(_assignmentRole);
+  }
+
+  Future<void> _loadAssignmentRoles() async {
+    try {
+      final usersResult = await UserService.getAllUsers();
+      if (usersResult['success'] != true) return;
+
+      final users = (usersResult['data'] as List?) ?? [];
+      final roleKeys = <String>{'salesman', 'telecaller'};
+
+      for (final user in users) {
+        if (user is! Map) continue;
+        final userMap = Map<String, dynamic>.from(user);
+        final rawRole = _getRoleFromUser(userMap);
+        if (rawRole.isEmpty) continue;
+
+        final roleKey = _normalizeRoleKey(rawRole);
+        if (roleKey.isEmpty) continue;
+
+        roleKeys.add(roleKey);
+        _assignmentRoleLabels[roleKey] = _toRoleLabel(rawRole);
+      }
+
+      final sortedRoles = roleKeys.toList()
+        ..sort((a, b) => (_assignmentRoleLabels[a] ?? a)
+            .compareTo(_assignmentRoleLabels[b] ?? b));
+      final orderedRoles = <String>[];
+      if (sortedRoles.remove('salesman')) orderedRoles.add('salesman');
+      if (sortedRoles.remove('telecaller')) orderedRoles.add('telecaller');
+      orderedRoles.addAll(sortedRoles);
+
+      if (!mounted) return;
+      setState(() {
+        _assignmentRoles = orderedRoles;
+        if (!_assignmentRoles.contains(_assignmentRole)) {
+          _assignmentRole = _assignmentRoles.first;
+        }
+      });
+    } catch (_) {
+      // Keep fallback defaults when role loading fails.
+    }
+  }
+
+  Future<void> _loadUsersForRole(String roleKey) async {
+    if (!mounted) return;
+
+    if (roleKey == 'salesman') {
+      await _loadSalesmen();
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final usersResult = await UserService.getAllUsers();
+      if (!mounted) return;
+
+      if (usersResult['success'] == true) {
+        final users = (usersResult['data'] as List?) ?? [];
+        final roleUsers = users.where((user) {
+          if (user is! Map) return false;
+          final userMap = Map<String, dynamic>.from(user);
+          final userRole = _normalizeRoleKey(_getRoleFromUser(userMap));
+          return userRole == roleKey;
+        }).map((u) => Map<String, dynamic>.from(u as Map)).toList();
+
+        setState(() {
+          _salesmen = roleUsers;
+          _filteredSalesmen = roleUsers;
+
+          if (_selectedSalesmanId != null &&
+              !_salesmen.any((u) => (u['id'] ?? u['_id']) == _selectedSalesmanId)) {
+            _selectedSalesmanId = null;
+            _selectedSalesmanName = null;
+          }
+        });
+      } else {
+        _showError(usersResult['message'] ?? 'Failed to load users for role');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _onAssignmentRoleChanged(String roleKey) async {
+    if (roleKey == _assignmentRole) return;
+
+    setState(() {
+      _assignmentRole = roleKey;
+      _currentStep = 0;
+      _salesmanSearchController.clear();
+      _selectedSalesmanId = null;
+      _selectedSalesmanName = null;
+    });
+
+    _pageController.jumpToPage(0);
+
+    if (_isTelecallerRole) {
+      if (_telecallers.isEmpty && !_isLoadingTelecaller) {
+        await _loadTelecallerData();
+      }
+      return;
+    }
+
+    await _loadUsersForRole(roleKey);
   }
 
   @override
@@ -506,7 +665,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   // Assign areas
   Future<void> _assignAreas() async {
     if (_selectedSalesmanId == null) {
-      _showError('Please select a salesman');
+      _showError('Please select a ${_currentRoleLabel.toLowerCase()}');
       return;
     }
 
@@ -714,7 +873,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     // Step 0: Salesman selection
     if (_currentStep == 0) {
       if (_selectedSalesmanId == null) {
-        _showError('Please select a salesman');
+        _showError('Please select a ${_currentRoleLabel.toLowerCase()}');
         return;
       }
     }
@@ -780,7 +939,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   String _getStepTitle(int step) {
     switch (step) {
       case 0:
-        return 'Select Salesman';
+        return 'Select $_currentRoleLabel';
       case 1:
         return 'Add Pincodes';
       case 2:
@@ -795,7 +954,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   String _ctaLabel() {
     if (_currentStep == 0) {
       return _selectedSalesmanId == null
-          ? 'Select Salesman to Continue'
+          ? 'Select $_currentRoleLabel to Continue'
           : 'Continue';
     }
     if (_currentStep == 1) {
@@ -811,7 +970,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
     String text = '';
     switch (_currentStep) {
       case 0:
-        text = 'Step 1: Choose a salesman. You must select one to go ahead.';
+        text =
+            'Step 1: Choose a ${_currentRoleLabel.toLowerCase()}. You must select one to go ahead.';
         break;
       case 1:
         text =
@@ -857,8 +1017,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
         backgroundColor: primaryColor,
         elevation: 0,
         actions: [
-          if (_assignmentRole == AssignmentRole.salesman &&
-              _selectedSalesmanName != null)
+          if (!_isTelecallerRole && _selectedSalesmanName != null)
             Container(
               margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -907,40 +1066,36 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   Widget _buildAssignTab() {
     return Column(
       children: [
-        // Role toggle
+        // Role selector
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ChoiceChip(
-                label: const Text('Salesman'),
-                selected: _assignmentRole == AssignmentRole.salesman,
-                onSelected: (_) {
-                  setState(() {
-                    _assignmentRole = AssignmentRole.salesman;
-                  });
-                },
+          child: DropdownButtonFormField<String>(
+            value: _assignmentRole,
+            decoration: InputDecoration(
+              labelText: 'Select Role',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: const Text('Telecaller'),
-                selected: _assignmentRole == AssignmentRole.telecaller,
-                onSelected: (_) {
-                  setState(() {
-                    _assignmentRole = AssignmentRole.telecaller;
-                  });
-                  if (_assignmentRole == AssignmentRole.telecaller &&
-                      _telecallers.isEmpty &&
-                      !_isLoadingTelecaller) {
-                    _loadTelecallerData();
-                  }
-                },
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
-            ],
+            ),
+            items: _assignmentRoles.map((roleKey) {
+              return DropdownMenuItem<String>(
+                value: roleKey,
+                child: Text(
+                  _assignmentRoleLabels[roleKey] ?? _toRoleLabel(roleKey),
+                ),
+              );
+            }).toList(),
+            onChanged: (role) {
+              if (role == null) return;
+              _onAssignmentRoleChanged(role);
+            },
           ),
         ),
-        if (_assignmentRole == AssignmentRole.telecaller)
+        if (_isTelecallerRole)
           // Telecaller: simple 2-step shell (Step 1: telecaller, Step 2: days+pincodes)
           Expanded(
             child: Column(
@@ -1712,8 +1867,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Select a salesman to assign tasks',
+          Text(
+            'Select a ${_currentRoleLabel.toLowerCase()} to assign tasks',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 16),
@@ -1721,7 +1876,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
           TextField(
             controller: _salesmanSearchController,
             decoration: InputDecoration(
-              labelText: 'Search Salesman',
+              labelText: 'Search $_currentRoleLabel',
               hintText: 'Search by name, code, or phone',
               prefixIcon: const Icon(Icons.search, color: primaryColor),
               suffixIcon: _salesmanSearchController.text.isNotEmpty
@@ -1752,8 +1907,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                     const SizedBox(height: 16),
                     Text(
                       _salesmen.isEmpty
-                          ? 'No salesmen found'
-                          : 'No matching salesmen',
+                        ? 'No $_currentRoleLabel found'
+                        : 'No matching $_currentRoleLabel',
                     ),
                   ],
                 ),
@@ -1761,7 +1916,8 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
             )
           else
             ...(_filteredSalesmen.map((salesman) {
-              final isSelected = _selectedSalesmanId == salesman['id'];
+              final salesmanId = salesman['id'] ?? salesman['_id'];
+              final isSelected = _selectedSalesmanId == salesmanId;
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 elevation: isSelected ? 4 : 1,
@@ -1818,7 +1974,7 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                         ),
                   onTap: () {
                     setState(() {
-                      _selectedSalesmanId = salesman['id'];
+                      _selectedSalesmanId = salesmanId;
                       _selectedSalesmanName = salesman['name'];
                     });
                   },
@@ -2037,6 +2193,27 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                             ),
                           ),
                           const SizedBox(height: 8),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            value: areas.isNotEmpty &&
+                                selectedAreas.length == areas.length,
+                            title: const Text('Select All Areas'),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedAreasByPincode[pincode] ??= [];
+                                if (value == true) {
+                                  _selectedAreasByPincode[pincode] = List<String>.from(
+                                    areas,
+                                  );
+                                } else {
+                                  _selectedAreasByPincode[pincode] = [];
+                                }
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
@@ -2049,9 +2226,12 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
                                   setState(() {
                                     _selectedAreasByPincode[pincode] ??= [];
                                     if (selected) {
-                                      _selectedAreasByPincode[pincode]!.add(
-                                        area,
-                                      );
+                                      if (!_selectedAreasByPincode[pincode]!
+                                          .contains(area)) {
+                                        _selectedAreasByPincode[pincode]!.add(
+                                          area,
+                                        );
+                                      }
                                     } else {
                                       _selectedAreasByPincode[pincode]!.remove(
                                         area,

@@ -130,11 +130,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.calendar_view_week,
             "/dashboard/admin/beat-plans/select-accounts",
           ),
-          SidebarItem(
-            "Existing Beat Plans",
-            Icons.route,
-            "/dashboard/admin/beat-plans",
-          ),
+          // SidebarItem(
+          //   "Existing Beat Plans",
+          //   Icons.route,
+          //   "/dashboard/admin/beat-plans",
+          // ),
           SidebarItem(
             "Verify Accounts",
             Icons.verified_user_outlined,
