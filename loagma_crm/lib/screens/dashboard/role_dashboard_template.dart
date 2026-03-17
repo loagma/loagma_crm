@@ -92,7 +92,7 @@ class RoleDashboardTemplate extends StatelessWidget {
           ),
 
           SidebarItem(
-            "Task Assignment",
+            "Area Assignment (Pincode)",
             Icons.map_outlined, // visually represents allotment/area
             "/dashboard/admin/task-assignment",
           ),

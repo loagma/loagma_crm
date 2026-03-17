@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
+import '../../services/map_task_assignment_service.dart';
 import '../../services/user_service.dart';
 
 /// Salesman screen: customers allotted by admin (day-wise).
@@ -18,29 +19,26 @@ class SalesmanCustomerAllotmentScreen extends StatefulWidget {
 
 class _SalesmanCustomerAllotmentScreenState
     extends State<SalesmanCustomerAllotmentScreen> {
-  // All allotted accounts for the salesman (unfiltered)
+  final _taskAssignmentService = MapTaskAssignmentService();
   List<Account> _allAccounts = [];
-
-  // Currently visible accounts after applying day/search filters
-  List<Account> _accounts = [];
+  final Set<String> _assignedPincodes = {};
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _searchQuery;
-  int _selectedDayIndex = 0; // 0 = All days, 1–7 = Mon–Sun
-
+  final Set<int> _selectedDaysForAssignment = {};
+  final Set<String> _selectedAccountIds = {};
+  final Set<String> _expandedPincodes = {};
   final TextEditingController _searchController = TextEditingController();
-  static const List<String> _dayLabels = [
-    'All days',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
-  /// Cached count of customers per day (1–7) for quick UX summary.
-  final Map<int, int> _dayCounts = {};
+  Map<String, List<Account>> _accountsByPincode = {};
+  static const Map<int, String> _dayLabelMap = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+    7: 'Sun',
+  };
 
   String? get _currentUserId => UserService.currentUserId;
   static const Color _primary = Color(0xFFD7BE69);
@@ -73,12 +71,24 @@ class _SalesmanCustomerAllotmentScreenState
         search: null,
         limit: 500,
       );
+
+      final assignmentResult =
+          await _taskAssignmentService.getAssignmentsBySalesman(userId);
+      final assignmentRows =
+          (assignmentResult['assignments'] as List?) ?? const [];
+      final assignedPins = assignmentRows
+          .map((e) => (e as Map)['pincode']?.toString().trim() ?? '')
+          .where((pin) => pin.isNotEmpty)
+          .toSet();
+
       if (!mounted) return;
       final accounts = List<Account>.from(result['accounts'] ?? []);
       setState(() {
+        _assignedPincodes
+          ..clear()
+          ..addAll(assignedPins);
         _allAccounts = accounts;
-        _recomputeDayCounts();
-        _applyFilters();
+        _regroupAccounts();
         _isLoading = false;
       });
     } catch (e) {
@@ -94,47 +104,100 @@ class _SalesmanCustomerAllotmentScreenState
     }
   }
 
-  /// Recalculate how many customers fall on each beat day (1–7).
-  void _recomputeDayCounts() {
-    _dayCounts.clear();
-    for (final acc in _allAccounts) {
-      final days = acc.assignedDays ?? const [];
-      for (final d in days) {
-        if (d < 1 || d > 7) continue;
-        _dayCounts[d] = (_dayCounts[d] ?? 0) + 1;
-      }
-    }
-  }
-
-  /// Apply current day + search filters to `_allAccounts`.
-  void _applyFilters() {
+  void _regroupAccounts() {
     final query = _searchQuery?.trim().toLowerCase();
-    final selectedDay = _selectedDayIndex; // 0 = All
-
-    _accounts = _allAccounts.where((acc) {
-      // Day filter
-      if (selectedDay > 0) {
-        final days = acc.assignedDays ?? const [];
-        if (!days.contains(selectedDay)) return false;
-      }
-
-      // Search filter
+    final grouped = <String, List<Account>>{};
+    for (final acc in _allAccounts) {
       if (query != null && query.isNotEmpty) {
         final haystack = [
           acc.personName,
           acc.businessName ?? '',
           acc.accountCode,
           acc.contactNumber,
+          acc.pincode ?? '',
         ].join(' ').toLowerCase();
-        if (!haystack.contains(query)) return false;
+        if (!haystack.contains(query)) continue;
       }
+      final pin = (acc.pincode == null || acc.pincode!.trim().isEmpty)
+          ? 'No Pincode'
+          : acc.pincode!.trim();
+      grouped.putIfAbsent(pin, () => []).add(acc);
+    }
 
-      return true;
-    }).toList();
+    final sortedKeys = grouped.keys.toList()..sort();
+    for (final pin in _assignedPincodes) {
+      grouped.putIfAbsent(pin, () => []);
+    }
+    final allKeys = grouped.keys.toList()..sort();
+    _accountsByPincode = {
+      for (final key in allKeys)
+        key: grouped[key]!..sort((a, b) =>
+            (a.businessName ?? a.personName).compareTo(b.businessName ?? b.personName)),
+    };
 
-    // Trigger rebuild
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  int get _totalVisibleAccounts {
+    return _accountsByPincode.values.fold<int>(0, (sum, v) => sum + v.length);
+  }
+
+  Future<void> _saveSelectedAssignments() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    if (_selectedAccountIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one account'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedDaysForAssignment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one day'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await AccountService.bulkAssignAccounts(
+        accountIds: _selectedAccountIds.toList(),
+        assignedToId: userId,
+        assignedDays: _selectedDaysForAssignment.toList()..sort(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Assigned ${_selectedAccountIds.length} account(s) to ${_selectedDaysForAssignment.length} day(s)',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      _selectedAccountIds.clear();
+      await _loadAccounts();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save assignments: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -189,7 +252,7 @@ class _SalesmanCustomerAllotmentScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Customers allotted to you by admin (day-wise)',
+                          'Pincode-wise allotted customers',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey.shade700,
@@ -211,12 +274,12 @@ class _SalesmanCustomerAllotmentScreenState
                           ),
                           onSubmitted: (v) {
                             _searchQuery = v.trim().isEmpty ? null : v.trim();
-                            _applyFilters();
+                            _regroupAccounts();
                           },
                         ),
                         const SizedBox(height: 12),
                         const Text(
-                          'Day',
+                          'Select days to assign',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -226,43 +289,39 @@ class _SalesmanCustomerAllotmentScreenState
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: List.generate(_dayLabels.length, (i) {
-                              final isSelected = _selectedDayIndex == i;
-                              // For index 0 show total unique customers,
-                              // for other days show per‑day counts.
-                              String labelText;
-                              if (i == 0) {
-                                labelText =
-                                    'All days (${_allAccounts.length})';
-                              } else {
-                                final count = _dayCounts[i] ?? 0;
-                                labelText =
-                                    '${_dayLabels[i]}${count > 0 ? ' ($count)' : ''}';
-                              }
+                            children: _dayLabelMap.entries.map((entry) {
+                              final day = entry.key;
+                              final isSelected =
+                                  _selectedDaysForAssignment.contains(day);
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: FilterChip(
-                                  label: Text(labelText),
+                                  label: Text(entry.value),
                                   selected: isSelected,
-                                  onSelected: (v) {
-                                    _selectedDayIndex = v == true ? i : 0;
-                                    _applyFilters();
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedDaysForAssignment.add(day);
+                                      } else {
+                                        _selectedDaysForAssignment.remove(day);
+                                      }
+                                    });
                                   },
                                   selectedColor: _primary.withValues(alpha: 0.3),
                                   checkmarkColor: _primary,
                                 ),
                               );
-                            }),
+                            }).toList(),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  if (!_isLoading && _accounts.isNotEmpty)
+                  if (!_isLoading && _totalVisibleAccounts > 0)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text(
-                        '${_accounts.length} customer(s) allotted',
+                        '${_accountsByPincode.length} pincode(s) • $_totalVisibleAccounts account(s)',
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey.shade700,
@@ -275,16 +334,63 @@ class _SalesmanCustomerAllotmentScreenState
                         ? const Center(
                             child: CircularProgressIndicator(color: _primary),
                           )
-                        : _accounts.isEmpty
+                        : _accountsByPincode.isEmpty
                             ? _buildEmpty()
                             : RefreshIndicator(
                                 onRefresh: _loadAccounts,
                                 color: _primary,
                                 child: ListView.builder(
                                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                                  itemCount: _accounts.length,
-                                  itemBuilder: (context, index) =>
-                                      _buildCard(_accounts[index]),
+                                  itemCount: _accountsByPincode.length,
+                                  itemBuilder: (context, index) {
+                                    final pincode =
+                                        _accountsByPincode.keys.elementAt(index);
+                                    final accounts = _accountsByPincode[pincode] ?? [];
+                                    final selectedInPin = accounts
+                                        .where((a) => _selectedAccountIds.contains(a.id))
+                                        .length;
+
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: ExpansionTile(
+                                        key: PageStorageKey<String>('sales-pin-$pincode'),
+                                        initiallyExpanded:
+                                            _expandedPincodes.contains(pincode),
+                                        onExpansionChanged: (expanded) {
+                                          setState(() {
+                                            if (expanded) {
+                                              _expandedPincodes.add(pincode);
+                                            } else {
+                                              _expandedPincodes.remove(pincode);
+                                            }
+                                          });
+                                        },
+                                        title: Text(
+                                          pincode,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          '${accounts.length} account(s)${selectedInPin > 0 ? ' • $selectedInPin selected' : ''}',
+                                        ),
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                                12, 0, 12, 12),
+                                            child: Column(
+                                              children: accounts.map((account) {
+                                                return _buildAccountItem(account);
+                                              }).toList(),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                   ),
@@ -293,6 +399,49 @@ class _SalesmanCustomerAllotmentScreenState
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${_selectedAccountIds.length} selected • ${_selectedDaysForAssignment.length} day(s)',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _isSaving ? null : _saveSelectedAssignments,
+                style: ElevatedButton.styleFrom(backgroundColor: _primary),
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save),
+                label: Text(_isSaving ? 'Saving...' : 'Assign Days'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -309,9 +458,7 @@ class _SalesmanCustomerAllotmentScreenState
           ),
           const SizedBox(height: 16),
           Text(
-            _selectedDayIndex == 0
-                ? 'No customers allotted yet'
-                : 'No customers allotted for ${_dayLabels[_selectedDayIndex]}',
+            'No customers allotted yet',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey.shade700,
@@ -330,8 +477,9 @@ class _SalesmanCustomerAllotmentScreenState
     );
   }
 
-  Widget _buildCard(Account account) {
+  Widget _buildAccountItem(Account account) {
     final name = account.businessName ?? account.personName;
+    final isSelected = _selectedAccountIds.contains(account.id);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -345,6 +493,19 @@ class _SalesmanCustomerAllotmentScreenState
             children: [
               Row(
                 children: [
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedAccountIds.add(account.id);
+                        } else {
+                          _selectedAccountIds.remove(account.id);
+                        }
+                      });
+                    },
+                    activeColor: _primary,
+                  ),
                   CircleAvatar(
                     backgroundColor: _primary,
                     radius: 22,
@@ -384,6 +545,15 @@ class _SalesmanCustomerAllotmentScreenState
                             color: Colors.grey.shade500,
                           ),
                         ),
+                        if (account.assignedDays != null &&
+                            account.assignedDays!.isNotEmpty)
+                          Text(
+                            'Current: ${account.assignedDays!.where((d) => _dayLabelMap.containsKey(d)).map((d) => _dayLabelMap[d]).join(', ')}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
                       ],
                     ),
                   ),

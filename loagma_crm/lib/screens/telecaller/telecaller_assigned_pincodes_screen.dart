@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../models/account_model.dart';
+import '../../services/account_service.dart';
 import '../../services/telecaller_api_service.dart';
 import '../../services/map_task_assignment_service.dart';
+import '../../services/user_service.dart';
 
 class TelecallerAssignedPincodesScreen extends StatefulWidget {
   const TelecallerAssignedPincodesScreen({super.key});
@@ -14,11 +17,25 @@ class _TelecallerAssignedPincodesScreenState
     extends State<TelecallerAssignedPincodesScreen> {
   final _service = MapTaskAssignmentService();
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _error;
   List<Map<String, dynamic>> _rows = [];
   final Map<String, Map<String, dynamic>> _detailsByPin = {};
+  final Map<String, List<Account>> _accountsByPin = {};
   final Set<String> _loadingPins = {};
   final Set<String> _expandedPins = {};
+  final Set<String> _selectedAccountIds = {};
+  final Set<int> _selectedDaysForAssignment = {};
+
+  static const Map<int, String> _dayLabelMap = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+    7: 'Sun',
+  };
 
   @override
   void initState() {
@@ -31,7 +48,9 @@ class _TelecallerAssignedPincodesScreenState
       _isLoading = true;
       _error = null;
       _detailsByPin.clear();
+      _accountsByPin.clear();
       _loadingPins.clear();
+      _selectedAccountIds.clear();
     });
     final result = await TelecallerApiService.getPincodeAssignments();
     if (!mounted) return;
@@ -139,6 +158,86 @@ class _TelecallerAssignedPincodesScreenState
     }
   }
 
+  Future<void> _loadAccountsByPincode(String pincode) async {
+    if (_accountsByPin.containsKey(pincode)) return;
+    final userId = UserService.currentUserId;
+    if (userId == null) return;
+
+    try {
+      final result = await AccountService.fetchAccounts(
+        assignedToId: userId,
+        pincode: pincode,
+        limit: 500,
+        page: 1,
+      );
+      if (!mounted) return;
+      final accounts = List<Account>.from(result['accounts'] ?? []);
+      setState(() {
+        _accountsByPin[pincode] = accounts;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _accountsByPin[pincode] = [];
+      });
+    }
+  }
+
+  Future<void> _saveSelectedAssignments() async {
+    final userId = UserService.currentUserId;
+    if (userId == null) return;
+
+    if (_selectedAccountIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one account'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedDaysForAssignment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one day'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await AccountService.bulkAssignAccounts(
+        accountIds: _selectedAccountIds.toList(),
+        assignedToId: userId,
+        assignedDays: _selectedDaysForAssignment.toList()..sort(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Assigned ${_selectedAccountIds.length} account(s) to ${_selectedDaysForAssignment.length} day(s)',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save assignments: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   String _formatDays(List<int> days) {
     if (days.isEmpty) return 'All days';
     if (days.contains(0)) return 'All days';
@@ -193,7 +292,7 @@ class _TelecallerAssignedPincodesScreenState
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                         itemCount: _rows.length,
                         itemBuilder: (context, index) {
                           final row = _rows[index];
@@ -212,6 +311,10 @@ class _TelecallerAssignedPincodesScreenState
                           final areaCount = (details?['areaCount'] is int)
                               ? details!['areaCount'] as int
                               : int.tryParse(details?['areaCount']?.toString() ?? '0') ?? 0;
+                            final accounts = _accountsByPin[pin] ?? const <Account>[];
+                            final selectedInPin = accounts
+                              .where((a) => _selectedAccountIds.contains(a.id))
+                              .length;
 
                           final locParts = <String>[
                             if (city != null && city.isNotEmpty) city,
@@ -240,6 +343,7 @@ class _TelecallerAssignedPincodesScreenState
                                 });
                                 if (expanded) {
                                   _loadPincodeDetails(pin);
+                                  _loadAccountsByPincode(pin);
                                 }
                               },
                               leading: const Icon(
@@ -257,6 +361,14 @@ class _TelecallerAssignedPincodesScreenState
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text('Days: ${_formatDays(days)}'),
+                                  if (selectedInPin > 0)
+                                    Text(
+                                      '$selectedInPin account(s) selected',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   if (locLine.isNotEmpty)
                                     Text(
                                       locLine,
@@ -320,6 +432,47 @@ class _TelecallerAssignedPincodesScreenState
                                           style: TextStyle(color: Colors.grey[700]),
                                         ),
                                       ],
+                                      const SizedBox(height: 8),
+                                      if (!_accountsByPin.containsKey(pin))
+                                        Text(
+                                          'Loading accounts...',
+                                          style: TextStyle(color: Colors.grey[700]),
+                                        )
+                                      else if (accounts.isEmpty)
+                                        Text(
+                                          'No accounts available for this pincode',
+                                          style: TextStyle(color: Colors.grey[700]),
+                                        )
+                                      else
+                                        ...accounts.map((account) {
+                                          final isSelected =
+                                              _selectedAccountIds.contains(account.id);
+                                          return CheckboxListTile(
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            value: isSelected,
+                                            controlAffinity:
+                                                ListTileControlAffinity.leading,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (value == true) {
+                                                  _selectedAccountIds.add(account.id);
+                                                } else {
+                                                  _selectedAccountIds.remove(account.id);
+                                                }
+                                              });
+                                            },
+                                            title: Text(
+                                              account.businessName ?? account.personName,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              '${account.accountCode} • ${account.contactNumber}',
+                                            ),
+                                          );
+                                        }),
                                     ],
                                   ),
                                 ),
@@ -329,6 +482,85 @@ class _TelecallerAssignedPincodesScreenState
                         },
                       ),
                     ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _dayLabelMap.entries.map((entry) {
+                    final selected =
+                        _selectedDaysForAssignment.contains(entry.key);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(entry.value),
+                        selected: selected,
+                        onSelected: (v) {
+                          setState(() {
+                            if (v) {
+                              _selectedDaysForAssignment.add(entry.key);
+                            } else {
+                              _selectedDaysForAssignment.remove(entry.key);
+                            }
+                          });
+                        },
+                        selectedColor:
+                            const Color(0xFFD7BE69).withOpacity(0.3),
+                        checkmarkColor: const Color(0xFFD7BE69),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_selectedAccountIds.length} selected • ${_selectedDaysForAssignment.length} day(s)',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _isSaving ? null : _saveSelectedAssignments,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD7BE69),
+                    ),
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(_isSaving ? 'Saving...' : 'Assign Days'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
