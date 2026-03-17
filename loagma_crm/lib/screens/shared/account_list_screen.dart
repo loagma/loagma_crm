@@ -1309,15 +1309,15 @@ class _AccountListScreenState extends State<AccountListScreen> {
             onPressed: _refreshAccounts,
           ),
           if (_isAdmin && !_selectionMode)
-            // TextButton.icon(
-            //   onPressed: () => setState(() {
-            //     _selectionMode = true;
-            //     _selectedAccountIds.clear();
-            //   }),
-            //   icon: const Icon(Icons.checklist_rtl, size: 20),
-            //   label: const Text('Select'),
-            //   style: TextButton.styleFrom(foregroundColor: Colors.white),
-            // ),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _selectionMode = true;
+                _selectedAccountIds.clear();
+              }),
+              icon: const Icon(Icons.checklist_rtl, size: 20),
+              label: const Text('Select'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+            ),
           if (_selectionMode) ...[
             TextButton(
               onPressed: () {
