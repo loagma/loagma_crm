@@ -51,6 +51,52 @@ const getSalesmanTaskAssignments = async (req, res) => {
       },
     });
 
+    // Build latest-assignment business totals by pincode.
+    // Query is ordered by assignedDate desc, so first seen entry is the latest.
+    const latestBusinessCountByPincode = {};
+    const assignedPincodes = [];
+    for (const assignment of assignments) {
+      const pin = (assignment.pincode || '').toString().trim();
+      if (!pin) continue;
+
+      if (!latestBusinessCountByPincode.hasOwnProperty(pin)) {
+        latestBusinessCountByPincode[pin] = Number(assignment.totalBusinesses || 0);
+      }
+      assignedPincodes.push(pin);
+    }
+
+    const uniqueAssignedPincodes = [...new Set(assignedPincodes)];
+
+    let existingAccountCounts = [];
+    if (uniqueAssignedPincodes.length > 0) {
+      existingAccountCounts = await prisma.account.groupBy({
+        by: ['pincode'],
+        where: {
+          pincode: {
+            in: uniqueAssignedPincodes,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      });
+    }
+
+    const existingAccountsByPincode = {};
+    for (const row of existingAccountCounts) {
+      const pin = (row.pincode || '').toString().trim();
+      if (!pin) continue;
+      existingAccountsByPincode[pin] = row._count?._all || 0;
+    }
+
+    const pincodeStats = {};
+    for (const pin of uniqueAssignedPincodes) {
+      pincodeStats[pin] = {
+        totalBusinessCount: latestBusinessCountByPincode[pin] || 0,
+        existingAccountsCount: existingAccountsByPincode[pin] || 0,
+      };
+    }
+
     res.json({
       success: true,
       assignments: assignments.map(assignment => ({
@@ -67,6 +113,7 @@ const getSalesmanTaskAssignments = async (req, res) => {
         assignedDate: assignment.assignedDate,
         totalBusinesses: assignment.totalBusinesses || 0,
       })),
+      pincodeStats,
     });
   } catch (error) {
     console.error('Error fetching salesman task assignments:', error);

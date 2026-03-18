@@ -387,6 +387,107 @@ class AccountService {
     }
   }
 
+  static DateTime toWeekStart(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final delta = normalized.weekday - 1;
+    return normalized.subtract(Duration(days: delta));
+  }
+
+  static Future<Map<String, dynamic>> fetchWeeklyAssignmentsView({
+    required String salesmanId,
+    required DateTime weekStartDate,
+    String? pincode,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+      final uri = Uri.parse('${ApiConfig.accountsUrl}/weekly/view').replace(
+        queryParameters: {
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          if (pincode != null && pincode.trim().isNotEmpty)
+            'pincode': pincode.trim(),
+        },
+      );
+
+      final response = await http.get(uri, headers: headers);
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to load weekly assignments');
+    } catch (e) {
+      print('Error fetching weekly assignments view: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> autoAssignNextUnassignedAccounts({
+    required String salesmanId,
+    required String pincode,
+    required DateTime weekStartDate,
+    required int day,
+    required int countN,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/weekly/auto-assign-next'),
+        headers: headers,
+        body: json.encode({
+          'salesmanId': salesmanId,
+          'pincode': pincode.trim(),
+          'weekStartDate': weekStart.toIso8601String(),
+          'day': day,
+          'countN': countN,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to auto-assign next accounts');
+    } catch (e) {
+      print('Error auto assigning next unassigned accounts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<int> manualAssignWeeklyAccounts({
+    required String salesmanId,
+    required DateTime weekStartDate,
+    required List<String> accountIds,
+    required List<int> assignedDays,
+    List<String> manualOverrideAccountIds = const [],
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/weekly/manual-assign'),
+        headers: headers,
+        body: json.encode({
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          'accountIds': accountIds,
+          'assignedDays': assignedDays,
+          'manualOverrideAccountIds': manualOverrideAccountIds,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return (data['count'] as num?)?.toInt() ?? 0;
+      }
+      throw Exception(data['message'] ?? 'Failed to assign weekly accounts');
+    } catch (e) {
+      print('Error manual assigning weekly accounts: $e');
+      rethrow;
+    }
+  }
+
   static Future<int> bulkApproveAccounts({
     required List<String> accountIds,
   }) async {

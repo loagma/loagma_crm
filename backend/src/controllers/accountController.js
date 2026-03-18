@@ -4,6 +4,36 @@ import { uploadBase64Image } from '../services/cloudinaryService.js';
 
 const prisma = new PrismaClient();
 
+const normalizeWeekStartDate = (input) => {
+  const base = input ? new Date(input) : new Date();
+  if (Number.isNaN(base.getTime())) return null;
+  const date = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  const day = date.getDay();
+  const delta = day === 0 ? -6 : 1 - day; // Monday start
+  date.setDate(date.getDate() + delta);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const parseAssignedDays = (value) => {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .map((d) => parseInt(d, 10))
+    .filter((d) => d >= 1 && d <= 7))];
+};
+
+const toAccountDtoWithAssignedDays = (account, assignedDays) => ({
+  ...account,
+  assignedDays,
+});
+
+const getWeeklyAssignmentDelegate = (client) => {
+  if (!client) return null;
+  const delegate = client.weeklyAccountAssignment;
+  if (!delegate) return null;
+  return typeof delegate.findMany === 'function' ? delegate : null;
+};
+
 // ==================== ACCOUNT CRUD ====================
 
 export const getAllAccounts = async (req, res) => {
@@ -1134,6 +1164,465 @@ export const bulkAssignAccounts = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getWeeklyAssignmentsView = async (req, res) => {
+  try {
+    const salesmanId = req.query.salesmanId || req.user?.id;
+    const weekStartDate = normalizeWeekStartDate(req.query.weekStartDate);
+    const pincodeFilter = req.query.pincode ? String(req.query.pincode).trim() : null;
+
+    if (!salesmanId) {
+      return res.status(400).json({ success: false, message: 'salesmanId is required' });
+    }
+
+    if (!weekStartDate) {
+      return res.status(400).json({ success: false, message: 'Valid weekStartDate is required' });
+    }
+
+    const taskPinsRows = await prisma.taskAssignment.findMany({
+      where: { salesmanId },
+      select: { pincode: true },
+      orderBy: { assignedDate: 'desc' },
+    });
+
+    const assignedPincodes = [...new Set(taskPinsRows
+      .map((r) => (r.pincode || '').trim())
+      .filter((p) => p.length > 0))];
+
+    const pincodes = pincodeFilter
+      ? assignedPincodes.filter((p) => p === pincodeFilter)
+      : assignedPincodes;
+
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+
+    const [allAccounts, weeklyRows] = await Promise.all([
+      pincodes.length === 0
+        ? Promise.resolve([])
+        : prisma.account.findMany({
+            where: { pincode: { in: pincodes } },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          }),
+      weeklyDelegate
+        ? weeklyDelegate.findMany({
+            where: {
+              salesmanId,
+              weekStartDate,
+              ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
+            },
+            include: { account: true },
+            orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const dayTotals = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    const weeklyByPincode = {};
+
+    if (weeklyDelegate) {
+      for (const row of weeklyRows) {
+        const pin = (row.pincode || '').trim();
+        if (!pin) continue;
+
+        const days = parseAssignedDays(row.assignedDays);
+        if (!weeklyByPincode[pin]) weeklyByPincode[pin] = [];
+        weeklyByPincode[pin].push({
+          ...row,
+          assignedDays: days,
+        });
+
+        for (const day of days) {
+          dayTotals[day] = (dayTotals[day] || 0) + 1;
+        }
+      }
+    } else {
+      // Compatibility fallback for servers running an older Prisma client.
+      for (const account of allAccounts) {
+        const pin = (account.pincode || '').trim();
+        if (!pin) continue;
+
+        const days = parseAssignedDays(account.assignedDays || []);
+        if (days.length === 0) continue;
+
+        if (!weeklyByPincode[pin]) weeklyByPincode[pin] = [];
+        weeklyByPincode[pin].push({
+          account,
+          assignedDays: days,
+        });
+
+        for (const day of days) {
+          dayTotals[day] = (dayTotals[day] || 0) + 1;
+        }
+      }
+    }
+
+    const allByPincode = {};
+    for (const account of allAccounts) {
+      const pin = (account.pincode || '').trim();
+      if (!pin) continue;
+      if (!allByPincode[pin]) allByPincode[pin] = [];
+      allByPincode[pin].push(account);
+    }
+
+    const effectivePins = pincodes.length > 0 ? pincodes : Object.keys(weeklyByPincode);
+    const pincodeGroups = effectivePins.map((pin) => {
+      const allPinAccounts = allByPincode[pin] || [];
+      const assignedRows = weeklyByPincode[pin] || [];
+      const assignedAccounts = assignedRows.map((r) =>
+        toAccountDtoWithAssignedDays(r.account, r.assignedDays),
+      );
+      const assignedIds = new Set(assignedAccounts.map((a) => a.id));
+      const remainingAccounts = allPinAccounts.filter((a) => !assignedIds.has(a.id));
+      const dayCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+      for (const row of assignedRows) {
+        for (const day of row.assignedDays) {
+          dayCounts[day] = (dayCounts[day] || 0) + 1;
+        }
+      }
+
+      return {
+        pincode: pin,
+        totalAccounts: allPinAccounts.length,
+        assignedAccounts: assignedAccounts.length,
+        remainingAccounts: remainingAccounts.length,
+        dayCounts,
+        assigned: assignedAccounts,
+        remaining: remainingAccounts,
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        salesmanId,
+        weekStartDate: weekStartDate.toISOString(),
+        dayTotals,
+        pincodes: pincodeGroups,
+        usesLegacyFallback: !weeklyDelegate,
+      },
+    });
+  } catch (error) {
+    console.error('Get weekly assignments view error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+  export const autoAssignNextUnassignedAccounts = async (req, res) => {
+    try {
+      const { salesmanId, pincode, weekStartDate, day, countN } = req.body;
+
+      const effectiveSalesmanId = salesmanId || req.user?.id;
+      const normalizedPin = String(pincode || '').trim();
+      const weekStart = normalizeWeekStartDate(weekStartDate);
+      const dayInt = parseInt(day, 10);
+      const count = parseInt(countN, 10);
+
+      if (!effectiveSalesmanId || !normalizedPin || !weekStart) {
+        return res.status(400).json({
+          success: false,
+          message: 'salesmanId, pincode, and valid weekStartDate are required',
+        });
+      }
+
+      if (!(dayInt >= 1 && dayInt <= 7) || !(count > 0)) {
+        return res.status(400).json({
+          success: false,
+          message: 'day (1..7) and countN (>0) are required',
+        });
+      }
+
+      const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+      if (!weeklyDelegate) {
+        const nextAccounts = await prisma.account.findMany({
+          where: {
+            pincode: normalizedPin,
+            OR: [{ assignedDays: null }, { assignedDays: { equals: [] } }],
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: count,
+        });
+
+        for (const account of nextAccounts) {
+          await prisma.account.update({
+            where: { id: account.id },
+            data: {
+              assignedToId: effectiveSalesmanId,
+              assignedDays: [dayInt],
+            },
+          });
+        }
+
+        return res.json({
+          success: true,
+          data: {
+            assignedCount: nextAccounts.length,
+            assignedAccountIds: nextAccounts.map((a) => a.id),
+            remainingRequested: Math.max(0, count - nextAccounts.length),
+            usesLegacyFallback: true,
+          },
+        });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
+        const existingRows = await txWeeklyDelegate.findMany({
+          where: {
+            salesmanId: effectiveSalesmanId,
+            weekStartDate: weekStart,
+            pincode: normalizedPin,
+          },
+          select: { accountId: true, sequenceNo: true },
+        });
+
+        const assignedIds = existingRows.map((r) => r.accountId);
+        const currentSequence = existingRows.reduce((m, r) => Math.max(m, r.sequenceNo || 0), 0);
+
+        const nextAccounts = await tx.account.findMany({
+          where: {
+            pincode: normalizedPin,
+            ...(assignedIds.length > 0 ? { id: { notIn: assignedIds } } : {}),
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: count,
+        });
+
+        if (nextAccounts.length > 0) {
+          await txWeeklyDelegate.createMany({
+            data: nextAccounts.map((account, idx) => ({
+              accountId: account.id,
+              salesmanId: effectiveSalesmanId,
+              pincode: normalizedPin,
+              weekStartDate: weekStart,
+              assignedDays: [dayInt],
+              sequenceNo: currentSequence + idx + 1,
+              isManualOverride: false,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return {
+          assignedCount: nextAccounts.length,
+          assignedAccountIds: nextAccounts.map((a) => a.id),
+          remainingRequested: Math.max(0, count - nextAccounts.length),
+        };
+      }, { timeout: 20000, maxWait: 20000 });
+
+      return res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Auto assign next unassigned accounts error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  };
+
+  export const manualAssignWeeklyAccounts = async (req, res) => {
+    try {
+      const {
+        salesmanId,
+        weekStartDate,
+        accountIds,
+        assignedDays,
+        manualOverrideAccountIds = [],
+      } = req.body;
+
+      const effectiveSalesmanId = salesmanId || req.user?.id;
+      const weekStart = normalizeWeekStartDate(weekStartDate);
+      const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
+      const days = parseAssignedDays(assignedDays);
+      const isSingleDayMode = days.length === 1;
+      const singleDay = isSingleDayMode ? days[0] : null;
+      const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
+
+      if (!effectiveSalesmanId || !weekStart || accountIdList.length === 0 || days.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'salesmanId, valid weekStartDate, accountIds, and assignedDays are required',
+        });
+      }
+
+      const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+      if (!weeklyDelegate) {
+        const accounts = await prisma.account.findMany({
+          where: { id: { in: accountIdList } },
+          select: { id: true, assignedDays: true },
+        });
+
+        const blockedAccountIds = [];
+        for (const account of accounts) {
+          const existingDays = parseAssignedDays(account.assignedDays || []);
+          const mergedDays = isSingleDayMode
+            ? [singleDay]
+            : [...new Set([...existingDays, ...days])];
+          const isAddingNewDay = mergedDays.length > existingDays.length;
+          if (!isSingleDayMode && isAddingNewDay && !overrideSet.has(account.id)) {
+            blockedAccountIds.push(account.id);
+          }
+        }
+
+        if (blockedAccountIds.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message: 'Some accounts are already assigned. Use manual override for multi-day assignment.',
+            blockedAccountIds,
+          });
+        }
+
+        for (const account of accounts) {
+          const existingDays = parseAssignedDays(account.assignedDays || []);
+          const mergedDays = isSingleDayMode
+            ? [singleDay]
+            : [...new Set([...existingDays, ...days])];
+          await prisma.account.update({
+            where: { id: account.id },
+            data: {
+              assignedToId: effectiveSalesmanId,
+              assignedDays: mergedDays,
+            },
+          });
+        }
+
+        return res.json({
+          success: true,
+          message: `${accounts.length} account(s) assigned (legacy mode)`,
+          count: accounts.length,
+          usesLegacyFallback: true,
+        });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
+        const [accounts, existingRows, existingSequenceRows] = await Promise.all([
+          tx.account.findMany({
+            where: { id: { in: accountIdList } },
+            select: { id: true, pincode: true, createdAt: true },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          }),
+          txWeeklyDelegate.findMany({
+            where: {
+              accountId: { in: accountIdList },
+              weekStartDate: weekStart,
+            },
+          }),
+          txWeeklyDelegate.findMany({
+            where: {
+              salesmanId: effectiveSalesmanId,
+              weekStartDate: weekStart,
+            },
+            select: { pincode: true, sequenceNo: true },
+          }),
+        ]);
+
+        const accountMap = new Map(accounts.map((a) => [a.id, a]));
+        const existingMap = new Map(existingRows.map((r) => [r.accountId, r]));
+        const nextSequenceByPin = {};
+
+        for (const row of existingSequenceRows) {
+          const pin = (row.pincode || '').trim();
+          nextSequenceByPin[pin] = Math.max(nextSequenceByPin[pin] || 0, row.sequenceNo || 0);
+        }
+
+        const blockedAccountIds = [];
+        const upsertTargets = [];
+
+        for (const accountId of accountIdList) {
+          const account = accountMap.get(accountId);
+          if (!account) continue;
+
+          const pin = (account.pincode || '').trim();
+          if (!pin) continue;
+
+          const existing = existingMap.get(accountId);
+          const existingDays = parseAssignedDays(existing?.assignedDays || []);
+          const mergedDays = isSingleDayMode
+            ? [singleDay]
+            : [...new Set([...existingDays, ...days])];
+
+          const isAddingNewDay = mergedDays.length > existingDays.length;
+          if (!isSingleDayMode && existing && isAddingNewDay && !overrideSet.has(accountId)) {
+            blockedAccountIds.push(accountId);
+            continue;
+          }
+
+          if (!existing) {
+            nextSequenceByPin[pin] = (nextSequenceByPin[pin] || 0) + 1;
+          }
+
+          upsertTargets.push({
+            accountId,
+            pincode: pin,
+            mergedDays,
+            existing,
+            isManualOverride: overrideSet.has(accountId),
+            sequenceNo: existing ? existing.sequenceNo : nextSequenceByPin[pin],
+          });
+        }
+
+        if (blockedAccountIds.length > 0) {
+          return {
+            blockedAccountIds,
+            upsertedCount: 0,
+          };
+        }
+
+        const createTargets = upsertTargets.filter((t) => !t.existing);
+        const updateTargets = upsertTargets.filter((t) => t.existing);
+
+        if (createTargets.length > 0) {
+          await txWeeklyDelegate.createMany({
+            data: createTargets.map((target) => ({
+              accountId: target.accountId,
+              salesmanId: effectiveSalesmanId,
+              pincode: target.pincode,
+              weekStartDate: weekStart,
+              assignedDays: target.mergedDays,
+              isManualOverride: target.isManualOverride,
+              sequenceNo: target.sequenceNo,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        for (const target of updateTargets) {
+          await txWeeklyDelegate.update({
+            where: {
+              accountId_weekStartDate: {
+                accountId: target.accountId,
+                weekStartDate: weekStart,
+              },
+            },
+            data: {
+              salesmanId: effectiveSalesmanId,
+              pincode: target.pincode,
+              assignedDays: target.mergedDays,
+              isManualOverride:
+                (target.existing?.isManualOverride || false) || target.isManualOverride,
+            },
+          });
+        }
+
+        return {
+          blockedAccountIds: [],
+          upsertedCount: upsertTargets.length,
+        };
+      }, { timeout: 30000, maxWait: 30000 });
+
+      if (result.blockedAccountIds.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'Some accounts are already assigned in this week. Use manual override for multi-day assignment.',
+          blockedAccountIds: result.blockedAccountIds,
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `${result.upsertedCount} account(s) assigned for selected week`,
+        count: result.upsertedCount,
+      });
+    } catch (error) {
+      console.error('Manual assign weekly accounts error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  };
 
 export const bulkApproveAccounts = async (req, res) => {
   try {

@@ -234,6 +234,7 @@ model Account {
   assignedTo        User?               @relation("AccountAssignedTo", fields: [assignedToId], references: [id])
   createdBy         User?               @relation("AccountCreatedBy", fields: [createdById], references: [id])
   callLogs          TelecallerCallLog[]
+  weeklyAssignments WeeklyAccountAssignment[]
 
   @@index([pincode])
   @@index([isActive])
@@ -245,6 +246,25 @@ model Account {
   @@index([areaId], map: "Account_areaId_fkey")
   @@index([assignedToId], map: "Account_assignedToId_fkey")
   @@index([createdById], map: "Account_createdById_fkey")
+}
+
+model WeeklyAccountAssignment {
+  id               String   @id @default(cuid())
+  accountId        String
+  salesmanId       String
+  pincode          String
+  weekStartDate    DateTime
+  assignedDays     Json
+  isManualOverride Boolean  @default(false)
+  sequenceNo       Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  account          Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, weekStartDate])
+  @@index([salesmanId, weekStartDate])
+  @@index([pincode, weekStartDate])
+  @@index([salesmanId, pincode, weekStartDate, sequenceNo])
 }
 
 model TelecallerCallLog {
