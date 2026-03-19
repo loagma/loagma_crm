@@ -2091,29 +2091,43 @@ export const getTodayPlannedAccounts = async (req, res) => {
 
       const result = await prisma.$transaction(async (tx) => {
         const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
-        const existingRows = await txWeeklyDelegate.findMany({
-          where: {
-            salesmanId: effectiveSalesmanId,
-            weekStartDate: weekStart,
-            pincode: normalizedPin,
-          },
-          select: { accountId: true, sequenceNo: true },
-        });
+        const [existingRowsForSalesman, existingRowsForWeekAndPin] = await Promise.all([
+          txWeeklyDelegate.findMany({
+            where: {
+              salesmanId: effectiveSalesmanId,
+              weekStartDate: weekStart,
+              pincode: normalizedPin,
+            },
+            select: { accountId: true, sequenceNo: true },
+          }),
+          txWeeklyDelegate.findMany({
+            where: {
+              weekStartDate: weekStart,
+              pincode: normalizedPin,
+            },
+            select: { accountId: true },
+          }),
+        ]);
 
-        const assignedIds = existingRows.map((r) => r.accountId);
-        const currentSequence = existingRows.reduce((m, r) => Math.max(m, r.sequenceNo || 0), 0);
+        const weekTakenIds = existingRowsForWeekAndPin.map((r) => r.accountId);
+        const currentSequence = existingRowsForSalesman.reduce(
+          (m, r) => Math.max(m, r.sequenceNo || 0),
+          0,
+        );
 
         const nextAccounts = await tx.account.findMany({
           where: {
             pincode: normalizedPin,
-            ...(assignedIds.length > 0 ? { id: { notIn: assignedIds } } : {}),
+            ...(weekTakenIds.length > 0 ? { id: { notIn: weekTakenIds } } : {}),
           },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           take: count,
         });
 
+        let insertedCount = 0;
+
         if (nextAccounts.length > 0) {
-          await txWeeklyDelegate.createMany({
+          const createResult = await txWeeklyDelegate.createMany({
             data: nextAccounts.map((account, idx) => ({
               accountId: account.id,
               salesmanId: effectiveSalesmanId,
@@ -2128,12 +2142,23 @@ export const getTodayPlannedAccounts = async (req, res) => {
             })),
             skipDuplicates: true,
           });
+          insertedCount = (createResult?.count || 0);
+
+          if (insertedCount > 0) {
+            await tx.account.updateMany({
+              where: { id: { in: nextAccounts.map((a) => a.id) } },
+              data: {
+                assignedToId: effectiveSalesmanId,
+                assignedDays: [dayInt],
+              },
+            });
+          }
         }
 
         return {
-          assignedCount: nextAccounts.length,
+          assignedCount: insertedCount,
           assignedAccountIds: nextAccounts.map((a) => a.id),
-          remainingRequested: Math.max(0, count - nextAccounts.length),
+          remainingRequested: Math.max(0, count - insertedCount),
         };
       }, { timeout: 20000, maxWait: 20000 });
 

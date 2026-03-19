@@ -514,9 +514,6 @@ class _SalesmanCustomerAllotmentScreenState
       return;
     }
 
-    final userId = _currentUserId;
-    if (userId == null) return;
-
     if (_selectedDaysForAssignment.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -537,39 +534,38 @@ class _SalesmanCustomerAllotmentScreenState
       return;
     }
 
-    final takeCount = requestedCount > remainingCount
-      ? remainingCount
-        : requestedCount;
+    final takeCount = requestedCount > remainingCount ? remainingCount : requestedCount;
+    final candidateIds = accounts
+        .where((a) => (a.assignedDays?.isEmpty ?? true))
+        .where((a) => !_selectedAccountIds.contains(a.id))
+        .map((a) => a.id)
+        .take(takeCount)
+        .toList();
 
-    try {
-      final selectedDay = _selectedDaysForAssignment.first;
-      final result = await AccountService.autoAssignNextUnassignedAccounts(
-        salesmanId: userId,
-        pincode: pincode,
-        weekStartDate: _activeWeekStart,
-        day: selectedDay,
-        countN: takeCount,
-      );
-      final assignedCount = (result['assignedCount'] as num?)?.toInt() ?? 0;
-      if (!mounted) return;
+    if (candidateIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '$assignedCount account(s) auto-assigned for ${_dayLabelMap[selectedDay]} in $pincode',
-          ),
-          backgroundColor: Colors.green,
+          content: Text('No more unassigned accounts available to select in $pincode'),
+          backgroundColor: Colors.orange,
         ),
       );
-      await _loadAccounts();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to auto-assign next accounts: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      return;
     }
+
+    setState(() {
+      _selectedAccountIds.addAll(candidateIds);
+    });
+
+    if (!mounted) return;
+    final selectedDay = _selectedDaysForAssignment.first;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${candidateIds.length} account(s) selected for ${_dayLabelMap[selectedDay]} in $pincode. Tap Assign Day to save.',
+        ),
+        backgroundColor: Colors.green,
+      ),
+    );
 
     if (requestedCount > remainingCount) {
       ScaffoldMessenger.of(context).showSnackBar(
