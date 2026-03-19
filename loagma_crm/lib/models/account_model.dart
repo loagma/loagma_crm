@@ -26,6 +26,8 @@ class Account {
   final String? assignedToId;
   /// Beat days: 1=Mon .. 7=Sun (from admin allotment).
   final List<int>? assignedDays;
+  /// Optional planning frequency for week view APIs: ONCE, TWICE, THRICE, DAILY.
+  final String? visitFrequency;
   final String? createdById;
   final String? approvedById;
   final DateTime? approvedAt;
@@ -69,6 +71,7 @@ class Account {
     this.longitude,
     this.assignedToId,
     this.assignedDays,
+    this.visitFrequency,
     this.createdById,
     this.approvedById,
     this.approvedAt,
@@ -118,6 +121,7 @@ class Account {
               (json['assignedDays'] as List).map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 0),
             )
           : null,
+      visitFrequency: json['visitFrequency']?.toString(),
       createdById: json['createdById'],
       approvedById: json['approvedById'],
       approvedAt: json['approvedAt'] != null
@@ -170,6 +174,7 @@ class Account {
       if (longitude != null) 'longitude': longitude,
       if (assignedToId != null) 'assignedToId': assignedToId,
       if (assignedDays != null) 'assignedDays': assignedDays,
+      if (visitFrequency != null) 'visitFrequency': visitFrequency,
       if (createdById != null) 'createdById': createdById,
       if (areaId != null) 'areaId': areaId,
     };

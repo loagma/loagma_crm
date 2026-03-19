@@ -34,6 +34,116 @@ const getWeeklyAssignmentDelegate = (client) => {
   return typeof delegate.findMany === 'function' ? delegate : null;
 };
 
+const VISIT_FREQUENCY = {
+  ONCE: 'ONCE',
+  TWICE: 'TWICE',
+  THRICE: 'THRICE',
+  DAILY: 'DAILY',
+};
+
+const REQUIRED_DAY_COUNT_BY_FREQUENCY = {
+  [VISIT_FREQUENCY.ONCE]: 1,
+  [VISIT_FREQUENCY.TWICE]: 2,
+  [VISIT_FREQUENCY.THRICE]: 3,
+  [VISIT_FREQUENCY.DAILY]: 7,
+};
+
+const ADMIN_OVERRIDE_ROLES = new Set(['admin', 'manager', 'teleadmin']);
+
+const deriveVisitFrequencyFromDays = (days) => {
+  const count = Array.isArray(days) ? days.length : 0;
+  if (count >= 7) return VISIT_FREQUENCY.DAILY;
+  if (count === 3) return VISIT_FREQUENCY.THRICE;
+  if (count === 2) return VISIT_FREQUENCY.TWICE;
+  return VISIT_FREQUENCY.ONCE;
+};
+
+const normalizeVisitFrequency = (input, fallbackDays = []) => {
+  if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+    return deriveVisitFrequencyFromDays(fallbackDays);
+  }
+
+  const raw = String(input).trim().toUpperCase();
+  if (raw === '1' || raw === 'ONCE' || raw === 'WEEKLY') return VISIT_FREQUENCY.ONCE;
+  if (raw === '2' || raw === 'TWICE') return VISIT_FREQUENCY.TWICE;
+  if (raw === '3' || raw === 'THRICE') return VISIT_FREQUENCY.THRICE;
+  if (raw === '7' || raw === 'DAILY') return VISIT_FREQUENCY.DAILY;
+  return null;
+};
+
+const validateDaysForFrequency = (days, frequency) => {
+  const required = REQUIRED_DAY_COUNT_BY_FREQUENCY[frequency];
+  if (!required) {
+    return `Invalid visitFrequency '${frequency}'. Allowed: ONCE, TWICE, THRICE, DAILY`;
+  }
+
+  if (!Array.isArray(days) || days.length === 0) {
+    return 'plannedDays is required';
+  }
+
+  if (days.length !== required) {
+    return `visitFrequency ${frequency} requires exactly ${required} day(s)`;
+  }
+
+  return null;
+};
+
+const hasAdminOverrideAccess = (user) => {
+  if (!user) return false;
+  const primaryRole = String(user.role || '').toLowerCase().trim();
+  const roleId = String(user.roleId || '').toLowerCase().trim();
+  const rolesArray = Array.isArray(user.roles)
+    ? user.roles.map((r) => String(r || '').toLowerCase().trim())
+    : [];
+
+  if (ADMIN_OVERRIDE_ROLES.has(primaryRole)) return true;
+  if (ADMIN_OVERRIDE_ROLES.has(roleId)) return true;
+  return rolesArray.some((r) => ADMIN_OVERRIDE_ROLES.has(r));
+};
+
+const getSalesmanPincodeRows = async (salesmanId) => {
+  const [areaRows, taskRows] = await Promise.all([
+    prisma.areaAssignment.findMany({
+      where: { salesmanId },
+      select: { pinCode: true },
+      orderBy: { assignedDate: 'desc' },
+    }),
+    prisma.taskAssignment.findMany({
+      where: { salesmanId },
+      select: { pincode: true },
+      orderBy: { assignedDate: 'desc' },
+    }),
+  ]);
+
+  const areaPins = areaRows.map((r) => (r.pinCode || '').trim()).filter(Boolean);
+  const taskPins = taskRows.map((r) => (r.pincode || '').trim()).filter(Boolean);
+  return [...new Set([...areaPins, ...taskPins])];
+};
+
+const buildPlanningSummary = (weeklyRows, allAccounts) => {
+  const plannedAccountIds = new Set(weeklyRows.map((r) => r.accountId));
+  const byFrequency = {
+    [VISIT_FREQUENCY.ONCE]: 0,
+    [VISIT_FREQUENCY.TWICE]: 0,
+    [VISIT_FREQUENCY.THRICE]: 0,
+    [VISIT_FREQUENCY.DAILY]: 0,
+  };
+
+  for (const row of weeklyRows) {
+    const frequency = normalizeVisitFrequency(row.visitFrequency, parseAssignedDays(row.assignedDays));
+    if (frequency && byFrequency[frequency] !== undefined) {
+      byFrequency[frequency] += 1;
+    }
+  }
+
+  return {
+    totalAccounts: allAccounts.length,
+    plannedAccounts: plannedAccountIds.size,
+    unplannedAccounts: Math.max(0, allAccounts.length - plannedAccountIds.size),
+    frequencyCounts: byFrequency,
+  };
+};
+
 // ==================== ACCOUNT CRUD ====================
 
 export const getAllAccounts = async (req, res) => {
@@ -1130,7 +1240,14 @@ export const bulkCreateAccounts = async (req, res) => {
 
 export const bulkAssignAccounts = async (req, res) => {
   try {
-    const { accountIds, assignedToId, assignedDays } = req.body;
+    const {
+      accountIds,
+      assignedToId,
+      assignedDays,
+      weekStartDate,
+      visitFrequency,
+      createWeeklyAssignments = true,
+    } = req.body;
 
     if (!accountIds || !Array.isArray(accountIds) || accountIds.length === 0) {
       return res.status(400).json({
@@ -1139,25 +1256,82 @@ export const bulkAssignAccounts = async (req, res) => {
       });
     }
 
-    const data = { assignedToId };
-    if (assignedDays && Array.isArray(assignedDays) && assignedDays.length > 0) {
-      const days = assignedDays.map((d) => parseInt(d, 10)).filter((d) => d >= 1 && d <= 7);
-      data.assignedDays = [...new Set(days)];
-    } else {
-      data.assignedDays = [];
+    const days = parseAssignedDays(assignedDays || []);
+    const normalizedFrequency = normalizeVisitFrequency(visitFrequency, days);
+    const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
+    if (frequencyError) {
+      return res.status(400).json({ success: false, message: frequencyError });
     }
 
-    const result = await prisma.account.updateMany({
-      where: {
-        id: { in: accountIds }
-      },
-      data
+    const actorUserId = req.user?.id || assignedToId || null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const data = {
+        assignedToId,
+        assignedDays: days,
+      };
+
+      const updateResult = await tx.account.updateMany({
+        where: {
+          id: { in: accountIds },
+        },
+        data,
+      });
+
+      const weeklyDelegate = getWeeklyAssignmentDelegate(tx);
+      const weekStart = normalizeWeekStartDate(weekStartDate);
+
+      if (createWeeklyAssignments && weeklyDelegate && weekStart) {
+        const accountRows = await tx.account.findMany({
+          where: { id: { in: accountIds } },
+          select: { id: true, pincode: true, createdAt: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        });
+
+        const existingSequenceRows = await weeklyDelegate.findMany({
+          where: { salesmanId: assignedToId, weekStartDate: weekStart },
+          select: { pincode: true, sequenceNo: true },
+        });
+
+        const nextSequenceByPin = {};
+        for (const row of existingSequenceRows) {
+          const pin = (row.pincode || '').trim();
+          nextSequenceByPin[pin] = Math.max(nextSequenceByPin[pin] || 0, row.sequenceNo || 0);
+        }
+
+        const rowsToCreate = [];
+        for (const account of accountRows) {
+          const pin = String(account.pincode || '').trim();
+          if (!pin) continue;
+          nextSequenceByPin[pin] = (nextSequenceByPin[pin] || 0) + 1;
+
+          rowsToCreate.push({
+            accountId: account.id,
+            salesmanId: assignedToId,
+            pincode: pin,
+            weekStartDate: weekStart,
+            assignedDays: days,
+            visitFrequency: normalizedFrequency,
+            plannedBy: actorUserId,
+            plannedAt: new Date(),
+            sequenceNo: nextSequenceByPin[pin],
+            isManualOverride: false,
+          });
+        }
+
+        if (rowsToCreate.length > 0) {
+          await weeklyDelegate.createMany({ data: rowsToCreate, skipDuplicates: true });
+        }
+      }
+
+      return updateResult;
     });
 
     res.json({
       success: true,
       message: `${result.count} accounts assigned successfully`,
-      count: result.count
+      count: result.count,
+      visitFrequency: normalizedFrequency,
     });
   } catch (error) {
     console.error('Bulk assign accounts error:', error);
@@ -1179,15 +1353,7 @@ export const getWeeklyAssignmentsView = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid weekStartDate is required' });
     }
 
-    const taskPinsRows = await prisma.taskAssignment.findMany({
-      where: { salesmanId },
-      select: { pincode: true },
-      orderBy: { assignedDate: 'desc' },
-    });
-
-    const assignedPincodes = [...new Set(taskPinsRows
-      .map((r) => (r.pincode || '').trim())
-      .filter((p) => p.length > 0))];
+    const assignedPincodes = await getSalesmanPincodeRows(salesmanId);
 
     const pincodes = pincodeFilter
       ? assignedPincodes.filter((p) => p === pincodeFilter)
@@ -1306,6 +1472,567 @@ export const getWeeklyAssignmentsView = async (req, res) => {
   }
 };
 
+const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = null }) => {
+  const weekStart = normalizeWeekStartDate(weekStartDate);
+  if (!salesmanId || !weekStart) {
+    return { error: 'salesmanId and valid weekStartDate are required' };
+  }
+
+  const assignedPincodes = await getSalesmanPincodeRows(salesmanId);
+  const effectivePincodes = pincodeFilter
+    ? assignedPincodes.filter((p) => p === pincodeFilter)
+    : assignedPincodes;
+
+  const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+  if (!weeklyDelegate) {
+    return { error: 'Weekly planning is not available on current server build' };
+  }
+
+  const [allAccounts, weeklyRows] = await Promise.all([
+    effectivePincodes.length === 0
+      ? Promise.resolve([])
+      : prisma.account.findMany({
+          where: { pincode: { in: effectivePincodes } },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+    weeklyDelegate.findMany({
+      where: {
+        salesmanId,
+        weekStartDate: weekStart,
+        ...(effectivePincodes.length > 0 ? { pincode: { in: effectivePincodes } } : {}),
+      },
+      include: { account: true },
+      orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+    }),
+  ]);
+
+  const byDay = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+  const byPincode = {};
+  const plannedAccountIds = new Set();
+
+  for (const row of weeklyRows) {
+    const days = parseAssignedDays(row.assignedDays);
+    const frequency = normalizeVisitFrequency(row.visitFrequency, days);
+    const account = toAccountDtoWithAssignedDays(row.account, days);
+    plannedAccountIds.add(account.id);
+
+    const pin = (row.pincode || '').trim();
+    if (!byPincode[pin]) {
+      byPincode[pin] = {
+        pincode: pin,
+        planned: [],
+        unplanned: [],
+        dayCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
+      };
+    }
+
+    const plannedDto = {
+      ...account,
+      weekStartDate: weekStart.toISOString(),
+      visitFrequency: frequency,
+      plannedBy: row.plannedBy || null,
+      plannedAt: row.plannedAt || null,
+      isManualOverride: !!row.isManualOverride,
+      overrideBy: row.overrideBy || null,
+      overrideReason: row.overrideReason || null,
+      overriddenAt: row.overriddenAt || null,
+      sequenceNo: row.sequenceNo || 0,
+    };
+
+    byPincode[pin].planned.push(plannedDto);
+
+    for (const day of days) {
+      byPincode[pin].dayCounts[day] += 1;
+      byDay[day].push(plannedDto);
+    }
+  }
+
+  for (const account of allAccounts) {
+    if (plannedAccountIds.has(account.id)) continue;
+    const pin = (account.pincode || '').trim();
+    if (!byPincode[pin]) {
+      byPincode[pin] = {
+        pincode: pin,
+        planned: [],
+        unplanned: [],
+        dayCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
+      };
+    }
+    byPincode[pin].unplanned.push(account);
+  }
+
+  const pincodeGroups = (effectivePincodes.length > 0
+    ? effectivePincodes
+    : Object.keys(byPincode)).map((pin) => {
+    const group = byPincode[pin] || {
+      pincode: pin,
+      planned: [],
+      unplanned: [],
+      dayCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
+    };
+
+    return {
+      pincode: pin,
+      totalAccounts: group.planned.length + group.unplanned.length,
+      plannedAccounts: group.planned.length,
+      unplannedAccounts: group.unplanned.length,
+      dayCounts: group.dayCounts,
+      planned: group.planned,
+      unplanned: group.unplanned,
+    };
+  });
+
+  const summary = buildPlanningSummary(weeklyRows, allAccounts);
+
+  return {
+    data: {
+      salesmanId,
+      weekStartDate: weekStart.toISOString(),
+      summary,
+      byDay,
+      pincodes: pincodeGroups,
+      dataSource: 'canonical',
+    },
+  };
+};
+
+export const getPlanningWeekView = async (req, res) => {
+  try {
+    const salesmanId = req.query.salesmanId || req.user?.id;
+    const weekStartDate = req.query.weekStartDate;
+    const pincodeFilter = req.query.pincode ? String(req.query.pincode).trim() : null;
+
+    const result = await getPlanningWeekData({
+      salesmanId,
+      weekStartDate,
+      pincodeFilter,
+    });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    return res.json({ success: true, data: result.data });
+  } catch (error) {
+    console.error('Get planning week view error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const assignPlanningWeekAccounts = async (req, res) => {
+  try {
+    const {
+      salesmanId,
+      weekStartDate,
+      assignments,
+      accountIds,
+      assignedDays,
+      visitFrequency,
+      manualOverrideAccountIds = [],
+      overrideReason = null,
+    } = req.body;
+
+    const effectiveSalesmanId = salesmanId || req.user?.id;
+    const actorUserId = req.user?.id || effectiveSalesmanId || null;
+    const weekStart = normalizeWeekStartDate(weekStartDate);
+    if (!effectiveSalesmanId || !weekStart) {
+      return res.status(400).json({ success: false, message: 'salesmanId and valid weekStartDate are required' });
+    }
+
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+    if (!weeklyDelegate) {
+      return res.status(500).json({ success: false, message: 'Weekly planning is not available on current server build' });
+    }
+
+    const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
+    const canOverride = hasAdminOverrideAccess(req.user);
+    if (!canOverride && overrideSet.size > 0) {
+      return res.status(403).json({ success: false, message: 'Override is allowed only for admin/manager/teleadmin users' });
+    }
+
+    let normalizedAssignments = [];
+    if (Array.isArray(assignments) && assignments.length > 0) {
+      normalizedAssignments = assignments.map((entry) => {
+        const days = parseAssignedDays(entry.plannedDays || entry.assignedDays || []);
+        const frequency = normalizeVisitFrequency(entry.visitFrequency, days);
+        return {
+          accountId: entry.accountId,
+          plannedDays: days,
+          visitFrequency: frequency,
+        };
+      });
+    } else {
+      const ids = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
+      const days = parseAssignedDays(assignedDays || []);
+      const frequency = normalizeVisitFrequency(visitFrequency, days);
+      normalizedAssignments = ids.map((id) => ({
+        accountId: id,
+        plannedDays: days,
+        visitFrequency: frequency,
+      }));
+    }
+
+    normalizedAssignments = normalizedAssignments.filter((a) => !!a.accountId);
+    if (normalizedAssignments.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one assignment is required' });
+    }
+
+    for (const assignment of normalizedAssignments) {
+      const validationError = validateDaysForFrequency(assignment.plannedDays, assignment.visitFrequency);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid assignment for account ${assignment.accountId}: ${validationError}`,
+        });
+      }
+    }
+
+    const allowedPincodes = await getSalesmanPincodeRows(effectiveSalesmanId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const txWeekly = getWeeklyAssignmentDelegate(tx);
+      const targetIds = normalizedAssignments.map((a) => a.accountId);
+
+      const [accounts, existingRows, existingSequenceRows] = await Promise.all([
+        tx.account.findMany({
+          where: { id: { in: targetIds } },
+          select: { id: true, pincode: true, createdAt: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+        txWeekly.findMany({
+          where: { accountId: { in: targetIds }, weekStartDate: weekStart },
+        }),
+        txWeekly.findMany({
+          where: { salesmanId: effectiveSalesmanId, weekStartDate: weekStart },
+          select: { pincode: true, sequenceNo: true },
+        }),
+      ]);
+
+      const accountMap = new Map(accounts.map((a) => [a.id, a]));
+      const existingMap = new Map(existingRows.map((r) => [r.accountId, r]));
+      const nextSequenceByPin = {};
+
+      for (const row of existingSequenceRows) {
+        const pin = (row.pincode || '').trim();
+        nextSequenceByPin[pin] = Math.max(nextSequenceByPin[pin] || 0, row.sequenceNo || 0);
+      }
+
+      const createdIds = [];
+      const updatedIds = [];
+
+      for (const assignment of normalizedAssignments) {
+        const account = accountMap.get(assignment.accountId);
+        if (!account) continue;
+
+        const pin = (account.pincode || '').trim();
+        if (!pin) continue;
+        if (allowedPincodes.length > 0 && !allowedPincodes.includes(pin)) {
+          throw new Error(`Account ${assignment.accountId} pincode ${pin} is outside assigned territory`);
+        }
+
+        const existing = existingMap.get(assignment.accountId);
+        const isOverride = overrideSet.has(assignment.accountId);
+
+        if (!existing) {
+          nextSequenceByPin[pin] = (nextSequenceByPin[pin] || 0) + 1;
+          await txWeekly.create({
+            data: {
+              accountId: assignment.accountId,
+              salesmanId: effectiveSalesmanId,
+              pincode: pin,
+              weekStartDate: weekStart,
+              assignedDays: assignment.plannedDays,
+              visitFrequency: assignment.visitFrequency,
+              plannedBy: actorUserId,
+              plannedAt: new Date(),
+              isManualOverride: isOverride,
+              overrideBy: isOverride ? actorUserId : null,
+              overrideReason: isOverride ? overrideReason : null,
+              overriddenAt: isOverride ? new Date() : null,
+              sequenceNo: nextSequenceByPin[pin],
+            },
+          });
+          createdIds.push(assignment.accountId);
+        } else {
+          await txWeekly.update({
+            where: {
+              accountId_weekStartDate: {
+                accountId: assignment.accountId,
+                weekStartDate: weekStart,
+              },
+            },
+            data: {
+              salesmanId: effectiveSalesmanId,
+              pincode: pin,
+              assignedDays: assignment.plannedDays,
+              visitFrequency: assignment.visitFrequency,
+              plannedBy: actorUserId,
+              plannedAt: new Date(),
+              isManualOverride: existing.isManualOverride || isOverride,
+              overrideBy: (existing.isManualOverride || isOverride) ? actorUserId : existing.overrideBy,
+              overrideReason: isOverride ? overrideReason : existing.overrideReason,
+              overriddenAt: isOverride ? new Date() : existing.overriddenAt,
+            },
+          });
+          updatedIds.push(assignment.accountId);
+        }
+
+        await tx.account.update({
+          where: { id: assignment.accountId },
+          data: {
+            assignedToId: effectiveSalesmanId,
+            assignedDays: assignment.plannedDays,
+          },
+        });
+      }
+
+      return {
+        createdCount: createdIds.length,
+        updatedCount: updatedIds.length,
+        totalCount: createdIds.length + updatedIds.length,
+      };
+    }, { timeout: 30000, maxWait: 30000 });
+
+    return res.json({
+      success: true,
+      message: `${result.totalCount} account(s) planned successfully`,
+      data: {
+        ...result,
+        overrideReason,
+      },
+    });
+  } catch (error) {
+    console.error('Assign planning week accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updatePlanningWeekAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const {
+      salesmanId,
+      weekStartDate,
+      plannedDays,
+      visitFrequency,
+      isOverride = false,
+      overrideReason = null,
+    } = req.body;
+
+    const effectiveSalesmanId = salesmanId || req.user?.id;
+    const actorUserId = req.user?.id || effectiveSalesmanId || null;
+    const weekStart = normalizeWeekStartDate(weekStartDate);
+    const days = parseAssignedDays(plannedDays || []);
+    const frequency = normalizeVisitFrequency(visitFrequency, days);
+
+    if (!accountId || !effectiveSalesmanId || !weekStart) {
+      return res.status(400).json({ success: false, message: 'accountId, salesmanId and valid weekStartDate are required' });
+    }
+
+    const frequencyError = validateDaysForFrequency(days, frequency);
+    if (frequencyError) {
+      return res.status(400).json({ success: false, message: frequencyError });
+    }
+
+    if (isOverride && !hasAdminOverrideAccess(req.user)) {
+      return res.status(403).json({ success: false, message: 'Override is allowed only for admin/manager/teleadmin users' });
+    }
+
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+    if (!weeklyDelegate) {
+      return res.status(500).json({ success: false, message: 'Weekly planning is not available on current server build' });
+    }
+
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, pincode: true },
+    });
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+
+    const pincode = String(account.pincode || '').trim();
+    if (!pincode) {
+      return res.status(400).json({ success: false, message: 'Account pincode is required for weekly planning' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const txWeekly = getWeeklyAssignmentDelegate(tx);
+      const existing = await txWeekly.findUnique({
+        where: {
+          accountId_weekStartDate: {
+            accountId,
+            weekStartDate: weekStart,
+          },
+        },
+      });
+
+      if (!existing) {
+        const existingRows = await txWeekly.findMany({
+          where: { salesmanId: effectiveSalesmanId, weekStartDate: weekStart, pincode },
+          select: { sequenceNo: true },
+        });
+        const nextSequence = existingRows.reduce((m, r) => Math.max(m, r.sequenceNo || 0), 0) + 1;
+
+        await txWeekly.create({
+          data: {
+            accountId,
+            salesmanId: effectiveSalesmanId,
+            pincode,
+            weekStartDate: weekStart,
+            assignedDays: days,
+            visitFrequency: frequency,
+            plannedBy: actorUserId,
+            plannedAt: new Date(),
+            isManualOverride: !!isOverride,
+            overrideBy: isOverride ? actorUserId : null,
+            overrideReason: isOverride ? overrideReason : null,
+            overriddenAt: isOverride ? new Date() : null,
+            sequenceNo: nextSequence,
+          },
+        });
+      } else {
+        await txWeekly.update({
+          where: {
+            accountId_weekStartDate: {
+              accountId,
+              weekStartDate: weekStart,
+            },
+          },
+          data: {
+            salesmanId: effectiveSalesmanId,
+            pincode,
+            assignedDays: days,
+            visitFrequency: frequency,
+            plannedBy: actorUserId,
+            plannedAt: new Date(),
+            isManualOverride: existing.isManualOverride || !!isOverride,
+            overrideBy: (existing.isManualOverride || !!isOverride) ? actorUserId : existing.overrideBy,
+            overrideReason: isOverride ? overrideReason : existing.overrideReason,
+            overriddenAt: isOverride ? new Date() : existing.overriddenAt,
+          },
+        });
+      }
+
+      await tx.account.update({
+        where: { id: accountId },
+        data: {
+          assignedToId: effectiveSalesmanId,
+          assignedDays: days,
+        },
+      });
+    }, { timeout: 20000, maxWait: 20000 });
+
+    return res.json({
+      success: true,
+      message: 'Planning updated successfully',
+      data: {
+        accountId,
+        weekStartDate: weekStart.toISOString(),
+        plannedDays: days,
+        visitFrequency: frequency,
+      },
+    });
+  } catch (error) {
+    console.error('Update planning week account error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getMultiVisitWeekAccounts = async (req, res) => {
+  try {
+    const salesmanId = req.query.salesmanId || req.user?.id;
+    const weekStartDate = req.query.weekStartDate;
+    const day = req.query.day ? parseInt(req.query.day, 10) : null;
+    const requestedFrequency = normalizeVisitFrequency(req.query.frequency || req.query.visitFrequency, []);
+    const allowedFrequencies = new Set([
+      VISIT_FREQUENCY.TWICE,
+      VISIT_FREQUENCY.THRICE,
+      VISIT_FREQUENCY.DAILY,
+    ]);
+
+    const result = await getPlanningWeekData({ salesmanId, weekStartDate });
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    let accounts = [];
+    for (const entry of Object.values(result.data.byDay)) {
+      accounts.push(...entry);
+    }
+
+    accounts = [...new Map(accounts.map((a) => [a.id, a])).values()];
+    accounts = accounts.filter((a) => allowedFrequencies.has(normalizeVisitFrequency(a.visitFrequency, a.assignedDays)));
+
+    if (requestedFrequency && allowedFrequencies.has(requestedFrequency)) {
+      accounts = accounts.filter(
+        (a) => normalizeVisitFrequency(a.visitFrequency, a.assignedDays) === requestedFrequency,
+      );
+    }
+
+    if (day && day >= 1 && day <= 7) {
+      accounts = accounts.filter((a) => Array.isArray(a.assignedDays) && a.assignedDays.includes(day));
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        salesmanId,
+        weekStartDate: normalizeWeekStartDate(weekStartDate).toISOString(),
+        day: day || null,
+        frequency: requestedFrequency || null,
+        total: accounts.length,
+        accounts,
+      },
+    });
+  } catch (error) {
+    console.error('Get multi-visit week accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getTodayPlannedAccounts = async (req, res) => {
+  try {
+    const salesmanId = req.query.salesmanId || req.user?.id;
+    const today = req.query.date ? new Date(req.query.date) : new Date();
+    if (Number.isNaN(today.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date' });
+    }
+
+    const weekStart = normalizeWeekStartDate(today);
+    const weekday = ((today.getDay() + 6) % 7) + 1; // 1=Mon..7=Sun
+
+    const result = await getPlanningWeekData({
+      salesmanId,
+      weekStartDate: weekStart,
+    });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    const todayAccounts = (result.data.byDay[weekday] || []).map((a) => ({
+      ...a,
+      visitFrequency: normalizeVisitFrequency(a.visitFrequency, a.assignedDays),
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        salesmanId,
+        date: new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString(),
+        dayOfWeek: weekday,
+        total: todayAccounts.length,
+        accounts: todayAccounts,
+      },
+    });
+  } catch (error) {
+    console.error('Get today planned accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
   export const autoAssignNextUnassignedAccounts = async (req, res) => {
     try {
       const { salesmanId, pincode, weekStartDate, day, countN } = req.body;
@@ -1393,6 +2120,9 @@ export const getWeeklyAssignmentsView = async (req, res) => {
               pincode: normalizedPin,
               weekStartDate: weekStart,
               assignedDays: [dayInt],
+              visitFrequency: VISIT_FREQUENCY.ONCE,
+              plannedBy: effectiveSalesmanId,
+              plannedAt: new Date(),
               sequenceNo: currentSequence + idx + 1,
               isManualOverride: false,
             })),
@@ -1421,13 +2151,18 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         weekStartDate,
         accountIds,
         assignedDays,
+        visitFrequency,
         manualOverrideAccountIds = [],
+        overrideReason = null,
       } = req.body;
 
       const effectiveSalesmanId = salesmanId || req.user?.id;
+      const actorUserId = req.user?.id || effectiveSalesmanId || null;
       const weekStart = normalizeWeekStartDate(weekStartDate);
       const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
       const days = parseAssignedDays(assignedDays);
+      const normalizedFrequency = normalizeVisitFrequency(visitFrequency, days);
+      const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
       const isSingleDayMode = days.length === 1;
       const singleDay = isSingleDayMode ? days[0] : null;
       const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
@@ -1437,6 +2172,10 @@ export const getWeeklyAssignmentsView = async (req, res) => {
           success: false,
           message: 'salesmanId, valid weekStartDate, accountIds, and assignedDays are required',
         });
+      }
+
+      if (frequencyError) {
+        return res.status(400).json({ success: false, message: frequencyError });
       }
 
       const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
@@ -1574,7 +2313,13 @@ export const getWeeklyAssignmentsView = async (req, res) => {
               pincode: target.pincode,
               weekStartDate: weekStart,
               assignedDays: target.mergedDays,
+              visitFrequency: normalizedFrequency,
+              plannedBy: actorUserId,
+              plannedAt: new Date(),
               isManualOverride: target.isManualOverride,
+              overrideBy: target.isManualOverride ? actorUserId : null,
+              overrideReason: target.isManualOverride ? overrideReason : null,
+              overriddenAt: target.isManualOverride ? new Date() : null,
               sequenceNo: target.sequenceNo,
             })),
             skipDuplicates: true,
@@ -1593,8 +2338,16 @@ export const getWeeklyAssignmentsView = async (req, res) => {
               salesmanId: effectiveSalesmanId,
               pincode: target.pincode,
               assignedDays: target.mergedDays,
+              visitFrequency: normalizedFrequency,
+              plannedBy: actorUserId,
+              plannedAt: new Date(),
               isManualOverride:
                 (target.existing?.isManualOverride || false) || target.isManualOverride,
+              overrideBy: ((target.existing?.isManualOverride || false) || target.isManualOverride)
+                ? actorUserId
+                : target.existing?.overrideBy,
+              overrideReason: target.isManualOverride ? overrideReason : target.existing?.overrideReason,
+              overriddenAt: target.isManualOverride ? new Date() : target.existing?.overriddenAt,
             },
           });
         }

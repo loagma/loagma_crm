@@ -322,7 +322,7 @@ class _SalesmanCustomerAllotmentScreenState
   String _formatDayWiseCounts(Map<int, int> dayCounts) {
     return _dayLabelMap.entries
         .map((entry) => '${entry.value}:${dayCounts[entry.key] ?? 0}')
-        .join(' • ');
+        .join('  |  ');
   }
 
   int _countAssignedAccounts(List<Account> accounts) {
@@ -780,7 +780,7 @@ class _SalesmanCustomerAllotmentScreenState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${_accountsByPincode.length} pincode(s) • $_totalVisibleAccounts account(s)',
+                            '${_accountsByPincode.length} pincode(s)  |  $_totalVisibleAccounts account(s)',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey.shade700,
@@ -864,7 +864,7 @@ class _SalesmanCustomerAllotmentScreenState
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'Total Business: $totalBusinessCount • Existing Accounts: $existingAccountsCount • Assigned: $assignedCount • Remaining: $remainingCount${selectedInPin > 0 ? ' • $selectedInPin selected' : ''}',
+                                              'Total Business: $totalBusinessCount  |  Existing Accounts: $existingAccountsCount  |  Assigned: $assignedCount  |  Remaining: $remainingCount${selectedInPin > 0 ? '  |  $selectedInPin selected' : ''}',
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
@@ -1014,7 +1014,7 @@ class _SalesmanCustomerAllotmentScreenState
             children: [
               Expanded(
                 child: Text(
-                  '${_selectedAccountIds.length} selected • ${_selectedDaysForAssignment.isEmpty ? 0 : 1} day',
+                  '${_selectedAccountIds.length} selected  |  ${_selectedDaysForAssignment.isEmpty ? 0 : 1} day',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     fontWeight: FontWeight.w600,
@@ -1208,11 +1208,424 @@ class _WeeklyAssignmentViewScreen extends StatefulWidget {
       _WeeklyAssignmentViewScreenState();
 }
 
+enum _WeeklyTapAssignmentMode { once, allWeek, manual }
+
 class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen> {
   int _weekOffset = 0;
   bool _isLoading = true;
+  bool _isAssigning = false;
+  final Set<int> _expandedDays = <int>{};
   Map<int, int> _dayTotals = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
   List<Map<String, dynamic>> _pincodeGroups = [];
+
+  Future<void> _openAccountDetails(String accountId) async {
+    final result = await context.push('/account/$accountId');
+    if (result == true && mounted) {
+      await _loadWeekData();
+    }
+  }
+
+  Future<void> _openAccountEdit(String accountId) async {
+    final result = await context.push('/account/edit/$accountId');
+    if (result == true && mounted) {
+      await _loadWeekData();
+    }
+  }
+
+  List<int> _allWeekDays() {
+    final days = widget.dayLabelMap.keys.toList()..sort();
+    return days;
+  }
+
+  String _dayLabels(List<int> days) {
+    final sorted = days.toList()..sort();
+    return sorted
+        .where(widget.dayLabelMap.containsKey)
+        .map((d) => widget.dayLabelMap[d]!)
+        .join(', ');
+  }
+
+  Future<_WeeklyTapAssignmentMode?> _showAssignmentModeSelector(
+    String displayName,
+    int tappedDay,
+  ) async {
+    final dayLabel = widget.dayLabelMap[tappedDay] ?? 'Selected Day';
+    return showModalBottomSheet<_WeeklyTapAssignmentMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Assign $displayName',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tapped from $dayLabel',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 10),
+                ListTile(
+                  leading: const Icon(Icons.looks_one_outlined),
+                  title: Text('Once ($dayLabel)'),
+                  onTap: () => Navigator.of(sheetContext).pop(_WeeklyTapAssignmentMode.once),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.calendar_view_week_outlined),
+                  title: const Text('All Week (Mon-Sun)'),
+                  onTap: () => Navigator.of(sheetContext).pop(_WeeklyTapAssignmentMode.allWeek),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.tune_outlined),
+                  title: const Text('Manual (Select Days)'),
+                  onTap: () => Navigator.of(sheetContext).pop(_WeeklyTapAssignmentMode.manual),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<int>?> _showManualDaySelector(int defaultDay) async {
+    final initialDays = <int>{defaultDay};
+    final selected = await showDialog<Set<int>>(
+      context: context,
+      builder: (dialogContext) {
+        final selectedDays = Set<int>.from(initialDays);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Manual Day Selection'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Choose one or more days',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _allWeekDays().map((day) {
+                      final isSelected = selectedDays.contains(day);
+                      return FilterChip(
+                        label: Text(widget.dayLabelMap[day] ?? 'Day $day'),
+                        selected: isSelected,
+                        onSelected: (value) {
+                          setDialogState(() {
+                            if (value) {
+                              selectedDays.add(day);
+                            } else {
+                              selectedDays.remove(day);
+                            }
+                          });
+                        },
+                        selectedColor: widget.primary.withValues(alpha: 0.25),
+                        checkmarkColor: widget.primary,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedDays.isEmpty
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(selectedDays),
+                  style: ElevatedButton.styleFrom(backgroundColor: widget.primary),
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selected == null || selected.isEmpty) return null;
+    return selected.toList()..sort();
+  }
+
+  Future<void> _assignFromWeeklyTap({
+    required String accountId,
+    required String displayName,
+    required int tappedDay,
+  }) async {
+    if (_isAssigning) return;
+
+    final mode = await _showAssignmentModeSelector(displayName, tappedDay);
+    if (!mounted || mode == null) return;
+
+    List<int>? assignedDays;
+    if (mode == _WeeklyTapAssignmentMode.once) {
+      assignedDays = [tappedDay];
+    } else if (mode == _WeeklyTapAssignmentMode.allWeek) {
+      assignedDays = _allWeekDays();
+    } else {
+      assignedDays = await _showManualDaySelector(tappedDay);
+    }
+
+    if (!mounted || assignedDays == null || assignedDays.isEmpty) return;
+
+    setState(() => _isAssigning = true);
+    try {
+      Future<void> submit({required bool useOverride}) async {
+        await AccountService.manualAssignWeeklyAccounts(
+          salesmanId: widget.salesmanId,
+          weekStartDate: _selectedWeekStart,
+          accountIds: [accountId],
+          assignedDays: assignedDays!,
+          manualOverrideAccountIds: useOverride ? [accountId] : const [],
+        );
+      }
+
+      bool usedOverride = false;
+      try {
+        await submit(useOverride: false);
+      } catch (e) {
+        final message = e.toString().toLowerCase();
+        final needsOverride = message.contains('manual override') ||
+            message.contains('already assigned in this week') ||
+            message.contains('already assigned');
+
+        if (!needsOverride) {
+          rethrow;
+        }
+
+        usedOverride = true;
+        await submit(useOverride: true);
+      }
+
+      if (!mounted) return;
+      final labels = _dayLabels(assignedDays);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            usedOverride
+                ? 'Assigned $displayName to $labels (manual override applied)'
+                : 'Assigned $displayName to $labels',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadWeekData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to assign account: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isAssigning = false);
+      }
+    }
+  }
+
+  int _readDayCount(dynamic rawDayCounts, int day) {
+    if (rawDayCounts is! Map) return 0;
+    return (rawDayCounts[day.toString()] as num?)?.toInt() ??
+        (rawDayCounts[day] as num?)?.toInt() ??
+        0;
+  }
+
+  List<Map<String, dynamic>> _assignedAccountsForDay(Map<String, dynamic> group, int day) {
+    final assigned = (group['assigned'] as List?) ?? const [];
+    final result = <Map<String, dynamic>>[];
+
+    for (final item in assigned) {
+      if (item is! Map) continue;
+      final account = Map<String, dynamic>.from(item);
+      final days = ((account['assignedDays'] as List?) ?? const [])
+          .map((e) => int.tryParse(e.toString()) ?? 0)
+          .where((d) => d >= 1 && d <= 7)
+          .toSet();
+      if (days.contains(day)) {
+        result.add(account);
+      }
+    }
+
+    return result;
+  }
+
+  Widget _buildDayAccountCard(Map<String, dynamic> account, String pin, int day) {
+    final displayName =
+        (account['businessName']?.toString().trim().isNotEmpty ?? false)
+            ? account['businessName'].toString()
+            : (account['personName']?.toString() ?? 'Unknown');
+    final personName = account['personName']?.toString() ?? '';
+    final accountCode = account['accountCode']?.toString() ?? '-';
+    final contactNumber = account['contactNumber']?.toString() ?? '-';
+    final accountId = account['id']?.toString();
+    final pincode = account['pincode']?.toString() ?? pin;
+    final frequency = account['visitFrequency']?.toString() ?? 'ONCE';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: (accountId == null || _isAssigning)
+            ? null
+            : () => _assignFromWeeklyTap(
+            accountId: accountId,
+            displayName: displayName,
+            tappedDay: day,
+          ),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: widget.primary.withValues(alpha: 0.18),
+                    child: Text(
+                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: widget.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      frequency,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  if (accountId != null)
+                    IconButton(
+                      onPressed: () => _openAccountDetails(accountId),
+                      icon: const Icon(Icons.open_in_new_outlined, size: 18),
+                      tooltip: 'Open details',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                      padding: const EdgeInsets.all(0),
+                    ),
+                  if (accountId != null)
+                    IconButton(
+                      onPressed: () => _openAccountEdit(accountId),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      tooltip: 'Edit account',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                      padding: const EdgeInsets.all(0),
+                    ),
+                  const SizedBox(width: 6),
+                  Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade500),
+                ],
+              ),
+              if (personName.isNotEmpty && personName != displayName)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    personName,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Code: $accountCode',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Phone: $contactNumber',
+                      style: TextStyle(fontSize: 11, color: Colors.green.shade800),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'PIN: $pincode',
+                      style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+                    ),
+                  ),
+                ],
+              ),
+              if (accountId != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _isAssigning
+                        ? 'Saving assignment...'
+                        : 'Tap card to assign. Use open/edit icons for details.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -1344,22 +1757,35 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ExpansionTile(
+                      key: PageStorageKey<String>(
+                        'weekly-day-${_selectedWeekStart.toIso8601String()}-$day',
+                      ),
+                      initiallyExpanded: _expandedDays.contains(day),
+                      onExpansionChanged: (expanded) {
+                        setState(() {
+                          if (expanded) {
+                            _expandedDays.add(day);
+                          } else {
+                            _expandedDays.remove(day);
+                          }
+                        });
+                      },
                       title: Text(
-                        '$dayLabel • $totalForDay assigned account(s)',
+                        '$dayLabel - $totalForDay assigned account(s)',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       children: [
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                           child: Column(
-                            children: _pincodeGroups.map((group) {
+                            children: _pincodeGroups.map<Widget>((group) {
                               final pin = (group['pincode'] ?? '').toString();
-                              final rawDayCounts = (group['dayCounts'] as Map?) ?? const {};
-                              final countForDay = (rawDayCounts[day.toString()] as num?)?.toInt() ??
-                                  (rawDayCounts[day] as num?)?.toInt() ?? 0;
+                              final countForDay = _readDayCount(group['dayCounts'], day);
                               if (countForDay == 0) {
                                 return const SizedBox.shrink();
                               }
+
+                              final accountsForDay = _assignedAccountsForDay(group, day);
 
                               final unassignedForWeek =
                                   (group['remainingAccounts'] as num?)?.toInt() ?? 0;
@@ -1386,11 +1812,15 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '$countForDay assigned on $dayLabel • $unassignedForWeek unassigned',
+                                            '$countForDay assigned on $dayLabel - $unassignedForWeek unassigned in week',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.grey.shade700,
                                             ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          ...accountsForDay.map(
+                                            (account) => _buildDayAccountCard(account, pin, day),
                                           ),
                                         ],
                                       ),

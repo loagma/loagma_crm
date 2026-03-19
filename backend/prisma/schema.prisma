@@ -255,7 +255,13 @@ model WeeklyAccountAssignment {
   pincode          String
   weekStartDate    DateTime
   assignedDays     Json
+  visitFrequency   String?
+  plannedBy        String?
+  plannedAt        DateTime?
   isManualOverride Boolean  @default(false)
+  overrideBy       String?
+  overrideReason   String?
+  overriddenAt     DateTime?
   sequenceNo       Int
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

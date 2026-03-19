@@ -14,6 +14,11 @@ import {
   getWeeklyAssignmentsView,
   autoAssignNextUnassignedAccounts,
   manualAssignWeeklyAccounts,
+  getPlanningWeekView,
+  assignPlanningWeekAccounts,
+  updatePlanningWeekAccount,
+  getMultiVisitWeekAccounts,
+  getTodayPlannedAccounts,
   checkContactNumber,
   debugDateFiltering,
   getAccountCountByPincode,
@@ -26,6 +31,9 @@ const router = express.Router();
 router.get('/', getAllAccounts);
 router.get('/stats', getAccountStats);
 router.get('/weekly/view', getWeeklyAssignmentsView);
+router.get('/planning/week', getPlanningWeekView);
+router.get('/planning/week/multi-visit', getMultiVisitWeekAccounts);
+router.get('/planning/today', getTodayPlannedAccounts);
 router.get('/debug-date-filtering', debugDateFiltering); // DEBUG ENDPOINT
 router.post('/check-contact', checkContactNumber);
 router.get('/pincode/:pincode/count', getAccountCountByPincode);
@@ -44,5 +52,7 @@ router.post('/bulk/assign', bulkAssignAccounts);
 router.post('/bulk/approve', bulkApproveAccounts);
 router.post('/weekly/auto-assign-next', autoAssignNextUnassignedAccounts);
 router.post('/weekly/manual-assign', manualAssignWeeklyAccounts);
+router.post('/planning/week/assign', assignPlanningWeekAccounts);
+router.patch('/planning/week/account/:accountId', updatePlanningWeekAccount);
 
 export default router;

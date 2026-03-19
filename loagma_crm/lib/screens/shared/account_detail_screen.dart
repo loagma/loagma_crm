@@ -479,24 +479,21 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     );
   }
 
+  Future<void> _openSharedEditMaster() async {
+    final accountId = _account?.id;
+    if (accountId == null) return;
+
+    final result = await context.push('/account/edit/$accountId');
+    if (result == true && mounted) {
+      await _loadAccount();
+    }
+  }
+
   // --------------------------
   // Build
   // --------------------------
   @override
   Widget build(BuildContext context) {
-    // Check if we should start in edit mode
-    final uri = GoRouterState.of(context).uri;
-    final shouldStartInEditMode = uri.queryParameters['edit'] == 'true';
-
-    // Set edit mode if query parameter is present and we haven't set it yet
-    if (shouldStartInEditMode && !_isEditing && _account != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() => _isEditing = true);
-        }
-      });
-    }
-
     // Show loading skeleton
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -556,10 +553,10 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
         title: Text(_account?.personName ?? 'Account Details'),
         backgroundColor: const Color(0xFFD7BE69),
         actions: [
-          if (!_isEditing && _account != null)
+          if (_account != null)
             IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () => setState(() => _isEditing = true),
+              onPressed: _openSharedEditMaster,
               tooltip: 'Edit Account',
             ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
@@ -569,7 +566,7 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: _isEditing ? _buildEditForm() : _buildViewMode(),
+      body: _buildViewMode(),
     );
   }
 

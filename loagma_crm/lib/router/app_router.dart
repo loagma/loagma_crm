@@ -40,6 +40,8 @@ import '../screens/salesman/enhanced_punch_screen.dart';
 import '../screens/salesman/leave_management_screen.dart';
 import '../screens/salesman/apply_leave_screen.dart';
 import '../screens/salesman/my_leave_status_screen.dart';
+import '../screens/salesman/today_planned_accounts_screen.dart';
+import '../screens/salesman/multi_visit_accounts_screen.dart';
 
 // Admin Map screen
 import '../screens/admin/map_view_screen.dart';
@@ -338,6 +340,14 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'beat-plan/today',
           builder: (_, __) => const TodaysBeatPlanScreen(),
+        ),
+        GoRoute(
+          path: 'planning/today',
+          builder: (_, __) => const TodayPlannedAccountsScreen(),
+        ),
+        GoRoute(
+          path: 'planning/multi-visit',
+          builder: (_, __) => const MultiVisitAccountsScreen(),
         ),
 
         // Telecaller-specific routes

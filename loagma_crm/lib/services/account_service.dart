@@ -358,6 +358,9 @@ class AccountService {
     required String assignedToId,
     /// Beat days: 1=Mon .. 7=Sun. Sent to backend for day-wise salesman list.
     List<int>? assignedDays,
+    DateTime? weekStartDate,
+    String? visitFrequency,
+    bool createWeeklyAssignments = true,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -368,6 +371,13 @@ class AccountService {
       if (assignedDays != null && assignedDays.isNotEmpty) {
         body['assignedDays'] = assignedDays;
       }
+      if (weekStartDate != null) {
+        body['weekStartDate'] = toWeekStart(weekStartDate).toIso8601String();
+      }
+      if (visitFrequency != null && visitFrequency.trim().isNotEmpty) {
+        body['visitFrequency'] = visitFrequency.trim().toUpperCase();
+      }
+      body['createWeeklyAssignments'] = createWeeklyAssignments;
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/bulk/assign'),
         headers: headers,
@@ -460,6 +470,7 @@ class AccountService {
     required DateTime weekStartDate,
     required List<String> accountIds,
     required List<int> assignedDays,
+    String? visitFrequency,
     List<String> manualOverrideAccountIds = const [],
   }) async {
     try {
@@ -473,6 +484,8 @@ class AccountService {
           'weekStartDate': weekStart.toIso8601String(),
           'accountIds': accountIds,
           'assignedDays': assignedDays,
+          if (visitFrequency != null && visitFrequency.trim().isNotEmpty)
+            'visitFrequency': visitFrequency.trim().toUpperCase(),
           'manualOverrideAccountIds': manualOverrideAccountIds,
         }),
       );
@@ -484,6 +497,161 @@ class AccountService {
       throw Exception(data['message'] ?? 'Failed to assign weekly accounts');
     } catch (e) {
       print('Error manual assigning weekly accounts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchPlanningWeekView({
+    required String salesmanId,
+    required DateTime weekStartDate,
+    String? pincode,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+      final uri = Uri.parse('${ApiConfig.accountsUrl}/planning/week').replace(
+        queryParameters: {
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          if (pincode != null && pincode.trim().isNotEmpty)
+            'pincode': pincode.trim(),
+        },
+      );
+
+      final response = await http.get(uri, headers: headers);
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to load planning week view');
+    } catch (e) {
+      print('Error fetching planning week view: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> assignPlanningWeekAccounts({
+    required String salesmanId,
+    required DateTime weekStartDate,
+    required List<Map<String, dynamic>> assignments,
+    List<String> manualOverrideAccountIds = const [],
+    String? overrideReason,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/planning/week/assign'),
+        headers: headers,
+        body: json.encode({
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          'assignments': assignments,
+          'manualOverrideAccountIds': manualOverrideAccountIds,
+          if (overrideReason != null && overrideReason.trim().isNotEmpty)
+            'overrideReason': overrideReason.trim(),
+        }),
+      );
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to assign planning week accounts');
+    } catch (e) {
+      print('Error assigning planning week accounts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> updatePlanningWeekAccount({
+    required String accountId,
+    required String salesmanId,
+    required DateTime weekStartDate,
+    required List<int> plannedDays,
+    required String visitFrequency,
+    bool isOverride = false,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.accountsUrl}/planning/week/account/$accountId'),
+        headers: headers,
+        body: json.encode({
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          'plannedDays': plannedDays,
+          'visitFrequency': visitFrequency.toUpperCase(),
+          'isOverride': isOverride,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to update planning week account');
+    } catch (e) {
+      print('Error updating planning week account: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchMultiVisitWeekAccounts({
+    required String salesmanId,
+    required DateTime weekStartDate,
+    String? frequency,
+    int? day,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final weekStart = toWeekStart(weekStartDate);
+      final uri = Uri.parse('${ApiConfig.accountsUrl}/planning/week/multi-visit').replace(
+        queryParameters: {
+          'salesmanId': salesmanId,
+          'weekStartDate': weekStart.toIso8601String(),
+          if (frequency != null && frequency.trim().isNotEmpty)
+            'frequency': frequency.trim().toUpperCase(),
+          if (day != null) 'day': day.toString(),
+        },
+      );
+
+      final response = await http.get(uri, headers: headers);
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to load multi-visit week accounts');
+    } catch (e) {
+      print('Error fetching multi-visit week accounts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchTodayPlannedAccounts({
+    required String salesmanId,
+    DateTime? date,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final uri = Uri.parse('${ApiConfig.accountsUrl}/planning/today').replace(
+        queryParameters: {
+          'salesmanId': salesmanId,
+          if (date != null) 'date': date.toIso8601String(),
+        },
+      );
+
+      final response = await http.get(uri, headers: headers);
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      throw Exception(data['message'] ?? 'Failed to load today planned accounts');
+    } catch (e) {
+      print('Error fetching today planned accounts: $e');
       rethrow;
     }
   }

@@ -107,6 +107,32 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
 
   final ImagePicker _picker = ImagePicker();
 
+  List<Map<String, dynamic>> _mapUniqueAreas(dynamic areasData) {
+    if (areasData is! List) return [];
+
+    final seen = <String>{};
+    final uniqueAreas = <Map<String, dynamic>>[];
+
+    for (final area in areasData) {
+      final name = area is String
+          ? area
+          : (area is Map<String, dynamic>)
+                ? (area['name']?.toString() ?? '')
+                : area.toString();
+
+      final trimmedName = name.trim();
+      if (trimmedName.isEmpty) continue;
+
+      final key = trimmedName.toLowerCase();
+      if (seen.contains(key)) continue;
+
+      seen.add(key);
+      uniqueAreas.add({'name': trimmedName});
+    }
+
+    return uniqueAreas;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -177,20 +203,15 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
       if (result['success'] == true && mounted) {
         final data = result['data'];
         setState(() {
-          // Load areas - convert string array to map array
-          final areasData = data['areas'] ?? [];
-          if (areasData is List) {
-            _availableAreas = areasData.map((area) {
-              if (area is String) {
-                return {'name': area};
-              } else if (area is Map<String, dynamic>) {
-                return area;
-              } else {
-                return {'name': area.toString()};
-              }
-            }).toList();
-          } else {
-            _availableAreas = [];
+          _availableAreas = _mapUniqueAreas(data['areas'] ?? []);
+          final selected = _selectedArea?.trim();
+          final hasSelectedInOptions = selected != null &&
+              _availableAreas.any(
+                (a) => (a['name']?.toString().trim().toLowerCase() ?? '') ==
+                    selected.toLowerCase(),
+              );
+          if (!hasSelectedInOptions) {
+            _selectedArea = null;
           }
         });
       }
@@ -324,21 +345,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
           _districtController.text = data['district'] ?? '';
           _cityController.text = data['city'] ?? '';
 
-          // Load areas - convert string array to map array
-          final areasData = data['areas'] ?? [];
-          if (areasData is List) {
-            _availableAreas = areasData.map((area) {
-              if (area is String) {
-                return {'name': area};
-              } else if (area is Map<String, dynamic>) {
-                return area;
-              } else {
-                return {'name': area.toString()};
-              }
-            }).toList();
-          } else {
-            _availableAreas = [];
-          }
+          _availableAreas = _mapUniqueAreas(data['areas'] ?? []);
           _selectedArea = null; // Reset area selection
         });
         _showSuccess('Location details fetched successfully');
@@ -1154,8 +1161,16 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
     required void Function(String?) onChanged,
     String? Function(String?)? validator,
   }) {
+    final uniqueItems = items
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList();
+    final safeValue =
+        (value != null && uniqueItems.contains(value.trim())) ? value.trim() : null;
+
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      initialValue: safeValue,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFFD7BE69)),
@@ -1165,7 +1180,7 @@ class _EditAccountMasterScreenState extends State<EditAccountMasterScreen> {
           borderSide: const BorderSide(color: Color(0xFFD7BE69), width: 2),
         ),
       ),
-      items: items.map((item) {
+      items: uniqueItems.map((item) {
         return DropdownMenuItem(value: item, child: Text(item));
       }).toList(),
       onChanged: onChanged,
