@@ -27,6 +27,7 @@ class _SalesmanCustomerAllotmentScreenState
   bool _isSaving = false;
   String? _searchQuery;
   final Set<int> _selectedDaysForAssignment = {};
+  int? _selectedAfterDays;
   final Set<String> _selectedAccountIds = {};
   final Set<String> _expandedPincodes = {};
   final TextEditingController _searchController = TextEditingController();
@@ -266,7 +267,7 @@ class _SalesmanCustomerAllotmentScreenState
       children: _dayLabelMap.entries.map((entry) {
         final count = dayCounts[entry.key] ?? 0;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             color: count > 0 ? _primary.withValues(alpha: 0.18) : Colors.grey.shade200,
@@ -514,26 +515,6 @@ class _SalesmanCustomerAllotmentScreenState
       return;
     }
 
-    if (_selectedDaysForAssignment.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select exactly one day before using Select N'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_selectedDaysForAssignment.length > 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select N works with one day only. Choose one day.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     final takeCount = requestedCount > remainingCount ? remainingCount : requestedCount;
     final candidateIds = accounts
         .where((a) => (a.assignedDays?.isEmpty ?? true))
@@ -557,11 +538,10 @@ class _SalesmanCustomerAllotmentScreenState
     });
 
     if (!mounted) return;
-    final selectedDay = _selectedDaysForAssignment.first;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${candidateIds.length} account(s) selected for ${_dayLabelMap[selectedDay]} in $pincode. Tap Assign Day to save.',
+          '${candidateIds.length} account(s) selected in $pincode. Choose a day and tap Assign Day to save.',
         ),
         backgroundColor: Colors.green,
       ),
@@ -620,19 +600,23 @@ class _SalesmanCustomerAllotmentScreenState
         weekStartDate: _activeWeekStart,
         accountIds: _selectedAccountIds.toList(),
         assignedDays: _selectedDaysForAssignment.toList()..sort(),
+        afterDays: _selectedAfterDays,
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Assigned ${_selectedAccountIds.length} account(s) to ${_dayLabelMap[_selectedDaysForAssignment.first]}',
+            _selectedAfterDays != null
+                ? 'Assigned ${_selectedAccountIds.length} account(s) to ${_dayLabelMap[_selectedDaysForAssignment.first]} with recurrence every $_selectedAfterDays day(s)'
+                : 'Assigned ${_selectedAccountIds.length} account(s) to ${_dayLabelMap[_selectedDaysForAssignment.first]}',
           ),
           backgroundColor: Colors.green,
         ),
       );
 
       _selectedAccountIds.clear();
+      _selectedAfterDays = null;
       await _loadAccounts();
     } catch (e) {
       if (!mounted) return;
@@ -645,6 +629,217 @@ class _SalesmanCustomerAllotmentScreenState
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  Future<void> _showDayPickerDialog() async {
+    int? pendingDay =
+        _selectedDaysForAssignment.isEmpty ? null : _selectedDaysForAssignment.first;
+    int? pendingAfterDays = _selectedAfterDays;
+    bool enableAfterDays = pendingAfterDays != null;
+    String afterDaysText = pendingAfterDays?.toString() ?? '';
+
+    final selection = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            String? validationError;
+            final parsedAfterDays = int.tryParse(afterDaysText.trim());
+            final canShowPreview =
+                enableAfterDays && pendingDay != null && parsedAfterDays != null && parsedAfterDays > 0;
+
+            DateTime? nextVisitDate;
+            if (canShowPreview) {
+              final selectedDate = _activeWeekStart.add(Duration(days: pendingDay! - 1));
+              nextVisitDate = selectedDate.add(Duration(days: parsedAfterDays));
+            }
+
+            return AlertDialog(
+              title: const Text('Choose Day'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ..._dayLabelMap.entries.map((entry) {
+                        final isSelected = pendingDay == entry.key;
+                        return ChoiceChip(
+                          label: Text(entry.value),
+                          selected: isSelected,
+                          onSelected: (_) {
+                            setDialogState(() {
+                              pendingDay = entry.key;
+                            });
+                          },
+                          selectedColor: _primary.withValues(alpha: 0.3),
+                        );
+                      }),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: enableAfterDays,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            enableAfterDays = value == true;
+                            if (!enableAfterDays) {
+                              afterDaysText = '';
+                              pendingAfterDays = null;
+                            }
+                          });
+                        },
+                        activeColor: _primary,
+                      ),
+                      const Text(
+                        'After Days (Recurring)',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  if (enableAfterDays)
+                    TextField(
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Enter after how many days',
+                        hintText: 'e.g. 10',
+                        isDense: true,
+                      ),
+                      controller: TextEditingController(text: afterDaysText)
+                        ..selection = TextSelection.fromPosition(
+                          TextPosition(offset: afterDaysText.length),
+                        ),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          afterDaysText = value;
+                        });
+                      },
+                    ),
+                  if (nextVisitDate != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Next visit: ${_formatDate(nextVisitDate)} (${_dayLabelMap[nextVisitDate.weekday] ?? ''})',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  if (validationError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        validationError,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop({
+                    'clear': true,
+                  }),
+                  child: const Text('Clear'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    if (pendingDay == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select one day'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (enableAfterDays) {
+                      final parsed = int.tryParse(afterDaysText.trim());
+                      if (parsed == null || parsed <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enter valid After Days value'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      pendingAfterDays = parsed;
+                    } else {
+                      pendingAfterDays = null;
+                    }
+
+                    Navigator.of(dialogContext).pop({
+                      'day': pendingDay,
+                      'afterDays': pendingAfterDays,
+                    });
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || selection == null) return;
+    setState(() {
+      if (selection['clear'] == true) {
+        _selectedDaysForAssignment.clear();
+        _selectedAfterDays = null;
+        return;
+      }
+
+      final pickedDay = selection['day'] as int?;
+      final pickedAfterDays = selection['afterDays'] as int?;
+      _selectedDaysForAssignment.clear();
+      if (pickedDay != null) {
+        _selectedDaysForAssignment.add(pickedDay);
+      }
+      _selectedAfterDays = pickedAfterDays;
+    });
+  }
+
+  Widget _buildDayPickerButton() {
+    final selectedDay =
+        _selectedDaysForAssignment.isEmpty ? null : _selectedDaysForAssignment.first;
+    final selectedDayLabel =
+      selectedDay == null
+        ? 'Choose Day'
+        : (_selectedAfterDays != null
+          ? '${_dayLabelMap[selectedDay]} +$_selectedAfterDays d'
+          : (_dayLabelMap[selectedDay] ?? 'Choose Day'));
+
+    return OutlinedButton.icon(
+      onPressed: _showDayPickerDialog,
+      icon: const Icon(Icons.calendar_today, size: 14),
+      label: Text(selectedDayLabel),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        minimumSize: const Size(0, 30),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        textStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 
   Future<void> _launchCall(String phoneNumber) async {
@@ -727,44 +922,6 @@ class _SalesmanCustomerAllotmentScreenState
                             _searchQuery = v.trim().isEmpty ? null : v.trim();
                             _regroupAccounts();
                           },
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Select day to assign',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: _dayLabelMap.entries.map((entry) {
-                              final day = entry.key;
-                              final isSelected =
-                                  _selectedDaysForAssignment.contains(day);
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(entry.value),
-                                  selected: isSelected,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _selectedDaysForAssignment.clear();
-                                        _selectedDaysForAssignment.add(day);
-                                      } else {
-                                        _selectedDaysForAssignment.remove(day);
-                                      }
-                                    });
-                                  },
-                                  selectedColor: _primary.withValues(alpha: 0.3),
-                                  checkmarkColor: _primary,
-                                ),
-                              );
-                            }).toList(),
-                          ),
                         ),
                       ],
                     ),
@@ -943,33 +1100,42 @@ class _SalesmanCustomerAllotmentScreenState
                                                             ),
                                                           ),
                                                         ),
-                                                        OutlinedButton.icon(
-                                                          onPressed: () =>
-                                                              _clearSelectionForPincode(
-                                                                  pincode),
-                                                          icon: const Icon(
-                                                            Icons.clear_all,
-                                                            size: 16,
-                                                          ),
-                                                          label: const Text(
-                                                              'Clear Pin'),
-                                                          style: OutlinedButton.styleFrom(
-                                                            padding: const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
+                                                        Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            OutlinedButton.icon(
+                                                              onPressed: () =>
+                                                                  _clearSelectionForPincode(
+                                                                      pincode),
+                                                              icon: const Icon(
+                                                                Icons.clear_all,
+                                                                size: 16,
+                                                              ),
+                                                              label: const Text(
+                                                                  'Clear Pin'),
+                                                              style: OutlinedButton.styleFrom(
+                                                                padding: const EdgeInsets.symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 4,
+                                                                ),
+                                                                minimumSize: const Size(0, 30),
+                                                                tapTargetSize:
+                                                                    MaterialTapTargetSize.shrinkWrap,
+                                                                visualDensity:
+                                                                    VisualDensity.compact,
+                                                                textStyle: const TextStyle(
+                                                                  fontSize: 12,
+                                                                  fontWeight: FontWeight.w600,
+                                                                ),
+                                                              ),
                                                             ),
-                                                            minimumSize: const Size(0, 30),
-                                                            tapTargetSize:
-                                                                MaterialTapTargetSize.shrinkWrap,
-                                                            visualDensity:
-                                                                VisualDensity.compact,
-                                                            textStyle: const TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
+                                                            if (_selectedAccountIds.isNotEmpty)
+                                                              const SizedBox(width: 6),
+                                                            if (_selectedAccountIds.isNotEmpty)
+                                                              _buildDayPickerButton(),
+                                                          ],
                                                         ),
-                                                      ],
+                                                        ],
                                                     ),
                                                   ),
                                                 ...accounts.map((account) {
@@ -1672,13 +1838,20 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
         _pincodeGroups = groups;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _dayTotals = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
         _pincodeGroups = [];
         _isLoading = false;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load weekly assignments: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

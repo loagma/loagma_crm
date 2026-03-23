@@ -471,6 +471,7 @@ class AccountService {
     required List<String> accountIds,
     required List<int> assignedDays,
     String? visitFrequency,
+    int? afterDays,
     List<String> manualOverrideAccountIds = const [],
   }) async {
     try {
@@ -486,6 +487,8 @@ class AccountService {
           'assignedDays': assignedDays,
           if (visitFrequency != null && visitFrequency.trim().isNotEmpty)
             'visitFrequency': visitFrequency.trim().toUpperCase(),
+          if (afterDays != null && afterDays > 0)
+            'afterDays': afterDays,
           'manualOverrideAccountIds': manualOverrideAccountIds,
         }),
       );

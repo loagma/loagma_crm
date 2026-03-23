@@ -15,11 +15,110 @@ const normalizeWeekStartDate = (input) => {
   return date;
 };
 
+const buildWeekStartDateFilter = (weekStartDate) => {
+  const start = toStartOfDay(weekStartDate);
+  if (!start) return null;
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+  return {
+    gte: start,
+    lt: end,
+  };
+};
+
+const buildWeekRange = (weekStartDate) => {
+  const start = toStartOfDay(weekStartDate);
+  if (!start) return null;
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  return { start, end };
+};
+
+const getDueDaysInWeekForAfterDays = ({ anchorDate, afterDays, weekStartDate }) => {
+  const normalizedAnchor = toStartOfDay(anchorDate);
+  const weekStart = toStartOfDay(weekStartDate);
+  if (!normalizedAnchor || !weekStart || !afterDays || afterDays <= 0) return [];
+
+  const dueDays = [];
+  for (let offset = 0; offset < 7; offset += 1) {
+    const targetDate = new Date(
+      weekStart.getFullYear(),
+      weekStart.getMonth(),
+      weekStart.getDate() + offset,
+    );
+    if (isAfterDaysDueOnDate(normalizedAnchor, afterDays, targetDate)) {
+      dueDays.push(offset + 1);
+    }
+  }
+
+  return dueDays;
+};
+
 const parseAssignedDays = (value) => {
   if (!Array.isArray(value)) return [];
   return [...new Set(value
     .map((d) => parseInt(d, 10))
     .filter((d) => d >= 1 && d <= 7))];
+};
+
+const parseAfterDays = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const toStartOfDay = (input) => {
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return null;
+  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+};
+
+const dayDiff = (from, to) => {
+  const fromDate = toStartOfDay(from);
+  const toDate = toStartOfDay(to);
+  if (!fromDate || !toDate) return null;
+  const ms = toDate.getTime() - fromDate.getTime();
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
+};
+
+const getDateForWeekday = (weekStartDate, day) => {
+  const weekStart = toStartOfDay(weekStartDate);
+  if (!weekStart || !(day >= 1 && day <= 7)) return null;
+  return new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + (day - 1));
+};
+
+const computeFirstRecurrenceDate = (anchorDate, afterDays) => {
+  const anchor = toStartOfDay(anchorDate);
+  if (!anchor || !afterDays || afterDays <= 0) return null;
+  return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + afterDays);
+};
+
+const isAfterDaysDueOnDate = (anchorDate, afterDays, targetDate) => {
+  if (!afterDays || afterDays <= 0) return false;
+  const diff = dayDiff(anchorDate, targetDate);
+  if (diff === null) return false;
+  if (diff < afterDays) return false;
+  return diff % afterDays === 0;
+};
+
+const computeNextRecurrenceDate = (anchorDate, afterDays, referenceDate) => {
+  if (!afterDays || afterDays <= 0) return null;
+  const anchor = toStartOfDay(anchorDate);
+  const reference = toStartOfDay(referenceDate);
+  if (!anchor || !reference) return null;
+
+  const first = computeFirstRecurrenceDate(anchor, afterDays);
+  if (!first) return null;
+  if (reference.getTime() < first.getTime()) return first;
+
+  const diff = dayDiff(anchor, reference);
+  if (diff === null) return first;
+  const multiplier = Math.floor(diff / afterDays) + 1;
+  return new Date(
+    anchor.getFullYear(),
+    anchor.getMonth(),
+    anchor.getDate() + (multiplier * afterDays),
+  );
 };
 
 const toAccountDtoWithAssignedDays = (account, assignedDays) => ({
@@ -1343,6 +1442,8 @@ export const getWeeklyAssignmentsView = async (req, res) => {
   try {
     const salesmanId = req.query.salesmanId || req.user?.id;
     const weekStartDate = normalizeWeekStartDate(req.query.weekStartDate);
+    const weekStartFilter = buildWeekStartDateFilter(weekStartDate);
+    const weekRange = buildWeekRange(weekStartDate);
     const pincodeFilter = req.query.pincode ? String(req.query.pincode).trim() : null;
 
     if (!salesmanId) {
@@ -1353,6 +1454,14 @@ export const getWeeklyAssignmentsView = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid weekStartDate is required' });
     }
 
+    if (!weekStartFilter) {
+      return res.status(400).json({ success: false, message: 'Unable to normalize weekStartDate for query' });
+    }
+
+    if (!weekRange) {
+      return res.status(400).json({ success: false, message: 'Unable to derive week range from weekStartDate' });
+    }
+
     const assignedPincodes = await getSalesmanPincodeRows(salesmanId);
 
     const pincodes = pincodeFilter
@@ -1361,7 +1470,7 @@ export const getWeeklyAssignmentsView = async (req, res) => {
 
     const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
 
-    const [allAccounts, weeklyRows] = await Promise.all([
+    const [allAccounts, weeklyRows, recurrenceRows] = await Promise.all([
       pincodes.length === 0
         ? Promise.resolve([])
         : prisma.account.findMany({
@@ -1372,7 +1481,19 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         ? weeklyDelegate.findMany({
             where: {
               salesmanId,
-              weekStartDate,
+              weekStartDate: weekStartFilter,
+              ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
+            },
+            include: { account: true },
+            orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+          })
+        : Promise.resolve([]),
+      weeklyDelegate
+        ? weeklyDelegate.findMany({
+            where: {
+              salesmanId,
+              recurrenceAfterDays: { not: null },
+              recurrenceStartDate: { lte: weekRange.end },
               ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
             },
             include: { account: true },
@@ -1382,6 +1503,29 @@ export const getWeeklyAssignmentsView = async (req, res) => {
     ]);
 
     const dayTotals = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    const accountDaysByPincode = {};
+    const accountMetaByPincode = {};
+
+    const upsertAccountDays = (pin, account, days) => {
+      if (!pin || !account || !account.id || !Array.isArray(days) || days.length === 0) {
+        return;
+      }
+
+      if (!accountDaysByPincode[pin]) accountDaysByPincode[pin] = new Map();
+      if (!accountMetaByPincode[pin]) accountMetaByPincode[pin] = new Map();
+
+      const byAccount = accountDaysByPincode[pin];
+      const currentDays = byAccount.get(account.id) || new Set();
+      for (const day of days) {
+        if (day >= 1 && day <= 7) {
+          currentDays.add(day);
+        }
+      }
+
+      byAccount.set(account.id, currentDays);
+      accountMetaByPincode[pin].set(account.id, account);
+    };
+
     const weeklyByPincode = {};
 
     if (weeklyDelegate) {
@@ -1390,15 +1534,51 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         if (!pin) continue;
 
         const days = parseAssignedDays(row.assignedDays);
-        if (!weeklyByPincode[pin]) weeklyByPincode[pin] = [];
-        weeklyByPincode[pin].push({
-          ...row,
-          assignedDays: days,
+        upsertAccountDays(pin, row.account, days);
+      }
+
+      for (const row of recurrenceRows) {
+        const pin = (row.pincode || '').trim();
+        if (!pin) continue;
+
+        const normalizedAfterDays = parseAfterDays(row.recurrenceAfterDays);
+        if (!normalizedAfterDays) continue;
+
+        const fallbackDays = parseAssignedDays(row.assignedDays);
+        const fallbackAnchorDay = fallbackDays[0];
+        const fallbackAnchorDate = fallbackAnchorDay
+          ? getDateForWeekday(row.weekStartDate, fallbackAnchorDay)
+          : null;
+        const anchorDate = row.recurrenceStartDate || fallbackAnchorDate;
+        if (!anchorDate) continue;
+
+        const dueDays = getDueDaysInWeekForAfterDays({
+          anchorDate,
+          afterDays: normalizedAfterDays,
+          weekStartDate,
         });
 
-        for (const day of days) {
-          dayTotals[day] = (dayTotals[day] || 0) + 1;
+        upsertAccountDays(pin, row.account, dueDays);
+      }
+
+      for (const [pin, byAccount] of Object.entries(accountDaysByPincode)) {
+        const meta = accountMetaByPincode[pin] || new Map();
+        const assignedAccounts = [];
+
+        for (const [accountId, daySet] of byAccount.entries()) {
+          const account = meta.get(accountId);
+          if (!account) continue;
+
+          const assignedDays = [...daySet].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
+          if (assignedDays.length === 0) continue;
+
+          assignedAccounts.push(toAccountDtoWithAssignedDays(account, assignedDays));
+          for (const day of assignedDays) {
+            dayTotals[day] = (dayTotals[day] || 0) + 1;
+          }
         }
+
+        weeklyByPincode[pin] = assignedAccounts;
       }
     } else {
       // Compatibility fallback for servers running an older Prisma client.
@@ -1410,10 +1590,7 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         if (days.length === 0) continue;
 
         if (!weeklyByPincode[pin]) weeklyByPincode[pin] = [];
-        weeklyByPincode[pin].push({
-          account,
-          assignedDays: days,
-        });
+        weeklyByPincode[pin].push(toAccountDtoWithAssignedDays(account, days));
 
         for (const day of days) {
           dayTotals[day] = (dayTotals[day] || 0) + 1;
@@ -1432,15 +1609,13 @@ export const getWeeklyAssignmentsView = async (req, res) => {
     const effectivePins = pincodes.length > 0 ? pincodes : Object.keys(weeklyByPincode);
     const pincodeGroups = effectivePins.map((pin) => {
       const allPinAccounts = allByPincode[pin] || [];
-      const assignedRows = weeklyByPincode[pin] || [];
-      const assignedAccounts = assignedRows.map((r) =>
-        toAccountDtoWithAssignedDays(r.account, r.assignedDays),
-      );
+      const assignedAccounts = weeklyByPincode[pin] || [];
       const assignedIds = new Set(assignedAccounts.map((a) => a.id));
       const remainingAccounts = allPinAccounts.filter((a) => !assignedIds.has(a.id));
       const dayCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-      for (const row of assignedRows) {
-        for (const day of row.assignedDays) {
+      for (const account of assignedAccounts) {
+        const days = parseAssignedDays(account.assignedDays || []);
+        for (const day of days) {
           dayCounts[day] = (dayCounts[day] || 0) + 1;
         }
       }
@@ -1474,8 +1649,13 @@ export const getWeeklyAssignmentsView = async (req, res) => {
 
 const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = null }) => {
   const weekStart = normalizeWeekStartDate(weekStartDate);
+  const weekStartFilter = buildWeekStartDateFilter(weekStart);
   if (!salesmanId || !weekStart) {
     return { error: 'salesmanId and valid weekStartDate are required' };
+  }
+
+  if (!weekStartFilter) {
+    return { error: 'Unable to normalize weekStartDate for query' };
   }
 
   const assignedPincodes = await getSalesmanPincodeRows(salesmanId);
@@ -1498,7 +1678,7 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
     weeklyDelegate.findMany({
       where: {
         salesmanId,
-        weekStartDate: weekStart,
+        weekStartDate: weekStartFilter,
         ...(effectivePincodes.length > 0 ? { pincode: { in: effectivePincodes } } : {}),
       },
       include: { account: true },
@@ -1530,6 +1710,9 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
       ...account,
       weekStartDate: weekStart.toISOString(),
       visitFrequency: frequency,
+      recurrenceAfterDays: row.recurrenceAfterDays ?? null,
+      recurrenceStartDate: row.recurrenceStartDate || null,
+      recurrenceNextDate: row.recurrenceNextDate || null,
       plannedBy: row.plannedBy || null,
       plannedAt: row.plannedAt || null,
       isManualOverride: !!row.isManualOverride,
@@ -2017,14 +2200,65 @@ export const getTodayPlannedAccounts = async (req, res) => {
       visitFrequency: normalizeVisitFrequency(a.visitFrequency, a.assignedDays),
     }));
 
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+    const dedupByAccount = new Map(todayAccounts.map((a) => [a.id, a]));
+
+    if (weeklyDelegate) {
+      const recurringRows = await weeklyDelegate.findMany({
+        where: {
+          salesmanId,
+          recurrenceAfterDays: { not: null },
+        },
+        include: { account: true },
+        orderBy: [{ accountId: 'asc' }, { plannedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      const latestRecurringByAccount = new Map();
+      for (const row of recurringRows) {
+        if (!latestRecurringByAccount.has(row.accountId)) {
+          latestRecurringByAccount.set(row.accountId, row);
+        }
+      }
+
+      for (const row of latestRecurringByAccount.values()) {
+        const days = parseAssignedDays(row.assignedDays);
+        const after = parseAfterDays(row.recurrenceAfterDays);
+        const anchorDate = row.recurrenceStartDate || getDateForWeekday(row.weekStartDate, days[0]);
+        if (!after || !anchorDate) continue;
+        if (!isAfterDaysDueOnDate(anchorDate, after, today)) continue;
+
+        const recurrenceNextDate = computeNextRecurrenceDate(anchorDate, after, today);
+        const recurringAccount = {
+          ...toAccountDtoWithAssignedDays(row.account, days),
+          weekStartDate: weekStart.toISOString(),
+          visitFrequency: normalizeVisitFrequency(row.visitFrequency, days),
+          recurrenceAfterDays: after,
+          recurrenceStartDate: toStartOfDay(anchorDate)?.toISOString() || null,
+          recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,
+          isRecurringAfterDays: true,
+          plannedBy: row.plannedBy || null,
+          plannedAt: row.plannedAt || null,
+          isManualOverride: !!row.isManualOverride,
+          overrideBy: row.overrideBy || null,
+          overrideReason: row.overrideReason || null,
+          overriddenAt: row.overriddenAt || null,
+          sequenceNo: row.sequenceNo || 0,
+        };
+
+        dedupByAccount.set(recurringAccount.id, recurringAccount);
+      }
+    }
+
+    const mergedTodayAccounts = [...dedupByAccount.values()];
+
     return res.json({
       success: true,
       data: {
         salesmanId,
         date: new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString(),
         dayOfWeek: weekday,
-        total: todayAccounts.length,
-        accounts: todayAccounts,
+        total: mergedTodayAccounts.length,
+        accounts: mergedTodayAccounts,
       },
     });
   } catch (error) {
@@ -2177,6 +2411,7 @@ export const getTodayPlannedAccounts = async (req, res) => {
         accountIds,
         assignedDays,
         visitFrequency,
+        afterDays,
         manualOverrideAccountIds = [],
         overrideReason = null,
       } = req.body;
@@ -2187,9 +2422,16 @@ export const getTodayPlannedAccounts = async (req, res) => {
       const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
       const days = parseAssignedDays(assignedDays);
       const normalizedFrequency = normalizeVisitFrequency(visitFrequency, days);
+      const normalizedAfterDays = parseAfterDays(afterDays);
       const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
       const isSingleDayMode = days.length === 1;
       const singleDay = isSingleDayMode ? days[0] : null;
+      const recurrenceStartDate = normalizedAfterDays
+        ? getDateForWeekday(weekStart, singleDay)
+        : null;
+      const recurrenceNextDate = normalizedAfterDays
+        ? computeFirstRecurrenceDate(recurrenceStartDate, normalizedAfterDays)
+        : null;
       const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
 
       if (!effectiveSalesmanId || !weekStart || accountIdList.length === 0 || days.length === 0) {
@@ -2201,6 +2443,20 @@ export const getTodayPlannedAccounts = async (req, res) => {
 
       if (frequencyError) {
         return res.status(400).json({ success: false, message: frequencyError });
+      }
+
+      if (afterDays !== undefined && normalizedAfterDays === null) {
+        return res.status(400).json({
+          success: false,
+          message: 'afterDays must be a positive integer',
+        });
+      }
+
+      if (normalizedAfterDays && !isSingleDayMode) {
+        return res.status(400).json({
+          success: false,
+          message: 'After Days requires exactly one selected day',
+        });
       }
 
       const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
@@ -2339,6 +2595,9 @@ export const getTodayPlannedAccounts = async (req, res) => {
               weekStartDate: weekStart,
               assignedDays: target.mergedDays,
               visitFrequency: normalizedFrequency,
+              recurrenceAfterDays: normalizedAfterDays,
+              recurrenceStartDate,
+              recurrenceNextDate,
               plannedBy: actorUserId,
               plannedAt: new Date(),
               isManualOverride: target.isManualOverride,
@@ -2364,6 +2623,9 @@ export const getTodayPlannedAccounts = async (req, res) => {
               pincode: target.pincode,
               assignedDays: target.mergedDays,
               visitFrequency: normalizedFrequency,
+              recurrenceAfterDays: normalizedAfterDays,
+              recurrenceStartDate,
+              recurrenceNextDate,
               plannedBy: actorUserId,
               plannedAt: new Date(),
               isManualOverride:
@@ -2395,6 +2657,9 @@ export const getTodayPlannedAccounts = async (req, res) => {
         success: true,
         message: `${result.upsertedCount} account(s) assigned for selected week`,
         count: result.upsertedCount,
+        recurrenceAfterDays: normalizedAfterDays,
+        recurrenceStartDate: recurrenceStartDate ? recurrenceStartDate.toISOString() : null,
+        recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,
       });
     } catch (error) {
       console.error('Manual assign weekly accounts error:', error);

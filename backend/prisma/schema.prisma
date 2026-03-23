@@ -256,6 +256,9 @@ model WeeklyAccountAssignment {
   weekStartDate    DateTime
   assignedDays     Json
   visitFrequency   String?
+  recurrenceAfterDays Int?
+  recurrenceStartDate DateTime?
+  recurrenceNextDate  DateTime?
   plannedBy        String?
   plannedAt        DateTime?
   isManualOverride Boolean  @default(false)
@@ -271,6 +274,7 @@ model WeeklyAccountAssignment {
   @@index([salesmanId, weekStartDate])
   @@index([pincode, weekStartDate])
   @@index([salesmanId, pincode, weekStartDate, sequenceNo])
+  @@index([salesmanId, recurrenceNextDate])
 }
 
 model TelecallerCallLog {
