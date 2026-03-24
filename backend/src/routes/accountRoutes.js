@@ -19,6 +19,7 @@ import {
   updatePlanningWeekAccount,
   getMultiVisitWeekAccounts,
   getTodayPlannedAccounts,
+  unassignWeeklyAccountsGlobal,
   checkContactNumber,
   debugDateFiltering,
   getAccountCountByPincode,
@@ -52,6 +53,7 @@ router.post('/bulk/assign', bulkAssignAccounts);
 router.post('/bulk/approve', bulkApproveAccounts);
 router.post('/weekly/auto-assign-next', autoAssignNextUnassignedAccounts);
 router.post('/weekly/manual-assign', manualAssignWeeklyAccounts);
+router.post('/weekly/unassign-global', unassignWeeklyAccountsGlobal);
 router.post('/planning/week/assign', assignPlanningWeekAccounts);
 router.patch('/planning/week/account/:accountId', updatePlanningWeekAccount);
 

@@ -504,6 +504,32 @@ class AccountService {
     }
   }
 
+  static Future<Map<String, dynamic>> unassignWeeklyAccountsGlobal({
+    required String salesmanId,
+    required List<String> accountIds,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/weekly/unassign-global'),
+        headers: headers,
+        body: json.encode({
+          'salesmanId': salesmanId,
+          'accountIds': accountIds,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return (data['data'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+      }
+      throw Exception(data['message'] ?? 'Failed to unassign weekly accounts');
+    } catch (e) {
+      print('Error global unassign weekly accounts: $e');
+      rethrow;
+    }
+  }
+
   static Future<Map<String, dynamic>> fetchPlanningWeekView({
     required String salesmanId,
     required DateTime weekStartDate,

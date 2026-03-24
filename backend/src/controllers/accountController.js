@@ -2667,6 +2667,166 @@ export const getTodayPlannedAccounts = async (req, res) => {
     }
   };
 
+export const unassignWeeklyAccountsGlobal = async (req, res) => {
+  try {
+    const { salesmanId, accountIds } = req.body;
+
+    const effectiveSalesmanId = salesmanId || req.user?.id;
+    const accountIdList = Array.isArray(accountIds)
+      ? [...new Set(accountIds.map((id) => String(id || '').trim()).filter(Boolean))]
+      : [];
+
+    if (!effectiveSalesmanId || accountIdList.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'salesmanId and accountIds are required',
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
+      const salesmanPins = await getSalesmanPincodeRows(effectiveSalesmanId);
+      const allowedPinSet = new Set(salesmanPins.map((p) => String(p || '').trim()).filter(Boolean));
+
+      const accounts = await tx.account.findMany({
+        where: { id: { in: accountIdList } },
+        select: {
+          id: true,
+          pincode: true,
+          assignedToId: true,
+          assignedDays: true,
+        },
+      });
+
+      const accountMap = new Map(accounts.map((a) => [a.id, a]));
+      const inScopeAccounts = [];
+      const missingAccountIds = [];
+      const outOfScopeAccountIds = [];
+
+      for (const accountId of accountIdList) {
+        const account = accountMap.get(accountId);
+        if (!account) {
+          missingAccountIds.push(accountId);
+          continue;
+        }
+
+        const pin = String(account.pincode || '').trim();
+        const scopedByPin = pin.length > 0 && allowedPinSet.has(pin);
+        const scopedByAssignment = account.assignedToId === effectiveSalesmanId;
+
+        if (!scopedByPin && !scopedByAssignment) {
+          outOfScopeAccountIds.push(accountId);
+          continue;
+        }
+
+        inScopeAccounts.push(account);
+      }
+
+      const inScopeIds = inScopeAccounts.map((a) => a.id);
+      if (inScopeIds.length === 0) {
+        return {
+          requestedCount: accountIdList.length,
+          inScopeCount: 0,
+          unassignedCount: 0,
+          alreadyUnassignedCount: 0,
+          missingAccountIds,
+          outOfScopeAccountIds,
+          unassignedAccountIds: [],
+          alreadyUnassignedAccountIds: [],
+          deletedWeeklyRows: 0,
+        };
+      }
+
+      const weeklyAssignedIdSet = new Set();
+      let deletedWeeklyRows = 0;
+
+      if (txWeeklyDelegate) {
+        const weeklyRows = await txWeeklyDelegate.findMany({
+          where: {
+            salesmanId: effectiveSalesmanId,
+            accountId: { in: inScopeIds },
+          },
+          select: { accountId: true },
+        });
+
+        for (const row of weeklyRows) {
+          weeklyAssignedIdSet.add(row.accountId);
+        }
+
+        const deleted = await txWeeklyDelegate.deleteMany({
+          where: {
+            salesmanId: effectiveSalesmanId,
+            accountId: { in: inScopeIds },
+          },
+        });
+        deletedWeeklyRows = deleted?.count || 0;
+      }
+
+      const hadAssignmentAccountIds = [];
+      const alreadyUnassignedAccountIds = [];
+
+      for (const account of inScopeAccounts) {
+        const hadWeekly = weeklyAssignedIdSet.has(account.id);
+        const hadLegacyDays = parseAssignedDays(account.assignedDays || []).length > 0;
+        const hadAssignmentOwner = account.assignedToId === effectiveSalesmanId;
+
+        if (hadWeekly || hadLegacyDays || hadAssignmentOwner) {
+          hadAssignmentAccountIds.push(account.id);
+        } else {
+          alreadyUnassignedAccountIds.push(account.id);
+        }
+      }
+
+      const idsAssignedToSalesman = inScopeAccounts
+        .filter((a) => a.assignedToId === effectiveSalesmanId)
+        .map((a) => a.id);
+      const idsNotAssignedToSalesman = inScopeAccounts
+        .filter((a) => a.assignedToId !== effectiveSalesmanId)
+        .map((a) => a.id);
+
+      if (idsAssignedToSalesman.length > 0) {
+        await tx.account.updateMany({
+          where: { id: { in: idsAssignedToSalesman } },
+          data: {
+            assignedToId: null,
+            assignedDays: [],
+          },
+        });
+      }
+
+      if (idsNotAssignedToSalesman.length > 0) {
+        await tx.account.updateMany({
+          where: { id: { in: idsNotAssignedToSalesman } },
+          data: {
+            assignedDays: [],
+          },
+        });
+      }
+
+      return {
+        requestedCount: accountIdList.length,
+        inScopeCount: inScopeIds.length,
+        unassignedCount: hadAssignmentAccountIds.length,
+        alreadyUnassignedCount: alreadyUnassignedAccountIds.length,
+        missingAccountIds,
+        outOfScopeAccountIds,
+        unassignedAccountIds: hadAssignmentAccountIds,
+        alreadyUnassignedAccountIds,
+        deletedWeeklyRows,
+      };
+    }, { timeout: 30000, maxWait: 30000 });
+
+    return res.json({
+      success: true,
+      message: `${result.unassignedCount} account(s) unassigned`,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Global unassign weekly accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const bulkApproveAccounts = async (req, res) => {
   try {
     const { accountIds } = req.body;

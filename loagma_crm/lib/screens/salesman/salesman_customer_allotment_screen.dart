@@ -25,6 +25,7 @@ class _SalesmanCustomerAllotmentScreenState
   final Map<String, Map<String, int>> _pincodeStatsByCode = {};
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isUnassigning = false;
   String? _searchQuery;
   final Set<int> _selectedDaysForAssignment = {};
   int? _selectedAfterDays;
@@ -631,6 +632,91 @@ class _SalesmanCustomerAllotmentScreenState
     }
   }
 
+  Future<void> _unassignSelectedAccounts() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    if (_selectedAccountIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one account'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final selectedCount = _selectedAccountIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Unassign Selected Accounts'),
+          content: Text(
+            'Unassign $selectedCount selected account(s) from all weeks? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600),
+              child: const Text('Unassign'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmed != true) return;
+
+    setState(() => _isUnassigning = true);
+    try {
+      final result = await AccountService.unassignWeeklyAccountsGlobal(
+        salesmanId: userId,
+        accountIds: _selectedAccountIds.toList(),
+      );
+
+      if (!mounted) return;
+      final unassignedCount = (result['unassignedCount'] as num?)?.toInt() ?? 0;
+      final alreadyUnassignedCount =
+          (result['alreadyUnassignedCount'] as num?)?.toInt() ?? 0;
+      final outOfScopeCount =
+          ((result['outOfScopeAccountIds'] as List?)?.length) ?? 0;
+
+      final message = StringBuffer()
+        ..write('Unassigned $unassignedCount account(s)');
+      if (alreadyUnassignedCount > 0) {
+        message.write(', $alreadyUnassignedCount already unassigned');
+      }
+      if (outOfScopeCount > 0) {
+        message.write(', $outOfScopeCount out of scope');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message.toString()),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      _selectedAccountIds.clear();
+      await _loadAccounts();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to unassign accounts: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUnassigning = false);
+    }
+  }
+
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -830,8 +916,8 @@ class _SalesmanCustomerAllotmentScreenState
       icon: const Icon(Icons.calendar_today, size: 14),
       label: Text(selectedDayLabel),
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        minimumSize: const Size(0, 28),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
         textStyle: const TextStyle(
@@ -889,279 +975,274 @@ class _SalesmanCustomerAllotmentScreenState
           Expanded(
             child: Container(
               color: Colors.grey.shade50,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Pincode-wise allotted customers',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Search by name, phone, code...',
-                            prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          onSubmitted: (v) {
-                            _searchQuery = v.trim().isEmpty ? null : v.trim();
-                            _regroupAccounts();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!_isLoading && _totalVisibleAccounts > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: _primary),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadAccounts,
+                      color: _primary,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                         children: [
-                          Text(
-                            '${_accountsByPincode.length} pincode(s)  |  $_totalVisibleAccounts account(s)',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.w500,
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Pincode-wise allotted customers',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _searchController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Search by name, phone, code...',
+                                    prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  onSubmitted: (v) {
+                                    _searchQuery = v.trim().isEmpty ? null : v.trim();
+                                    _regroupAccounts();
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          _buildDayWiseChips(
-                            _computeDayWiseAccountCounts(_allAccounts),
-                          ),
+                          if (_totalVisibleAccounts > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${_accountsByPincode.length} pincode(s)  |  $_totalVisibleAccounts account(s)',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildDayWiseChips(
+                                    _computeDayWiseAccountCounts(_allAccounts),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_totalVisibleAccounts == 0 && _allAccounts.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: _buildDayWiseChips(
+                                _computeDayWiseAccountCounts(_allAccounts),
+                              ),
+                            ),
+                          if (_accountsByPincode.isEmpty)
+                            SizedBox(height: 260, child: _buildEmpty())
+                          else
+                            ..._accountsByPincode.entries.map((entry) {
+                              final pincode = entry.key;
+                              final accounts = entry.value;
+                              final selectedInPin = accounts
+                                  .where((a) => _selectedAccountIds.contains(a.id))
+                                  .length;
+                              final stats = _pincodeStatsByCode[pincode];
+                              final totalBusinessCount =
+                                stats?['totalBusinessCount'] ?? 0;
+                              final existingAccountsCount =
+                                stats?['existingAccountsCount'] ?? 0;
+                              final pincodeDayCounts =
+                                  _computeDayWiseAccountCounts(accounts);
+                              final pincodeDaySummary =
+                                  _formatDayWiseCounts(pincodeDayCounts);
+                              final assignedCount =
+                                _countAssignedAccounts(accounts);
+                              final remainingCount =
+                                _countRemainingAccounts(accounts);
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ExpansionTile(
+                                  key: PageStorageKey<String>('sales-pin-$pincode'),
+                                  initiallyExpanded:
+                                      _expandedPincodes.contains(pincode),
+                                  onExpansionChanged: (expanded) {
+                                    setState(() {
+                                      if (expanded) {
+                                        _expandedPincodes.add(pincode);
+                                      } else {
+                                        _expandedPincodes.remove(pincode);
+                                      }
+                                    });
+                                  },
+                                  title: Text(
+                                    pincode,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Total Business: $totalBusinessCount  |  Existing Accounts: $existingAccountsCount  |  Assigned: $assignedCount  |  Remaining: $remainingCount${selectedInPin > 0 ? '  |  $selectedInPin selected' : ''}',
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        pincodeDaySummary,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          12, 0, 12, 12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          if (accounts.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(
+                                                bottom: 6,
+                                              ),
+                                              child: Wrap(
+                                                spacing: 6,
+                                                runSpacing: 6,
+                                                children: [
+                                                  OutlinedButton.icon(
+                                                    onPressed: () =>
+                                                        _selectAllForPincode(
+                                                            pincode),
+                                                    icon: const Icon(
+                                                      Icons.done_all,
+                                                      size: 16,
+                                                    ),
+                                                    label:
+                                                        const Text('All'),
+                                                    style: OutlinedButton.styleFrom(
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2,
+                                                      ),
+                                                      minimumSize: const Size(0, 28),
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize.shrinkWrap,
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      textStyle: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  OutlinedButton.icon(
+                                                    onPressed: () =>
+                                                        _showSelectCountDialogForPincode(
+                                                            pincode),
+                                                    icon: const Icon(
+                                                      Icons.filter_9_plus,
+                                                      size: 16,
+                                                    ),
+                                                    label:
+                                                        const Text('Select N'),
+                                                    style: OutlinedButton.styleFrom(
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2,
+                                                      ),
+                                                      minimumSize: const Size(0, 28),
+                                                      tapTargetSize:
+                                                          MaterialTapTargetSize.shrinkWrap,
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      textStyle: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      OutlinedButton.icon(
+                                                        onPressed: () =>
+                                                            _clearSelectionForPincode(
+                                                                pincode),
+                                                        icon: const Icon(
+                                                          Icons.clear_all,
+                                                          size: 16,
+                                                        ),
+                                                        label: const Text(
+                                                            'Clear Pin'),
+                                                        style: OutlinedButton.styleFrom(
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 2,
+                                                          ),
+                                                          minimumSize: const Size(0, 28),
+                                                          tapTargetSize:
+                                                              MaterialTapTargetSize.shrinkWrap,
+                                                          visualDensity:
+                                                              VisualDensity.compact,
+                                                          textStyle: const TextStyle(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      if (_selectedAccountIds.isNotEmpty)
+                                                        const SizedBox(width: 6),
+                                                      if (_selectedAccountIds.isNotEmpty)
+                                                        _buildDayPickerButton(),
+                                                    ],
+                                                  ),
+                                                  ],
+                                              ),
+                                            ),
+                                          ...accounts.map((account) {
+                                            return _buildAccountItem(
+                                              account,
+                                            );
+                                          }),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
                         ],
                       ),
                     ),
-                  if (!_isLoading && _totalVisibleAccounts == 0 && _allAccounts.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: _buildDayWiseChips(
-                        _computeDayWiseAccountCounts(_allAccounts),
-                      ),
-                    ),
-                  Expanded(
-                    child: _isLoading
-                        ? const Center(
-                            child: CircularProgressIndicator(color: _primary),
-                          )
-                        : _accountsByPincode.isEmpty
-                            ? _buildEmpty()
-                            : RefreshIndicator(
-                                onRefresh: _loadAccounts,
-                                color: _primary,
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                                  itemCount: _accountsByPincode.length,
-                                  itemBuilder: (context, index) {
-                                    final pincode =
-                                        _accountsByPincode.keys.elementAt(index);
-                                    final accounts = _accountsByPincode[pincode] ?? [];
-                                    final selectedInPin = accounts
-                                        .where((a) => _selectedAccountIds.contains(a.id))
-                                        .length;
-                                    final stats = _pincodeStatsByCode[pincode];
-                                    final totalBusinessCount =
-                                      stats?['totalBusinessCount'] ?? 0;
-                                    final existingAccountsCount =
-                                      stats?['existingAccountsCount'] ?? 0;
-                                    final pincodeDayCounts =
-                                        _computeDayWiseAccountCounts(accounts);
-                                    final pincodeDaySummary =
-                                        _formatDayWiseCounts(pincodeDayCounts);
-                                    final assignedCount =
-                                      _countAssignedAccounts(accounts);
-                                    final remainingCount =
-                                      _countRemainingAccounts(accounts);
-
-                                    return Card(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: ExpansionTile(
-                                        key: PageStorageKey<String>('sales-pin-$pincode'),
-                                        initiallyExpanded:
-                                            _expandedPincodes.contains(pincode),
-                                        onExpansionChanged: (expanded) {
-                                          setState(() {
-                                            if (expanded) {
-                                              _expandedPincodes.add(pincode);
-                                            } else {
-                                              _expandedPincodes.remove(pincode);
-                                            }
-                                          });
-                                        },
-                                        title: Text(
-                                          pincode,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        subtitle: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Total Business: $totalBusinessCount  |  Existing Accounts: $existingAccountsCount  |  Assigned: $assignedCount  |  Remaining: $remainingCount${selectedInPin > 0 ? '  |  $selectedInPin selected' : ''}',
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              pincodeDaySummary,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                                12, 0, 12, 12),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                if (accounts.isNotEmpty)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      bottom: 6,
-                                                    ),
-                                                    child: Wrap(
-                                                      spacing: 6,
-                                                      runSpacing: 6,
-                                                      children: [
-                                                        OutlinedButton.icon(
-                                                          onPressed: () =>
-                                                              _selectAllForPincode(
-                                                                  pincode),
-                                                          icon: const Icon(
-                                                            Icons.done_all,
-                                                            size: 16,
-                                                          ),
-                                                          label:
-                                                              const Text('All'),
-                                                          style: OutlinedButton.styleFrom(
-                                                            padding: const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
-                                                            ),
-                                                            minimumSize: const Size(0, 30),
-                                                            tapTargetSize:
-                                                                MaterialTapTargetSize.shrinkWrap,
-                                                            visualDensity:
-                                                                VisualDensity.compact,
-                                                            textStyle: const TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        OutlinedButton.icon(
-                                                          onPressed: () =>
-                                                              _showSelectCountDialogForPincode(
-                                                                  pincode),
-                                                          icon: const Icon(
-                                                            Icons.filter_9_plus,
-                                                            size: 16,
-                                                          ),
-                                                          label:
-                                                              const Text('Select N'),
-                                                          style: OutlinedButton.styleFrom(
-                                                            padding: const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
-                                                            ),
-                                                            minimumSize: const Size(0, 30),
-                                                            tapTargetSize:
-                                                                MaterialTapTargetSize.shrinkWrap,
-                                                            visualDensity:
-                                                                VisualDensity.compact,
-                                                            textStyle: const TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        Row(
-                                                          mainAxisSize: MainAxisSize.min,
-                                                          children: [
-                                                            OutlinedButton.icon(
-                                                              onPressed: () =>
-                                                                  _clearSelectionForPincode(
-                                                                      pincode),
-                                                              icon: const Icon(
-                                                                Icons.clear_all,
-                                                                size: 16,
-                                                              ),
-                                                              label: const Text(
-                                                                  'Clear Pin'),
-                                                              style: OutlinedButton.styleFrom(
-                                                                padding: const EdgeInsets.symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 4,
-                                                                ),
-                                                                minimumSize: const Size(0, 30),
-                                                                tapTargetSize:
-                                                                    MaterialTapTargetSize.shrinkWrap,
-                                                                visualDensity:
-                                                                    VisualDensity.compact,
-                                                                textStyle: const TextStyle(
-                                                                  fontSize: 12,
-                                                                  fontWeight: FontWeight.w600,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            if (_selectedAccountIds.isNotEmpty)
-                                                              const SizedBox(width: 6),
-                                                            if (_selectedAccountIds.isNotEmpty)
-                                                              _buildDayPickerButton(),
-                                                          ],
-                                                        ),
-                                                        ],
-                                                    ),
-                                                  ),
-                                                ...accounts.map((account) {
-                                                  return _buildAccountItem(
-                                                    account,
-                                                  );
-                                                }),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           decoration: BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -1183,19 +1264,52 @@ class _SalesmanCustomerAllotmentScreenState
                   ),
                 ),
               ),
+              OutlinedButton.icon(
+                onPressed: (_isSaving || _isUnassigning || _selectedAccountIds.isEmpty)
+                    ? null
+                    : _unassignSelectedAccounts,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red.shade700,
+                  side: BorderSide(color: Colors.red.shade300),
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                icon: _isUnassigning
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red.shade700),
+                        ),
+                      )
+                    : const Icon(Icons.remove_circle_outline, size: 16),
+                label: Text(_isUnassigning ? 'Unassigning...' : 'Unassign'),
+              ),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: _isSaving ? null : _saveSelectedAssignments,
-                style: ElevatedButton.styleFrom(backgroundColor: _primary),
+                onPressed: (_isSaving || _isUnassigning) ? null : _saveSelectedAssignments,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 icon: _isSaving
                     ? const SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.save),
+                    : const Icon(Icons.save, size: 16),
                 label: Text(_isSaving ? 'Saving...' : 'Assign Day'),
               ),
             ],
