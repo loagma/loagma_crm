@@ -1239,7 +1239,9 @@ class _SalesmanCustomerAllotmentScreenState
   Widget _buildAccountItem(Account account) {
     final name = account.businessName ?? account.personName;
     final isSelected = _selectedAccountIds.contains(account.id);
+    final isAssigned = account.assignedDays != null && account.assignedDays!.isNotEmpty;
     return Card(
+      color: isAssigned ? Colors.blue.shade50 : null,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
@@ -1304,8 +1306,7 @@ class _SalesmanCustomerAllotmentScreenState
                             color: Colors.grey.shade500,
                           ),
                         ),
-                        if (account.assignedDays != null &&
-                            account.assignedDays!.isNotEmpty)
+                        if (isAssigned)
                           Text(
                             'Current: ${account.assignedDays!.where((d) => _dayLabelMap.containsKey(d)).map((d) => _dayLabelMap[d]).join(', ')}',
                             style: TextStyle(
