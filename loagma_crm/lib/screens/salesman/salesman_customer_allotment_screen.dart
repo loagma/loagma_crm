@@ -5,12 +5,42 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/account_model.dart';
 import '../../services/account_service.dart';
 import '../../services/map_task_assignment_service.dart';
+import '../../services/telecaller_api_service.dart';
 import '../../services/user_service.dart';
+
+const Map<int, Color> _dayLightColors = {
+  1: Color(0xFFFECACA), // Mon
+  2: Color(0xFFBFDBFE), // Tue
+  3: Color(0xFFD9F99D), // Wed
+  4: Color(0xFFCFFAFE), // Thu
+  5: Color(0xFFFBCFE8), // Fri
+  6: Color(0xFFFED7AA), // Sat
+  7: Color(0xFFE9D5FF), // Sun
+};
+
+const Map<int, Color> _dayBaseColors = {
+  1: Color(0xFFB91C1C), // Mon base red
+  2: Color(0xFF1D4ED8), // Tue base blue
+  3: Color(0xFF3F6212), // Wed base lime
+  4: Color(0xFF0E7490), // Thu base cyan
+  5: Color(0xFFBE185D), // Fri base pink
+  6: Color(0xFFC2410C), // Sat base orange
+  7: Color(0xFF7E22CE), // Sun base purple
+};
+
+Color _dayLightColorFor(int day) => _dayLightColors[day] ?? Colors.white;
+
+Color _dayBaseColorFor(int day) => _dayBaseColors[day] ?? const Color(0xFF4B5563);
 
 /// Salesman screen: customers allotted by admin (day-wise).
 /// Shows existing accounts from assigned pincodes; day chips are used for reassignment (1=Mon .. 7=Sun).
 class SalesmanCustomerAllotmentScreen extends StatefulWidget {
-  const SalesmanCustomerAllotmentScreen({super.key});
+  const SalesmanCustomerAllotmentScreen({
+    super.key,
+    this.screenTitle = 'Customer list allotment',
+  });
+
+  final String screenTitle;
 
   @override
   State<SalesmanCustomerAllotmentScreen> createState() =>
@@ -44,7 +74,11 @@ class _SalesmanCustomerAllotmentScreenState
     7: 'Sun',
   };
 
-  String? get _currentUserId => UserService.currentUserId;
+  String? get _currentUserId {
+    final id = UserService.currentUserId?.trim();
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
   static const Color _primary = Color(0xFFD7BE69);
 
   @override
@@ -98,7 +132,15 @@ class _SalesmanCustomerAllotmentScreenState
   Future<void> _loadAccounts() async {
     final userId = _currentUserId;
     if (userId == null) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session is missing user id. Please logout and login again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -177,6 +219,24 @@ class _SalesmanCustomerAllotmentScreenState
             'existingAccountsCount':
                 (map['totalAccounts'] as num?)?.toInt() ?? 0,
           };
+        }
+      }
+
+      final currentRole = (UserService.currentRole ?? '').toLowerCase().trim();
+      if (pinsFromWeekly.isEmpty && currentRole.contains('telecaller')) {
+        final telecallerPinsResult = await TelecallerApiService.getPincodeAssignments();
+        if (telecallerPinsResult['success'] == true) {
+          final fallbackRows = (telecallerPinsResult['data'] as List?) ?? const [];
+          for (final row in fallbackRows) {
+            if (row is! Map) continue;
+            final pin = (row['pincode']?.toString() ?? '').trim();
+            if (pin.isEmpty) continue;
+            pinsFromWeekly.add(pin);
+            parsedStats.putIfAbsent(pin, () => {
+              'totalBusinessCount': 0,
+              'existingAccountsCount': 0,
+            });
+          }
         }
       }
 
@@ -266,14 +326,17 @@ class _SalesmanCustomerAllotmentScreenState
       spacing: 6,
       runSpacing: 4,
       children: _dayLabelMap.entries.map((entry) {
-        final count = dayCounts[entry.key] ?? 0;
+        final day = entry.key;
+        final count = dayCounts[day] ?? 0;
+        final dayBase = _dayBaseColorFor(day);
+        final dayLight = _dayLightColorFor(day);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: count > 0 ? _primary.withValues(alpha: 0.18) : Colors.grey.shade200,
+            color: dayLight,
             border: Border.all(
-              color: count > 0 ? _primary : Colors.grey.shade300,
+              color: dayBase.withValues(alpha: count > 0 ? 0.9 : 0.45),
               width: 0.5,
             ),
           ),
@@ -282,7 +345,7 @@ class _SalesmanCustomerAllotmentScreenState
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
+              color: count > 0 ? dayBase : dayBase.withValues(alpha: 0.72),
             ),
           ),
         );
@@ -294,16 +357,19 @@ class _SalesmanCustomerAllotmentScreenState
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: _dayLabelMap.entries.map((entry) {
-        final count = dayCounts[entry.key] ?? 0;
+        final day = entry.key;
+        final count = dayCounts[day] ?? 0;
+        final dayBase = _dayBaseColorFor(day);
+        final dayLight = _dayLightColorFor(day);
         return Padding(
           padding: const EdgeInsets.only(right: 4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: count > 0 ? _primary.withValues(alpha: 0.14) : Colors.grey.shade100,
+              color: dayLight,
               border: Border.all(
-                color: count > 0 ? _primary : Colors.grey.shade300,
+                color: dayBase.withValues(alpha: count > 0 ? 0.9 : 0.45),
                 width: 0.5,
               ),
             ),
@@ -312,7 +378,7 @@ class _SalesmanCustomerAllotmentScreenState
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: count > 0 ? dayBase : dayBase.withValues(alpha: 0.72),
               ),
             ),
           ),
@@ -758,15 +824,31 @@ class _SalesmanCustomerAllotmentScreenState
                     children: [
                       ..._dayLabelMap.entries.map((entry) {
                         final isSelected = pendingDay == entry.key;
+                        final day = entry.key;
+                        final dayBase = _dayBaseColorFor(day);
+                        final dayLight = _dayLightColorFor(day);
                         return ChoiceChip(
-                          label: Text(entry.value),
+                          label: Text(
+                            entry.value,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? dayBase
+                                  : dayBase.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           selected: isSelected,
                           onSelected: (_) {
                             setDialogState(() {
                               pendingDay = entry.key;
                             });
                           },
-                          selectedColor: _primary.withValues(alpha: 0.3),
+                          backgroundColor: dayLight.withValues(alpha: 0.65),
+                          selectedColor: dayLight,
+                          side: BorderSide(
+                            color: dayBase.withValues(alpha: isSelected ? 0.9 : 0.45),
+                            width: 0.6,
+                          ),
                         );
                       }),
                     ],
@@ -954,7 +1036,7 @@ class _SalesmanCustomerAllotmentScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Customer list allotment'),
+        title: Text(widget.screenTitle),
         backgroundColor: _primary,
         actions: [
           IconButton(
@@ -1353,11 +1435,26 @@ class _SalesmanCustomerAllotmentScreenState
   Widget _buildAccountItem(Account account) {
     final name = account.businessName ?? account.personName;
     final isSelected = _selectedAccountIds.contains(account.id);
-    final isAssigned = account.assignedDays != null && account.assignedDays!.isNotEmpty;
+    final assignedDays = (account.assignedDays ?? const <int>[])
+        .where((d) => _dayLabelMap.containsKey(d))
+        .toList();
+    final isAssigned = assignedDays.isNotEmpty;
+    final firstDay = isAssigned ? assignedDays.first : null;
+    final cardColor = isAssigned ? _dayLightColorFor(firstDay!) : Colors.white;
+    final accentColor = isAssigned ? _dayBaseColorFor(firstDay!) : _primary;
+
     return Card(
-      color: isAssigned ? Colors.blue.shade50 : null,
+      color: cardColor,
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isAssigned
+              ? accentColor.withValues(alpha: 0.4)
+              : Colors.grey.shade300,
+          width: 0.8,
+        ),
+      ),
       child: InkWell(
         onTap: () => _openAccountDetail(account.id),
         borderRadius: BorderRadius.circular(12),
@@ -1382,7 +1479,7 @@ class _SalesmanCustomerAllotmentScreenState
                     activeColor: _primary,
                   ),
                   CircleAvatar(
-                    backgroundColor: _primary,
+                    backgroundColor: accentColor,
                     radius: 22,
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : '?',
@@ -1421,11 +1518,31 @@ class _SalesmanCustomerAllotmentScreenState
                           ),
                         ),
                         if (isAssigned)
-                          Text(
-                            'Current: ${account.assignedDays!.where((d) => _dayLabelMap.containsKey(d)).map((d) => _dayLabelMap[d]).join(', ')}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Wrap(
+                              spacing: 5,
+                              runSpacing: 4,
+                              children: assignedDays.map((day) {
+                                final base = _dayBaseColorFor(day);
+                                final light = _dayLightColorFor(day);
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: light,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: base.withValues(alpha: 0.85), width: 0.7),
+                                  ),
+                                  child: Text(
+                                    _dayLabelMap[day] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: base,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
                           ),
                       ],
@@ -1752,6 +1869,8 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
     final accountId = account['id']?.toString();
     final pincode = account['pincode']?.toString() ?? pin;
     final frequency = account['visitFrequency']?.toString() ?? 'ONCE';
+    final dayLight = _dayLightColorFor(day);
+    final dayBase = _dayBaseColorFor(day);
 
     return Material(
       color: Colors.transparent,
@@ -1768,9 +1887,9 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: dayLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(color: dayBase.withValues(alpha: 0.45)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1779,11 +1898,11 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: widget.primary.withValues(alpha: 0.18),
+                    backgroundColor: dayBase.withValues(alpha: 0.16),
                     child: Text(
                       displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
                       style: TextStyle(
-                        color: widget.primary,
+                        color: dayBase,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1801,15 +1920,16 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: dayLight,
                       borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: dayBase.withValues(alpha: 0.6), width: 0.6),
                     ),
                     child: Text(
                       frequency,
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: Colors.blue.shade700,
+                        color: dayBase,
                       ),
                     ),
                   ),
@@ -1851,34 +1971,37 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
+                      color: dayLight,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: dayBase.withValues(alpha: 0.45), width: 0.6),
                     ),
                     child: Text(
                       'Code: $accountCode',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 11, color: dayBase),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: dayLight,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: dayBase.withValues(alpha: 0.45), width: 0.6),
                     ),
                     child: Text(
                       'Phone: $contactNumber',
-                      style: TextStyle(fontSize: 11, color: Colors.green.shade800),
+                      style: TextStyle(fontSize: 11, color: dayBase),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
+                      color: dayLight,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: dayBase.withValues(alpha: 0.45), width: 0.6),
                     ),
                     child: Text(
                       'PIN: $pincode',
-                      style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+                      style: TextStyle(fontSize: 11, color: dayBase),
                     ),
                   ),
                 ],
@@ -2036,9 +2159,14 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                   final totalForDay = _dayTotals[day] ?? 0;
 
                   return Card(
+                    color: _dayLightColorFor(day),
                     margin: const EdgeInsets.only(bottom: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: _dayBaseColorFor(day).withValues(alpha: 0.45),
+                        width: 0.9,
+                      ),
                     ),
                     child: ExpansionTile(
                       key: PageStorageKey<String>(
@@ -2056,7 +2184,10 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                       },
                       title: Text(
                         '$dayLabel - $totalForDay assigned account(s)',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _dayBaseColorFor(day),
+                        ),
                       ),
                       children: [
                         Padding(
@@ -2078,8 +2209,12 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                                 margin: const EdgeInsets.only(bottom: 8),
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
+                                  color: _dayLightColorFor(day).withValues(alpha: 0.7),
                                   borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: _dayBaseColorFor(day).withValues(alpha: 0.4),
+                                    width: 0.8,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
@@ -2099,7 +2234,7 @@ class _WeeklyAssignmentViewScreenState extends State<_WeeklyAssignmentViewScreen
                                             '$countForDay assigned on $dayLabel - $unassignedForWeek unassigned in week',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey.shade700,
+                                              color: _dayBaseColorFor(day).withValues(alpha: 0.88),
                                             ),
                                           ),
                                           const SizedBox(height: 8),

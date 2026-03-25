@@ -409,11 +409,18 @@ class AccountService {
     String? pincode,
   }) async {
     try {
+      final effectiveSalesmanId = salesmanId.trim().isNotEmpty
+          ? salesmanId.trim()
+          : (UserService.currentUserId?.trim() ?? '');
+      if (effectiveSalesmanId.isEmpty) {
+        throw Exception('Session is missing user id. Please login again.');
+      }
+
       final headers = await _getHeaders();
       final weekStart = toWeekStart(weekStartDate);
       final uri = Uri.parse('${ApiConfig.accountsUrl}/weekly/view').replace(
         queryParameters: {
-          'salesmanId': salesmanId,
+          'salesmanId': effectiveSalesmanId,
           'weekStartDate': weekStart.toIso8601String(),
           if (pincode != null && pincode.trim().isNotEmpty)
             'pincode': pincode.trim(),

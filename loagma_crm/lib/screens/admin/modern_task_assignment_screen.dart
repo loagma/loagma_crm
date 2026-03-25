@@ -1549,19 +1549,13 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
   }
   Future<void> _saveTelecallerAssignments() async {
     if (_selectedTelecallerId == null) {
-      Fluttertoast.showToast(
-        msg: 'Select a telecaller',
-        backgroundColor: Colors.red,
-      );
+      _showError('Select a telecaller');
       return;
     }
 
     final currentPins = _telecallerPincodesAll.keys.toList()..sort();
     if (currentPins.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Add at least one pincode to save',
-        backgroundColor: Colors.orange,
-      );
+      _showError('Add at least one pincode to save');
       return;
     }
 
@@ -1591,19 +1585,32 @@ class _ModernTaskAssignmentScreenState extends State<ModernTaskAssignmentScreen>
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
         if (!mounted) return;
-        Fluttertoast.showToast(
-          msg:
-              'Assignments saved. Total pincodes: ${data['data']?['count'] ?? currentPins.length}',
-          backgroundColor: primaryColor,
+        final savedCount = data['data']?['count'] ?? currentPins.length;
+        final successMessage =
+            'Assignments saved successfully. Total pincodes: $savedCount';
+        _showSuccess(successMessage);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMessage),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
         );
       } else {
         throw Exception(data['message'] ?? 'Failed to save assignments');
       }
     } catch (e) {
       if (!mounted) return;
-      Fluttertoast.showToast(
-        msg: 'Failed to save assignments: $e',
-        backgroundColor: Colors.red,
+      final errorMessage = 'Failed to save assignments: $e';
+      _showError(errorMessage);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }

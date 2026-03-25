@@ -306,7 +306,13 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: 'customer-allotment',
-          builder: (_, __) => const SalesmanCustomerAllotmentScreen(),
+          builder: (context, state) {
+            final role = state.pathParameters['role']?.toLowerCase();
+            final title = role == 'telecaller'
+                ? 'Allotted Customers'
+                : 'Customer list allotment';
+            return SalesmanCustomerAllotmentScreen(screenTitle: title);
+          },
         ),
         GoRoute(
           path: 'assignments',

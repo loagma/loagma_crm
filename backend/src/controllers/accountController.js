@@ -200,8 +200,33 @@ const hasAdminOverrideAccess = (user) => {
   return rolesArray.some((r) => ADMIN_OVERRIDE_ROLES.has(r));
 };
 
+const resolveScopedAssigneeId = (req, requestedAssigneeId) => {
+  const authUserId = req.user?.id || null;
+  const requested = requestedAssigneeId ? String(requestedAssigneeId).trim() : '';
+
+  if (hasAdminOverrideAccess(req.user)) {
+    return {
+      assigneeId: requested || authUserId,
+      forbidden: false,
+    };
+  }
+
+  if (!authUserId) {
+    return { assigneeId: null, forbidden: false };
+  }
+
+  if (requested && requested !== authUserId) {
+    return { assigneeId: null, forbidden: true };
+  }
+
+  return {
+    assigneeId: requested || authUserId,
+    forbidden: false,
+  };
+};
+
 const getSalesmanPincodeRows = async (salesmanId) => {
-  const [areaRows, taskRows] = await Promise.all([
+  const [areaRows, taskRows, telecallerRows] = await Promise.all([
     prisma.areaAssignment.findMany({
       where: { salesmanId },
       select: { pinCode: true },
@@ -212,11 +237,22 @@ const getSalesmanPincodeRows = async (salesmanId) => {
       select: { pincode: true },
       orderBy: { assignedDate: 'desc' },
     }),
+    prisma.telecallerPincodeAssignment.findMany({
+      where: {
+        telecallerId: salesmanId,
+        isActive: true,
+      },
+      select: { pincode: true },
+      orderBy: [{ pincode: 'asc' }, { dayOfWeek: 'asc' }],
+    }),
   ]);
 
   const areaPins = areaRows.map((r) => (r.pinCode || '').trim()).filter(Boolean);
   const taskPins = taskRows.map((r) => (r.pincode || '').trim()).filter(Boolean);
-  return [...new Set([...areaPins, ...taskPins])];
+  const telecallerPins = telecallerRows
+    .map((r) => (r.pincode || '').trim())
+    .filter(Boolean);
+  return [...new Set([...areaPins, ...taskPins, ...telecallerPins])];
 };
 
 const buildPlanningSummary = (weeklyRows, allAccounts) => {
@@ -1440,7 +1476,15 @@ export const bulkAssignAccounts = async (req, res) => {
 
 export const getWeeklyAssignmentsView = async (req, res) => {
   try {
-    const salesmanId = req.query.salesmanId || req.user?.id;
+    const scope = resolveScopedAssigneeId(req, req.query.salesmanId);
+    if (scope.forbidden) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only access your own weekly assignments',
+      });
+    }
+
+    const salesmanId = scope.assigneeId;
     const weekStartDate = normalizeWeekStartDate(req.query.weekStartDate);
     const weekStartFilter = buildWeekStartDateFilter(weekStartDate);
     const weekRange = buildWeekRange(weekStartDate);
@@ -1781,7 +1825,15 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
 
 export const getPlanningWeekView = async (req, res) => {
   try {
-    const salesmanId = req.query.salesmanId || req.user?.id;
+    const scope = resolveScopedAssigneeId(req, req.query.salesmanId);
+    if (scope.forbidden) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only access your own planning week data',
+      });
+    }
+
+    const salesmanId = scope.assigneeId;
     const weekStartDate = req.query.weekStartDate;
     const pincodeFilter = req.query.pincode ? String(req.query.pincode).trim() : null;
 
@@ -2416,7 +2468,15 @@ export const getTodayPlannedAccounts = async (req, res) => {
         overrideReason = null,
       } = req.body;
 
-      const effectiveSalesmanId = salesmanId || req.user?.id;
+      const scope = resolveScopedAssigneeId(req, salesmanId);
+      if (scope.forbidden) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only assign weekly accounts for your own user',
+        });
+      }
+
+      const effectiveSalesmanId = scope.assigneeId;
       const actorUserId = req.user?.id || effectiveSalesmanId || null;
       const weekStart = normalizeWeekStartDate(weekStartDate);
       const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
@@ -2671,7 +2731,15 @@ export const unassignWeeklyAccountsGlobal = async (req, res) => {
   try {
     const { salesmanId, accountIds } = req.body;
 
-    const effectiveSalesmanId = salesmanId || req.user?.id;
+    const scope = resolveScopedAssigneeId(req, salesmanId);
+    if (scope.forbidden) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only unassign weekly accounts for your own user',
+      });
+    }
+
+    const effectiveSalesmanId = scope.assigneeId;
     const accountIdList = Array.isArray(accountIds)
       ? [...new Set(accountIds.map((id) => String(id || '').trim()).filter(Boolean))]
       : [];

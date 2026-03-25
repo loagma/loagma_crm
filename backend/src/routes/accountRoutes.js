@@ -1,4 +1,5 @@
 import express from 'express';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 import {
   getAllAccounts,
   getAccountById,
@@ -27,6 +28,8 @@ import {
 // import {  } from '../middleware/.js';
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 // ==================== ACCOUNT ROUTES ====================
 router.get('/', getAllAccounts);

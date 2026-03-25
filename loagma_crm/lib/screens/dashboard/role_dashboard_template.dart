@@ -233,9 +233,9 @@ class RoleDashboardTemplate extends StatelessWidget {
             "/dashboard/telecaller/follow-up",
           ),
           SidebarItem(
-            "Assigned Pincodes",
-            Icons.pin_drop_outlined,
-            "/dashboard/telecaller/assigned-pincodes",
+            "Allotted Customers",
+            Icons.people_alt_outlined,
+            "/dashboard/telecaller/customer-allotment",
           ),
         ];
 
