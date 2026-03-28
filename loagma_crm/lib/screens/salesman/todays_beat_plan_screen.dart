@@ -209,37 +209,293 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
 
   Widget _buildAccountCard(Map<String, dynamic> account) {
     final accountId = account['id']?.toString();
-    final personName = account['personName']?.toString().trim().isNotEmpty == true
-        ? account['personName'].toString()
+    final ownerName = account['personName']?.toString().trim().isNotEmpty == true
+        ? account['personName'].toString().trim()
         : 'Unknown';
-    final businessName = account['businessName']?.toString() ?? '-';
-    final contact = account['contactNumber']?.toString() ?? '-';
-    final area = account['area']?.toString() ?? '-';
-    final pincode = account['pincode']?.toString() ?? '-';
-    final address = account['address']?.toString() ?? '-';
-    final accountCode = account['accountCode']?.toString() ?? '-';
+    final shopName = (account['businessName']?.toString() ?? '-').trim();
+    final contact = (account['contactNumber']?.toString() ?? '-').trim();
+    final area = (account['area']?.toString() ?? '-').trim();
+    final pincode = (account['pincode']?.toString() ?? '-').trim();
+    final address = (account['address']?.toString() ?? '-').trim();
+    final accountCode = (account['accountCode']?.toString() ?? '-').trim();
     final frequency = account['visitFrequency']?.toString() ?? 'ONCE';
-    final assignedDays = _formatAssignedDays(account['assignedDays']);
-    final canOpenMaps = (account['latitude'] as num?) != null && (account['longitude'] as num?) != null;
+    final canOpenMaps =
+        (account['latitude'] as num?) != null &&
+        (account['longitude'] as num?) != null;
+
+    final rawAssignedDays = (account['assignedDays'] as List?) ?? const [];
+    final assignedDays = rawAssignedDays
+        .map((e) => int.tryParse(e.toString()))
+        .whereType<int>()
+        .toList();
+    final selectedDays = assignedDays.toSet();
+
+    const dayLabels = {
+      1: 'Mon',
+      2: 'Tue',
+      3: 'Wed',
+      4: 'Thu',
+      5: 'Fri',
+      6: 'Sat',
+      7: 'Sun',
+    };
+    final dayEntries = dayLabels.entries.toList();
+
+    final dayCardColors = <int, Color>{
+      1: const Color(0xFFFDE2E2),
+      2: const Color(0xFFE3EEFF),
+      3: const Color(0xFFECF8D8),
+      4: const Color(0xFFE3F7FA),
+      5: const Color(0xFFFFE4F1),
+      6: const Color(0xFFFFEBD6),
+      7: const Color(0xFFF1E6FF),
+    };
+    final dayBorderColors = <int, Color>{
+      1: const Color(0xFFE8A8A8),
+      2: const Color(0xFFAEC4EF),
+      3: const Color(0xFFBBD992),
+      4: const Color(0xFFA8D9E0),
+      5: const Color(0xFFE8AFCB),
+      6: const Color(0xFFE6C29E),
+      7: const Color(0xFFCAB7E8),
+    };
+    final firstAssignedDay = assignedDays.isEmpty ? null : assignedDays.first;
+    final cardColor = firstAssignedDay == null
+        ? Colors.white
+        : (dayCardColors[firstAssignedDay] ?? Colors.white);
+    final borderColor = firstAssignedDay == null
+        ? const Color(0xFFE5E7EB)
+        : (dayBorderColors[firstAssignedDay] ?? const Color(0xFFE5E7EB));
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    personName,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      color: cardColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: borderColor, width: 0.8),
+      ),
+      child: InkWell(
+        onTap: accountId == null ? null : () => context.push('/account/$accountId'),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      accountCode,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ownerName,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        height: 1.05,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopName,
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.grey.shade900,
+                  fontWeight: FontWeight.w700,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Address : $address',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                'Main area : $area',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade900,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'PIN : $pincode',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Days :',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Row(
+                      children: List.generate(dayEntries.length, (index) {
+                        final entry = dayEntries[index];
+                        final isActive = selectedDays.contains(entry.key);
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: index == dayEntries.length - 1 ? 0 : 3,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: isActive
+                                    ? const Color(0xFFB0B4BD)
+                                    : const Color(0xFFE8EAEE),
+                              ),
+                              child: Text(
+                                entry.value,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive
+                                      ? Colors.white
+                                      : const Color(0xFF666B75),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            size: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              contact,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: accountId == null
+                        ? null
+                        : () => context.push('/account/$accountId'),
+                    icon: const Icon(Icons.visibility, size: 18),
+                    tooltip: 'Details',
+                    color: Colors.grey.shade700,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: contact == '-' ? null : () => _callNumber(contact),
+                    icon: const Icon(Icons.call, size: 18),
+                    tooltip: 'Call',
+                    color: Colors.grey.shade700,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: canOpenMaps ? () => _openInMaps(account) : null,
+                    icon: const Icon(Icons.map, size: 18),
+                    tooltip: 'Map',
+                    color: Colors.blue.shade700,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFDCEBFF),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: _frequencyColor(frequency).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -253,68 +509,11 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              businessName,
-              style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _tag('Code: $accountCode', Colors.grey.shade100, Colors.grey.shade800),
-                _tag('Phone: $contact', Colors.green.shade50, Colors.green.shade800),
-                _tag('Area: $area', Colors.orange.shade50, Colors.orange.shade800),
-                _tag('PIN: $pincode', Colors.blue.shade50, Colors.blue.shade800),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Planned Days: $assignedDays', style: TextStyle(color: Colors.grey.shade700)),
-            const SizedBox(height: 4),
-            Text('Address: $address', style: TextStyle(color: Colors.grey.shade700)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (accountId != null)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.push('/account/$accountId'),
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('Details'),
-                    ),
-                  ),
-                if (accountId != null) const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: contact == '-' ? null : () => _callNumber(contact),
-                    icon: const Icon(Icons.call_outlined, size: 18),
-                    label: const Text('Call'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: canOpenMaps ? () => _openInMaps(account) : null,
-                    icon: const Icon(Icons.map_outlined, size: 18),
-                    label: const Text('Map'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _tag(String text, Color bg, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: TextStyle(fontSize: 11, color: fg)),
     );
   }
 
