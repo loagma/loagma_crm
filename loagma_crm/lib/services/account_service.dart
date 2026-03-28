@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/account_model.dart';
 import 'api_config.dart';
 import 'network_service.dart';
+import 'user_service.dart';
 
 class AccountService {
   // Get auth token from shared preferences

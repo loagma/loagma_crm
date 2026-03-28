@@ -175,11 +175,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.people_alt_outlined,
             "/dashboard/salesman/customer-allotment",
           ),
-          SidebarItem(
-            "Area Allotments",
-            Icons.map_outlined,
-            "/dashboard/salesman/assignments",
-          ),
+          // SidebarItem(
+          //   "Area Allotments",
+          //   Icons.map_outlined,
+          //   "/dashboard/salesman/assignments",
+          // ),
           // SidebarItem(
           //   "Create Expense",
           //   Icons.add_card_outlined,
@@ -201,6 +201,11 @@ class RoleDashboardTemplate extends StatelessWidget {
             "Today's Beat Plan",
             Icons.today,
             "/dashboard/salesman/beat-plan/today",
+          ),
+          SidebarItem(
+            "All Beat Plan",
+            Icons.today,
+            "/dashboard/salesman/beat-plan/all",
           ),
         ];
 
@@ -257,24 +262,21 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.people_outline,
             "/dashboard/manager/account/all",
           ),
-          
         ];
       case "teleadmin":
         return [
           SidebarItem("Dashboard", Icons.dashboard, "/dashboard/teleadmin"),
 
           SidebarItem(
-           "Accounts Master Management",
+            "Accounts Master Management",
             Icons.route_outlined,
             "/dashboard/teleadmin/account/all",
           ),
- SidebarItem(
-           "Assign Account",
+          SidebarItem(
+            "Assign Account",
             Icons.route_outlined,
             "/dashboard/teleadmin/assign",
           ),
-         
-        
         ];
 
       default:
