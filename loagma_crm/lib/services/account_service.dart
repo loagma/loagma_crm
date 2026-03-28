@@ -480,6 +480,7 @@ class AccountService {
     required List<int> assignedDays,
     String? visitFrequency,
     int? afterDays,
+    DateTime? monthlyAnchorDate,
     List<String> manualOverrideAccountIds = const [],
   }) async {
     try {
@@ -497,6 +498,8 @@ class AccountService {
             'visitFrequency': visitFrequency.trim().toUpperCase(),
           if (afterDays != null && afterDays > 0)
             'afterDays': afterDays,
+          if (monthlyAnchorDate != null)
+            'monthlyAnchorDate': monthlyAnchorDate.toIso8601String(),
           'manualOverrideAccountIds': manualOverrideAccountIds,
         }),
       );

@@ -43,7 +43,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// Toggle between local and production backend.
 class ApiConfig {
   /// Set to false for local development, true for production (Render).
-  static const bool useProduction = true;
+  static const bool useProduction = false;
 
   /// Your computer's local WiFi IP. Update if it changes.
   /// Find it with: ipconfig (Windows) or ifconfig / ip addr (Mac/Linux).

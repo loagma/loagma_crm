@@ -37,6 +37,9 @@ class _SalesmanCustomerAllotmentScreenState
   static const String _filterExisting = 'existing';
   static const String _filterRemaining = 'remaining';
   static const String _filterAssigned = 'assigned';
+  static const String _recurrenceWeekly = 'weekly';
+  static const String _recurrenceMonthly = 'monthly';
+  static const String _recurrenceAfterDays = 'after_days';
 
   final _taskAssignmentService = MapTaskAssignmentService();
   List<Account> _allAccounts = [];
@@ -640,7 +643,7 @@ class _SalesmanCustomerAllotmentScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${candidateIds.length} account(s) selected in $pincode. Choose a day and tap Assign Day to save.',
+          '${candidateIds.length} account(s) selected in $pincode. Tap Assign Day to open popup and save.',
         ),
         backgroundColor: Colors.green,
       ),
@@ -672,7 +675,18 @@ class _SalesmanCustomerAllotmentScreenState
       return;
     }
 
-    if (_selectedDaysForAssignment.isEmpty) {
+    final selection = await _showAssignDayPopup();
+    if (!mounted || selection == null) {
+      return;
+    }
+
+    final assignedDays = (selection['assignedDays'] as List<int>?) ?? const [];
+    final recurrenceMode =
+        (selection['recurrenceMode'] as String?) ?? _recurrenceWeekly;
+    final afterDays = selection['afterDays'] as int?;
+    final monthlyAnchorDate = selection['monthlyAnchorDate'] as DateTime?;
+
+    if (assignedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select at least one day'),
@@ -682,40 +696,114 @@ class _SalesmanCustomerAllotmentScreenState
       return;
     }
 
-    if (_selectedDaysForAssignment.length > 1) {
+    if (recurrenceMode == _recurrenceMonthly && monthlyAnchorDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Select exactly one day'),
+          content: Text('Select monthly date for Monthly mode'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
+    final visitFrequency = recurrenceMode == _recurrenceMonthly
+        ? 'MONTHLY'
+        : null;
+
+    _selectedDaysForAssignment
+      ..clear()
+      ..addAll(assignedDays);
+    _selectedAfterDays = afterDays;
+
     setState(() => _isSaving = true);
     try {
-      await AccountService.manualAssignWeeklyAccounts(
-        salesmanId: userId,
-        weekStartDate: _activeWeekStart,
-        accountIds: _selectedAccountIds.toList(),
-        assignedDays: _selectedDaysForAssignment.toList()..sort(),
-        afterDays: _selectedAfterDays,
-      );
+      final selectedAccountIds = _selectedAccountIds.toList();
+      assignedDays.sort();
+
+      Future<void> submit({required bool useOverride}) async {
+        await AccountService.manualAssignWeeklyAccounts(
+          salesmanId: userId,
+          weekStartDate: _activeWeekStart,
+          accountIds: selectedAccountIds,
+          assignedDays: assignedDays,
+          visitFrequency: visitFrequency,
+          afterDays: afterDays,
+          monthlyAnchorDate: monthlyAnchorDate,
+          manualOverrideAccountIds: useOverride ? selectedAccountIds : const [],
+        );
+      }
+
+      bool usedOverride = false;
+      try {
+        await submit(useOverride: false);
+      } catch (e) {
+        final message = e.toString().toLowerCase();
+        final needsOverride =
+            message.contains('manual override') ||
+            message.contains('already assigned in this week') ||
+            message.contains('already assigned');
+
+        if (!needsOverride) {
+          rethrow;
+        }
+
+        if (!mounted) return;
+        final confirmOverride = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Override Existing Assignments?'),
+            content: const Text(
+              'Some selected accounts are already assigned this week. Continue with manual override for selected accounts?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Override'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmOverride != true) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Assignment cancelled'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        usedOverride = true;
+        await submit(useOverride: true);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _selectedAfterDays != null
-                ? 'Assigned ${_selectedAccountIds.length} account(s) to ${_dayLabelMap[_selectedDaysForAssignment.first]} with recurrence every $_selectedAfterDays day(s)'
-                : 'Assigned ${_selectedAccountIds.length} account(s) to ${_dayLabelMap[_selectedDaysForAssignment.first]}',
+            recurrenceMode == _recurrenceMonthly
+                ? (usedOverride
+                      ? 'Assigned ${selectedAccountIds.length} account(s) in Monthly mode (manual override applied)'
+                      : 'Assigned ${selectedAccountIds.length} account(s) in Monthly mode (same date every month)')
+                : (afterDays != null
+                      ? (usedOverride
+                            ? 'Assigned ${selectedAccountIds.length} account(s) every $afterDays day(s) (manual override applied)'
+                            : 'Assigned ${selectedAccountIds.length} account(s) with recurrence every $afterDays day(s)')
+                      : (usedOverride
+                            ? 'Assigned ${selectedAccountIds.length} account(s) to ${assignedDays.map((d) => _dayLabelMap[d]).whereType<String>().join(', ')} (manual override applied)'
+                            : 'Assigned ${selectedAccountIds.length} account(s) to ${assignedDays.map((d) => _dayLabelMap[d]).whereType<String>().join(', ')}')),
           ),
           backgroundColor: Colors.green,
         ),
       );
 
       _selectedAccountIds.clear();
-      _selectedAfterDays = null;
       await _loadAccounts();
     } catch (e) {
       if (!mounted) return;
@@ -823,153 +911,235 @@ class _SalesmanCustomerAllotmentScreenState
     return '$day/$month/${date.year}';
   }
 
-  Future<void> _showDayPickerDialog() async {
-    int? pendingDay = _selectedDaysForAssignment.isEmpty
-        ? null
-        : _selectedDaysForAssignment.first;
-    int? pendingAfterDays = _selectedAfterDays;
-    bool enableAfterDays = pendingAfterDays != null;
-    String afterDaysText = pendingAfterDays?.toString() ?? '';
+  Set<int> _prefillSelectedDays() {
+    final selectedAccounts = _allAccounts
+        .where((a) => _selectedAccountIds.contains(a.id))
+        .toList();
+    if (selectedAccounts.isEmpty) return <int>{};
 
-    final selection = await showDialog<Map<String, dynamic>>(
+    Set<int>? intersection;
+    for (final account in selectedAccounts) {
+      final days = (account.assignedDays ?? const <int>[])
+          .where((d) => _dayLabelMap.containsKey(d))
+          .toSet();
+      if (intersection == null) {
+        intersection = days;
+      } else {
+        intersection = intersection.intersection(days);
+      }
+    }
+
+    return intersection ?? <int>{};
+  }
+
+  Future<Map<String, dynamic>?> _showAssignDayPopup() async {
+    final prefillDays = _prefillSelectedDays();
+    final selectedDays = <int>{...prefillDays};
+    var recurrenceMode = _recurrenceWeekly;
+    DateTime? monthlyAnchorDate;
+    final afterDaysController = TextEditingController(
+      text: _selectedAfterDays?.toString() ?? '',
+    );
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            String? validationError;
-            final parsedAfterDays = int.tryParse(afterDaysText.trim());
-            final canShowPreview =
-                enableAfterDays &&
-                pendingDay != null &&
-                parsedAfterDays != null &&
-                parsedAfterDays > 0;
-
-            DateTime? nextVisitDate;
-            if (canShowPreview) {
-              final selectedDate = _activeWeekStart.add(
-                Duration(days: pendingDay! - 1),
-              );
-              nextVisitDate = selectedDate.add(Duration(days: parsedAfterDays));
-            }
+            final isMonthlyMode = recurrenceMode == _recurrenceMonthly;
+            final isAfterDaysMode = recurrenceMode == _recurrenceAfterDays;
 
             return AlertDialog(
-              title: const Text('Choose Day'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ..._dayLabelMap.entries.map((entry) {
-                        final isSelected = pendingDay == entry.key;
-                        return ChoiceChip(
-                          label: Text(
-                            entry.value,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? _dayChipSelectedText
-                                  : _dayChipText,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          selected: isSelected,
-                          onSelected: (_) {
-                            setDialogState(() {
-                              pendingDay = entry.key;
-                            });
-                          },
-                          backgroundColor: _dayChipBg,
-                          selectedColor: _dayChipSelectedBg,
-                          side: BorderSide.none,
-                        );
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Checkbox(
-                        value: enableAfterDays,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            enableAfterDays = value == true;
-                            if (!enableAfterDays) {
-                              afterDaysText = '';
-                              pendingAfterDays = null;
-                            }
-                          });
-                        },
-                        activeColor: _primary,
-                      ),
-                      const Text(
-                        'After Days (Recurring)',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  if (enableAfterDays)
-                    TextField(
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter after how many days',
-                        hintText: 'e.g. 10',
-                        isDense: true,
-                      ),
-                      controller: TextEditingController(text: afterDaysText)
-                        ..selection = TextSelection.fromPosition(
-                          TextPosition(offset: afterDaysText.length),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: const Text('Assign Day'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ..._dayLabelMap.entries.map((entry) {
+                      final day = entry.key;
+                      return CheckboxListTile(
+                        value: selectedDays.contains(day),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: const VisualDensity(
+                          horizontal: -4,
+                          vertical: -4,
                         ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(
+                          entry.value,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        onChanged: isMonthlyMode
+                            ? null
+                            : (checked) {
+                                setDialogState(() {
+                                  if (checked == true) {
+                                    selectedDays.add(day);
+                                  } else {
+                                    selectedDays.remove(day);
+                                  }
+                                });
+                              },
+                      );
+                    }),
+                    const Divider(height: 20),
+                    RadioListTile<String>(
+                      value: _recurrenceWeekly,
+                      groupValue: recurrenceMode,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Every Week',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() => recurrenceMode = value!);
+                      },
+                    ),
+                    RadioListTile<String>(
+                      value: _recurrenceMonthly,
+                      groupValue: recurrenceMode,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Monthly',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                       onChanged: (value) {
                         setDialogState(() {
-                          afterDaysText = value;
+                          recurrenceMode = value!;
+                          if (selectedDays.isNotEmpty) {
+                            selectedDays.clear();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Unselect day first for Monthly mode',
+                                ),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
                         });
                       },
                     ),
-                  if (nextVisitDate != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Next visit: ${_formatDate(nextVisitDate)} (${_dayLabelMap[nextVisitDate.weekday] ?? ''})',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w600,
+                    RadioListTile<String>(
+                      value: _recurrenceAfterDays,
+                      groupValue: recurrenceMode,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Recurring Day (After N Days)',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() => recurrenceMode = value!);
+                      },
+                    ),
+                    if (isAfterDaysMode)
+                      TextField(
+                        controller: afterDaysController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'After how many days',
+                          hintText: 'e.g. 10',
                         ),
                       ),
-                    ),
-                  if (validationError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        validationError,
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                    if (isMonthlyMode)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                monthlyAnchorDate == null
+                                    ? 'No monthly date selected'
+                                    : 'Monthly date: ${_formatDate(monthlyAnchorDate!)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: dialogContext,
+                                  initialDate:
+                                      monthlyAnchorDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    monthlyAnchorDate = DateTime(
+                                      picked.year,
+                                      picked.month,
+                                      picked.day,
+                                    );
+                                  });
+                                }
+                              },
+                              child: const Text('Pick Date'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                ],
+                    if (isMonthlyMode)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          'Monthly mode ignores day checkboxes.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
-                  onPressed: () =>
-                      Navigator.of(dialogContext).pop({'clear': true}),
-                  child: const Text('Clear'),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
                 ),
-                TextButton(
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: _primary),
                   onPressed: () {
-                    if (pendingDay == null) {
+                    if (!isMonthlyMode && selectedDays.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Please select one day'),
+                          content: Text('Select at least one day'),
                           backgroundColor: Colors.red,
                         ),
                       );
                       return;
                     }
 
-                    if (enableAfterDays) {
-                      final parsed = int.tryParse(afterDaysText.trim());
+                    if (isMonthlyMode && monthlyAnchorDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Select monthly date'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    int? afterDays;
+                    if (recurrenceMode == _recurrenceAfterDays) {
+                      final parsed = int.tryParse(
+                        afterDaysController.text.trim(),
+                      );
                       if (parsed == null || parsed <= 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -979,16 +1149,32 @@ class _SalesmanCustomerAllotmentScreenState
                         );
                         return;
                       }
-                      pendingAfterDays = parsed;
-                    } else {
-                      pendingAfterDays = null;
+                      if (selectedDays.length != 1) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Recurring After N Days requires exactly one day',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      afterDays = parsed;
                     }
 
-                    Navigator.of(
-                      dialogContext,
-                    ).pop({'day': pendingDay, 'afterDays': pendingAfterDays});
+                    final finalAssignedDays = isMonthlyMode
+                        ? <int>[monthlyAnchorDate!.weekday]
+                        : (selectedDays.toList()..sort());
+
+                    Navigator.of(dialogContext).pop({
+                      'assignedDays': finalAssignedDays,
+                      'recurrenceMode': recurrenceMode,
+                      'afterDays': afterDays,
+                      'monthlyAnchorDate': monthlyAnchorDate,
+                    });
                   },
-                  child: const Text('Apply'),
+                  child: const Text('Ok'),
                 ),
               ],
             );
@@ -997,46 +1183,8 @@ class _SalesmanCustomerAllotmentScreenState
       },
     );
 
-    if (!mounted || selection == null) return;
-    setState(() {
-      if (selection['clear'] == true) {
-        _selectedDaysForAssignment.clear();
-        _selectedAfterDays = null;
-        return;
-      }
-
-      final pickedDay = selection['day'] as int?;
-      final pickedAfterDays = selection['afterDays'] as int?;
-      _selectedDaysForAssignment.clear();
-      if (pickedDay != null) {
-        _selectedDaysForAssignment.add(pickedDay);
-      }
-      _selectedAfterDays = pickedAfterDays;
-    });
-  }
-
-  Widget _buildDayPickerButton() {
-    final selectedDay = _selectedDaysForAssignment.isEmpty
-        ? null
-        : _selectedDaysForAssignment.first;
-    final selectedDayLabel = selectedDay == null
-        ? 'Choose Day'
-        : (_selectedAfterDays != null
-              ? '${_dayLabelMap[selectedDay]} +$_selectedAfterDays d'
-              : (_dayLabelMap[selectedDay] ?? 'Choose Day'));
-
-    return OutlinedButton.icon(
-      onPressed: _showDayPickerDialog,
-      icon: const Icon(Icons.calendar_today, size: 14),
-      label: Text(selectedDayLabel),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        minimumSize: const Size(0, 28),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-    );
+    afterDaysController.dispose();
+    return result;
   }
 
   Future<void> _launchCall(String phoneNumber) async {
@@ -1535,14 +1683,6 @@ class _SalesmanCustomerAllotmentScreenState
                                                               ),
                                                         ),
                                                       ),
-                                                      if (_selectedAccountIds
-                                                          .isNotEmpty)
-                                                        const SizedBox(
-                                                          width: 6,
-                                                        ),
-                                                      if (_selectedAccountIds
-                                                          .isNotEmpty)
-                                                        _buildDayPickerButton(),
                                                     ],
                                                   ),
                                                 ],
@@ -1744,16 +1884,16 @@ class _SalesmanCustomerAllotmentScreenState
 
     return Card(
       color: cardColor,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: borderColor, width: 0.8),
       ),
       child: InkWell(
         onTap: () => _openAccountDetail(account.id),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1763,7 +1903,7 @@ class _SalesmanCustomerAllotmentScreenState
                     child: Text(
                       account.accountCode,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: Colors.grey.shade700,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1777,7 +1917,7 @@ class _SalesmanCustomerAllotmentScreenState
                       ownerName,
                       textAlign: TextAlign.right,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
                         height: 1.05,
                       ),
@@ -1791,18 +1931,18 @@ class _SalesmanCustomerAllotmentScreenState
               Text(
                 shopName,
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   color: Colors.grey.shade900,
                   fontWeight: FontWeight.w700,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 'Address : $addressLine',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   color: Colors.grey.shade800,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1812,20 +1952,20 @@ class _SalesmanCustomerAllotmentScreenState
               Text(
                 'Main area : $areaLine',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   color: Colors.grey.shade900,
                   fontWeight: FontWeight.w700,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Text(
                     'Days :',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: Colors.grey.shade800,
                     ),
@@ -1843,8 +1983,8 @@ class _SalesmanCustomerAllotmentScreenState
                             ),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 2,
-                                vertical: 2,
+                                horizontal: 3,
+                                vertical: 3,
                               ),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
@@ -1858,7 +1998,7 @@ class _SalesmanCustomerAllotmentScreenState
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 9,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   color: isActive
                                       ? _dayChipSelectedText
@@ -1873,12 +2013,12 @@ class _SalesmanCustomerAllotmentScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   SizedBox(
-                    width: 28,
-                    height: 28,
+                    width: 32,
+                    height: 32,
                     child: Checkbox(
                       value: isSelected,
                       onChanged: (value) {
@@ -1899,8 +2039,8 @@ class _SalesmanCustomerAllotmentScreenState
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
+                        horizontal: 10,
+                        vertical: 8,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.7),
@@ -1910,7 +2050,7 @@ class _SalesmanCustomerAllotmentScreenState
                         children: [
                           Icon(
                             Icons.phone,
-                            size: 15,
+                            size: 16,
                             color: Colors.grey.shade700,
                           ),
                           const SizedBox(width: 6),
@@ -1918,7 +2058,7 @@ class _SalesmanCustomerAllotmentScreenState
                             child: Text(
                               account.contactNumber,
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
                               ),
                               maxLines: 1,
@@ -1932,26 +2072,26 @@ class _SalesmanCustomerAllotmentScreenState
                   const SizedBox(width: 6),
                   IconButton(
                     onPressed: () => _launchCall(account.contactNumber),
-                    icon: const Icon(Icons.call, size: 17),
+                    icon: const Icon(Icons.call, size: 18),
                     tooltip: 'Call',
-                    color: Colors.green.shade800,
+                    color: Colors.grey.shade700,
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFFC9F1D5),
-                      minimumSize: const Size(34, 34),
-                      padding: const EdgeInsets.all(6),
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                   const SizedBox(width: 4),
                   IconButton(
                     onPressed: () => _launchWhatsApp(account.contactNumber),
-                    icon: const Icon(Icons.chat, size: 17),
+                    icon: const Icon(Icons.call, size: 18),
                     tooltip: 'WhatsApp',
                     color: Colors.green.shade800,
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFFC9F1D5),
-                      minimumSize: const Size(34, 34),
-                      padding: const EdgeInsets.all(6),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),

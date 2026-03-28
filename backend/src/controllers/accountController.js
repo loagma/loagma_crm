@@ -52,6 +52,35 @@ const getDueDaysInWeekForAfterDays = ({ anchorDate, afterDays, weekStartDate }) 
   return dueDays;
 };
 
+const getDueDaysInWeekForMonthly = ({ anchorDate, weekStartDate }) => {
+  const anchor = toStartOfDay(anchorDate);
+  const weekStart = toStartOfDay(weekStartDate);
+  if (!anchor || !weekStart) return [];
+
+  const anchorDayOfMonth = anchor.getDate();
+  const dueDays = [];
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const targetDate = new Date(
+      weekStart.getFullYear(),
+      weekStart.getMonth(),
+      weekStart.getDate() + offset,
+    );
+    const lastDayOfMonth = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth() + 1,
+      0,
+    ).getDate();
+    const monthlyDueDate = Math.min(anchorDayOfMonth, lastDayOfMonth);
+
+    if (targetDate.getDate() === monthlyDueDate) {
+      dueDays.push(offset + 1);
+    }
+  }
+
+  return dueDays;
+};
+
 const parseAssignedDays = (value) => {
   if (!Array.isArray(value)) return [];
   return [...new Set(value
@@ -138,6 +167,7 @@ const VISIT_FREQUENCY = {
   TWICE: 'TWICE',
   THRICE: 'THRICE',
   DAILY: 'DAILY',
+  MONTHLY: 'MONTHLY',
 };
 
 const REQUIRED_DAY_COUNT_BY_FREQUENCY = {
@@ -145,6 +175,7 @@ const REQUIRED_DAY_COUNT_BY_FREQUENCY = {
   [VISIT_FREQUENCY.TWICE]: 2,
   [VISIT_FREQUENCY.THRICE]: 3,
   [VISIT_FREQUENCY.DAILY]: 7,
+  [VISIT_FREQUENCY.MONTHLY]: 1,
 };
 
 const ADMIN_OVERRIDE_ROLES = new Set(['admin', 'manager', 'teleadmin']);
@@ -167,13 +198,14 @@ const normalizeVisitFrequency = (input, fallbackDays = []) => {
   if (raw === '2' || raw === 'TWICE') return VISIT_FREQUENCY.TWICE;
   if (raw === '3' || raw === 'THRICE') return VISIT_FREQUENCY.THRICE;
   if (raw === '7' || raw === 'DAILY') return VISIT_FREQUENCY.DAILY;
+  if (raw === 'MONTHLY') return VISIT_FREQUENCY.MONTHLY;
   return null;
 };
 
 const validateDaysForFrequency = (days, frequency) => {
   const required = REQUIRED_DAY_COUNT_BY_FREQUENCY[frequency];
   if (!required) {
-    return `Invalid visitFrequency '${frequency}'. Allowed: ONCE, TWICE, THRICE, DAILY`;
+    return `Invalid visitFrequency '${frequency}'. Allowed: ONCE, TWICE, THRICE, DAILY, MONTHLY`;
   }
 
   if (!Array.isArray(days) || days.length === 0) {
@@ -1536,8 +1568,11 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         ? weeklyDelegate.findMany({
             where: {
               salesmanId,
-              recurrenceAfterDays: { not: null },
               recurrenceStartDate: { lte: weekRange.end },
+              OR: [
+                { recurrenceAfterDays: { not: null } },
+                { visitFrequency: VISIT_FREQUENCY.MONTHLY },
+              ],
               ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
             },
             include: { account: true },
@@ -1584,6 +1619,29 @@ export const getWeeklyAssignmentsView = async (req, res) => {
       for (const row of recurrenceRows) {
         const pin = (row.pincode || '').trim();
         if (!pin) continue;
+
+        const rowFrequency = normalizeVisitFrequency(
+          row.visitFrequency,
+          parseAssignedDays(row.assignedDays),
+        );
+
+        if (rowFrequency === VISIT_FREQUENCY.MONTHLY) {
+          const fallbackDays = parseAssignedDays(row.assignedDays);
+          const fallbackAnchorDay = fallbackDays[0];
+          const fallbackAnchorDate = fallbackAnchorDay
+            ? getDateForWeekday(row.weekStartDate, fallbackAnchorDay)
+            : null;
+          const anchorDate = row.recurrenceStartDate || fallbackAnchorDate;
+          if (!anchorDate) continue;
+
+          const dueDays = getDueDaysInWeekForMonthly({
+            anchorDate,
+            weekStartDate,
+          });
+
+          upsertAccountDays(pin, row.account, dueDays);
+          continue;
+        }
 
         const normalizedAfterDays = parseAfterDays(row.recurrenceAfterDays);
         if (!normalizedAfterDays) continue;
@@ -2464,6 +2522,7 @@ export const getTodayPlannedAccounts = async (req, res) => {
         assignedDays,
         visitFrequency,
         afterDays,
+        monthlyAnchorDate,
         manualOverrideAccountIds = [],
         overrideReason = null,
       } = req.body;
@@ -2483,12 +2542,16 @@ export const getTodayPlannedAccounts = async (req, res) => {
       const days = parseAssignedDays(assignedDays);
       const normalizedFrequency = normalizeVisitFrequency(visitFrequency, days);
       const normalizedAfterDays = parseAfterDays(afterDays);
+      const normalizedMonthlyAnchorDate = toStartOfDay(monthlyAnchorDate);
       const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
       const isSingleDayMode = days.length === 1;
+      const isMonthlyMode = normalizedFrequency === VISIT_FREQUENCY.MONTHLY;
       const singleDay = isSingleDayMode ? days[0] : null;
-      const recurrenceStartDate = normalizedAfterDays
-        ? getDateForWeekday(weekStart, singleDay)
-        : null;
+      const recurrenceStartDate = isMonthlyMode
+        ? (normalizedMonthlyAnchorDate || getDateForWeekday(weekStart, singleDay))
+        : (normalizedAfterDays
+            ? getDateForWeekday(weekStart, singleDay)
+            : null);
       const recurrenceNextDate = normalizedAfterDays
         ? computeFirstRecurrenceDate(recurrenceStartDate, normalizedAfterDays)
         : null;
@@ -2509,6 +2572,13 @@ export const getTodayPlannedAccounts = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'afterDays must be a positive integer',
+        });
+      }
+
+      if (isMonthlyMode && monthlyAnchorDate !== undefined && monthlyAnchorDate !== null && !normalizedMonthlyAnchorDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'monthlyAnchorDate must be a valid date',
         });
       }
 
