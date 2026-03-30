@@ -163,29 +163,30 @@ const getWeeklyAssignmentDelegate = (client) => {
 };
 
 const VISIT_FREQUENCY = {
+  WEEKLY: 'WEEKLY',
   ONCE: 'ONCE',
   TWICE: 'TWICE',
   THRICE: 'THRICE',
   DAILY: 'DAILY',
   MONTHLY: 'MONTHLY',
+  AFTER_DAYS: 'AFTER_DAYS',
 };
 
 const REQUIRED_DAY_COUNT_BY_FREQUENCY = {
+  [VISIT_FREQUENCY.WEEKLY]: 1,
   [VISIT_FREQUENCY.ONCE]: 1,
   [VISIT_FREQUENCY.TWICE]: 2,
   [VISIT_FREQUENCY.THRICE]: 3,
   [VISIT_FREQUENCY.DAILY]: 7,
   [VISIT_FREQUENCY.MONTHLY]: 1,
+  [VISIT_FREQUENCY.AFTER_DAYS]: 1,
 };
 
 const ADMIN_OVERRIDE_ROLES = new Set(['admin', 'manager', 'teleadmin']);
 
 const deriveVisitFrequencyFromDays = (days) => {
   const count = Array.isArray(days) ? days.length : 0;
-  if (count >= 7) return VISIT_FREQUENCY.DAILY;
-  if (count === 3) return VISIT_FREQUENCY.THRICE;
-  if (count === 2) return VISIT_FREQUENCY.TWICE;
-  return VISIT_FREQUENCY.ONCE;
+  return count > 0 ? VISIT_FREQUENCY.WEEKLY : null;
 };
 
 const normalizeVisitFrequency = (input, fallbackDays = []) => {
@@ -194,22 +195,27 @@ const normalizeVisitFrequency = (input, fallbackDays = []) => {
   }
 
   const raw = String(input).trim().toUpperCase();
-  if (raw === '1' || raw === 'ONCE' || raw === 'WEEKLY') return VISIT_FREQUENCY.ONCE;
-  if (raw === '2' || raw === 'TWICE') return VISIT_FREQUENCY.TWICE;
-  if (raw === '3' || raw === 'THRICE') return VISIT_FREQUENCY.THRICE;
-  if (raw === '7' || raw === 'DAILY') return VISIT_FREQUENCY.DAILY;
+  if (raw === 'WEEKLY' || raw === '1' || raw === 'ONCE') return VISIT_FREQUENCY.WEEKLY;
+  if (raw === '2' || raw === 'TWICE') return VISIT_FREQUENCY.WEEKLY;
+  if (raw === '3' || raw === 'THRICE') return VISIT_FREQUENCY.WEEKLY;
+  if (raw === '7' || raw === 'DAILY') return VISIT_FREQUENCY.WEEKLY;
   if (raw === 'MONTHLY') return VISIT_FREQUENCY.MONTHLY;
+  if (raw === 'AFTER_DAYS' || raw === 'AFTER DAYS') return VISIT_FREQUENCY.AFTER_DAYS;
   return null;
 };
 
 const validateDaysForFrequency = (days, frequency) => {
   const required = REQUIRED_DAY_COUNT_BY_FREQUENCY[frequency];
   if (!required) {
-    return `Invalid visitFrequency '${frequency}'. Allowed: ONCE, TWICE, THRICE, DAILY, MONTHLY`;
+    return `Invalid visitFrequency '${frequency}'. Allowed: WEEKLY, MONTHLY, AFTER_DAYS`;
   }
 
   if (!Array.isArray(days) || days.length === 0) {
     return 'plannedDays is required';
+  }
+
+  if (frequency === VISIT_FREQUENCY.WEEKLY && days.length >= 1 && days.length <= 7) {
+    return null;
   }
 
   if (days.length !== required) {
@@ -290,6 +296,9 @@ const getSalesmanPincodeRows = async (salesmanId) => {
 const buildPlanningSummary = (weeklyRows, allAccounts) => {
   const plannedAccountIds = new Set(weeklyRows.map((r) => r.accountId));
   const byFrequency = {
+    [VISIT_FREQUENCY.WEEKLY]: 0,
+    [VISIT_FREQUENCY.MONTHLY]: 0,
+    [VISIT_FREQUENCY.AFTER_DAYS]: 0,
     [VISIT_FREQUENCY.ONCE]: 0,
     [VISIT_FREQUENCY.TWICE]: 0,
     [VISIT_FREQUENCY.THRICE]: 0,
@@ -1568,10 +1577,13 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         ? weeklyDelegate.findMany({
             where: {
               salesmanId,
-              recurrenceStartDate: { lte: weekRange.end },
-              OR: [
-                { recurrenceAfterDays: { not: null } },
-                { visitFrequency: VISIT_FREQUENCY.MONTHLY },
+              AND: [
+                {
+                  OR: [
+                    { recurrenceStartDate: null },
+                    { recurrenceStartDate: { lte: weekRange.end } },
+                  ],
+                },
               ],
               ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
             },
@@ -1584,14 +1596,23 @@ export const getWeeklyAssignmentsView = async (req, res) => {
     const dayTotals = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
     const accountDaysByPincode = {};
     const accountMetaByPincode = {};
+    const accountFrequencyByPincode = {};
 
-    const upsertAccountDays = (pin, account, days) => {
+    const frequencyPriority = (frequency) => {
+      if (frequency === VISIT_FREQUENCY.AFTER_DAYS) return 3;
+      if (frequency === VISIT_FREQUENCY.MONTHLY) return 2;
+      if (frequency === VISIT_FREQUENCY.WEEKLY) return 1;
+      return 0;
+    };
+
+    const upsertAccountDays = (pin, account, days, frequency = VISIT_FREQUENCY.WEEKLY) => {
       if (!pin || !account || !account.id || !Array.isArray(days) || days.length === 0) {
         return;
       }
 
       if (!accountDaysByPincode[pin]) accountDaysByPincode[pin] = new Map();
       if (!accountMetaByPincode[pin]) accountMetaByPincode[pin] = new Map();
+      if (!accountFrequencyByPincode[pin]) accountFrequencyByPincode[pin] = new Map();
 
       const byAccount = accountDaysByPincode[pin];
       const currentDays = byAccount.get(account.id) || new Set();
@@ -1603,6 +1624,11 @@ export const getWeeklyAssignmentsView = async (req, res) => {
 
       byAccount.set(account.id, currentDays);
       accountMetaByPincode[pin].set(account.id, account);
+
+      const existingFrequency = accountFrequencyByPincode[pin].get(account.id);
+      if (!existingFrequency || frequencyPriority(frequency) > frequencyPriority(existingFrequency)) {
+        accountFrequencyByPincode[pin].set(account.id, frequency);
+      }
     };
 
     const weeklyByPincode = {};
@@ -1613,7 +1639,8 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         if (!pin) continue;
 
         const days = parseAssignedDays(row.assignedDays);
-        upsertAccountDays(pin, row.account, days);
+        const frequency = normalizeVisitFrequency(row.visitFrequency, days) || VISIT_FREQUENCY.WEEKLY;
+        upsertAccountDays(pin, row.account, days, frequency);
       }
 
       for (const row of recurrenceRows) {
@@ -1624,6 +1651,12 @@ export const getWeeklyAssignmentsView = async (req, res) => {
           row.visitFrequency,
           parseAssignedDays(row.assignedDays),
         );
+
+        if (rowFrequency === VISIT_FREQUENCY.WEEKLY) {
+          const weeklyDays = parseAssignedDays(row.assignedDays);
+          upsertAccountDays(pin, row.account, weeklyDays);
+          continue;
+        }
 
         if (rowFrequency === VISIT_FREQUENCY.MONTHLY) {
           const fallbackDays = parseAssignedDays(row.assignedDays);
@@ -1639,7 +1672,7 @@ export const getWeeklyAssignmentsView = async (req, res) => {
             weekStartDate,
           });
 
-          upsertAccountDays(pin, row.account, dueDays);
+          upsertAccountDays(pin, row.account, dueDays, VISIT_FREQUENCY.MONTHLY);
           continue;
         }
 
@@ -1660,7 +1693,7 @@ export const getWeeklyAssignmentsView = async (req, res) => {
           weekStartDate,
         });
 
-        upsertAccountDays(pin, row.account, dueDays);
+        upsertAccountDays(pin, row.account, dueDays, VISIT_FREQUENCY.AFTER_DAYS);
       }
 
       for (const [pin, byAccount] of Object.entries(accountDaysByPincode)) {
@@ -1674,7 +1707,11 @@ export const getWeeklyAssignmentsView = async (req, res) => {
           const assignedDays = [...daySet].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
           if (assignedDays.length === 0) continue;
 
-          assignedAccounts.push(toAccountDtoWithAssignedDays(account, assignedDays));
+          const frequency = accountFrequencyByPincode[pin]?.get(accountId) || VISIT_FREQUENCY.WEEKLY;
+          assignedAccounts.push({
+            ...toAccountDtoWithAssignedDays(account, assignedDays),
+            visitFrequency: frequency,
+          });
           for (const day of assignedDays) {
             dayTotals[day] = (dayTotals[day] || 0) + 1;
           }
@@ -1752,11 +1789,12 @@ export const getWeeklyAssignmentsView = async (req, res) => {
 const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = null }) => {
   const weekStart = normalizeWeekStartDate(weekStartDate);
   const weekStartFilter = buildWeekStartDateFilter(weekStart);
+  const weekRange = buildWeekRange(weekStart);
   if (!salesmanId || !weekStart) {
     return { error: 'salesmanId and valid weekStartDate are required' };
   }
 
-  if (!weekStartFilter) {
+  if (!weekStartFilter || !weekRange) {
     return { error: 'Unable to normalize weekStartDate for query' };
   }
 
@@ -1770,7 +1808,7 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
     return { error: 'Weekly planning is not available on current server build' };
   }
 
-  const [allAccounts, weeklyRows] = await Promise.all([
+  const [allAccounts, weeklyRows, recurrenceRows] = await Promise.all([
     effectivePincodes.length === 0
       ? Promise.resolve([])
       : prisma.account.findMany({
@@ -1786,19 +1824,115 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
       include: { account: true },
       orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
     }),
+    weeklyDelegate.findMany({
+      where: {
+        salesmanId,
+        AND: [
+          {
+            OR: [
+              { recurrenceStartDate: null },
+              { recurrenceStartDate: { lte: weekRange.end } },
+            ],
+          },
+        ],
+        ...(effectivePincodes.length > 0 ? { pincode: { in: effectivePincodes } } : {}),
+      },
+      include: { account: true },
+      orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+    }),
   ]);
 
   const byDay = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
   const byPincode = {};
   const plannedAccountIds = new Set();
 
+  const plannedByPincode = new Map();
+  const frequencyPriority = (frequency) => {
+    if (frequency === VISIT_FREQUENCY.AFTER_DAYS) return 3;
+    if (frequency === VISIT_FREQUENCY.MONTHLY) return 2;
+    if (frequency === VISIT_FREQUENCY.WEEKLY) return 1;
+    return 0;
+  };
+
+  const upsertPlanned = ({ row, dueDays, frequency }) => {
+    const pin = (row.pincode || '').trim();
+    const account = row.account;
+    const accountId = account?.id;
+    if (!pin || !accountId || !Array.isArray(dueDays) || dueDays.length === 0) return;
+
+    if (!plannedByPincode.has(pin)) plannedByPincode.set(pin, new Map());
+    const byAccount = plannedByPincode.get(pin);
+    const existing = byAccount.get(accountId);
+
+    if (!existing) {
+      byAccount.set(accountId, {
+        row,
+        account,
+        days: new Set(dueDays.filter((d) => d >= 1 && d <= 7)),
+        frequency,
+      });
+      return;
+    }
+
+    for (const day of dueDays) {
+      if (day >= 1 && day <= 7) existing.days.add(day);
+    }
+
+    if (frequencyPriority(frequency) > frequencyPriority(existing.frequency)) {
+      existing.row = row;
+      existing.frequency = frequency;
+    }
+  };
+
   for (const row of weeklyRows) {
     const days = parseAssignedDays(row.assignedDays);
     const frequency = normalizeVisitFrequency(row.visitFrequency, days);
-    const account = toAccountDtoWithAssignedDays(row.account, days);
-    plannedAccountIds.add(account.id);
+    upsertPlanned({ row, dueDays: days, frequency });
+  }
 
+  for (const row of recurrenceRows) {
+    const baseDays = parseAssignedDays(row.assignedDays);
+    const frequency = normalizeVisitFrequency(row.visitFrequency, baseDays);
     const pin = (row.pincode || '').trim();
+    if (!pin) continue;
+
+    if (frequency === VISIT_FREQUENCY.WEEKLY) {
+      upsertPlanned({ row, dueDays: baseDays, frequency });
+      continue;
+    }
+
+    if (frequency === VISIT_FREQUENCY.MONTHLY) {
+      const fallbackAnchorDay = baseDays[0];
+      const fallbackAnchorDate = fallbackAnchorDay
+        ? getDateForWeekday(row.weekStartDate, fallbackAnchorDay)
+        : null;
+      const anchorDate = row.recurrenceStartDate || fallbackAnchorDate;
+      if (!anchorDate) continue;
+      const dueDays = getDueDaysInWeekForMonthly({
+        anchorDate,
+        weekStartDate: weekStart,
+      });
+      upsertPlanned({ row, dueDays, frequency });
+      continue;
+    }
+
+    const after = parseAfterDays(row.recurrenceAfterDays);
+    if (!after) continue;
+    const fallbackAnchorDay = baseDays[0];
+    const fallbackAnchorDate = fallbackAnchorDay
+      ? getDateForWeekday(row.weekStartDate, fallbackAnchorDay)
+      : null;
+    const anchorDate = row.recurrenceStartDate || fallbackAnchorDate;
+    if (!anchorDate) continue;
+    const dueDays = getDueDaysInWeekForAfterDays({
+      anchorDate,
+      afterDays: after,
+      weekStartDate: weekStart,
+    });
+    upsertPlanned({ row, dueDays, frequency: VISIT_FREQUENCY.AFTER_DAYS });
+  }
+
+  for (const [pin, byAccount] of plannedByPincode.entries()) {
     if (!byPincode[pin]) {
       byPincode[pin] = {
         pincode: pin,
@@ -1808,27 +1942,33 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
       };
     }
 
-    const plannedDto = {
-      ...account,
-      weekStartDate: weekStart.toISOString(),
-      visitFrequency: frequency,
-      recurrenceAfterDays: row.recurrenceAfterDays ?? null,
-      recurrenceStartDate: row.recurrenceStartDate || null,
-      recurrenceNextDate: row.recurrenceNextDate || null,
-      plannedBy: row.plannedBy || null,
-      plannedAt: row.plannedAt || null,
-      isManualOverride: !!row.isManualOverride,
-      overrideBy: row.overrideBy || null,
-      overrideReason: row.overrideReason || null,
-      overriddenAt: row.overriddenAt || null,
-      sequenceNo: row.sequenceNo || 0,
-    };
+    for (const item of byAccount.values()) {
+      const orderedDays = [...item.days].sort((a, b) => a - b);
+      if (orderedDays.length === 0) continue;
 
-    byPincode[pin].planned.push(plannedDto);
+      const plannedDto = {
+        ...toAccountDtoWithAssignedDays(item.account, orderedDays),
+        weekStartDate: weekStart.toISOString(),
+        visitFrequency: item.frequency,
+        recurrenceAfterDays: item.row.recurrenceAfterDays ?? null,
+        recurrenceStartDate: item.row.recurrenceStartDate || null,
+        recurrenceNextDate: item.row.recurrenceNextDate || null,
+        plannedBy: item.row.plannedBy || null,
+        plannedAt: item.row.plannedAt || null,
+        isManualOverride: !!item.row.isManualOverride,
+        overrideBy: item.row.overrideBy || null,
+        overrideReason: item.row.overrideReason || null,
+        overriddenAt: item.row.overriddenAt || null,
+        sequenceNo: item.row.sequenceNo || 0,
+      };
 
-    for (const day of days) {
-      byPincode[pin].dayCounts[day] += 1;
-      byDay[day].push(plannedDto);
+      byPincode[pin].planned.push(plannedDto);
+      plannedAccountIds.add(plannedDto.id);
+
+      for (const day of orderedDays) {
+        byPincode[pin].dayCounts[day] += 1;
+        byDay[day].push(plannedDto);
+      }
     }
   }
 
@@ -1867,7 +2007,29 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
     };
   });
 
-  const summary = buildPlanningSummary(weeklyRows, allAccounts);
+  const summary = {
+    totalAccounts: allAccounts.length,
+    plannedAccounts: plannedAccountIds.size,
+    unplannedAccounts: Math.max(0, allAccounts.length - plannedAccountIds.size),
+    frequencyCounts: {
+      [VISIT_FREQUENCY.WEEKLY]: 0,
+      [VISIT_FREQUENCY.MONTHLY]: 0,
+      [VISIT_FREQUENCY.AFTER_DAYS]: 0,
+      [VISIT_FREQUENCY.ONCE]: 0,
+      [VISIT_FREQUENCY.TWICE]: 0,
+      [VISIT_FREQUENCY.THRICE]: 0,
+      [VISIT_FREQUENCY.DAILY]: 0,
+    },
+  };
+
+  for (const pin of Object.keys(byPincode)) {
+    for (const planned of byPincode[pin].planned) {
+      const freq = normalizeVisitFrequency(planned.visitFrequency, planned.assignedDays);
+      if (freq && summary.frequencyCounts[freq] !== undefined) {
+        summary.frequencyCounts[freq] += 1;
+      }
+    }
+  }
 
   return {
     data: {
@@ -2240,9 +2402,9 @@ export const getMultiVisitWeekAccounts = async (req, res) => {
     const day = req.query.day ? parseInt(req.query.day, 10) : null;
     const requestedFrequency = normalizeVisitFrequency(req.query.frequency || req.query.visitFrequency, []);
     const allowedFrequencies = new Set([
-      VISIT_FREQUENCY.TWICE,
-      VISIT_FREQUENCY.THRICE,
-      VISIT_FREQUENCY.DAILY,
+      VISIT_FREQUENCY.WEEKLY,
+      VISIT_FREQUENCY.MONTHLY,
+      VISIT_FREQUENCY.AFTER_DAYS,
     ]);
 
     const result = await getPlanningWeekData({ salesmanId, weekStartDate });
@@ -2310,56 +2472,7 @@ export const getTodayPlannedAccounts = async (req, res) => {
       visitFrequency: normalizeVisitFrequency(a.visitFrequency, a.assignedDays),
     }));
 
-    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
-    const dedupByAccount = new Map(todayAccounts.map((a) => [a.id, a]));
-
-    if (weeklyDelegate) {
-      const recurringRows = await weeklyDelegate.findMany({
-        where: {
-          salesmanId,
-          recurrenceAfterDays: { not: null },
-        },
-        include: { account: true },
-        orderBy: [{ accountId: 'asc' }, { plannedAt: 'desc' }, { createdAt: 'desc' }],
-      });
-
-      const latestRecurringByAccount = new Map();
-      for (const row of recurringRows) {
-        if (!latestRecurringByAccount.has(row.accountId)) {
-          latestRecurringByAccount.set(row.accountId, row);
-        }
-      }
-
-      for (const row of latestRecurringByAccount.values()) {
-        const days = parseAssignedDays(row.assignedDays);
-        const after = parseAfterDays(row.recurrenceAfterDays);
-        const anchorDate = row.recurrenceStartDate || getDateForWeekday(row.weekStartDate, days[0]);
-        if (!after || !anchorDate) continue;
-        if (!isAfterDaysDueOnDate(anchorDate, after, today)) continue;
-
-        const recurrenceNextDate = computeNextRecurrenceDate(anchorDate, after, today);
-        const recurringAccount = {
-          ...toAccountDtoWithAssignedDays(row.account, days),
-          weekStartDate: weekStart.toISOString(),
-          visitFrequency: normalizeVisitFrequency(row.visitFrequency, days),
-          recurrenceAfterDays: after,
-          recurrenceStartDate: toStartOfDay(anchorDate)?.toISOString() || null,
-          recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,
-          isRecurringAfterDays: true,
-          plannedBy: row.plannedBy || null,
-          plannedAt: row.plannedAt || null,
-          isManualOverride: !!row.isManualOverride,
-          overrideBy: row.overrideBy || null,
-          overrideReason: row.overrideReason || null,
-          overriddenAt: row.overriddenAt || null,
-          sequenceNo: row.sequenceNo || 0,
-        };
-
-        dedupByAccount.set(recurringAccount.id, recurringAccount);
-      }
-    }
-
-    const mergedTodayAccounts = [...dedupByAccount.values()];
+    const mergedTodayAccounts = [...new Map(todayAccounts.map((a) => [a.id, a])).values()];
 
     return res.json({
       success: true,
@@ -2540,9 +2653,14 @@ export const getTodayPlannedAccounts = async (req, res) => {
       const weekStart = normalizeWeekStartDate(weekStartDate);
       const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
       const days = parseAssignedDays(assignedDays);
-      const normalizedFrequency = normalizeVisitFrequency(visitFrequency, days);
+      const incomingFrequency = normalizeVisitFrequency(visitFrequency, days);
       const normalizedAfterDays = parseAfterDays(afterDays);
       const normalizedMonthlyAnchorDate = toStartOfDay(monthlyAnchorDate);
+      const normalizedFrequency = normalizedAfterDays
+        ? VISIT_FREQUENCY.AFTER_DAYS
+        : (incomingFrequency === VISIT_FREQUENCY.MONTHLY
+        ? VISIT_FREQUENCY.MONTHLY
+        : VISIT_FREQUENCY.WEEKLY);
       const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
       const isSingleDayMode = days.length === 1;
       const isMonthlyMode = normalizedFrequency === VISIT_FREQUENCY.MONTHLY;
@@ -2551,7 +2669,7 @@ export const getTodayPlannedAccounts = async (req, res) => {
         ? (normalizedMonthlyAnchorDate || getDateForWeekday(weekStart, singleDay))
         : (normalizedAfterDays
             ? getDateForWeekday(weekStart, singleDay)
-            : null);
+            : weekStart);
       const recurrenceNextDate = normalizedAfterDays
         ? computeFirstRecurrenceDate(recurrenceStartDate, normalizedAfterDays)
         : null;
@@ -2785,8 +2903,9 @@ export const getTodayPlannedAccounts = async (req, res) => {
 
       return res.json({
         success: true,
-        message: `${result.upsertedCount} account(s) assigned for selected week`,
+        message: `${result.upsertedCount} account(s) assigned with recurrence`,
         count: result.upsertedCount,
+        visitFrequency: normalizedFrequency,
         recurrenceAfterDays: normalizedAfterDays,
         recurrenceStartDate: recurrenceStartDate ? recurrenceStartDate.toISOString() : null,
         recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,

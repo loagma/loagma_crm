@@ -1158,6 +1158,12 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                 () => context.go('/dashboard/salesman/beat-plan/today'),
               ),
               _buildActionCard(
+                'All Beat Plan',
+                Icons.calendar_view_week,
+                const Color(0xFF6A5ACD),
+                () => context.go('/dashboard/salesman/beat-plan/all'),
+              ),
+              _buildActionCard(
                 'SR Area Allotment',
                 Icons.location_city,
                 Colors.purple,

@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -125,6 +126,16 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     final uri = Uri.parse('tel:$cleaned');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    }
+  }
+
+  Future<void> _launchWhatsApp(String phoneNumber) async {
+    final clean = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (clean.isEmpty || clean == '-') return;
+
+    final uri = Uri.parse('https://wa.me/$clean');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -468,6 +479,19 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     color: Colors.grey.shade700,
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFFE5E7EB),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: contact == '-' ? null : () => _launchWhatsApp(contact),
+                    icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18),
+                    tooltip: 'WhatsApp',
+                    color: Colors.green.shade800,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFC9F1D5),
                       minimumSize: const Size(36, 36),
                       padding: const EdgeInsets.all(7),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -42,6 +42,7 @@ import '../screens/salesman/apply_leave_screen.dart';
 import '../screens/salesman/my_leave_status_screen.dart';
 import '../screens/salesman/today_planned_accounts_screen.dart';
 import '../screens/salesman/multi_visit_accounts_screen.dart';
+import '../screens/salesman/all_beat_plan_screen.dart';
 
 // Admin Map screen
 import '../screens/admin/map_view_screen.dart';
@@ -346,6 +347,10 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'beat-plan/today',
           builder: (_, __) => const TodaysBeatPlanScreen(),
+        ),
+        GoRoute(
+          path: 'beat-plan/all',
+          builder: (_, __) => const AllBeatPlanScreen(),
         ),
         GoRoute(
           path: 'planning/today',

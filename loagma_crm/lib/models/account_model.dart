@@ -88,6 +88,26 @@ class Account {
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
+    double? parseNullableDouble(dynamic value) {
+      if (value == null || value is bool) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
+    }
+
+    bool? parseNullableBool(dynamic value) {
+      if (value == null) return null;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      final normalized = value.toString().trim().toLowerCase();
+      if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+        return true;
+      }
+      if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+        return false;
+      }
+      return null;
+    }
+
     return Account(
       id: json['id'],
       accountCode: json['accountCode'],
@@ -105,7 +125,7 @@ class Account {
       panCard: json['panCard'],
       ownerImage: json['ownerImage'],
       shopImage: json['shopImage'],
-      isActive: json['isActive'],
+      isActive: parseNullableBool(json['isActive']),
       pincode: json['pincode'],
       country: json['country'],
       state: json['state'],
@@ -113,8 +133,8 @@ class Account {
       city: json['city'],
       area: json['area'],
       address: json['address'],
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
+      latitude: parseNullableDouble(json['latitude']),
+      longitude: parseNullableDouble(json['longitude']),
       assignedToId: json['assignedToId'],
       assignedDays: json['assignedDays'] != null
           ? List<int>.from(
@@ -127,7 +147,7 @@ class Account {
       approvedAt: json['approvedAt'] != null
           ? DateTime.parse(json['approvedAt'])
           : null,
-      isApproved: json['isApproved'] ?? false,
+      isApproved: parseNullableBool(json['isApproved']) ?? false,
       verificationNotes: json['verificationNotes'],
       rejectionNotes: json['rejectionNotes'],
       areaId: json['areaId'],
