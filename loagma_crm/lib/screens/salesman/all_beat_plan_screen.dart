@@ -15,6 +15,19 @@ class AllBeatPlanScreen extends StatefulWidget {
 
 class _AllBeatPlanScreenState extends State<AllBeatPlanScreen> {
   static const Color primaryColor = Color(0xFFD7BE69);
+  static const Color _dayChipBg = Color(0xFFF1F3F5);
+  static const Color _dayChipSelectedBg = Color(0xFFE5E7EB);
+  static const Color _dayChipText = Color(0xFF4B5563);
+  static const Color _dayChipSelectedText = Color(0xFF1F2937);
+  static const Map<int, String> _dayLabelMap = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+    7: 'Sun',
+  };
 
   bool _isLoading = true;
   String? _error;
@@ -133,12 +146,6 @@ class _AllBeatPlanScreenState extends State<AllBeatPlanScreen> {
     return text.isEmpty ? fallback : text;
   }
 
-  double? _toDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value.trim());
-    return null;
-  }
-
   Future<void> _callNumber(String number) async {
     final cleaned = number.trim();
     if (cleaned.isEmpty || cleaned == '-') return;
@@ -159,153 +166,250 @@ class _AllBeatPlanScreenState extends State<AllBeatPlanScreen> {
     }
   }
 
-  Future<void> _openInMaps(Map<String, dynamic> account) async {
-    final lat = _toDouble(account['latitude']);
-    final lng = _toDouble(account['longitude']);
-    if (lat == null || lng == null) return;
-
-    final uri = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   Widget _buildSheetAccountCard(Map<String, dynamic> account) {
     final accountId = _safeText(account['id'], fallback: '');
     final ownerName = _safeText(account['personName'], fallback: 'Unknown');
     final shopName = _safeText(account['businessName']);
     final contact = _safeText(account['contactNumber']);
     final area = _safeText(account['area']);
-    final pincode = _safeText(account['pincode']);
     final accountCode = _safeText(account['accountCode']);
     final address = _safeText(account['address']);
-    final canOpenMaps =
-        _toDouble(account['latitude']) != null && _toDouble(account['longitude']) != null;
+    final addressLine = address.isNotEmpty ? address : '-';
+    final areaLine = area.isNotEmpty ? area : '-';
+    final assignedDaysRaw = (account['assignedDays'] as List?) ?? const [];
+    final assignedDays = assignedDaysRaw
+        .map((e) => int.tryParse(e.toString()))
+        .whereType<int>()
+        .where((d) => _dayLabelMap.containsKey(d))
+        .toList();
+    final selectedDays = assignedDays.toSet();
+    final dayEntries = _dayLabelMap.entries.toList();
+    final firstAssignedDay = assignedDays.isEmpty ? null : assignedDays.first;
+    final dayCardColors = <int, Color>{
+      1: const Color(0xFFFDE2E2),
+      2: const Color(0xFFE3EEFF),
+      3: const Color(0xFFECF8D8),
+      4: const Color(0xFFE3F7FA),
+      5: const Color(0xFFFFE4F1),
+      6: const Color(0xFFFFEBD6),
+      7: const Color(0xFFF1E6FF),
+    };
+    final dayBorderColors = <int, Color>{
+      1: const Color(0xFFE8A8A8),
+      2: const Color(0xFFAEC4EF),
+      3: const Color(0xFFBBD992),
+      4: const Color(0xFFA8D9E0),
+      5: const Color(0xFFE8AFCB),
+      6: const Color(0xFFE6C29E),
+      7: const Color(0xFFCAB7E8),
+    };
+    final cardColor = firstAssignedDay == null
+        ? Colors.white
+        : (dayCardColors[firstAssignedDay] ?? Colors.white);
+    final borderColor = firstAssignedDay == null
+        ? const Color(0xFFE5E7EB)
+        : (dayBorderColors[firstAssignedDay] ?? const Color(0xFFE5E7EB));
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              ownerName,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              shopName,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _chip('Code: $accountCode', Colors.blue.shade50, Colors.blue.shade800),
-                _chip('Area: $area', Colors.orange.shade50, Colors.orange.shade800),
-                _chip('Pin: $pincode', Colors.green.shade50, Colors.green.shade800),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              address,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(10),
+      color: cardColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: borderColor, width: 0.8),
+      ),
+      child: InkWell(
+        onTap: accountId.isEmpty
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                context.push('/account/$accountId');
+              },
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      accountCode,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ownerName,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        height: 1.05,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                shopName,
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.grey.shade900,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Address : $addressLine',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                'Main area : $areaLine',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade900,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Days :',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
                     child: Row(
-                      children: [
-                        Icon(Icons.phone, size: 16, color: Colors.grey.shade700),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            contact,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                      children: List.generate(dayEntries.length, (index) {
+                        final entry = dayEntries[index];
+                        final isActive = selectedDays.contains(entry.key);
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: index == dayEntries.length - 1 ? 0 : 3,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: isActive ? _dayChipSelectedBg : _dayChipBg,
+                              ),
+                              child: Text(
+                                entry.value,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive
+                                      ? _dayChipSelectedText
+                                      : _dayChipText,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        );
+                      }),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                IconButton(
-                  onPressed: accountId.isEmpty
-                      ? null
-                      : () {
-                          Navigator.of(context).pop();
-                          context.push('/account/$accountId');
-                        },
-                  icon: const Icon(Icons.visibility, size: 18),
-                  tooltip: 'Details',
-                  color: Colors.grey.shade700,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFE5E7EB),
-                    minimumSize: const Size(36, 36),
-                    padding: const EdgeInsets.all(7),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            size: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              contact,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: contact == '-' ? null : () => _callNumber(contact),
-                  icon: const Icon(Icons.call, size: 18),
-                  tooltip: 'Call',
-                  color: Colors.grey.shade700,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFE5E7EB),
-                    minimumSize: const Size(36, 36),
-                    padding: const EdgeInsets.all(7),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: contact == '-' ? null : () => _callNumber(contact),
+                    icon: const Icon(Icons.call, size: 18),
+                    tooltip: 'Call',
+                    color: Colors.grey.shade700,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: contact == '-' ? null : () => _launchWhatsApp(contact),
-                  icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18),
-                  tooltip: 'WhatsApp',
-                  color: Colors.green.shade800,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFC9F1D5),
-                    minimumSize: const Size(36, 36),
-                    padding: const EdgeInsets.all(7),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: contact == '-' ? null : () => _launchWhatsApp(contact),
+                    icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18),
+                    tooltip: 'WhatsApp',
+                    color: Colors.green.shade800,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFC9F1D5),
+                      minimumSize: const Size(36, 36),
+                      padding: const EdgeInsets.all(7),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: canOpenMaps ? () => _openInMaps(account) : null,
-                  icon: const Icon(Icons.map, size: 18),
-                  tooltip: 'Map',
-                  color: Colors.blue.shade700,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFDCEBFF),
-                    minimumSize: const Size(36, 36),
-                    padding: const EdgeInsets.all(7),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

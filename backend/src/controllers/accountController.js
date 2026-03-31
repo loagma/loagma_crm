@@ -52,6 +52,23 @@ const getDueDaysInWeekForAfterDays = ({ anchorDate, afterDays, weekStartDate }) 
   return dueDays;
 };
 
+const getDueDaysInWeekForWeekly = ({ assignedDays, recurrenceStartDate, weekStartDate }) => {
+  const weekStart = toStartOfDay(weekStartDate);
+  if (!weekStart) return [];
+
+  const weeklyDays = parseAssignedDays(assignedDays);
+  if (weeklyDays.length === 0) return [];
+
+  const recurrenceStart = toStartOfDay(recurrenceStartDate);
+  if (!recurrenceStart) return weeklyDays;
+
+  return weeklyDays.filter((day) => {
+    const targetDate = getDateForWeekday(weekStart, day);
+    if (!targetDate) return false;
+    return targetDate.getTime() >= recurrenceStart.getTime();
+  });
+};
+
 const getDueDaysInWeekForMonthly = ({ anchorDate, weekStartDate }) => {
   const anchor = toStartOfDay(anchorDate);
   const weekStart = toStartOfDay(weekStartDate);
@@ -66,6 +83,8 @@ const getDueDaysInWeekForMonthly = ({ anchorDate, weekStartDate }) => {
       weekStart.getMonth(),
       weekStart.getDate() + offset,
     );
+    if (targetDate.getTime() < anchor.getTime()) continue;
+
     const lastDayOfMonth = new Date(
       targetDate.getFullYear(),
       targetDate.getMonth() + 1,
@@ -1653,8 +1672,12 @@ export const getWeeklyAssignmentsView = async (req, res) => {
         );
 
         if (rowFrequency === VISIT_FREQUENCY.WEEKLY) {
-          const weeklyDays = parseAssignedDays(row.assignedDays);
-          upsertAccountDays(pin, row.account, weeklyDays);
+          const weeklyDays = getDueDaysInWeekForWeekly({
+            assignedDays: row.assignedDays,
+            recurrenceStartDate: row.recurrenceStartDate || row.weekStartDate,
+            weekStartDate,
+          });
+          upsertAccountDays(pin, row.account, weeklyDays, VISIT_FREQUENCY.WEEKLY);
           continue;
         }
 
@@ -1897,7 +1920,12 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
     if (!pin) continue;
 
     if (frequency === VISIT_FREQUENCY.WEEKLY) {
-      upsertPlanned({ row, dueDays: baseDays, frequency });
+      const dueDays = getDueDaysInWeekForWeekly({
+        assignedDays: row.assignedDays,
+        recurrenceStartDate: row.recurrenceStartDate || row.weekStartDate,
+        weekStartDate: weekStart,
+      });
+      upsertPlanned({ row, dueDays, frequency });
       continue;
     }
 
