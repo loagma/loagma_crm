@@ -4,6 +4,10 @@ async function fetchIndiaPost(pincode, { retries = 3, timeoutMs = 12000 } = {}) 
   const url = `https://api.postalpincode.in/pincode/${pincode}`;
   let lastError;
 
+  // Increased retries and timeout for more tolerance
+  retries = 4;
+  timeoutMs = 15000;
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await axios.get(url, { timeout: timeoutMs });
@@ -13,7 +17,7 @@ async function fetchIndiaPost(pincode, { retries = 3, timeoutMs = 12000 } = {}) 
       const isRetryable =
         code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNABORTED';
       if (!isRetryable || attempt === retries) break;
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
     }
   }
 
@@ -32,18 +36,13 @@ export const getLocationByPincode = async (pincode) => {
       throw new Error('Invalid pincode format. Must be 6 digits.');
     }
 
-    // Use India Post API
-    const response = await fetchIndiaPost(pincode, { retries: 2, timeoutMs: 7000 });
+    // Use India Post API with increased tolerance
+    const response = await fetchIndiaPost(pincode);
 
     if (response.data && response.data[0]?.Status === 'Success') {
       const postOffices = response.data[0].PostOffice;
-
-      // Extract all unique area names
       const areas = [...new Set(postOffices.map(po => po.Name))];
-
-      // Get common location data from first post office
       const firstOffice = postOffices[0];
-
       return {
         success: true,
         data: {
@@ -53,8 +52,7 @@ export const getLocationByPincode = async (pincode) => {
           district: firstOffice.District,
           city: firstOffice.Division || firstOffice.District,
           region: firstOffice.Region,
-          areas: areas, // Return all areas as array
-          // Keep single area for backward compatibility
+          areas: areas,
           area: firstOffice.Name,
         },
       };
@@ -66,10 +64,14 @@ export const getLocationByPincode = async (pincode) => {
     }
   } catch (error) {
     const code = error?.code;
-    console.error('Pincode lookup error:', code || error.message);
+    console.error('Pincode lookup error:', code || error.message, error);
+    let userMessage = 'Failed to fetch location details.';
+    if (code === 'ECONNABORTED') {
+      userMessage += ' The postal service is currently slow or unavailable. Please try again later.';
+    }
     return {
       success: false,
-      message: 'Failed to fetch location details',
+      message: userMessage,
       error: error.message,
     };
   }
@@ -87,18 +89,13 @@ export const getAreasByPincode = async (pincode) => {
       throw new Error('Invalid pincode format. Must be 6 digits.');
     }
 
-    // Use India Post API
-    const response = await fetchIndiaPost(pincode, { retries: 2, timeoutMs: 7000 });
+    // Use India Post API with increased tolerance
+    const response = await fetchIndiaPost(pincode);
 
     if (response.data && response.data[0]?.Status === 'Success') {
       const postOffices = response.data[0].PostOffice;
-
-      // Extract unique area names
       const areas = [...new Set(postOffices.map(po => po.Name))];
-
-      // Get common location data from first post office
       const firstOffice = postOffices[0];
-
       return {
         success: true,
         data: {
@@ -119,10 +116,14 @@ export const getAreasByPincode = async (pincode) => {
     }
   } catch (error) {
     const code = error?.code;
-    console.error('Areas lookup error:', code || error.message);
+    console.error('Areas lookup error:', code || error.message, error);
+    let userMessage = 'Failed to fetch areas.';
+    if (code === 'ECONNABORTED') {
+      userMessage += ' The postal service is currently slow or unavailable. Please try again later.';
+    }
     return {
       success: false,
-      message: 'Failed to fetch areas',
+      message: userMessage,
       error: error.message,
     };
   }
