@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 const PINCODE_LOOKUP_URL = 'https://api.postalpincode.in/pincode';
+const GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
 const PINCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const pincodeCache = new Map();
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 
 const RETRYABLE_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -44,7 +46,7 @@ const logLookupFailure = (label, pincode, error) => {
   console.error(`${label} lookup error for ${pincode}: ${code} - ${message}`);
 };
 
-async function fetchIndiaPost(pincode, { retries = 1, timeoutMs = 5000 } = {}) {
+async function fetchIndiaPost(pincode, { retries = 0, timeoutMs = 3000 } = {}) {
   const normalizedPincode = normalizePincode(pincode);
   const freshCachedPayload = getCachedPayload(normalizedPincode);
   if (freshCachedPayload) {
@@ -73,6 +75,67 @@ async function fetchIndiaPost(pincode, { retries = 1, timeoutMs = 5000 } = {}) {
   }
 
   throw lastError;
+}
+
+const parseAddressComponent = (components, wantedTypes) => {
+  if (!Array.isArray(components)) return '';
+  const match = components.find((component) =>
+    Array.isArray(component.types) &&
+    wantedTypes.some((type) => component.types.includes(type)),
+  );
+  return match?.long_name || '';
+};
+
+const buildGoogleFallbackData = (pincode, payload) => {
+  const firstResult = payload?.results?.[0];
+  if (!firstResult) return null;
+
+  const components = firstResult.address_components || [];
+  const state = parseAddressComponent(components, ['administrative_area_level_1']);
+  const district = parseAddressComponent(components, [
+    'administrative_area_level_2',
+    'administrative_area_level_3',
+  ]);
+  const city =
+    parseAddressComponent(components, ['locality']) ||
+    parseAddressComponent(components, ['postal_town']) ||
+    district;
+  const sublocality =
+    parseAddressComponent(components, ['sublocality', 'sublocality_level_1']) ||
+    parseAddressComponent(components, ['neighborhood']);
+  const country = parseAddressComponent(components, ['country']) || 'India';
+  const areas = [sublocality, city, district].filter(Boolean);
+
+  return {
+    pincode,
+    country,
+    state,
+    district,
+    city,
+    region: district || city,
+    area: sublocality || city || district || pincode,
+    areas: [...new Set(areas)].slice(0, 10),
+    fallbackSource: 'google-geocode',
+  };
+};
+
+async function fetchGooglePincodeFallback(pincode, { timeoutMs = 2500 } = {}) {
+  if (!GOOGLE_MAPS_API_KEY) return null;
+
+  const response = await axios.get(GOOGLE_GEOCODE_URL, {
+    timeout: timeoutMs,
+    params: {
+      address: `${pincode}, India`,
+      components: `country:IN|postal_code:${pincode}`,
+      key: GOOGLE_MAPS_API_KEY,
+    },
+  });
+
+  if (response?.data?.status !== 'OK') {
+    return null;
+  }
+
+  return buildGoogleFallbackData(pincode, response.data);
 }
 
 const parseIndiaPostPayload = (payload, pincode) => {
@@ -167,6 +230,25 @@ export const getLocationByPincode = async (pincode) => {
     }
     return result;
   } catch (error) {
+    try {
+      const fallbackData = await fetchGooglePincodeFallback(normalizedPincode);
+      if (fallbackData) {
+        console.warn(
+          `Pincode lookup fallback used for ${normalizedPincode}: primary provider ${error?.code || error?.message || 'failed'}`,
+        );
+        return {
+          success: true,
+          data: fallbackData,
+          fallbackSource: 'google-geocode',
+          stale: false,
+        };
+      }
+    } catch (fallbackError) {
+      console.warn(
+        `Pincode fallback failed for ${normalizedPincode}: ${fallbackError?.code || fallbackError?.message || 'unknown error'}`,
+      );
+    }
+
     logLookupFailure('Pincode', normalizedPincode, error);
     return buildTransientFailureResult(
       'Failed to fetch location details.',
@@ -219,6 +301,33 @@ export const getAreasByPincode = async (pincode) => {
       stale: staleFallback,
     };
   } catch (error) {
+    try {
+      const fallbackData = await fetchGooglePincodeFallback(normalizedPincode);
+      if (fallbackData) {
+        console.warn(
+          `Areas lookup fallback used for ${normalizedPincode}: primary provider ${error?.code || error?.message || 'failed'}`,
+        );
+        return {
+          success: true,
+          data: {
+            pincode: fallbackData.pincode,
+            country: fallbackData.country,
+            state: fallbackData.state,
+            district: fallbackData.district,
+            city: fallbackData.city,
+            region: fallbackData.region,
+            areas: fallbackData.areas,
+          },
+          fallbackSource: 'google-geocode',
+          stale: false,
+        };
+      }
+    } catch (fallbackError) {
+      console.warn(
+        `Areas fallback failed for ${normalizedPincode}: ${fallbackError?.code || fallbackError?.message || 'unknown error'}`,
+      );
+    }
+
     logLookupFailure('Areas', normalizedPincode, error);
     const cachedPayload = getCachedPayload(normalizedPincode, { allowExpired: true });
     const cachedData = cachedPayload
