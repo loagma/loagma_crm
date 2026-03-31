@@ -21,7 +21,7 @@ router.get('/pincode/:pincode/areas', async (req, res) => {
     if (result.success) {
       res.json(result);
     } else {
-      res.status(404).json(result);
+      res.status(result.httpStatus || 502).json(result);
     }
   } catch (error) {
     console.error('Pincode lookup error:', error);

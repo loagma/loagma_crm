@@ -18,9 +18,8 @@ router.get('/:pincode', async (req, res) => {
     if (result.success) {
       res.json(result);
     } else {
-      // 404 only when the pincode truly doesn't exist.
-      // Network / upstream failures should not be treated as "not found".
-      res.status(isNotFoundResult(result) ? 404 : 502).json(result);
+      const status = result.httpStatus || (isNotFoundResult(result) ? 404 : 502);
+      res.status(status).json(result);
     }
   } catch (error) {
     console.error('Pincode route error:', error);
@@ -42,7 +41,8 @@ router.get('/:pincode/areas', async (req, res) => {
     if (result.success) {
       res.json(result);
     } else {
-      res.status(isNotFoundResult(result) ? 404 : 502).json(result);
+      const status = result.httpStatus || (isNotFoundResult(result) ? 404 : 502);
+      res.status(status).json(result);
     }
   } catch (error) {
     console.error('Areas route error:', error);
