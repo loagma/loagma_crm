@@ -1344,7 +1344,7 @@ class _SalesmanCustomerAllotmentScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.screenTitle),
-        backgroundColor: _primary,
+        backgroundColor: const Color.fromRGBO(215, 190, 105, 1),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
@@ -1554,30 +1554,34 @@ class _SalesmanCustomerAllotmentScreenState
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
+                                                      horizontal: 9,
+                                                      vertical: 5,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      activeFilter ==
-                                                          _filterExisting
-                                                      ? _primary.withValues(
-                                                          alpha: 0.24,
-                                                        )
-                                                      : Colors.grey.shade100,
+                                                  color: _primary,
+                                                  border: Border.all(
+                                                    color: activeFilter ==
+                                                            _filterExisting
+                                                        ? const Color(
+                                                            0xFF8A7631,
+                                                          )
+                                                        : const Color(
+                                                            0xFFBFA958,
+                                                          ),
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(999),
                                                 ),
                                                 child: Text(
                                                   'Existing: $existingAccountsCount',
                                                   style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
                                                     color:
                                                         activeFilter ==
                                                             _filterExisting
-                                                        ? Colors.black87
-                                                        : Colors.grey.shade700,
+                                                        ? Colors.black
+                                                        : Colors.black87,
                                                   ),
                                                 ),
                                               ),
@@ -1595,30 +1599,34 @@ class _SalesmanCustomerAllotmentScreenState
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
+                                                      horizontal: 9,
+                                                      vertical: 5,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      activeFilter ==
-                                                          _filterAssigned
-                                                      ? _primary.withValues(
-                                                          alpha: 0.24,
-                                                        )
-                                                      : Colors.grey.shade100,
+                                                  color: _primary,
+                                                  border: Border.all(
+                                                    color: activeFilter ==
+                                                            _filterAssigned
+                                                        ? const Color(
+                                                            0xFF8A7631,
+                                                          )
+                                                        : const Color(
+                                                            0xFFBFA958,
+                                                          ),
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(999),
                                                 ),
                                                 child: Text(
                                                   'Assign: $assignedCount',
                                                   style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
                                                     color:
                                                         activeFilter ==
                                                             _filterAssigned
-                                                        ? Colors.black87
-                                                        : Colors.grey.shade700,
+                                                        ? Colors.black
+                                                        : Colors.black87,
                                                   ),
                                                 ),
                                               ),
@@ -1636,30 +1644,34 @@ class _SalesmanCustomerAllotmentScreenState
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
+                                                      horizontal: 9,
+                                                      vertical: 5,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      activeFilter ==
-                                                          _filterRemaining
-                                                      ? _primary.withValues(
-                                                          alpha: 0.24,
-                                                        )
-                                                      : Colors.grey.shade100,
+                                                  color: _primary,
+                                                  border: Border.all(
+                                                    color: activeFilter ==
+                                                            _filterRemaining
+                                                        ? const Color(
+                                                            0xFF8A7631,
+                                                          )
+                                                        : const Color(
+                                                            0xFFBFA958,
+                                                          ),
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(999),
                                                 ),
                                                 child: Text(
                                                   'Remaining: $remainingCount',
                                                   style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
                                                     color:
                                                         activeFilter ==
                                                             _filterRemaining
-                                                        ? Colors.black87
-                                                        : Colors.grey.shade700,
+                                                        ? Colors.black
+                                                        : Colors.black87,
                                                   ),
                                                 ),
                                               ),
@@ -1677,30 +1689,34 @@ class _SalesmanCustomerAllotmentScreenState
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
+                                                      horizontal: 9,
+                                                      vertical: 5,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      activeFilter ==
-                                                          _filterSelected
-                                                      ? _primary.withValues(
-                                                          alpha: 0.24,
-                                                        )
-                                                      : Colors.grey.shade100,
+                                                  color: _primary,
+                                                  border: Border.all(
+                                                    color: activeFilter ==
+                                                            _filterSelected
+                                                        ? const Color(
+                                                            0xFF8A7631,
+                                                          )
+                                                        : const Color(
+                                                            0xFFBFA958,
+                                                          ),
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(999),
                                                 ),
                                                 child: Text(
                                                   'Selected: $selectedInPin',
                                                   style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
                                                     color:
                                                         activeFilter ==
                                                             _filterSelected
-                                                        ? Colors.black87
-                                                        : Colors.grey.shade700,
+                                                        ? Colors.black
+                                                        : Colors.black87,
                                                   ),
                                                 ),
                                               ),

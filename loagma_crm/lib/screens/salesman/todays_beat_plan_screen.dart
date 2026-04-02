@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
+import 'order_details_screen.dart';
 
 class TodaysBeatPlanScreen extends StatefulWidget {
   const TodaysBeatPlanScreen({super.key});
@@ -85,40 +86,6 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
-  String _formatAssignedDays(dynamic assignedDays) {
-    final days = (assignedDays as List?) ?? const [];
-    if (days.isEmpty) return '-';
-
-    const short = {
-      1: 'Mon',
-      2: 'Tue',
-      3: 'Wed',
-      4: 'Thu',
-      5: 'Fri',
-      6: 'Sat',
-      7: 'Sun',
-    };
-
-    return days
-        .map((e) => int.tryParse(e.toString()))
-        .whereType<int>()
-        .map((d) => short[d] ?? d.toString())
-        .join(', ');
-  }
-
-  Color _frequencyColor(String frequency) {
-    switch (frequency.toUpperCase()) {
-      case 'DAILY':
-        return Colors.red.shade700;
-      case 'THRICE':
-        return Colors.deepOrange.shade700;
-      case 'TWICE':
-        return Colors.blue.shade700;
-      default:
-        return Colors.green.shade700;
-    }
-  }
-
   Future<void> _callNumber(String number) async {
     final cleaned = number.trim();
     if (cleaned.isEmpty || cleaned == '-') return;
@@ -151,6 +118,90 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     }
   }
 
+  Future<void> _openShownInMaps() async {
+    final accountsWithLocation = _accounts.where((account) {
+      final lat = (account['latitude'] as num?)?.toDouble();
+      final lng = (account['longitude'] as num?)?.toDouble();
+      return lat != null && lng != null;
+    }).toList();
+
+    if (accountsWithLocation.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No mapped locations found in shown accounts.')),
+      );
+      return;
+    }
+
+    if (accountsWithLocation.length == 1) {
+      await _openInMaps(accountsWithLocation.first);
+      return;
+    }
+
+    // Google Maps supports limited waypoints in a URL. Keep a safe cap.
+    const maxWaypoints = 8;
+    final origin = accountsWithLocation.first;
+    final destination = accountsWithLocation.last;
+    final waypointAccounts = accountsWithLocation.sublist(
+      1,
+      accountsWithLocation.length - 1,
+    );
+    final limitedWaypoints = waypointAccounts.take(maxWaypoints).toList();
+    final waypointValue = limitedWaypoints
+        .map((a) => '${(a['latitude'] as num).toDouble()},${(a['longitude'] as num).toDouble()}')
+        .join('|');
+
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'origin':
+          '${(origin['latitude'] as num).toDouble()},${(origin['longitude'] as num).toDouble()}',
+      'destination':
+          '${(destination['latitude'] as num).toDouble()},${(destination['longitude'] as num).toDouble()}',
+      if (waypointValue.isNotEmpty) 'waypoints': waypointValue,
+    });
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (accountsWithLocation.length > (maxWaypoints + 2) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Showing map route for first ${maxWaypoints + 2} accounts with location.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  String _buildRecurrenceLabel(Map<String, dynamic> account, String frequency) {
+    final visitFrequency = (account['visitFrequency']?.toString() ?? frequency)
+        .trim()
+        .toUpperCase();
+    final recurrenceType =
+        (account['recurrenceType']?.toString() ?? '').trim().toLowerCase();
+    final afterDays = int.tryParse(account['afterDays']?.toString() ?? '');
+
+    if (afterDays != null && afterDays > 0) {
+      return 'AFTER $afterDays DAYS';
+    }
+    if (recurrenceType.contains('after')) {
+      return 'AFTER N DAYS';
+    }
+    if (visitFrequency == 'WEEKLY') return 'WEEKLY';
+    if (visitFrequency == 'MONTHLY') return 'MONTHLY';
+    if (visitFrequency == 'ONCE') return 'ONCE';
+    return visitFrequency.isEmpty ? 'WEEKLY' : visitFrequency;
+  }
+
+  void _openOrderDetails(Map<String, dynamic> account) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OrderDetailsScreen(account: account),
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -164,21 +215,38 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Today Beat Plan',
-            style: TextStyle(
-              color: Colors.grey.shade900,
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${_dayLabel(_dayOfWeek)} | ${_formatDate(_selectedDate)}',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  'Today Beat Plan',
+                  style: TextStyle(
+                    color: Colors.grey.shade900,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_dayLabel(_dayOfWeek)} | ${_formatDate(_selectedDate)}',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -195,7 +263,6 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
@@ -209,6 +276,23 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _accounts.isEmpty ? null : _openShownInMaps,
+                icon: const Icon(Icons.map_outlined, size: 16),
+                label: const Text('Show in Map'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue.shade700,
+                  side: BorderSide(color: Colors.blue.shade200),
+                  backgroundColor: Colors.blue.shade50.withValues(alpha: 0.45),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
             ],
@@ -230,6 +314,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     final address = (account['address']?.toString() ?? '-').trim();
     final accountCode = (account['accountCode']?.toString() ?? '-').trim();
     final frequency = account['visitFrequency']?.toString() ?? 'ONCE';
+    final recurrenceLabel = _buildRecurrenceLabel(account, frequency);
     final canOpenMaps =
         (account['latitude'] as num?) != null &&
         (account['longitude'] as num?) != null;
@@ -240,17 +325,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
         .whereType<int>()
         .toList();
     final selectedDays = assignedDays.toSet();
-
-    const dayLabels = {
-      1: 'Mon',
-      2: 'Tue',
-      3: 'Wed',
-      4: 'Thu',
-      5: 'Fri',
-      6: 'Sat',
-      7: 'Sun',
-    };
-    final dayEntries = dayLabels.entries.toList();
+    final todayLabel = _dayLabel(_dayOfWeek);
 
     final dayCardColors = <int, Color>{
       1: const Color(0xFFFDE2E2),
@@ -308,42 +383,129 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: selectedDays.contains(_dayOfWeek)
+                              ? const Color(0xFF9EA3AD)
+                              : const Color(0xFFE8EAEE),
+                        ),
+                        child: Text(
+                          todayLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: selectedDays.contains(_dayOfWeek)
+                                ? Colors.white
+                                : const Color(0xFF666B75),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCF3E3),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          recurrenceLabel,
+                          style: const TextStyle(
+                            color: Color(0xFF1E7A3C),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Expanded(
                     child: Text(
-                      ownerName,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      shopName,
+                      style: TextStyle(
                         fontSize: 20,
+                        color: Colors.grey.shade900,
                         fontWeight: FontWeight.w700,
-                        height: 1.05,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 130,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          ownerName,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            height: 1.15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                shopName,
-                style: TextStyle(
-                  fontSize: 20,
-                  color: Colors.grey.shade900,
-                  fontWeight: FontWeight.w700,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Address : $address',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade800,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Address : $address',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 30,
+                    child: ElevatedButton(
+                      onPressed: () => _openOrderDetails(account),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: const Text('Proceed'),
+                    ),
+                  ),
+                ],
               ),
               Text(
                 'Main area : $area',
@@ -365,60 +527,6 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Text(
-                    'Days :',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Row(
-                      children: List.generate(dayEntries.length, (index) {
-                        final entry = dayEntries[index];
-                        final isActive = selectedDays.contains(entry.key);
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: index == dayEntries.length - 1 ? 0 : 3,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 3,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: isActive
-                                    ? const Color(0xFFB0B4BD)
-                                    : const Color(0xFFE8EAEE),
-                              ),
-                              child: Text(
-                                entry.value,
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: isActive
-                                      ? Colors.white
-                                      : const Color(0xFF666B75),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ],
               ),
               const SizedBox(height: 10),
               Row(
@@ -511,28 +619,6 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _frequencyColor(frequency).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    frequency,
-                    style: TextStyle(
-                      color: _frequencyColor(frequency),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),

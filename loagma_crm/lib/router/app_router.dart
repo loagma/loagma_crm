@@ -43,6 +43,7 @@ import '../screens/salesman/my_leave_status_screen.dart';
 import '../screens/salesman/today_planned_accounts_screen.dart';
 import '../screens/salesman/multi_visit_accounts_screen.dart';
 import '../screens/salesman/all_beat_plan_screen.dart';
+import '../screens/salesman/order_details_screen.dart';
 
 // Admin Map screen
 import '../screens/admin/map_view_screen.dart';
@@ -351,6 +352,14 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: 'beat-plan/all',
           builder: (_, __) => const AllBeatPlanScreen(),
+        ),
+        GoRoute(
+          path: 'beat-plan/order-details',
+          builder: (_, state) {
+            final raw = state.extra;
+            final account = raw is Map ? Map<String, dynamic>.from(raw) : null;
+            return OrderDetailsScreen(account: account);
+          },
         ),
         GoRoute(
           path: 'planning/today',
