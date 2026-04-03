@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
+import 'salesman_map_screen.dart';
 
 class AllBeatPlanScreen extends StatefulWidget {
   const AllBeatPlanScreen({super.key});
@@ -139,6 +140,45 @@ class _AllBeatPlanScreenState extends State<AllBeatPlanScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  double? _parseCoordinate(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
+  }
+
+  bool _hasValidCoordinates(Map<String, dynamic> account) {
+    final lat = _parseCoordinate(account['latitude'] ?? account['lat']);
+    final lng = _parseCoordinate(account['longitude'] ?? account['lng']);
+    if (lat == null || lng == null) return false;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+    if (lat == 0 && lng == 0) return false;
+    return true;
+  }
+
+  void _openAllInMap() {
+    final allAccounts = _accountsByDay.values.expand((e) => e).toList();
+    final accountsWithLocation =
+        allAccounts.where(_hasValidCoordinates).toList();
+
+    if (accountsWithLocation.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No mapped locations found for this week.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SalesmanMapScreen(
+          initialAccounts:
+              accountsWithLocation.map((e) => Map<String, dynamic>.from(e)).toList(),
+          screenTitle: 'All Beat Plan Map',
+          sourceTag: 'all_beat_plan',
+        ),
+      ),
+    );
   }
 
   String _safeText(dynamic value, {String fallback = '-'}) {
@@ -522,26 +562,57 @@ class _AllBeatPlanScreenState extends State<AllBeatPlanScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'All Beat Plan',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${_formatDate(_weekStart)} - ${_formatDate(weekEnd)}',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'All Beat Plan',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${_formatDate(_weekStart)} - ${_formatDate(weekEnd)}',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          Row(
             children: [
-              _chip('Total: $_totalAccounts', Colors.blue.shade50,
-                  Colors.blue.shade800),
-              _chip('Planned: $_plannedAccounts', Colors.orange.shade50,
-                  Colors.orange.shade800),
-              _chip('Remaining: $_unplannedAccounts', Colors.green.shade50,
-                  Colors.green.shade800),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _chip('Total: $_totalAccounts', Colors.blue.shade50,
+                        Colors.blue.shade800),
+                    _chip('Planned: $_plannedAccounts', Colors.orange.shade50,
+                        Colors.orange.shade800),
+                    _chip('Remaining: $_unplannedAccounts', Colors.green.shade50,
+                        Colors.green.shade800),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _openAllInMap,
+                icon: const Icon(Icons.map_outlined, size: 16),
+                label: const Text('Show All in Map'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue.shade700,
+                  side: BorderSide(color: Colors.blue.shade200),
+                  backgroundColor: Colors.blue.shade50.withOpacity(0.45),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ],
           ),
         ],

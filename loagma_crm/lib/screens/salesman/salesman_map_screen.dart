@@ -7,7 +7,16 @@ import '../../services/api_config.dart';
 import '../../services/user_service.dart';
 
 class SalesmanMapScreen extends StatefulWidget {
-  const SalesmanMapScreen({super.key});
+  const SalesmanMapScreen({
+    super.key,
+    this.initialAccounts,
+    this.screenTitle,
+    this.sourceTag,
+  });
+
+  final List<Map<String, dynamic>>? initialAccounts;
+  final String? screenTitle;
+  final String? sourceTag;
 
   @override
   State<SalesmanMapScreen> createState() => _SalesmanMapScreenState();
@@ -21,6 +30,9 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
   List<Map<String, dynamic>> allAccounts = []; // Store all accounts
   Position? _currentPosition;
   bool _locationPermissionGranted = false;
+  bool get _isPreloadedMode => widget.initialAccounts != null;
+  bool get _isSinglePreloadedAccountMode =>
+      _isPreloadedMode && allAccounts.length == 1;
 
   // Filter states
   bool isFilterExpanded = false;
@@ -258,6 +270,14 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     setState(() => isLoading = true);
 
     try {
+      if (_isPreloadedMode) {
+        allAccounts = (widget.initialAccounts ?? const [])
+            .map(_normalizeAccountCoordinates)
+            .toList();
+        _applyFilters();
+        return;
+      }
+
       final userId = UserService.currentUserId;
 
       if (userId == null || userId.isEmpty) {
@@ -293,13 +313,46 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     }
   }
 
+  Map<String, dynamic> _normalizeAccountCoordinates(Map<String, dynamic> account) {
+    final normalized = Map<String, dynamic>.from(account);
+    final lat = _extractCoordinate(account, const ['latitude', 'lat', 'Latitude']);
+    final lng = _extractCoordinate(account, const ['longitude', 'lng', 'lon', 'Longitude']);
+    if (lat != null && lng != null) {
+      normalized['latitude'] = lat;
+      normalized['longitude'] = lng;
+    }
+    return normalized;
+  }
+
+  double? _extractCoordinate(Map<String, dynamic> account, List<String> keys) {
+    for (final key in keys) {
+      if (!account.containsKey(key)) continue;
+      final parsed = _parseCoordinate(account[key]);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  double? _parseCoordinate(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final raw = value.trim();
+      if (raw.isEmpty) return null;
+      final direct = double.tryParse(raw);
+      if (direct != null) return direct;
+      return double.tryParse(raw.replaceAll(',', '.'));
+    }
+    return null;
+  }
+
   void _createMarkers() {
     Set<Marker> markers = {};
 
     print('🗺️ Creating markers for ${accounts.length} accounts');
 
-    // Add current location marker if available
-    if (_currentPosition != null) {
+    // Add current location marker only in normal (non-preloaded) map mode.
+    // For Today Beat preloaded map, show and focus only account pins.
+    if (_currentPosition != null && !_isPreloadedMode) {
       markers.add(
         Marker(
           markerId: const MarkerId('current_location'),
@@ -860,6 +913,22 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
     );
   }
 
+  void _focusOnSinglePreloadedAccount() {
+    if (!_isSinglePreloadedAccountMode || accounts.isEmpty || _mapController == null) {
+      return;
+    }
+
+    try {
+      final lat = double.parse(accounts.first['latitude'].toString());
+      final lng = double.parse(accounts.first['longitude'].toString());
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(lat, lng), 17),
+      );
+    } catch (_) {
+      // Ignore parse issues and allow fallback behavior.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final accountsOnMap = accounts
@@ -869,44 +938,45 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Account Locations'),
+        title: Text(widget.screenTitle ?? 'Account Locations'),
         backgroundColor: primaryColor,
         actions: [
           // Show all accounts list
-          IconButton(
-            icon: Stack(
-              children: [
-                const Icon(Icons.list),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(
-                      color: primaryColor,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      accounts.length.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+          if (!_isPreloadedMode)
+            IconButton(
+              icon: Stack(
+                children: [
+                  const Icon(Icons.list),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: primaryColor,
+                        shape: BoxShape.circle,
                       ),
-                      textAlign: TextAlign.center,
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        accounts.length.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              tooltip: 'View all accounts',
+              onPressed: _showAllAccountsList,
             ),
-            tooltip: 'View all accounts',
-            onPressed: _showAllAccountsList,
-          ),
-          if (accountsWithoutLocation > 0)
+          if (!_isPreloadedMode && accountsWithoutLocation > 0)
             IconButton(
               icon: Stack(
                 children: [
@@ -1014,6 +1084,14 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
 
                     // If we have markers, move camera to show them
                     if (_markers.isNotEmpty) {
+                      if (_isSinglePreloadedAccountMode) {
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          if (mounted && _mapController != null) {
+                            _focusOnSinglePreloadedAccount();
+                          }
+                        });
+                        return;
+                      }
                       // Use multiple delays to ensure map is fully loaded
                       Future.delayed(const Duration(milliseconds: 300), () {
                         if (mounted && _mapController != null) {
@@ -1036,7 +1114,8 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
                 ),
 
                 // Collapsible Filter Section at top
-                Positioned(
+                if (!_isPreloadedMode)
+                  Positioned(
                   top: 8,
                   left: 8,
                   right: 8,
@@ -1431,7 +1510,7 @@ class _SalesmanMapScreenState extends State<SalesmanMapScreen> {
                 // Info card at the bottom
               ],
             ),
-      floatingActionButton: _markers.isNotEmpty
+      floatingActionButton: !_isPreloadedMode && _markers.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: () {
                 print('🎯 Recenter map to show all markers');

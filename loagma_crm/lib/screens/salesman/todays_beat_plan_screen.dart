@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/account_service.dart';
 import '../../services/user_service.dart';
 import 'order_details_screen.dart';
+import 'salesman_map_screen.dart';
 
 class TodaysBeatPlanScreen extends StatefulWidget {
   const TodaysBeatPlanScreen({super.key});
@@ -107,23 +108,31 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   }
 
   Future<void> _openInMaps(Map<String, dynamic> account) async {
-    final lat = (account['latitude'] as num?)?.toDouble();
-    final lng = (account['longitude'] as num?)?.toDouble();
-
-    if (lat == null || lng == null) return;
-
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!_hasValidCoordinates(account)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No valid map location for this account.')));
+      return;
     }
+
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SalesmanMapScreen(
+          initialAccounts: [_normalizedAccountForMap(account)],
+          screenTitle: 'Account Location',
+          sourceTag: 'today_beat_single',
+        ),
+      ),
+    );
   }
 
   Future<void> _openShownInMaps() async {
-    final accountsWithLocation = _accounts.where((account) {
-      final lat = (account['latitude'] as num?)?.toDouble();
-      final lng = (account['longitude'] as num?)?.toDouble();
-      return lat != null && lng != null;
-    }).toList();
+    final accountsWithLocation = _accounts
+        .where(_hasValidCoordinates)
+        .map(_normalizedAccountForMap)
+        .toList();
 
     if (accountsWithLocation.isEmpty) {
       if (!mounted) return;
@@ -133,45 +142,60 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
       return;
     }
 
-    if (accountsWithLocation.length == 1) {
-      await _openInMaps(accountsWithLocation.first);
-      return;
-    }
-
-    // Google Maps supports limited waypoints in a URL. Keep a safe cap.
-    const maxWaypoints = 8;
-    final origin = accountsWithLocation.first;
-    final destination = accountsWithLocation.last;
-    final waypointAccounts = accountsWithLocation.sublist(
-      1,
-      accountsWithLocation.length - 1,
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SalesmanMapScreen(
+          initialAccounts: accountsWithLocation,
+          screenTitle: 'Today Beat Plan Map',
+          sourceTag: 'today_beat_all',
+        ),
+      ),
     );
-    final limitedWaypoints = waypointAccounts.take(maxWaypoints).toList();
-    final waypointValue = limitedWaypoints
-        .map((a) => '${(a['latitude'] as num).toDouble()},${(a['longitude'] as num).toDouble()}')
-        .join('|');
+  }
 
-    final uri = Uri.https('www.google.com', '/maps/dir/', {
-      'api': '1',
-      'origin':
-          '${(origin['latitude'] as num).toDouble()},${(origin['longitude'] as num).toDouble()}',
-      'destination':
-          '${(destination['latitude'] as num).toDouble()},${(destination['longitude'] as num).toDouble()}',
-      if (waypointValue.isNotEmpty) 'waypoints': waypointValue,
-    });
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (accountsWithLocation.length > (maxWaypoints + 2) && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Showing map route for first ${maxWaypoints + 2} accounts with location.',
-            ),
-          ),
-        );
-      }
+  Map<String, dynamic> _normalizedAccountForMap(Map<String, dynamic> account) {
+    final normalized = Map<String, dynamic>.from(account);
+    final lat = _extractLatitude(account);
+    final lng = _extractLongitude(account);
+    if (lat != null && lng != null) {
+      normalized['latitude'] = lat;
+      normalized['longitude'] = lng;
     }
+    return normalized;
+  }
+
+  double? _parseCoordinate(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final raw = value.trim();
+      if (raw.isEmpty) return null;
+      final direct = double.tryParse(raw);
+      if (direct != null) return direct;
+      return double.tryParse(raw.replaceAll(',', '.'));
+    }
+    return null;
+  }
+
+  double? _extractLatitude(Map<String, dynamic> account) {
+    return _parseCoordinate(
+      account['latitude'] ?? account['lat'] ?? account['Latitude'],
+    );
+  }
+
+  double? _extractLongitude(Map<String, dynamic> account) {
+    return _parseCoordinate(
+      account['longitude'] ?? account['lng'] ?? account['lon'] ?? account['Longitude'],
+    );
+  }
+
+  bool _hasValidCoordinates(Map<String, dynamic> account) {
+    final lat = _extractLatitude(account);
+    final lng = _extractLongitude(account);
+    if (lat == null || lng == null) return false;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+    if (lat == 0 && lng == 0) return false;
+    return true;
   }
 
   String _buildRecurrenceLabel(Map<String, dynamic> account, String frequency) {
@@ -315,9 +339,7 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
     final accountCode = (account['accountCode']?.toString() ?? '-').trim();
     final frequency = account['visitFrequency']?.toString() ?? 'ONCE';
     final recurrenceLabel = _buildRecurrenceLabel(account, frequency);
-    final canOpenMaps =
-        (account['latitude'] as num?) != null &&
-        (account['longitude'] as num?) != null;
+    final canOpenMaps = _hasValidCoordinates(account);
 
     final rawAssignedDays = (account['assignedDays'] as List?) ?? const [];
     final assignedDays = rawAssignedDays
