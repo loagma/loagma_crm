@@ -85,6 +85,8 @@ model Department {
   name      String   @unique
   createdAt DateTime @default(now())
   users     User[]
+
+  @@map("department")
 }
 
 model Role {
@@ -161,6 +163,7 @@ model User {
 
   @@index([departmentId], map: "User_departmentId_fkey")
   @@index([roleId], map: "User_roleId_fkey")
+  @@map("user_crm")
 }
 
 model EmployeeArea {
