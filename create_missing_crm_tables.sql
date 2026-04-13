@@ -8,14 +8,14 @@ CREATE TABLE IF NOT EXISTS `department_crm` (
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `Role` (
+CREATE TABLE IF NOT EXISTS `LoginUserRoles_crm` (
   `id` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `user_crm` (
+CREATE TABLE IF NOT EXISTS `LoginUser_crm` (
   `id` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `employeeCode` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `name` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS `user_crm` (
   KEY `User_roleId_fkey` (`roleId`),
   PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,
   CONSTRAINT `User_departmentId_fkey` FOREIGN KEY (`departmentId`) REFERENCES `department_crm` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `User_roleId_fkey` FOREIGN KEY (`roleId`) REFERENCES `Role` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `User_roleId_fkey` FOREIGN KEY (`roleId`) REFERENCES `LoginUserRoles_crm` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS=1;

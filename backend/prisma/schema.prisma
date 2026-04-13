@@ -94,6 +94,8 @@ model Role {
   name      String
   createdAt DateTime @default(now())
   users     User[]
+
+  @@map("LoginUserRoles_crm")
 }
 
 model User {
@@ -163,7 +165,7 @@ model User {
 
   @@index([departmentId], map: "User_departmentId_fkey")
   @@index([roleId], map: "User_roleId_fkey")
-  @@map("user_crm")
+  @@map("LoginUser_crm")
 }
 
 model EmployeeArea {
@@ -249,6 +251,7 @@ model Account {
   @@index([areaId], map: "Account_areaId_fkey")
   @@index([assignedToId], map: "Account_assignedToId_fkey")
   @@index([createdById], map: "Account_createdById_fkey")
+  @@map("LeadsAccount_crm")
 }
 
 model WeeklyAccountAssignment {
