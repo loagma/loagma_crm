@@ -401,35 +401,6 @@ model TaskAssignment {
   @@index([assignedDate])
 }
 
-model Shop {
-  id              String    @id @default(cuid())
-  placeId         String?   @unique
-  name            String
-  businessType    String
-  address         String?
-  pincode         String
-  area            String?
-  city            String?
-  state           String?
-  country         String?
-  latitude        Float?
-  longitude       Float?
-  phoneNumber     String?
-  rating          Float?
-  stage           String    @default("new")
-  assignedTo      String?
-  notes           String?
-  lastContactDate DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([pincode])
-  @@index([businessType])
-  @@index([stage])
-  @@index([assignedTo])
-  @@index([area])
-}
-
 model Attendance {
   id                      String                  @id @default(cuid())
   employeeId              String
