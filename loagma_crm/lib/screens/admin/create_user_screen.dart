@@ -158,19 +158,30 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
 
   Future<void> fetchDepartments() async {
     try {
-      final response = await http.get(
-        Uri.parse("${ApiConfig.baseUrl}/masters/departments"),
-        headers: {"Accept": "application/json"},
-      );
+      final endpoints = <String>[
+        "${ApiConfig.baseUrl}/masters/departments",
+        "${ApiConfig.baseUrl}/departments",
+      ];
 
-      if (response.statusCode == 200) {
+      for (final endpoint in endpoints) {
+        final response = await http.get(
+          Uri.parse(endpoint),
+          headers: {"Accept": "application/json"},
+        );
+
+        if (response.statusCode != 200) continue;
+
         final data = jsonDecode(response.body);
+        final dynamic rows = data["data"] ?? data["departments"] ?? data;
+        if (rows is! List) continue;
+
+        final parsed = List<Map<String, dynamic>>.from(rows);
+        if (parsed.isEmpty) continue;
+
         setState(() {
-          // API returns {success: true, data: [...]}
-          departments = List<Map<String, dynamic>>.from(
-            data["data"] ?? data["departments"] ?? [],
-          );
+          departments = parsed;
         });
+        return;
       }
     } catch (e) {
       if (kDebugMode) print("Error fetching departments: $e");
@@ -1172,7 +1183,12 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                   MaterialPageRoute(
                                     builder: (context) => UserDetailScreen(
                                       user: existingUser!,
-                                      onUpdate: () {},
+                                      onUpdate: () {
+                                        final phone = _phone.text.trim();
+                                        if (phone.length == 10) {
+                                          unawaited(checkExistingUser(phone));
+                                        }
+                                      },
                                     ),
                                   ),
                                 );
@@ -1203,14 +1219,15 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                                   ),
                                 );
 
-                                // If edit was successful, clear the form
+                                // If edit was successful, refresh latest user data
                                 if (result == true) {
                                   Fluttertoast.showToast(
                                     msg: 'Employee updated successfully',
                                   );
-                                  setState(() {
-                                    existingUser = null;
-                                  });
+                                  final phone = _phone.text.trim();
+                                  if (phone.length == 10) {
+                                    await checkExistingUser(phone);
+                                  }
                                 }
                               },
                             ),
