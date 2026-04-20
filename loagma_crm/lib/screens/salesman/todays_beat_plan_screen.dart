@@ -219,9 +219,11 @@ class _TodaysBeatPlanScreenState extends State<TodaysBeatPlanScreen> {
   }
 
   void _openOrderDetails(Map<String, dynamic> account) {
+    final accountWithSelectedDay = Map<String, dynamic>.from(account)
+      ..['selectedDay'] = _dayOfWeek;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => OrderDetailsScreen(account: account),
+        builder: (_) => OrderDetailsScreen(account: accountWithSelectedDay),
       ),
     );
   }
