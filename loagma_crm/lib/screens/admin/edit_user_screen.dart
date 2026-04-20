@@ -126,8 +126,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _locationSearchController = TextEditingController();
 
     // Initialize dropdown values
-    selectedRoleId = widget.user['roleId'];
-    selectedDepartmentId = widget.user['departmentId'];
+    selectedRoleId = widget.user['roleId']?.toString();
+    selectedDepartmentId = widget.user['departmentId']?.toString();
     selectedGender = widget.user['gender'];
     isActive = widget.user['isActive'] ?? true;
 
@@ -315,66 +315,56 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
   Future<void> fetchDepartments() async {
     try {
-      if (kDebugMode)
-        print('🔄 Fetching departments from: ${ApiConfig.baseUrl}/departments');
+      final endpoints = <String>[
+        '${ApiConfig.baseUrl}/masters/departments',
+        '${ApiConfig.baseUrl}/departments',
+      ];
 
-      final url = Uri.parse('${ApiConfig.baseUrl}/departments');
-      final response = await http.get(url).timeout(const Duration(seconds: 30));
+      for (final endpoint in endpoints) {
+        if (kDebugMode) print('🔄 Fetching departments from: $endpoint');
 
-      if (kDebugMode) {
-        print('📡 Departments API Response Status: ${response.statusCode}');
-        print('📦 Departments API Response Body: ${response.body}');
-      }
+        final response = await http
+            .get(
+              Uri.parse(endpoint),
+              headers: {"Accept": "application/json"},
+            )
+            .timeout(const Duration(seconds: 30));
 
-      final data = jsonDecode(response.body);
+        if (response.statusCode != 200) continue;
 
-      if (response.statusCode == 200 && data['success'] == true) {
-        final departmentsList = data['departments'] ?? data['data'] ?? [];
+        final data = jsonDecode(response.body);
+        final dynamic rows = data['data'] ?? data['departments'] ?? data;
+        if (rows is! List) continue;
 
-        if (kDebugMode) {
-          print(
-            '✅ Departments loaded successfully: ${departmentsList.length} departments',
-          );
-          for (var dept in departmentsList) {
-            print('   - ${dept['name']} (ID: ${dept['id']})');
-          }
-        }
+        final parsed = rows
+            .whereType<Map>()
+            .map<Map<String, dynamic>>((row) {
+              final id = row['id']?.toString();
+              final name = row['name']?.toString();
+              if (id == null || id.isEmpty || name == null || name.isEmpty) {
+                return {};
+              }
+              return {'id': id, 'name': name};
+            })
+            .where((row) => row.isNotEmpty)
+            .toList();
+        if (parsed.isEmpty) continue;
 
         setState(() {
-          departments = List<Map<String, dynamic>>.from(departmentsList);
+          departments = parsed;
+          if (selectedDepartmentId != null &&
+              !departments.any((d) => d['id'] == selectedDepartmentId)) {
+            selectedDepartmentId = null;
+          }
           isLoadingData = false;
         });
-
-        // Show success message if departments loaded
-        if (departmentsList.isNotEmpty) {
-          Fluttertoast.showToast(
-            msg: "✅ ${departmentsList.length} departments loaded",
-            toastLength: Toast.LENGTH_SHORT,
-          );
-        }
-      } else {
-        if (kDebugMode)
-          print(
-            '❌ Departments API failed: ${data['message'] ?? 'Unknown error'}',
-          );
-
-        // Try alternative endpoint
-        await _tryAlternativeDepartmentEndpoint();
-
-        setState(() => isLoadingData = false);
+        return;
       }
-    } catch (e) {
-      if (kDebugMode) print('❌ Error loading departments: $e');
-
-      // Try alternative endpoint
-      await _tryAlternativeDepartmentEndpoint();
 
       setState(() => isLoadingData = false);
-
-      Fluttertoast.showToast(
-        msg: "⚠️ Error loading departments: $e",
-        toastLength: Toast.LENGTH_LONG,
-      );
+    } catch (e) {
+      if (kDebugMode) print('❌ Error loading departments: $e');
+      setState(() => isLoadingData = false);
     }
   }
 
@@ -1070,12 +1060,18 @@ class _EditUserScreenState extends State<EditUserScreen> {
             "effectiveFrom": DateTime.now().toIso8601String(),
           };
 
-          final salaryUrl = Uri.parse('${ApiConfig.baseUrl}/salaries');
-          await http.post(
-            salaryUrl,
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode(salaryBody),
-          );
+          final salaryUrl = Uri.parse('${ApiConfig.baseUrl}/salary');
+          final salaryResponse = await http
+              .post(
+                salaryUrl,
+                headers: {"Content-Type": "application/json"},
+                body: jsonEncode(salaryBody),
+              )
+              .timeout(const Duration(seconds: 30));
+
+          if (salaryResponse.statusCode < 200 || salaryResponse.statusCode >= 300) {
+            Fluttertoast.showToast(msg: "Employee updated, but salary update failed");
+          }
         }
 
         // Save working hours

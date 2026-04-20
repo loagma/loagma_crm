@@ -175,11 +175,26 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
         final dynamic rows = data["data"] ?? data["departments"] ?? data;
         if (rows is! List) continue;
 
-        final parsed = List<Map<String, dynamic>>.from(rows);
+        final parsed = rows
+            .whereType<Map>()
+            .map<Map<String, dynamic>>((row) {
+              final id = row["id"]?.toString();
+              final name = row["name"]?.toString();
+              if (id == null || id.isEmpty || name == null || name.isEmpty) {
+                return {};
+              }
+              return {"id": id, "name": name};
+            })
+            .where((row) => row.isNotEmpty)
+            .toList();
         if (parsed.isEmpty) continue;
 
         setState(() {
           departments = parsed;
+          if (selectedDepartmentId != null &&
+              !departments.any((d) => d["id"] == selectedDepartmentId)) {
+            selectedDepartmentId = null;
+          }
         });
         return;
       }
@@ -1828,11 +1843,12 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
               const SizedBox(height: 15),
 
               // DEPARTMENT
-              DropdownButtonFormField(
+              DropdownButtonFormField<String>(
                 decoration: _input("Department *", Icons.business),
+                value: selectedDepartmentId,
                 items: departments
                     .map(
-                      (d) => DropdownMenuItem(
+                      (d) => DropdownMenuItem<String>(
                         value: d["id"],
                         child: Text(d["name"]),
                       ),
@@ -1840,7 +1856,7 @@ class _AdminCreateUserScreenState extends State<AdminCreateUserScreen> {
                     .toList(),
                 onChanged: (v) {
                   setState(() {
-                    selectedDepartmentId = v as String?;
+                    selectedDepartmentId = v;
                   });
                 },
                 validator: (v) => v == null ? 'Department is required' : null,
