@@ -2065,6 +2065,12 @@ class _SalesmanCustomerAllotmentScreenState
         .toList();
     final selectedDays = assignedDays.toSet();
     final dayEntries = _dayLabelMap.entries.toList();
+    final assignedDateLabels = assignedDays.toSet().toList()
+      ..sort();
+    final visitDateChips = assignedDateLabels.map((d) {
+      final visitDate = _activeWeekStart.add(Duration(days: d - 1));
+      return '${_dayLabelMap[d] ?? 'Day $d'} ${_formatDate(visitDate)}';
+    }).toList();
     final firstAssignedDay = assignedDays.isEmpty ? null : assignedDays.first;
     final dayCardColors = <int, Color>{
       1: const Color(0xFFFDE2E2),
@@ -2222,6 +2228,33 @@ class _SalesmanCustomerAllotmentScreenState
                   ),
                 ],
               ),
+              if (visitDateChips.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: visitDateChips.map((label) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _dayChipSelectedBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _dayChipSelectedText,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -2619,6 +2652,9 @@ class _WeeklyAssignmentViewScreenState
     final contactNumber = account['contactNumber']?.toString() ?? '-';
     final accountId = account['id']?.toString();
     final pincode = account['pincode']?.toString() ?? pin;
+    final visitDate = _selectedWeekStart.add(Duration(days: day - 1));
+    final visitDateLabel =
+        '${visitDate.day.toString().padLeft(2, '0')}/${visitDate.month.toString().padLeft(2, '0')}/${visitDate.year}';
     final rawFrequency =
         (account['visitFrequency']?.toString() ?? 'WEEKLY').toUpperCase();
     final frequency = switch (rawFrequency) {
@@ -2798,6 +2834,24 @@ class _WeeklyAssignmentViewScreenState
                       style: TextStyle(fontSize: 11, color: dayBase),
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dayLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: dayBase.withValues(alpha: 0.45),
+                        width: 0.6,
+                      ),
+                    ),
+                    child: Text(
+                      visitDateLabel,
+                      style: TextStyle(fontSize: 11, color: dayBase),
+                    ),
+                  ),
                 ],
               ),
               if (accountId != null)
@@ -2841,6 +2895,13 @@ class _WeeklyAssignmentViewScreenState
     final start = _selectedWeekStart;
     final end = start.add(const Duration(days: 6));
     return '${start.day}/${start.month}/${start.year} - ${end.day}/${end.month}/${end.year}';
+  }
+
+  String _shortDateLabel(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = (date.year % 100).toString().padLeft(2, '0');
+    return '$day/$month/$year';
   }
 
   Future<void> _loadWeekData() async {
@@ -2941,6 +3002,9 @@ class _WeeklyAssignmentViewScreenState
                         final day = dayEntry.key;
                         final dayLabel = dayEntry.value;
                         final totalForDay = _dayTotals[day] ?? 0;
+                        final dayDate = _selectedWeekStart.add(
+                          Duration(days: day - 1),
+                        );
 
                         return Card(
                           color: _dayLightColorFor(day),
@@ -2970,6 +3034,13 @@ class _WeeklyAssignmentViewScreenState
                             },
                             title: Text(
                               '$dayLabel - $totalForDay assigned account(s)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: _dayBaseColorFor(day),
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Date : ${_shortDateLabel(dayDate)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 color: _dayBaseColorFor(day),

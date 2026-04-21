@@ -70,6 +70,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         .toList();
   }
 
+  List<int> _visibleDays(Map<String, dynamic> account) {
+    final explicitDay = int.tryParse(
+      (account['selectedDay'] ?? account['dayOfWeek'] ?? '').toString(),
+    );
+    if (explicitDay != null && explicitDay >= 1 && explicitDay <= 7) {
+      return [explicitDay];
+    }
+    return _assignedDays(account);
+  }
+
   String _visitType(Map<String, dynamic> account) {
     final freq = (account['visitFrequency']?.toString() ?? '')
         .trim()
@@ -495,7 +505,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final accountCode = (account['accountCode']?.toString() ?? '-').trim();
     final address = (account['address']?.toString() ?? '-').trim();
     final plan = _visitPlanLabel(account);
-    final assignedDays = _assignedDays(account);
+    final assignedDays = _visibleDays(account);
     final accountId = (accountCode.isNotEmpty && accountCode != '-')
         ? accountCode
         : (account['id']?.toString() ?? '-').trim();

@@ -434,8 +434,11 @@ export const updateUserByAdmin = async (req, res) => {
       image,
       notes,
       aadharCard,
-      panCard
+      panCard,
     } = req.body;
+
+    console.log('?? UpdateUserByAdmin called for user:', id);
+    console.log('?? Incoming departmentId:', departmentId);
 
     if (contactNumber) {
       contactNumber = cleanPhoneNumber(contactNumber);
@@ -449,85 +452,86 @@ export const updateUserByAdmin = async (req, res) => {
     let imageUrl = image;
     if (image && image.startsWith('data:image')) {
       try {
-        console.log('📸 Processing image upload for update...');
-        console.log('📦 Image size:', image.length, 'characters');
+        console.log('?? Processing image upload for update...');
+        console.log('?? Image size:', image.length, 'characters');
         imageUrl = await uploadBase64Image(image, 'users');
-        console.log('✅ Image uploaded to Cloudinary:', imageUrl);
-      } catch (error) {
-        console.error('❌ Image upload failed:', error.message);
-        console.error('❌ Full error:', error);
-        // Don't update image if upload fails
+        console.log('? Image uploaded to Cloudinary:', imageUrl);
+      } catch (uploadError) {
+        console.error('? Image upload failed:', uploadError.message);
+        console.error('? Full error:', uploadError);
+        // Do not update image if upload fails
         imageUrl = undefined;
       }
-    } else if (image && !image.startsWith('data:image') && !image.startsWith('http')) {
-      // If image is provided but not base64 or URL, don't save it
-      console.log('⚠️ Invalid image format, skipping');
+    } else if (
+      image &&
+      !image.startsWith('data:image') &&
+      !image.startsWith('http')
+    ) {
+      // If image is provided but not base64 or URL, do not save it
+      console.log('?? Invalid image format, skipping');
       imageUrl = undefined;
     }
 
+    const updateData = {
+      ...(contactNumber && { contactNumber }),
+      ...(alternativeNumber !== undefined && { alternativeNumber }),
+      ...(roleId !== undefined && { roleId }),
+      ...(roles !== undefined && { roles }),
+      ...(name !== undefined && { name }),
+      ...(email !== undefined && { email }),
+      ...(gender !== undefined && { gender }),
+      ...(dateOfBirth !== undefined && {
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      }),
+      ...(preferredLanguages !== undefined && { preferredLanguages }),
+      ...(departmentId !== undefined && { departmentId }),
+      ...(isActive !== undefined && { isActive }),
+      ...(password !== undefined && { password }),
+      ...(address !== undefined && { address }),
+      ...(city !== undefined && { city }),
+      ...(state !== undefined && { state }),
+      ...(pincode !== undefined && { pincode }),
+      ...(country !== undefined && { country }),
+      ...(district !== undefined && { district }),
+      ...(area !== undefined && { area }),
+      ...(latitude !== undefined && {
+        latitude: latitude ? parseFloat(latitude) : null,
+      }),
+      ...(longitude !== undefined && {
+        longitude: longitude ? parseFloat(longitude) : null,
+      }),
+      ...(imageUrl !== undefined && { image: imageUrl }),
+      ...(notes !== undefined && { notes }),
+      ...(aadharCard !== undefined && { aadharCard }),
+      ...(panCard !== undefined && { panCard }),
+    };
+
+    console.log('?? Update payload for user:', updateData);
+
     const user = await prisma.user.update({
       where: { id },
-      data: {
-        ...(contactNumber && { contactNumber }),
-        ...(alternativeNumber !== undefined && { alternativeNumber }),
-        ...(roleId !== undefined && { roleId }),
-        ...(roles !== undefined && { roles }),
-        ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(gender !== undefined && { gender }),
-        ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
-        ...(preferredLanguages !== undefined && { preferredLanguages }),
-        ...(departmentId !== undefined && { departmentId }),
-        ...(isActive !== undefined && { isActive }),
-        ...(password !== undefined && { password }),
-        ...(address !== undefined && { address }),
-        ...(city !== undefined && { city }),
-        ...(state !== undefined && { state }),
-        ...(pincode !== undefined && { pincode }),
-        ...(country !== undefined && { country }),
-        ...(district !== undefined && { district }),
-        ...(area !== undefined && { area }),
-        ...(latitude !== undefined && { latitude: latitude ? parseFloat(latitude) : null }),
-        ...(longitude !== undefined && { longitude: longitude ? parseFloat(longitude) : null }),
-        ...(imageUrl !== undefined && { image: imageUrl }),
-        ...(notes !== undefined && { notes }),
-        ...(aadharCard !== undefined && { aadharCard }),
-        ...(panCard !== undefined && { panCard }),
-      },
+      data: updateData,
       include: {
         role: { select: { name: true } },
         department: { select: { name: true } },
       },
     });
 
-    res.json({
+    console.log('? User after update:', user);
+
+    return res.status(200).json({
       success: true,
       message: 'User updated successfully',
-      user: {
-        id: user.id,
-        employeeCode: user.employeeCode,
-        name: user.name,
-        email: user.email,
-        contactNumber: user.contactNumber,
-        alternativeNumber: user.alternativeNumber,
-        role: user.role?.name,
-        roles: user.roles,
-        roleId: user.roleId,
-        department: user.department?.name,
-        gender: user.gender,
-        dateOfBirth: user.dateOfBirth,
-        isActive: user.isActive,
-      },
+      data: user,
     });
   } catch (error) {
-    console.error('❌ Update User Error:', error);
-    res.status(500).json({
+    console.error('? Update User Error:', error);
+    return res.status(500).json({
       success: false,
       message: 'Failed to update user',
     });
   }
 };
-
 // Delete user with cascade deletion of all related data
 export const deleteUserByAdmin = async (req, res) => {
   try {
@@ -761,3 +765,4 @@ export const deleteUserByAdmin = async (req, res) => {
     });
   }
 };
+

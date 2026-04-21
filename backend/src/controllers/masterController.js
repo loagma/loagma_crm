@@ -5,9 +5,23 @@ const prisma = new PrismaClient();
 // Get all departments
 export const getAllDepartments = async (req, res) => {
   try {
-    const departments = await prisma.department.findMany({
-      orderBy: { name: 'asc' }
-    });
+    let departments = [];
+
+    // Primary source: department_crm (as requested by app flow)
+    try {
+      departments = await prisma.$queryRawUnsafe(`
+        SELECT id, name
+        FROM department_crm
+        ORDER BY name ASC
+      `);
+    } catch (rawError) {
+      console.error('department_crm query failed, falling back to prisma.department:', rawError);
+      // Fallback for older DBs still using mapped Department table
+      departments = await prisma.department.findMany({
+        orderBy: { name: 'asc' }
+      });
+    }
+
     res.json({ success: true, data: departments });
   } catch (error) {
     console.error('Get Departments Error:', error);

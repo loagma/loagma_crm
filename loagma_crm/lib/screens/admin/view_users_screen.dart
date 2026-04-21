@@ -64,7 +64,7 @@ class _AdminViewUsersScreenState extends State<AdminViewUsersScreen> {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/admin/users');
       if (kDebugMode) print('📡 Fetching users from $url');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      final response = await http.get(url).timeout(const Duration(seconds: 30));
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {

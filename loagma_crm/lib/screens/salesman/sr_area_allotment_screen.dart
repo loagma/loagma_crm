@@ -20,6 +20,48 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
   bool _isLoading = false;
   String? _error;
 
+  List<Map<String, dynamic>> _dedupeByPincode(
+    List<Map<String, dynamic>> assignments,
+  ) {
+    final byPincode = <String, Map<String, dynamic>>{};
+    for (final assignment in assignments) {
+      final normalizedPincode = (assignment['pincode'] ?? '').toString().trim();
+      final pincode = normalizedPincode.isEmpty
+          ? '__missing_${assignment['id'] ?? assignment.hashCode}'
+          : normalizedPincode;
+
+      final existing = byPincode[pincode];
+      if (existing == null) {
+        byPincode[pincode] = assignment;
+        continue;
+      }
+
+      final existingActive = existing['isActive'] == true;
+      final incomingActive = assignment['isActive'] == true;
+      if (!existingActive && incomingActive) {
+        byPincode[pincode] = assignment;
+        continue;
+      }
+      if (existingActive && !incomingActive) {
+        continue;
+      }
+
+      DateTime? parseDate(dynamic raw) {
+        if (raw == null) return null;
+        return DateTime.tryParse(raw.toString());
+      }
+
+      final existingDate = parseDate(existing['assignedDate']);
+      final incomingDate = parseDate(assignment['assignedDate']);
+      if (incomingDate != null &&
+          (existingDate == null || incomingDate.isAfter(existingDate))) {
+        byPincode[pincode] = assignment;
+      }
+    }
+
+    return byPincode.values.toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -79,10 +121,11 @@ class _SRAreaAllotmentScreenState extends State<SRAreaAllotmentScreen> {
       } else if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
+          final rawAssignments = List<Map<String, dynamic>>.from(
+            data['assignments'] ?? data['data'] ?? [],
+          );
           setState(() {
-            _areaAssignments = List<Map<String, dynamic>>.from(
-              data['assignments'] ?? data['data'] ?? [],
-            );
+            _areaAssignments = _dedupeByPincode(rawAssignments);
           });
           print('✅ Loaded ${_areaAssignments.length} area assignments');
         } else {

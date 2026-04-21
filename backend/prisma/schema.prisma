@@ -86,7 +86,7 @@ model Department {
   createdAt DateTime @default(now())
   users     User[]
 
-  @@map("department")
+  @@map("department_crm")
 }
 
 model Role {
