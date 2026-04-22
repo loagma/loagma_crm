@@ -37,6 +37,7 @@ import shopRoutes from './routes/shopRoutes.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import telecallerRoutes from './routes/telecallerRoutes.js';
 import teleadminRoutes from './routes/teleadminRoutes.js';
+import transactionCrmRoutes from './routes/transactionCrm.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger.js';
 
@@ -124,6 +125,7 @@ app.use('/shops', shopRoutes);
 app.use('/tracking', trackingRoutes);
 app.use('/telecaller', telecallerRoutes);
 app.use('/teleadmin', teleadminRoutes);
+app.use('/transaction-crm', transactionCrmRoutes);
 
 // 404 Handler
 app.use((req, res) => {

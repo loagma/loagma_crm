@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import 'network_service.dart';
+import 'auth_service.dart';
 
 class UserService {
   static SharedPreferences? _prefs;
@@ -32,14 +33,25 @@ class UserService {
 
     // Handle both 'id' and '_id' formats from backend
     final userId = user['id'] ?? user['_id'] ?? "";
+    final role = user['role'] ?? "";
+    final contact = user['contactNumber'] ?? "";
+    final userName = user['name'] ?? "";
+
     await _prefs?.setString(_keyUserId, userId);
-    await _prefs?.setString(_keyRole, user['role'] ?? "");
-    await _prefs?.setString(_keyContact, user['contactNumber'] ?? "");
-    await _prefs?.setString(_keyName, user['name'] ?? "");
+    await _prefs?.setString(_keyRole, role);
+    await _prefs?.setString(_keyContact, contact);
+    await _prefs?.setString(_keyName, userName);
 
     if (data['token'] != null) {
       await _prefs?.setString(_keyToken, data['token']);
     }
+
+    // Also save to AuthService for Visit In/Out functionality
+    await AuthService.saveUserData(
+      userId: userId,
+      userName: userName,
+      userRole: role,
+    );
   }
 
   /// -------------------------------------------------------------
@@ -61,6 +73,13 @@ class UserService {
     if (name != null) {
       await _prefs?.setString(_keyName, name);
     }
+
+    // Also save to AuthService for Visit In/Out functionality
+    await AuthService.saveUserData(
+      userId: userId ?? 'DEV_USER_${role.toUpperCase()}',
+      userName: name ?? 'Dev User',
+      userRole: role,
+    );
   }
 
   /// -------------------------------------------------------------
@@ -69,6 +88,11 @@ class UserService {
   static Future<void> logout() async {
     // Disconnect admin socket if connected
     AdminSocketService.instance.disconnect();
+
+    // Clear AuthService data
+    await AuthService.clearUserData();
+
+    // Clear UserService data
     await _prefs?.clear();
   }
 

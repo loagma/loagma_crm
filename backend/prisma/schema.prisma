@@ -683,3 +683,29 @@ model BeatCompletion {
   @@index([areaName])
   @@index([verifiedBy], map: "BeatCompletion_verifiedBy_fkey")
 }
+
+model TransactionCrm {
+  id                  Int       @id @default(autoincrement())
+  accountId           String    @map("account_id")
+  transactionNo       Int       @map("transaction_no")
+  beatNo              Int?      @map("beat_no")
+  salesmanId          String    @map("salesman_id")
+  visitInTime         DateTime? @map("visit_in_time")
+  visitOutTime        DateTime? @map("visit_out_time")
+  visitInLatitude     Float?    @map("visit_in_latitude")
+  visitInLongitude    Float?    @map("visit_in_longitude")
+  visitOutLatitude    Float?    @map("visit_out_latitude")
+  visitOutLongitude   Float?    @map("visit_out_longitude")
+  orderFunnel         String?   @map("order_funnel") @db.VarChar(100)
+  notes               String?   @db.Text
+  notesRelatedTo      String?   @map("notes_related_to") @db.VarChar(100)
+  merchandiseImage1   String?   @map("merchandise_image_1") @db.LongText
+  merchandiseImage2   String?   @map("merchandise_image_2") @db.LongText
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([salesmanId])
+  @@index([visitInTime])
+  @@map("transaction_crm")
+}

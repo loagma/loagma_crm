@@ -1,0 +1,25 @@
+-- Create transaction_crm table for tracking salesman visits
+CREATE TABLE IF NOT EXISTS transaction_crm (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  account_id VARCHAR(255) NOT NULL,
+  transaction_no INT NOT NULL COMMENT 'Visit count for this account',
+  beat_no INT COMMENT 'Beat number (1, 2, 3, etc.)',
+  salesman_id INT NOT NULL,
+  visit_in_time DATETIME COMMENT 'Time when salesman visited in',
+  visit_out_time DATETIME COMMENT 'Time when salesman visited out',
+  visit_in_latitude DECIMAL(10, 8) COMMENT 'Latitude at visit in',
+  visit_in_longitude DECIMAL(11, 8) COMMENT 'Longitude at visit in',
+  visit_out_latitude DECIMAL(10, 8) COMMENT 'Latitude at visit out',
+  visit_out_longitude DECIMAL(11, 8) COMMENT 'Longitude at visit out',
+  order_funnel VARCHAR(100) COMMENT 'Order funnel stage selected',
+  notes TEXT COMMENT 'General notes',
+  notes_related_to VARCHAR(100) COMMENT 'Mistake related to (Customer, Salesman, Product, etc.)',
+  merchandise_image_1 TEXT COMMENT 'First merchandise image path/URL',
+  merchandise_image_2 TEXT COMMENT 'Second merchandise image path/URL',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_account_id (account_id),
+  INDEX idx_salesman_id (salesman_id),
+  INDEX idx_visit_in_time (visit_in_time),
+  FOREIGN KEY (salesman_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
