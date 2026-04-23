@@ -334,6 +334,77 @@ router.get('/history/:accountId', async (req, res) => {
     }
 });
 
+// Update transaction during active visit (PUT /update)
+router.put('/update', async (req, res) => {
+    try {
+        console.log('=== Update Transaction Request ===');
+        console.log('Request body:', req.body);
+
+        const {
+            transactionId,
+            orderFunnel,
+            notes,
+            notesRelatedTo,
+            merchandiseImage1,
+            merchandiseImage2,
+        } = req.body;
+
+        if (!transactionId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Transaction ID is required',
+            });
+        }
+
+        // Check if transaction exists and is active (has visit in but no visit out)
+        const existingTransaction = await prisma.transactionCrm.findUnique({
+            where: { id: transactionId },
+        });
+
+        if (!existingTransaction) {
+            return res.status(404).json({
+                success: false,
+                message: 'Transaction not found',
+            });
+        }
+
+        if (existingTransaction.visitOutTime) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot update completed visit',
+            });
+        }
+
+        console.log('Updating transaction:', transactionId);
+
+        const transaction = await prisma.transactionCrm.update({
+            where: { id: transactionId },
+            data: {
+                orderFunnel: orderFunnel || null,
+                notes: notes || null,
+                notesRelatedTo: notesRelatedTo || null,
+                merchandiseImage1: merchandiseImage1 || null,
+                merchandiseImage2: merchandiseImage2 || null,
+            },
+        });
+
+        console.log('Transaction updated successfully');
+
+        res.json({
+            success: true,
+            message: 'Transaction updated successfully',
+            transaction,
+        });
+    } catch (error) {
+        console.error('Update transaction error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update transaction',
+            error: error.message,
+        });
+    }
+});
+
 // Update order funnel and notes (can be done separately)
 router.patch('/update/:transactionId', async (req, res) => {
     try {

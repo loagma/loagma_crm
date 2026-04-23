@@ -34,6 +34,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   bool _isTimerRunning = false;
   List<Map<String, dynamic>> _transactions = [];
   bool _isLoadingTransactions = false;
+  bool _isFunnelUpdated = false;
 
   static const List<String> _funnelStages = [
     'Placed order',
@@ -104,7 +105,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+    final hour = dateTime.hour;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${hour12}:${dateTime.minute.toString().padLeft(2, '0')} $period';
   }
 
   Widget _buildTransactionRow(
@@ -453,6 +457,110 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
+  Future<void> _handleUpdate() async {
+    if (_activeTransactionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text('No active visit found')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(16),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Upload images if any
+      String? image1Url;
+      String? image2Url;
+      if (_capturedImages.isNotEmpty) {
+        image1Url = await _uploadImage(_capturedImages[0]);
+      }
+      if (_capturedImages.length > 1) {
+        image2Url = await _uploadImage(_capturedImages[1]);
+      }
+
+      final requestBody = {
+        'transactionId': _activeTransactionId,
+        'orderFunnel': _selectedFunnelStage,
+        'notes': _notesController.text.isNotEmpty
+            ? _notesController.text
+            : null,
+        'notesRelatedTo': _mistakeRelatedTo,
+        'merchandiseImage1': image1Url,
+        'merchandiseImage2': image2Url,
+      };
+
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/transaction-crm/update'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(requestBody),
+      );
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        setState(() => _isFunnelUpdated = true);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '✓ Updated: $_selectedFunnelStage${_capturedImages.isNotEmpty ? " (${_capturedImages.length} images)" : ""}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+      } else {
+        throw Exception(data['message'] ?? 'Failed to update');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(e.toString().replaceAll('Exception: ', '')),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _handleVisitOut() async {
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -602,6 +710,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           _capturedImages.clear();
           _notesController.clear();
           _mistakeRelatedTo = null;
+          _isFunnelUpdated = false;
         });
 
         // Reload transactions
@@ -878,165 +987,56 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     });
   }
 
-  Future<void> _showMerchandiseDialog() async {
-    await showDialog(
+  void _showImageDialog(BuildContext context, String base64Image) {
+    showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Merchandise Details'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Capture Images (Max 2)',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ..._capturedImages.asMap().entries.map((entry) {
-                      return Stack(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(entry.value.path),
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    base64Decode(base64Image),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        padding: const EdgeInsets.all(40),
+                        color: Colors.grey.shade300,
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error, size: 48, color: Colors.red),
+                            SizedBox(height: 16),
+                            Text(
+                              'Failed to load image',
+                              style: TextStyle(color: Colors.black),
                             ),
-                          ),
-                          Positioned(
-                            top: 0,
-                            right: 0,
-                            child: IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              color: Colors.white,
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                padding: EdgeInsets.zero,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _capturedImages.removeAt(entry.key);
-                                });
-                                setDialogState(() {});
-                              },
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       );
-                    }),
-                    if (_capturedImages.length < 2)
-                      InkWell(
-                        onTap: () async {
-                          final picker = ImagePicker();
-                          final image = await picker.pickImage(
-                            source: ImageSource.camera,
-                            imageQuality: 75,
-                          );
-                          if (image != null) {
-                            setState(() {
-                              _capturedImages.add(image);
-                            });
-                            setDialogState(() {});
-                          }
-                        },
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade400),
-                          ),
-                          child: const Icon(Icons.add_a_photo, size: 32),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Mistake Related To',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _mistakeRelatedTo,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  hint: const Text('Select'),
-                  items: _mistakeOptions.map((option) {
-                    return DropdownMenuItem(value: option, child: Text(option));
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _mistakeRelatedTo = value;
-                    });
-                    setDialogState(() {});
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Notes',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _notesController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    hintText: 'Enter notes here...',
-                    contentPadding: const EdgeInsets.all(12),
+                    },
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '✓ Merchandise saved (${_capturedImages.length} images)',
-                          ),
-                        ),
-                      ],
-                    ),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: _primary),
-              child: const Text('Save'),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
             ),
           ],
         ),
@@ -1125,11 +1125,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE4E8EE)),
+          border: Border.all(
+            color: _primary.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1139,30 +1142,32 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               children: [
                 const Text(
                   'Order Funnel',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                 ),
-                if (_selectedFunnelStage != null)
+                if (_isFunnelUpdated)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: _primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.shade200),
+                      border: Border.all(
+                        color: _primary.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.check_circle, size: 14, color: Colors.green),
-                        SizedBox(width: 4),
+                      children: [
+                        Icon(Icons.check_circle, size: 14, color: _primary),
+                        const SizedBox(width: 4),
                         Text(
-                          'Submitted',
+                          'Updated',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.green,
+                            color: _primary,
                           ),
                         ),
                       ],
@@ -1170,70 +1175,283 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            ..._funnelStages.map((stage) {
-              return RadioListTile<String>(
-                title: Text(
-                  stage,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+            const SizedBox(height: 10),
+            // Show message if visit not started
+            if (!_isVisitedIn)
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
                 ),
-                value: stage,
-                groupValue: _selectedFunnelStage,
-                activeColor: _primary,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedFunnelStage = value;
-                  });
-                },
-              );
-            }),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _selectedFunnelStage == null
-                    ? null
-                    : () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Row(
-                              children: [
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text('✓ Saved: $_selectedFunnelStage'),
-                                ),
-                              ],
-                            ),
-                            backgroundColor: Colors.green,
-                            duration: const Duration(seconds: 1),
-                            behavior: SnackBarBehavior.floating,
-                            margin: const EdgeInsets.all(16),
-                          ),
-                        );
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Save',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                child: Row(
+                  children: const [
+                    Icon(Icons.info_outline, size: 18, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Please click "Visit In" to start editing',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            // Display funnel stages in 2 columns
+            ...List.generate((_funnelStages.length / 2).ceil(), (rowIndex) {
+              final startIndex = rowIndex * 2;
+              final endIndex = (startIndex + 2).clamp(0, _funnelStages.length);
+              final rowStages = _funnelStages.sublist(startIndex, endIndex);
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: rowStages.map((stage) {
+                    final isSelected = _selectedFunnelStage == stage;
+                    return Expanded(
+                      child: InkWell(
+                        onTap: _isVisitedIn
+                            ? () {
+                                setState(() {
+                                  _selectedFunnelStage = stage;
+                                });
+                              }
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              Radio<String>(
+                                value: stage,
+                                groupValue: _selectedFunnelStage,
+                                activeColor: _primary,
+                                onChanged: _isVisitedIn
+                                    ? (value) {
+                                        setState(() {
+                                          _selectedFunnelStage = value;
+                                        });
+                                      }
+                                    : null,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: const VisualDensity(
+                                  horizontal: -4,
+                                  vertical: -4,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  stage,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _isVisitedIn
+                                        ? (isSelected
+                                              ? _primary
+                                              : Colors.black87)
+                                        : Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            }),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            // Merchandise Section
+            const Text(
+              'Merchandise Details',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
+            const SizedBox(height: 10),
+            // Image Capture
+            const Text(
+              'Capture Images (Max 2)',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ..._capturedImages.asMap().entries.map((entry) {
+                  return Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          File(entry.value.path),
+                          width: 90,
+                          height: 90,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      if (_isVisitedIn)
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _capturedImages.removeAt(entry.key);
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                }),
+                if (_capturedImages.length < 2 && _isVisitedIn)
+                  InkWell(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final image = await picker.pickImage(
+                        source: ImageSource.camera,
+                        imageQuality: 75,
+                      );
+                      if (image != null) {
+                        setState(() {
+                          _capturedImages.add(image);
+                        });
+                      }
+                    },
+                    child: Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.add_a_photo, size: 28, color: Colors.grey),
+                          SizedBox(height: 4),
+                          Text(
+                            'Add Photo',
+                            style: TextStyle(fontSize: 10, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Mistake Related To
+            const Text(
+              'Mistake Related To',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _mistakeRelatedTo,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 10,
+                ),
+                filled: !_isVisitedIn,
+                fillColor: !_isVisitedIn ? Colors.grey.shade100 : null,
+              ),
+              hint: const Text('Select', style: TextStyle(fontSize: 12)),
+              style: TextStyle(
+                fontSize: 12,
+                color: _isVisitedIn ? Colors.black : Colors.grey,
+              ),
+              items: _mistakeOptions.map((option) {
+                return DropdownMenuItem(value: option, child: Text(option));
+              }).toList(),
+              onChanged: _isVisitedIn
+                  ? (value) {
+                      setState(() {
+                        _mistakeRelatedTo = value;
+                      });
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 10),
+            // Notes
+            const Text(
+              'Notes',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notesController,
+              maxLines: 3,
+              enabled: _isVisitedIn,
+              style: TextStyle(
+                fontSize: 12,
+                color: _isVisitedIn ? Colors.black : Colors.grey,
+              ),
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                hintText: 'Enter notes here...',
+                hintStyle: const TextStyle(fontSize: 12),
+                contentPadding: const EdgeInsets.all(10),
+                filled: !_isVisitedIn,
+                fillColor: !_isVisitedIn ? Colors.grey.shade100 : null,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Update Button (only visible when visit is active)
+            if (_isVisitedIn)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _selectedFunnelStage == null
+                      ? null
+                      : _handleUpdate,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 230, 225, 93),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Update',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -1311,10 +1529,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 itemBuilder: (context, index) {
                   final transaction = _transactions[index];
                   final visitIn = transaction['visitInTime'] != null
-                      ? DateTime.parse(transaction['visitInTime'])
+                      ? DateTime.parse(transaction['visitInTime']).toLocal()
                       : null;
                   final visitOut = transaction['visitOutTime'] != null
-                      ? DateTime.parse(transaction['visitOutTime'])
+                      ? DateTime.parse(transaction['visitOutTime']).toLocal()
                       : null;
                   final duration = visitIn != null && visitOut != null
                       ? visitOut.difference(visitIn)
@@ -1392,11 +1610,110 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           ),
                         if (transaction['merchandiseImage1'] != null ||
                             transaction['merchandiseImage2'] != null)
-                          _buildTransactionRow(
-                            Icons.photo_camera,
-                            'Merchandise',
-                            '${transaction['merchandiseImage1'] != null ? '1' : '0'} + ${transaction['merchandiseImage2'] != null ? '1' : '0'} images',
-                            Colors.purple,
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.photo_camera,
+                                      size: 16,
+                                      color: Colors.purple,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Merchandise Images: ',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    if (transaction['merchandiseImage1'] !=
+                                        null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 8,
+                                        ),
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            _showImageDialog(
+                                              context,
+                                              transaction['merchandiseImage1'],
+                                            );
+                                          },
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: Image.memory(
+                                              base64Decode(
+                                                transaction['merchandiseImage1'],
+                                              ),
+                                              width: 80,
+                                              height: 80,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Container(
+                                                      width: 80,
+                                                      height: 80,
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                      child: const Icon(
+                                                        Icons.error,
+                                                      ),
+                                                    );
+                                                  },
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    if (transaction['merchandiseImage2'] !=
+                                        null)
+                                      GestureDetector(
+                                        onTap: () {
+                                          _showImageDialog(
+                                            context,
+                                            transaction['merchandiseImage2'],
+                                          );
+                                        },
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Image.memory(
+                                            base64Decode(
+                                              transaction['merchandiseImage2'],
+                                            ),
+                                            width: 80,
+                                            height: 80,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                                  return Container(
+                                                    width: 80,
+                                                    height: 80,
+                                                    color: Colors.grey.shade300,
+                                                    child: const Icon(
+                                                      Icons.error,
+                                                    ),
+                                                  );
+                                                },
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                       ],
                     ),
@@ -1429,11 +1746,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       appBar: AppBar(
         title: const Text('Order Details'),
         backgroundColor: _primary,
-      ),
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: _showMerchandiseDialog,
-        backgroundColor: _primary,
-        child: const Icon(Icons.add_a_photo, size: 20),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
