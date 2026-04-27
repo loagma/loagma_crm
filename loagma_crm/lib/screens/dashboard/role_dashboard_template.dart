@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/user_service.dart';
+import '../../services/attendance_service.dart';
+import '../../services/attendance_session_manager.dart';
+import '../../models/attendance_model.dart';
 import '../../widgets/enterprise_sidebar.dart';
+import '../../widgets/compact_attendance_widget.dart';
 import '../../widgets/notification_bell.dart';
 import '../salesman/salesman_dashboard_screen.dart';
 import '../manager/manager_dashboard_screen.dart';
 
-class RoleDashboardTemplate extends StatelessWidget {
+class RoleDashboardTemplate extends StatefulWidget {
   final String roleName;
   final String roleDisplayName;
   final IconData roleIcon;
@@ -28,6 +32,55 @@ class RoleDashboardTemplate extends StatelessWidget {
     this.logoPath,
     this.appName,
   });
+
+  @override
+  State<RoleDashboardTemplate> createState() => _RoleDashboardTemplateState();
+}
+
+class _RoleDashboardTemplateState extends State<RoleDashboardTemplate> {
+  AttendanceModel? todayAttendance;
+  bool isLoadingAttendance = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load attendance only for salesman
+    if (widget.roleName.toLowerCase() == 'salesman') {
+      _loadTodayAttendance();
+    }
+  }
+
+  Future<void> _loadTodayAttendance() async {
+    setState(() => isLoadingAttendance = true);
+
+    try {
+      if (!UserService.hasValidAuth) {
+        print('❌ User authentication invalid - skipping attendance load');
+        return;
+      }
+
+      final employeeId = UserService.currentUserId;
+      if (employeeId == null) return;
+
+      final attendance = await AttendanceService.getTodayAttendance(employeeId);
+
+      if (mounted) {
+        setState(() {
+          todayAttendance = attendance;
+        });
+
+        // Bootstrap live tracking
+        await AttendanceSessionManager.ensureTrackingForActiveSession(context);
+      }
+    } catch (e) {
+      print('Error loading attendance: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingAttendance = false);
+      }
+    }
+  }
+
   Future<bool> _onBackPressed(BuildContext context) async {
     final result = await showDialog<bool>(
       context: context,
@@ -56,7 +109,7 @@ class RoleDashboardTemplate extends StatelessWidget {
   // ------------------------------------------------------------
   List<SidebarItem> getSidebarMenu() {
     // Normalize role: "tele admin" / "Tele Admin" -> "teleadmin" for matching
-    final roleKey = roleName.toLowerCase().replaceAll(' ', '');
+    final roleKey = widget.roleName.toLowerCase().replaceAll(' ', '');
     switch (roleKey) {
       case "admin":
         return [
@@ -272,22 +325,31 @@ class RoleDashboardTemplate extends StatelessWidget {
             Icons.route_outlined,
             "/dashboard/teleadmin/account/all",
           ),
+          // SidebarItem(
+          //   "Assign Account",
+          //   Icons.route_outlined,
+          //   "/dashboard/teleadmin/assign",
+          // ),
           SidebarItem(
-            "Assign Account",
-            Icons.route_outlined,
-            "/dashboard/teleadmin/assign",
+            "Verify Accounts",
+            Icons.verified_user_outlined,
+            "/dashboard/teleadmin/verify-accounts",
           ),
         ];
 
       default:
         return [
-          SidebarItem("Dashboard", Icons.dashboard, "/dashboard/$roleName"),
+          SidebarItem(
+            "Dashboard",
+            Icons.dashboard,
+            "/dashboard/${widget.roleName}",
+          ),
         ];
     }
   }
 
   List<DashboardCard> getDashCards(BuildContext context) {
-    if (cards != null && cards!.isNotEmpty) return cards!;
+    if (widget.cards != null && widget.cards!.isNotEmpty) return widget.cards!;
 
     return getSidebarMenu()
         .where((m) => m.title != "Dashboard")
@@ -306,7 +368,7 @@ class RoleDashboardTemplate extends StatelessWidget {
   // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final color = primaryColor ?? const Color(0xFFD7BE69);
+    final color = widget.primaryColor ?? const Color(0xFFD7BE69);
     final dashCards = getDashCards(context);
 
     return PopScope(
@@ -320,17 +382,46 @@ class RoleDashboardTemplate extends StatelessWidget {
       },
       child: Scaffold(
         appBar: _buildAppBar(context, color),
-        drawer: EnterpriseSidebar(
-          items: getSidebarMenu(),
-          primaryColor: color,
-          roleName: roleDisplayName,
-          userName: UserService.name,
-          userContact: userContactNumber,
-          logoPath: logoPath,
-          appName: appName,
-        ),
+        drawer: _buildDrawer(context, color),
         body: _buildBody(context, color, dashCards),
       ),
+    );
+  }
+
+  // Build drawer with attendance widget for salesman
+  Widget _buildDrawer(BuildContext context, Color color) {
+    print('🔍 Building drawer for role: ${widget.roleName}');
+    print('🔍 Today attendance: $todayAttendance');
+
+    // Always show attendance widget for salesman (no conditions)
+    Widget? attendanceWidget;
+    if (widget.roleName.toLowerCase() == 'salesman') {
+      print('✅ Creating CompactAttendanceWidget for salesman');
+      attendanceWidget = CompactAttendanceWidget(
+        attendance: todayAttendance,
+        showLiveLocation: true,
+        onTap: () {
+          Navigator.pop(context); // Close drawer
+          context.go('/dashboard/salesman/punch');
+        },
+      );
+    } else {
+      print('❌ Not salesman role, skipping attendance widget');
+    }
+
+    print(
+      '🔍 Attendance widget is: ${attendanceWidget != null ? "NOT NULL" : "NULL"}',
+    );
+
+    return EnterpriseSidebar(
+      items: getSidebarMenu(),
+      primaryColor: color,
+      roleName: widget.roleDisplayName,
+      userName: UserService.name,
+      userContact: widget.userContactNumber,
+      logoPath: widget.logoPath,
+      appName: widget.appName,
+      attendanceWidget: attendanceWidget,
     );
   }
 
@@ -357,7 +448,7 @@ class RoleDashboardTemplate extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "$roleDisplayName Dashboard",
+                  "${widget.roleDisplayName} Dashboard",
                   style: const TextStyle(fontSize: 18),
                 ),
                 if (UserService.name != null)
@@ -375,9 +466,9 @@ class RoleDashboardTemplate extends StatelessWidget {
       ),
       actions: [
         // Show notification bell for admin and manager
-        if (roleName.toLowerCase() == 'admin')
+        if (widget.roleName.toLowerCase() == 'admin')
           const NotificationBell(role: 'admin'),
-        if (roleName.toLowerCase() == 'manager')
+        if (widget.roleName.toLowerCase() == 'manager')
           const NotificationBell(role: 'manager'),
         IconButton(
           icon: const Icon(Icons.logout),
@@ -422,11 +513,11 @@ class RoleDashboardTemplate extends StatelessWidget {
     List<DashboardCard> cards,
   ) {
     // Show custom dashboard for salesman
-    if (roleName.toLowerCase() == 'salesman') {
+    if (widget.roleName.toLowerCase() == 'salesman') {
       return const SalesmanDashboardScreen();
     }
     // Show custom dashboard for manager
-    if (roleName.toLowerCase() == 'manager') {
+    if (widget.roleName.toLowerCase() == 'manager') {
       return const ManagerDashboardScreen();
     }
 

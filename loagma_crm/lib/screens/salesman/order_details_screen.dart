@@ -2117,8 +2117,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   static const Color _primary = Color(0xFFD7BE69);
   String? _expandedSection;
   String? _selectedFunnelStage;
-  final List<XFile> _capturedImages = [];
+  final List<Map<String, dynamic>> _capturedImages =
+      []; // Changed to store image with metadata
   final TextEditingController _notesController = TextEditingController();
+  final FocusNode _notesFocusNode = FocusNode();
   String? _mistakeRelatedTo;
   bool _isVisitedIn = false;
   bool _isLoading = false;
@@ -2141,6 +2143,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     'Interested',
   ];
 
+  static const List<String> _imageRelatedToOptions = [
+    'Quality Issue',
+    'Competitor working',
+    'New Product in Market',
+    'Document Issue',
+    'Others',
+  ];
+
   static const List<String> _mistakeOptions = [
     'Customer',
     'Salesman',
@@ -2151,9 +2161,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   ];
 
   @override
+  void deactivate() {
+    // Unfocus before deactivation
+    _notesFocusNode.unfocus();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
+    _isTimerRunning = false;
+    _notesFocusNode.dispose();
     _notesController.dispose();
-    _stopTimer();
     super.dispose();
   }
 
@@ -2185,9 +2203,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   void _stopTimer() {
-    setState(() {
-      _isTimerRunning = false;
-    });
+    _isTimerRunning = false;
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   String _formatDuration(Duration duration) {
@@ -2262,7 +2281,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['hasActiveVisit'] == true) {
+        if (data['hasActiveVisit'] == true && mounted) {
           setState(() {
             _isVisitedIn = true;
             _activeTransactionId = data['activeVisit']['id'];
@@ -2286,7 +2305,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         account['id']?.toString() ?? account['accountCode']?.toString();
     if (accountId == null) return;
 
-    setState(() => _isLoadingTransactions = true);
+    if (mounted) {
+      setState(() => _isLoadingTransactions = true);
+    }
 
     try {
       final url = '${ApiConfig.baseUrl}/transaction-crm/history/$accountId';
@@ -2298,15 +2319,19 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           final transactionsList = List<Map<String, dynamic>>.from(
             data['transactions'].map((t) => Map<String, dynamic>.from(t)),
           );
-          setState(() {
-            _transactions = transactionsList;
-          });
+          if (mounted) {
+            setState(() {
+              _transactions = transactionsList;
+            });
+          }
         }
       }
     } catch (e) {
       print('Error loading transactions: $e');
     } finally {
-      setState(() => _isLoadingTransactions = false);
+      if (mounted) {
+        setState(() => _isLoadingTransactions = false);
+      }
     }
   }
 
@@ -2414,7 +2439,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirmed != true) return;
 
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final account = widget.account;
@@ -2453,12 +2480,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        setState(() {
-          _isVisitedIn = true;
-          _activeTransactionId = data['transaction']['id'];
-          _visitInTime = DateTime.now();
-        });
-        _startTimer();
+        if (mounted) {
+          setState(() {
+            _isVisitedIn = true;
+            _activeTransactionId = data['transaction']['id'];
+            _visitInTime = DateTime.now();
+          });
+          _startTimer();
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2505,40 +2534,50 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _handleUpdate() async {
     if (_activeTransactionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.error, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(child: Text('No active visit found')),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(child: Text('No active visit found')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
           ),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.all(16),
-        ),
-      );
+        );
+      }
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
-      String? image1Url;
-      String? image2Url;
-      if (_capturedImages.isNotEmpty) {
-        image1Url = await _uploadImage(_capturedImages[0]);
-      }
-      if (_capturedImages.length > 1) {
-        image2Url = await _uploadImage(_capturedImages[1]);
+      // Upload all images with metadata
+      List<Map<String, dynamic>> uploadedImages = [];
+      for (var imageData in _capturedImages) {
+        final imageUrl = await _uploadImage(imageData['file']);
+        if (imageUrl != null) {
+          uploadedImages.add({
+            'url': imageUrl,
+            'relatedTo': imageData['relatedTo'],
+            'notes': imageData['notes'],
+          });
+        }
       }
 
       final requestBody = {
@@ -2548,8 +2587,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ? _notesController.text
             : null,
         'notesRelatedTo': _mistakeRelatedTo,
-        'merchandiseImage1': image1Url,
-        'merchandiseImage2': image2Url,
+        'merchandiseImages': uploadedImages, // Send all images with metadata
       };
 
       final response = await http.put(
@@ -2561,7 +2599,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        setState(() => _isFunnelUpdated = true);
+        if (mounted) {
+          setState(() => _isFunnelUpdated = true);
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2608,7 +2648,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -2668,7 +2710,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirmed != true) return;
 
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final account = widget.account;
@@ -2690,13 +2734,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final salesmanId = await AuthService.getUserId();
       if (salesmanId == null) throw Exception('User not logged in');
 
-      String? image1Url;
-      String? image2Url;
-      if (_capturedImages.isNotEmpty) {
-        image1Url = await _uploadImage(_capturedImages[0]);
-      }
-      if (_capturedImages.length > 1) {
-        image2Url = await _uploadImage(_capturedImages[1]);
+      // Upload all images with metadata
+      List<Map<String, dynamic>> uploadedImages = [];
+      for (var imageData in _capturedImages) {
+        final imageUrl = await _uploadImage(imageData['file']);
+        if (imageUrl != null) {
+          uploadedImages.add({
+            'url': imageUrl,
+            'relatedTo': imageData['relatedTo'],
+            'notes': imageData['notes'],
+          });
+        }
       }
 
       final requestBody = {
@@ -2711,8 +2759,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ? _notesController.text
             : null,
         'notesRelatedTo': _mistakeRelatedTo,
-        'merchandiseImage1': image1Url,
-        'merchandiseImage2': image2Url,
+        'merchandiseImages': uploadedImages, // Send all images with metadata
       };
 
       final response = await http.post(
@@ -2726,19 +2773,21 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       if (response.statusCode == 200 && data['success'] == true) {
         _stopTimer();
 
-        setState(() {
-          _isVisitedIn = false;
-          _activeTransactionId = null;
-          _visitInTime = null;
-          _visitDuration = Duration.zero;
-          _selectedFunnelStage = null;
-          _capturedImages.clear();
-          _notesController.clear();
-          _mistakeRelatedTo = null;
-          _isFunnelUpdated = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isVisitedIn = false;
+            _activeTransactionId = null;
+            _visitInTime = null;
+            _visitDuration = Duration.zero;
+            _selectedFunnelStage = null;
+            _capturedImages.clear();
+            _notesController.clear();
+            _mistakeRelatedTo = null;
+            _isFunnelUpdated = false;
+          });
 
-        _loadTransactions();
+          _loadTransactions();
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2783,8 +2832,146 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  Future<Map<String, dynamic>?> _showImageDetailsDialog({
+    required String title,
+    String? initialRelatedTo,
+    String initialNotes = '',
+    String confirmLabel = 'OK',
+  }) async {
+    String? tempRelatedTo = initialRelatedTo;
+    final notesController = TextEditingController(text: initialNotes);
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Related To',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: tempRelatedTo,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    isDense: true,
+                  ),
+                  hint: const Text('Select', style: TextStyle(fontSize: 13)),
+                  style: const TextStyle(fontSize: 13, color: Colors.black),
+                  items: _imageRelatedToOptions.map((option) {
+                    return DropdownMenuItem(value: option, child: Text(option));
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      tempRelatedTo = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Notes',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: notesController,
+                  maxLines: 3,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    hintText: 'Enter notes for this image...',
+                    contentPadding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, {
+                  'relatedTo': tempRelatedTo,
+                  'notes': notesController.text.trim(),
+                });
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: _primary),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    notesController.dispose();
+    return result;
+  }
+
+  Future<void> _captureImageWithDetails() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 75,
+    );
+
+    if (image == null) return;
+
+    final details = await _showImageDetailsDialog(
+      title: 'Image Details',
+      confirmLabel: 'OK',
+    );
+
+    if (details == null) return;
+
+    setState(() {
+      _capturedImages.add({
+        'file': image,
+        'relatedTo': details['relatedTo'],
+        'notes': details['notes'] ?? '',
+      });
+    });
+  }
+
+  Future<void> _showEditImageDialog(
+    int index,
+    Map<String, dynamic> imageData,
+  ) async {
+    final details = await _showImageDetailsDialog(
+      title: 'Edit Image ${index + 1}',
+      initialRelatedTo: imageData['relatedTo'],
+      initialNotes: imageData['notes'] ?? '',
+      confirmLabel: 'OK',
+    );
+
+    if (details == null) return;
+
+    setState(() {
+      _capturedImages[index]['relatedTo'] = details['relatedTo'];
+      _capturedImages[index]['notes'] = details['notes'] ?? '';
+    });
   }
 
   Future<String?> _uploadImage(XFile image) async {
@@ -3301,100 +3488,231 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
             // ── Merchandise section ────────────────────────────────────────
             const Text(
-              'Merchandise Details',
+              'Details',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
 
-            // Image capture
-            const Text(
-              'Capture Images (Max 2)',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
-            ),
-            const SizedBox(height: 5),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ..._capturedImages.asMap().entries.map((entry) {
-                  return Stack(
+            // Add Image Button
+            if (_isVisitedIn)
+              InkWell(
+                onTap: _captureImageWithDetails,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _primary, width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.file(
-                          File(entry.value.path),
-                          width: 72,
-                          height: 72,
-                          fit: BoxFit.cover,
+                      Icon(Icons.add_circle_outline, color: _primary, size: 20),
+                      const SizedBox(width: 6),
+                      Icon(Icons.camera_alt, color: _primary, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        '+ Add Image',
+                        style: TextStyle(
+                          color: _primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
                         ),
                       ),
-                      if (_isVisitedIn)
-                        Positioned(
-                          top: 3,
-                          right: 3,
-                          child: InkWell(
-                            onTap: () {
+                    ],
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 8),
+
+            // Display captured images in card format
+            ..._capturedImages.asMap().entries.map((entry) {
+              final index = entry.key;
+              final imageData = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Image with delete button
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.file(
+                            File(imageData['file'].path),
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Image ${index + 1}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (imageData['relatedTo'] != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _primary.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    imageData['relatedTo'],
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: _primary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (_isVisitedIn) ...[
+                          // Edit button
+                          IconButton(
+                            onPressed: () {
+                              _showEditImageDialog(index, imageData);
+                            },
+                            icon: Icon(Icons.edit, color: _primary),
+                            iconSize: 20,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 8),
+                          // Delete button
+                          IconButton(
+                            onPressed: () {
                               setState(() {
-                                _capturedImages.removeAt(entry.key);
+                                _capturedImages.removeAt(index);
                               });
                             },
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 12,
-                                color: Colors.white,
-                              ),
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            iconSize: 20,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Always show Related To and Notes as text labels (not input fields)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Related To: ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            imageData['relatedTo'] ?? '-',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: imageData['relatedTo'] != null
+                                  ? _primary
+                                  : Colors.grey,
                             ),
                           ),
                         ),
-                    ],
-                  );
-                }),
-                if (_capturedImages.length < 2 && _isVisitedIn)
-                  InkWell(
-                    onTap: () async {
-                      final picker = ImagePicker();
-                      final image = await picker.pickImage(
-                        source: ImageSource.camera,
-                        imageQuality: 75,
-                      );
-                      if (image != null) {
-                        setState(() => _capturedImages.add(image));
-                      }
-                    },
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add_a_photo, size: 22, color: Colors.grey),
-                          SizedBox(height: 3),
-                          Text(
-                            'Add Photo',
-                            style: TextStyle(fontSize: 9, color: Colors.grey),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  ),
-              ],
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Notes: ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            (imageData['notes'] != null &&
+                                    imageData['notes'].isNotEmpty)
+                                ? imageData['notes']
+                                : '-',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color:
+                                  (imageData['notes'] != null &&
+                                      imageData['notes'].isNotEmpty)
+                                  ? Colors.black87
+                                  : Colors.grey,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+
+            const SizedBox(height: 6),
+            // General Notes (separate from image notes)
+            const Text(
+              'General Notes',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _notesController,
+              focusNode: _notesFocusNode,
+              maxLines: 3,
+              enabled: _isVisitedIn,
+              style: TextStyle(
+                fontSize: 11,
+                color: _isVisitedIn ? Colors.black : Colors.grey,
+              ),
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                hintText: 'Enter general notes here...',
+                hintStyle: const TextStyle(fontSize: 11),
+                contentPadding: const EdgeInsets.all(8),
+                filled: !_isVisitedIn,
+                fillColor: !_isVisitedIn ? Colors.grey.shade100 : null,
+              ),
             ),
 
             const SizedBox(height: 6),
-            // Related To
+            // Related To for general notes
             const Text(
-              'Related To',
+              'Notes Related To',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
             ),
             const SizedBox(height: 4),
@@ -3426,33 +3744,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               onChanged: _isVisitedIn
                   ? (value) => setState(() => _mistakeRelatedTo = value)
                   : null,
-            ),
-
-            const SizedBox(height: 6),
-            // Notes
-            const Text(
-              'Notes',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
-            ),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _notesController,
-              maxLines: 3,
-              enabled: _isVisitedIn,
-              style: TextStyle(
-                fontSize: 11,
-                color: _isVisitedIn ? Colors.black : Colors.grey,
-              ),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                hintText: 'Enter notes here...',
-                hintStyle: const TextStyle(fontSize: 11),
-                contentPadding: const EdgeInsets.all(8),
-                filled: !_isVisitedIn,
-                fillColor: !_isVisitedIn ? Colors.grey.shade100 : null,
-              ),
             ),
 
             // Update button
@@ -3991,7 +4282,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                 '';
                             if (phone.isNotEmpty) {
                               _makePhoneCall(phone);
-                            } else {
+                            } else if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Phone number not available'),
@@ -4018,7 +4309,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                 '';
                             if (phone.isNotEmpty) {
                               _openWhatsApp(phone);
-                            } else {
+                            } else if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Phone number not available'),
@@ -4040,7 +4331,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           onPressed: () {
                             if (address.isNotEmpty && address != '-') {
                               _openMap(address);
-                            } else {
+                            } else if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Address not available'),
@@ -4060,12 +4351,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       height: 30,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Take Order feature coming soon'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Take Order feature coming soon'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         },
                         icon: const Icon(Icons.shopping_cart, size: 14),
                         label: const Text('Take Order'),
@@ -4102,10 +4395,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ],
           ),
 
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: _buildExpandedBody(),
-          ),
+          // Expanded body section
+          if (_expandedSection != null) _buildExpandedBody(),
         ],
       ),
     );

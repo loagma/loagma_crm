@@ -709,3 +709,46 @@ model TransactionCrm {
   @@index([visitInTime])
   @@map("transaction_crm")
 }
+
+model CustomerUser {
+  userid                 BigInt  @id @db.UnsignedBigInt
+  email                  String  @default("") @db.VarChar(250)
+  is_email_verified      Int     @default(0) @db.TinyInt
+  contactno              String  @db.VarChar(250)
+  is_contact_verified    Int     @default(0) @db.TinyInt
+  name                   String  @db.Text
+  account_state          String  @default("incomplete") @db.VarChar(250)
+  address                String  @db.Text
+  latitude               Float   @default(0) @db.Float
+  longitude              Float   @default(0) @db.Float
+  dob                    String? @db.Text
+  register_date          Int     @default(0) @db.UnsignedInt
+  shop_name              String? @db.VarChar(255)
+  shop_address           String? @db.VarChar(255)
+  shop_plot_no           String? @db.VarChar(255)
+  user_type              UserType
+  adhar_card             String? @db.VarChar(255)
+  shop_photo             String? @db.VarChar(255)
+  shop_licence           String? @db.VarChar(255)
+  bussiness_pan_card     String? @db.VarChar(255)
+  is_approved            ApprovalStatus @default(YES)
+  session_id             String  @db.Text
+  last_activity          Int     @default(0) @db.UnsignedInt
+  push_notif_id          String  @db.Text
+  is_first_login         Int     @default(1) @db.UnsignedTinyInt
+  has_unread_comments    Int     @default(0) @db.UnsignedTinyInt
+  password               String? @db.VarChar(250)
+
+  @@map("user")
+}
+
+enum UserType {
+  B2C
+  B2B
+}
+
+enum ApprovalStatus {
+  YES
+  NO
+  REQUESTED
+}

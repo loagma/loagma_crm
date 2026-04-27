@@ -11,8 +11,6 @@ import '../../services/leave_service.dart';
 import '../../models/attendance_model.dart';
 import '../../models/leave_model.dart';
 import '../../models/account_model.dart';
-import '../../widgets/attendance_status_widget.dart';
-import '../../widgets/notification_bell.dart';
 import '../../utils/time_formatting_utils.dart';
 import '../../services/account_service.dart';
 import '../../services/attendance_session_manager.dart';
@@ -61,9 +59,6 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   // Theme colors
   static const Color primaryColor = Color(0xFFD7BE69);
 
-  // Notification bell key for refreshing
-  final GlobalKey<NotificationBellState> _notificationBellKey = GlobalKey();
-
   @override
   void initState() {
     super.initState();
@@ -82,12 +77,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
   }
 
   void _startNotificationRefresh() {
-    // Refresh notifications every 30 seconds to catch approval notifications
-    Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (mounted) {
-        _notificationBellKey.currentState?.refreshNotifications();
-      }
-    });
+    // Notification refresh is now handled by the RoleDashboardTemplate
   }
 
   Future<void> _loadTodayAttendance() async {
@@ -448,9 +438,9 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      body: isLoading
+    return Container(
+      color: Colors.grey[50],
+      child: isLoading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : RefreshIndicator(
               onRefresh: () async {
@@ -466,94 +456,7 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
                   child: Column(
                     children: [
                       // Welcome Header with Salesman Name
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.all(16),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [primaryColor, Color(0xFFB8A054)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryColor.withValues(alpha: 0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Welcome Back!',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      Text(
-                                        UserService.name ?? 'Salesman',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Notification Bell
-                                NotificationBell(
-                                  key: _notificationBellKey,
-                                  userId: UserService.currentUserId,
-                                  role: UserService.currentRole,
-                                  iconColor: Colors.white,
-                                  iconSize: 28,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Role: ${UserService.currentRole?.toUpperCase() ?? 'SALESMAN'}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Enhanced Attendance Status Widget
-                      AttendanceStatusWidget(
-                        attendance: todayAttendance,
-                        showLiveLocation: true,
-                        onTap: () => context.go('/dashboard/salesman/punch'),
-                      ),
+                  
 
                       // Quick Actions Section
                       _buildQuickActionsSection(),
@@ -1115,11 +1018,8 @@ class _SalesmanDashboardScreenState extends State<SalesmanDashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Quick Actions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
+          
+         
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),

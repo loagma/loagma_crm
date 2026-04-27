@@ -52,6 +52,7 @@ class VerifyAccountMasterScreen extends StatefulWidget {
   State<VerifyAccountMasterScreen> createState() =>
       _VerifyAccountMasterScreenState();
 }
+
 class _FilterDropdown<T> extends StatelessWidget {
   final String label;
   final T? value;
@@ -122,8 +123,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
   Timer? _searchDebounce;
   final ScrollController _scrollController = ScrollController();
 
-  bool get _isAdmin =>
-      UserService.currentRole?.toLowerCase() == 'admin';
+  bool get _isAdmin => UserService.currentRole?.toLowerCase() == 'admin';
+
+  bool get _isTeleadmin =>
+      UserService.currentRole?.toLowerCase() == 'teleadmin';
 
   @override
   void initState() {
@@ -177,19 +180,25 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
         final allUsers = (data ?? [])
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
-        
+
         // Filter to get salesmen (users with salesman role)
         // Check roleId or role field
         final salesmen = allUsers.where((user) {
-          final role = user['role']?.toString().toLowerCase() ?? 
-                      user['roleId']?.toString().toLowerCase() ?? '';
+          final role =
+              user['role']?.toString().toLowerCase() ??
+              user['roleId']?.toString().toLowerCase() ??
+              '';
           return role.contains('salesman') || role.contains('sales');
         }).toList();
-        
-        print('👥 Loaded ${allUsers.length} total users, ${salesmen.length} salesmen');
-        
+
+        print(
+          '👥 Loaded ${allUsers.length} total users, ${salesmen.length} salesmen',
+        );
+
         setState(() {
-          _users = salesmen.isNotEmpty ? salesmen : allUsers; // Fallback to all users if no salesmen found
+          _users = salesmen.isNotEmpty
+              ? salesmen
+              : allUsers; // Fallback to all users if no salesmen found
           _usersLoading = false;
         });
       } else {
@@ -217,38 +226,44 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
           isApproved = null; // Show all regardless of approval status
           break;
       }
-      
+
       // Debug logging
       print('🔍 Loading accounts with filters:');
       print('   Status filter: $_statusFilter (isApproved: $isApproved)');
       print('   Salesman ID: $_salesmanId');
       print('   Telecaller ID: $_telecallerId');
       print('   Search query: $_searchQuery');
-      
+
       // Note: Accounts are linked to salesmen via createdById (who created them)
       // assignedToId is for assignment/allotment, createdById is for ownership
       final result = await AccountService.fetchAccounts(
         isApproved: isApproved,
         search: _searchQuery,
-        salesmanId: _salesmanId, // Uses createdById internally (accounts created by this salesman)
+        salesmanId:
+            _salesmanId, // Uses createdById internally (accounts created by this salesman)
         approvedById: _telecallerId,
         limit: 1000, // Increased limit to show more accounts
       );
-      
+
       if (mounted) {
         final accounts = List<Account>.from(result['accounts'] ?? []);
         print('✅ Loaded ${accounts.length} accounts');
-        
+
         setState(() {
           _accounts = accounts;
           _isLoading = false;
         });
-        
+
         // Show feedback if filters are active but no results
-        if (accounts.isEmpty && (_salesmanId != null || _statusFilter != _StatusFilter.all || _searchQuery != null)) {
+        if (accounts.isEmpty &&
+            (_salesmanId != null ||
+                _statusFilter != _StatusFilter.all ||
+                _searchQuery != null)) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('No accounts found matching the selected filters'),
+              content: const Text(
+                'No accounts found matching the selected filters',
+              ),
               backgroundColor: Colors.orange.shade700,
               duration: const Duration(seconds: 2),
             ),
@@ -288,7 +303,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening dialer: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error opening dialer: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -320,7 +338,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           FilledButton(
@@ -329,7 +350,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               backgroundColor: Colors.green.shade700,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Call', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Call',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -349,7 +373,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Icon(Icons.verified_user, color: Colors.green.shade700, size: 28),
@@ -380,7 +406,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.green.shade700, width: 1.5),
+                      borderSide: BorderSide(
+                        color: Colors.green.shade700,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -404,7 +433,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                       const SizedBox(height: 4),
                       Text(
                         account.contactNumber,
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -429,12 +461,18 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.green.shade700,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Verify', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              child: const Text(
+                'Verify',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         );
@@ -449,10 +487,29 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
 
   Future<void> _verifyAccount(Account account, String notes) async {
     try {
-      await AccountService.verifyAccount(account.id, notes: notes.isEmpty ? null : notes);
-      if (mounted) {
-        CustomToast.showSuccess(context, 'Account verified successfully');
-        _loadAccounts();
+      if (_isTeleadmin) {
+        // Use teleadmin verification endpoint that creates user
+        await AccountService.teleadminVerifyAccount(
+          account.id,
+          notes: notes.isEmpty ? null : notes,
+        );
+        if (mounted) {
+          CustomToast.showSuccess(
+            context,
+            'Account verified and customer user created successfully',
+          );
+          _loadAccounts();
+        }
+      } else {
+        // Use regular verification for telecaller/admin
+        await AccountService.verifyAccount(
+          account.id,
+          notes: notes.isEmpty ? null : notes,
+        );
+        if (mounted) {
+          CustomToast.showSuccess(context, 'Account verified successfully');
+          _loadAccounts();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -466,15 +523,15 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
     }
   }
 
-  
-
   Future<void> _showRejectDialog(Account account) async {
     final notesController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Icon(Icons.cancel_outlined, color: Colors.red.shade700, size: 28),
@@ -505,7 +562,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.red.shade700, width: 1.5),
+                      borderSide: BorderSide(
+                        color: Colors.red.shade700,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -529,7 +589,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                       const SizedBox(height: 4),
                       Text(
                         account.contactNumber,
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -554,12 +617,18 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.red.shade700,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Reject', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              child: const Text(
+                'Reject',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         );
@@ -574,7 +643,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
 
   Future<void> _rejectAccount(Account account, String notes) async {
     try {
-      await AccountService.rejectAccount(account.id, notes: notes.isEmpty ? null : notes);
+      await AccountService.rejectAccount(
+        account.id,
+        notes: notes.isEmpty ? null : notes,
+      );
       if (mounted) {
         CustomToast.showSuccess(context, 'Account rejected');
         _loadAccounts();
@@ -616,11 +688,18 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                   _buildSearchAndFilters(isNarrow),
                   if (!_isLoading && _accounts.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       color: Colors.white,
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, size: 18, color: Colors.grey.shade600),
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Colors.grey.shade600,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             '${_accounts.length} account${_accounts.length == 1 ? '' : 's'} found',
@@ -631,7 +710,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                             ),
                           ),
                           const Spacer(),
-                          if (_salesmanId != null || _statusFilter != _StatusFilter.all || _searchQuery != null)
+                          if (_salesmanId != null ||
+                              _statusFilter != _StatusFilter.all ||
+                              _searchQuery != null)
                             TextButton.icon(
                               onPressed: () {
                                 setState(() {
@@ -644,10 +725,16 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                                 });
                               },
                               icon: const Icon(Icons.clear_all, size: 16),
-                              label: const Text('Clear Filters', style: TextStyle(fontSize: 13)),
+                              label: const Text(
+                                'Clear Filters',
+                                style: TextStyle(fontSize: 13),
+                              ),
                               style: TextButton.styleFrom(
                                 foregroundColor: const Color(0xFFD7BE69),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
                               ),
                             ),
                         ],
@@ -656,11 +743,13 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                   Expanded(
                     child: _isLoading
                         ? const Center(
-                            child: CircularProgressIndicator(color: Color(0xFFD7BE69)),
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFD7BE69),
+                            ),
                           )
                         : _accounts.isEmpty
-                            ? _buildEmptyState()
-                            : _buildAccountList(isNarrow),
+                        ? _buildEmptyState()
+                        : _buildAccountList(isNarrow),
                   ),
                 ],
               ),
@@ -703,11 +792,22 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                 style: const TextStyle(fontSize: 15),
                 decoration: InputDecoration(
                   hintText: 'Search by name, phone, business...',
-                  hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 15),
-                  prefixIcon: Icon(Icons.search, color: Colors.grey.shade600, size: 22),
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 15,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: Colors.grey.shade600,
+                    size: 22,
+                  ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: Icon(Icons.clear, size: 20, color: Colors.grey.shade600),
+                          icon: Icon(
+                            Icons.clear,
+                            size: 20,
+                            color: Colors.grey.shade600,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -718,7 +818,10 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                         )
                       : null,
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
               ),
             ),
@@ -778,7 +881,8 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                       items: {
                         null: 'All',
                         for (final u in _users)
-                          u['id'] as String?: (u['name'] as String? ?? 'Unknown'),
+                          u['id'] as String?:
+                              (u['name'] as String? ?? 'Unknown'),
                       },
                       onChanged: (val) {
                         setState(() {
@@ -798,7 +902,11 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
-                    icon: Icon(Icons.refresh, size: 22, color: const Color(0xFFD7BE69)),
+                    icon: Icon(
+                      Icons.refresh,
+                      size: 22,
+                      color: const Color(0xFFD7BE69),
+                    ),
                     onPressed: _isLoading ? null : _loadAccounts,
                     tooltip: 'Refresh',
                   ),
@@ -814,18 +922,21 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
   // (old DropdownButtonFormField-based filter widgets removed in favor of `_FilterDropdown`)
 
   Widget _buildEmptyState() {
-    final hasActiveFilters = _salesmanId != null || 
-                            _statusFilter != _StatusFilter.all || 
-                            _searchQuery != null ||
-                            (_isAdmin && _telecallerId != null);
-    
+    final hasActiveFilters =
+        _salesmanId != null ||
+        _statusFilter != _StatusFilter.all ||
+        _searchQuery != null ||
+        (_isAdmin && _telecallerId != null);
+
     String getStatusMessage() {
       if (_salesmanId != null) {
-        final salesmanName = _users.firstWhere(
-          (u) => u['id'] == _salesmanId,
-          orElse: () => {'name': 'Selected'},
-        )['name'] as String?;
-        
+        final salesmanName =
+            _users.firstWhere(
+                  (u) => u['id'] == _salesmanId,
+                  orElse: () => {'name': 'Selected'},
+                )['name']
+                as String?;
+
         if (_statusFilter == _StatusFilter.pending) {
           return 'No pending accounts for $salesmanName';
         } else if (_statusFilter == _StatusFilter.verified) {
@@ -834,16 +945,16 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
           return 'No accounts found for $salesmanName';
         }
       }
-      
+
       if (_statusFilter == _StatusFilter.verified) {
         return 'No verified accounts';
       } else if (_statusFilter == _StatusFilter.pending) {
         return 'No accounts pending verification';
       }
-      
+
       return 'No accounts found';
     }
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -857,7 +968,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                hasActiveFilters ? Icons.filter_alt_outlined : Icons.verified_user_outlined,
+                hasActiveFilters
+                    ? Icons.filter_alt_outlined
+                    : Icons.verified_user_outlined,
                 size: 64,
                 color: Colors.grey.shade400,
               ),
@@ -881,7 +994,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                 children: [
                   if (_statusFilter != _StatusFilter.all)
                     Chip(
-                      label: Text('Status: ${_statusFilter == _StatusFilter.pending ? 'Pending' : 'Verified'}'),
+                      label: Text(
+                        'Status: ${_statusFilter == _StatusFilter.pending ? 'Pending' : 'Verified'}',
+                      ),
                       backgroundColor: const Color(0xFFD7BE69).withOpacity(0.2),
                       deleteIcon: const Icon(Icons.close, size: 16),
                       onDeleted: () {
@@ -893,7 +1008,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                     ),
                   if (_salesmanId != null)
                     Chip(
-                      label: Text('Salesman: ${_users.firstWhere((u) => u['id'] == _salesmanId, orElse: () => {'name': 'Selected'})['name']}'),
+                      label: Text(
+                        'Salesman: ${_users.firstWhere((u) => u['id'] == _salesmanId, orElse: () => {'name': 'Selected'})['name']}',
+                      ),
                       backgroundColor: const Color(0xFFD7BE69).withOpacity(0.2),
                       deleteIcon: const Icon(Icons.close, size: 16),
                       onDeleted: () {
@@ -924,10 +1041,7 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               hasActiveFilters
                   ? 'Try clearing filters or adjusting your search'
                   : 'Try adjusting your filters or search query',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade500,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -947,7 +1061,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
       itemBuilder: (context, index) {
         final account = _accounts[index];
         final bool canAdminApprove =
-            _isAdmin && account.isApproved && account.customerStage != 'Customer';
+            _isAdmin &&
+            account.isApproved &&
+            account.customerStage != 'Customer';
 
         return _AccountCard(
           account: account,
@@ -958,10 +1074,12 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               if (context.mounted) _loadAccounts();
             });
           },
-          onVerify:
-              !_isAdmin && !account.isApproved ? () => _showVerifyDialog(account) : null,
-          onReject:
-              !_isAdmin && !account.isApproved ? () => _showRejectDialog(account) : null,
+          onVerify: (!_isAdmin || _isTeleadmin) && !account.isApproved
+              ? () => _showVerifyDialog(account)
+              : null,
+          onReject: (!_isAdmin || _isTeleadmin) && !account.isApproved
+              ? () => _showRejectDialog(account)
+              : null,
           // In admin dashboard, show telecaller verification notes so that
           // admin can see what telecaller captured during verification.
           showVerificationNotes: _isAdmin,
@@ -1000,7 +1118,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade700, size: 26),
@@ -1026,10 +1146,7 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                 const SizedBox(height: 6),
                 Text(
                   account.contactNumber,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1052,19 +1169,13 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                     (notes != null && notes.isNotEmpty)
                         ? notes
                         : 'No notes were added by telecaller.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade800,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Do you want to approve this account as a final customer?',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                 ),
               ],
             ),
@@ -1152,8 +1263,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                 return;
               }
 
-              final needsFollowup =
-                  _callStatusRequiresFollowup(selectedStatus!);
+              final needsFollowup = _callStatusRequiresFollowup(
+                selectedStatus!,
+              );
               if (needsFollowup) {
                 if (followupDate == null || followupTime == null) {
                   setSheetState(() {
@@ -1176,7 +1288,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               });
 
               DateTime? nextFollowupAt;
-              if (needsFollowup && followupDate != null && followupTime != null) {
+              if (needsFollowup &&
+                  followupDate != null &&
+                  followupTime != null) {
                 nextFollowupAt = DateTime(
                   followupDate!.year,
                   followupDate!.month,
@@ -1217,7 +1331,8 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
               } else {
                 setSheetState(() {
                   isSaving = false;
-                  errorText = result['message']?.toString() ??
+                  errorText =
+                      result['message']?.toString() ??
                       'Failed to save call outcome';
                 });
               }
@@ -1356,10 +1471,7 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                       const SizedBox(height: 8),
                       Text(
                         errorText!,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -1377,8 +1489,9 @@ class _VerifyAccountMasterScreenState extends State<VerifyAccountMasterScreen> {
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               )
                             : const Text('Save Outcome'),
@@ -1451,7 +1564,6 @@ class _AccountCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             /// ================= HEADER =================
             Row(
               children: [
@@ -1495,7 +1607,10 @@ class _AccountCard extends StatelessWidget {
                 ),
 
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.shade50,
                     borderRadius: BorderRadius.circular(20),
@@ -1670,7 +1785,6 @@ class _AccountCard extends StatelessWidget {
                 ),
               ],
             ),
-
           ],
         ),
       ),

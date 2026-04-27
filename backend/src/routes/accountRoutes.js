@@ -7,6 +7,7 @@ import {
   updateAccount,
   deleteAccount,
   approveAccount,
+  teleadminVerifyAccount,
   rejectAccount,
   getAccountStats,
   bulkCreateAccounts,
@@ -48,6 +49,7 @@ router.delete('/:id', deleteAccount);
 
 // ==================== APPROVAL ROUTES ====================
 router.post('/:id/approve', approveAccount);
+router.post('/:id/teleadmin-verify', teleadminVerifyAccount);
 router.post('/:id/reject', rejectAccount);
 
 // ==================== BULK OPERATIONS ====================
