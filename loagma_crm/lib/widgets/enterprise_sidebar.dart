@@ -9,6 +9,7 @@ class EnterpriseSidebar extends StatelessWidget {
   final String? userName;
   final String? appName;
   final String? logoPath;
+  final Widget? attendanceWidget;
 
   const EnterpriseSidebar({
     super.key,
@@ -19,21 +20,43 @@ class EnterpriseSidebar extends StatelessWidget {
     this.userName,
     this.appName,
     this.logoPath,
+    this.attendanceWidget,
   });
 
   @override
   Widget build(BuildContext context) {
+    print(
+      '🎨 EnterpriseSidebar build - attendanceWidget: ${attendanceWidget != null ? "PROVIDED" : "NULL"}',
+    );
+
+    // Check if this is salesman role (hide menu items for salesman only)
+    final isSalesman = roleName.toLowerCase() == 'salesman';
+
     return Drawer(
       elevation: 10,
       child: Column(
         children: [
           _buildHeader(),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: items.map((item) => _buildTile(context, item)).toList(),
+          // Attendance Widget (if provided)
+          if (attendanceWidget != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: attendanceWidget!,
             ),
-          ),
+            const Divider(height: 1),
+          ],
+          // Show menu items for all roles EXCEPT salesman
+          if (!isSalesman)
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: items
+                    .map((item) => _buildTile(context, item))
+                    .toList(),
+              ),
+            ),
+          // Spacer for salesman (no menu items)
+          if (isSalesman) const Spacer(),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -69,7 +92,7 @@ class EnterpriseSidebar extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withOpacity(0.8)],
+          colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
         ),
       ),
       child: Column(

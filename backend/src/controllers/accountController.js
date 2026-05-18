@@ -1165,6 +1165,157 @@ export const approveAccount = async (req, res) => {
   }
 };
 
+export const teleadminVerifyAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const approvedById = req.user?.id || req.body.approvedById;
+    const verificationNotes = req.body.verificationNotes ?? null;
+
+    if (!approvedById) {
+      return res.status(400).json({
+        success: false,
+        message: 'Approver ID is required'
+      });
+    }
+
+    // Check if user is teleadmin
+    const approver = await prisma.user.findUnique({
+      where: { id: approvedById },
+      include: { role: true }
+    });
+
+    if (!approver || approver.role?.name?.toLowerCase() !== 'teleadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only teleadmin can use this verification endpoint'
+      });
+    }
+
+    // Get the account to verify
+    const existingAccount = await prisma.account.findUnique({
+      where: { id }
+    });
+
+    if (!existingAccount) {
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found'
+      });
+    }
+
+    // Check if customer user already exists with this contact number
+    const existingCustomerUser = await prisma.customerUser.findFirst({
+      where: { contactno: existingAccount.contactNumber }
+    });
+
+    if (existingCustomerUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer user already exists with this contact number'
+      });
+    }
+
+    // Start transaction to approve account and create user
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Approve the account
+      const approvedAccount = await tx.account.update({
+        where: { id },
+        data: {
+          isApproved: true,
+          approvedById,
+          approvedAt: new Date(),
+          verificationNotes: verificationNotes || null,
+          rejectionNotes: null
+        },
+        include: {
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+              contactNumber: true
+            }
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              contactNumber: true
+            }
+          },
+          approvedBy: {
+            select: {
+              id: true,
+              name: true,
+              contactNumber: true
+            }
+          }
+        }
+      });
+
+      // 2. Create customer user from account data
+      // Generate a unique userid (timestamp + random)
+      const userid = BigInt(Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(3, '0'));
+
+      const newCustomerUser = await tx.customerUser.create({
+        data: {
+          userid: userid,
+          email: '', // Default empty email
+          contactno: existingAccount.contactNumber,
+          name: existingAccount.personName,
+          account_state: 'complete', // Mark as complete since verified
+          address: existingAccount.address || '',
+          latitude: existingAccount.latitude || 0,
+          longitude: existingAccount.longitude || 0,
+          dob: existingAccount.dateOfBirth ? existingAccount.dateOfBirth.toISOString() : null,
+          register_date: Math.floor(Date.now() / 1000), // Unix timestamp
+          shop_name: existingAccount.businessName,
+          shop_address: existingAccount.address,
+          user_type: existingAccount.businessType === 'B2B' ? 'B2B' : 'B2C',
+          adhar_card: null, // Not available in account
+          shop_photo: existingAccount.shopImage,
+          shop_licence: null, // Not available in account
+          bussiness_pan_card: existingAccount.panCard,
+          is_approved: 'YES', // Approved by teleadmin
+          session_id: '', // Empty session initially
+          last_activity: Math.floor(Date.now() / 1000),
+          push_notif_id: '', // Empty initially
+          is_first_login: 1,
+          has_unread_comments: 0,
+          password: `temp_${existingAccount.contactNumber}` // Temporary password
+        }
+      });
+
+      return { approvedAccount, newCustomerUser };
+    });
+
+    res.json({
+      success: true,
+      message: 'Account verified and customer user created successfully',
+      data: {
+        account: result.approvedAccount,
+        customerUser: {
+          userid: result.newCustomerUser.userid.toString(), // Convert BigInt to string
+          name: result.newCustomerUser.name,
+          contactno: result.newCustomerUser.contactno,
+          email: result.newCustomerUser.email,
+          user_type: result.newCustomerUser.user_type,
+          account_state: result.newCustomerUser.account_state,
+          is_approved: result.newCustomerUser.is_approved
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Teleadmin verify account error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(400).json({ success: false, message: 'Customer user with this contact number already exists' });
+    }
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const rejectAccount = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1578,37 +1729,37 @@ export const getWeeklyAssignmentsView = async (req, res) => {
       pincodes.length === 0
         ? Promise.resolve([])
         : prisma.account.findMany({
-            where: { pincode: { in: pincodes } },
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          }),
+          where: { pincode: { in: pincodes } },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
       weeklyDelegate
         ? weeklyDelegate.findMany({
-            where: {
-              salesmanId,
-              weekStartDate: weekStartFilter,
-              ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
-            },
-            include: { account: true },
-            orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
-          })
+          where: {
+            salesmanId,
+            weekStartDate: weekStartFilter,
+            ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
+          },
+          include: { account: true },
+          orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+        })
         : Promise.resolve([]),
       weeklyDelegate
         ? weeklyDelegate.findMany({
-            where: {
-              salesmanId,
-              AND: [
-                {
-                  OR: [
-                    { recurrenceStartDate: null },
-                    { recurrenceStartDate: { lte: weekRange.end } },
-                  ],
-                },
-              ],
-              ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
-            },
-            include: { account: true },
-            orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
-          })
+          where: {
+            salesmanId,
+            AND: [
+              {
+                OR: [
+                  { recurrenceStartDate: null },
+                  { recurrenceStartDate: { lte: weekRange.end } },
+                ],
+              },
+            ],
+            ...(pincodes.length > 0 ? { pincode: { in: pincodes } } : {}),
+          },
+          include: { account: true },
+          orderBy: [{ pincode: 'asc' }, { sequenceNo: 'asc' }],
+        })
         : Promise.resolve([]),
     ]);
 
@@ -1835,9 +1986,9 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
     effectivePincodes.length === 0
       ? Promise.resolve([])
       : prisma.account.findMany({
-          where: { pincode: { in: effectivePincodes } },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        }),
+        where: { pincode: { in: effectivePincodes } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      }),
     weeklyDelegate.findMany({
       where: {
         salesmanId,
@@ -2017,23 +2168,23 @@ const getPlanningWeekData = async ({ salesmanId, weekStartDate, pincodeFilter = 
   const pincodeGroups = (effectivePincodes.length > 0
     ? effectivePincodes
     : Object.keys(byPincode)).map((pin) => {
-    const group = byPincode[pin] || {
-      pincode: pin,
-      planned: [],
-      unplanned: [],
-      dayCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
-    };
+      const group = byPincode[pin] || {
+        pincode: pin,
+        planned: [],
+        unplanned: [],
+        dayCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
+      };
 
-    return {
-      pincode: pin,
-      totalAccounts: group.planned.length + group.unplanned.length,
-      plannedAccounts: group.planned.length,
-      unplannedAccounts: group.unplanned.length,
-      dayCounts: group.dayCounts,
-      planned: group.planned,
-      unplanned: group.unplanned,
-    };
-  });
+      return {
+        pincode: pin,
+        totalAccounts: group.planned.length + group.unplanned.length,
+        plannedAccounts: group.planned.length,
+        unplannedAccounts: group.unplanned.length,
+        dayCounts: group.dayCounts,
+        planned: group.planned,
+        unplanned: group.unplanned,
+      };
+    });
 
   const summary = {
     totalAccounts: allAccounts.length,
@@ -2518,431 +2669,431 @@ export const getTodayPlannedAccounts = async (req, res) => {
   }
 };
 
-  export const autoAssignNextUnassignedAccounts = async (req, res) => {
-    try {
-      const { salesmanId, pincode, weekStartDate, day, countN } = req.body;
+export const autoAssignNextUnassignedAccounts = async (req, res) => {
+  try {
+    const { salesmanId, pincode, weekStartDate, day, countN } = req.body;
 
-      const effectiveSalesmanId = salesmanId || req.user?.id;
-      const normalizedPin = String(pincode || '').trim();
-      const weekStart = normalizeWeekStartDate(weekStartDate);
-      const dayInt = parseInt(day, 10);
-      const count = parseInt(countN, 10);
+    const effectiveSalesmanId = salesmanId || req.user?.id;
+    const normalizedPin = String(pincode || '').trim();
+    const weekStart = normalizeWeekStartDate(weekStartDate);
+    const dayInt = parseInt(day, 10);
+    const count = parseInt(countN, 10);
 
-      if (!effectiveSalesmanId || !normalizedPin || !weekStart) {
-        return res.status(400).json({
-          success: false,
-          message: 'salesmanId, pincode, and valid weekStartDate are required',
-        });
-      }
-
-      if (!(dayInt >= 1 && dayInt <= 7) || !(count > 0)) {
-        return res.status(400).json({
-          success: false,
-          message: 'day (1..7) and countN (>0) are required',
-        });
-      }
-
-      const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
-      if (!weeklyDelegate) {
-        const nextAccounts = await prisma.account.findMany({
-          where: {
-            pincode: normalizedPin,
-            OR: [{ assignedDays: null }, { assignedDays: { equals: [] } }],
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: count,
-        });
-
-        for (const account of nextAccounts) {
-          await prisma.account.update({
-            where: { id: account.id },
-            data: {
-              assignedToId: effectiveSalesmanId,
-              assignedDays: [dayInt],
-            },
-          });
-        }
-
-        return res.json({
-          success: true,
-          data: {
-            assignedCount: nextAccounts.length,
-            assignedAccountIds: nextAccounts.map((a) => a.id),
-            remainingRequested: Math.max(0, count - nextAccounts.length),
-            usesLegacyFallback: true,
-          },
-        });
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
-        const [existingRowsForSalesman, existingRowsForWeekAndPin] = await Promise.all([
-          txWeeklyDelegate.findMany({
-            where: {
-              salesmanId: effectiveSalesmanId,
-              weekStartDate: weekStart,
-              pincode: normalizedPin,
-            },
-            select: { accountId: true, sequenceNo: true },
-          }),
-          txWeeklyDelegate.findMany({
-            where: {
-              weekStartDate: weekStart,
-              pincode: normalizedPin,
-            },
-            select: { accountId: true },
-          }),
-        ]);
-
-        const weekTakenIds = existingRowsForWeekAndPin.map((r) => r.accountId);
-        const currentSequence = existingRowsForSalesman.reduce(
-          (m, r) => Math.max(m, r.sequenceNo || 0),
-          0,
-        );
-
-        const nextAccounts = await tx.account.findMany({
-          where: {
-            pincode: normalizedPin,
-            ...(weekTakenIds.length > 0 ? { id: { notIn: weekTakenIds } } : {}),
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: count,
-        });
-
-        let insertedCount = 0;
-
-        if (nextAccounts.length > 0) {
-          const createResult = await txWeeklyDelegate.createMany({
-            data: nextAccounts.map((account, idx) => ({
-              accountId: account.id,
-              salesmanId: effectiveSalesmanId,
-              pincode: normalizedPin,
-              weekStartDate: weekStart,
-              assignedDays: [dayInt],
-              visitFrequency: VISIT_FREQUENCY.ONCE,
-              plannedBy: effectiveSalesmanId,
-              plannedAt: new Date(),
-              sequenceNo: currentSequence + idx + 1,
-              isManualOverride: false,
-            })),
-            skipDuplicates: true,
-          });
-          insertedCount = (createResult?.count || 0);
-
-          if (insertedCount > 0) {
-            await tx.account.updateMany({
-              where: { id: { in: nextAccounts.map((a) => a.id) } },
-              data: {
-                assignedToId: effectiveSalesmanId,
-                assignedDays: [dayInt],
-              },
-            });
-          }
-        }
-
-        return {
-          assignedCount: insertedCount,
-          assignedAccountIds: nextAccounts.map((a) => a.id),
-          remainingRequested: Math.max(0, count - insertedCount),
-        };
-      }, { timeout: 20000, maxWait: 20000 });
-
-      return res.json({ success: true, data: result });
-    } catch (error) {
-      console.error('Auto assign next unassigned accounts error:', error);
-      return res.status(500).json({ success: false, message: error.message });
+    if (!effectiveSalesmanId || !normalizedPin || !weekStart) {
+      return res.status(400).json({
+        success: false,
+        message: 'salesmanId, pincode, and valid weekStartDate are required',
+      });
     }
-  };
 
-  export const manualAssignWeeklyAccounts = async (req, res) => {
-    try {
-      const {
-        salesmanId,
-        weekStartDate,
-        accountIds,
-        assignedDays,
-        visitFrequency,
-        afterDays,
-        monthlyAnchorDate,
-        manualOverrideAccountIds = [],
-        overrideReason = null,
-      } = req.body;
+    if (!(dayInt >= 1 && dayInt <= 7) || !(count > 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'day (1..7) and countN (>0) are required',
+      });
+    }
 
-      const scope = resolveScopedAssigneeId(req, salesmanId);
-      if (scope.forbidden) {
-        return res.status(403).json({
-          success: false,
-          message: 'You can only assign weekly accounts for your own user',
-        });
-      }
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+    if (!weeklyDelegate) {
+      const nextAccounts = await prisma.account.findMany({
+        where: {
+          pincode: normalizedPin,
+          OR: [{ assignedDays: null }, { assignedDays: { equals: [] } }],
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: count,
+      });
 
-      const effectiveSalesmanId = scope.assigneeId;
-      const actorUserId = req.user?.id || effectiveSalesmanId || null;
-      const weekStart = normalizeWeekStartDate(weekStartDate);
-      const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
-      const days = parseAssignedDays(assignedDays);
-      const incomingFrequency = normalizeVisitFrequency(visitFrequency, days);
-      const normalizedAfterDays = parseAfterDays(afterDays);
-      const normalizedMonthlyAnchorDate = toStartOfDay(monthlyAnchorDate);
-      const normalizedFrequency = normalizedAfterDays
-        ? VISIT_FREQUENCY.AFTER_DAYS
-        : (incomingFrequency === VISIT_FREQUENCY.MONTHLY
-        ? VISIT_FREQUENCY.MONTHLY
-        : VISIT_FREQUENCY.WEEKLY);
-      const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
-      const isSingleDayMode = days.length === 1;
-      const isMonthlyMode = normalizedFrequency === VISIT_FREQUENCY.MONTHLY;
-      const singleDay = isSingleDayMode ? days[0] : null;
-      const recurrenceStartDate = isMonthlyMode
-        ? (normalizedMonthlyAnchorDate || getDateForWeekday(weekStart, singleDay))
-        : (normalizedAfterDays
-            ? getDateForWeekday(weekStart, singleDay)
-            : weekStart);
-      const recurrenceNextDate = normalizedAfterDays
-        ? computeFirstRecurrenceDate(recurrenceStartDate, normalizedAfterDays)
-        : null;
-      const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
-
-      if (!effectiveSalesmanId || !weekStart || accountIdList.length === 0 || days.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'salesmanId, valid weekStartDate, accountIds, and assignedDays are required',
-        });
-      }
-
-      if (frequencyError) {
-        return res.status(400).json({ success: false, message: frequencyError });
-      }
-
-      if (afterDays !== undefined && normalizedAfterDays === null) {
-        return res.status(400).json({
-          success: false,
-          message: 'afterDays must be a positive integer',
-        });
-      }
-
-      if (isMonthlyMode && monthlyAnchorDate !== undefined && monthlyAnchorDate !== null && !normalizedMonthlyAnchorDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'monthlyAnchorDate must be a valid date',
-        });
-      }
-
-      if (normalizedAfterDays && !isSingleDayMode) {
-        return res.status(400).json({
-          success: false,
-          message: 'After Days requires exactly one selected day',
-        });
-      }
-
-      const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
-      if (!weeklyDelegate) {
-        const accounts = await prisma.account.findMany({
-          where: { id: { in: accountIdList } },
-          select: { id: true, assignedDays: true },
-        });
-
-        const blockedAccountIds = [];
-        for (const account of accounts) {
-          const existingDays = parseAssignedDays(account.assignedDays || []);
-          const mergedDays = isSingleDayMode
-            ? [singleDay]
-            : [...new Set([...existingDays, ...days])];
-          const isAddingNewDay = mergedDays.length > existingDays.length;
-          if (!isSingleDayMode && isAddingNewDay && !overrideSet.has(account.id)) {
-            blockedAccountIds.push(account.id);
-          }
-        }
-
-        if (blockedAccountIds.length > 0) {
-          return res.status(409).json({
-            success: false,
-            message: 'Some accounts are already assigned. Use manual override for multi-day assignment.',
-            blockedAccountIds,
-          });
-        }
-
-        for (const account of accounts) {
-          const existingDays = parseAssignedDays(account.assignedDays || []);
-          const mergedDays = isSingleDayMode
-            ? [singleDay]
-            : [...new Set([...existingDays, ...days])];
-          await prisma.account.update({
-            where: { id: account.id },
-            data: {
-              assignedToId: effectiveSalesmanId,
-              assignedDays: mergedDays,
-            },
-          });
-        }
-
-        return res.json({
-          success: true,
-          message: `${accounts.length} account(s) assigned (legacy mode)`,
-          count: accounts.length,
-          usesLegacyFallback: true,
-        });
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
-        const [accounts, existingRows, existingSequenceRows] = await Promise.all([
-          tx.account.findMany({
-            where: { id: { in: accountIdList } },
-            select: { id: true, pincode: true, createdAt: true },
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          }),
-          txWeeklyDelegate.findMany({
-            where: {
-              accountId: { in: accountIdList },
-              weekStartDate: weekStart,
-            },
-          }),
-          txWeeklyDelegate.findMany({
-            where: {
-              salesmanId: effectiveSalesmanId,
-              weekStartDate: weekStart,
-            },
-            select: { pincode: true, sequenceNo: true },
-          }),
-        ]);
-
-        const accountMap = new Map(accounts.map((a) => [a.id, a]));
-        const existingMap = new Map(existingRows.map((r) => [r.accountId, r]));
-        const nextSequenceByPin = {};
-
-        for (const row of existingSequenceRows) {
-          const pin = (row.pincode || '').trim();
-          nextSequenceByPin[pin] = Math.max(nextSequenceByPin[pin] || 0, row.sequenceNo || 0);
-        }
-
-        const blockedAccountIds = [];
-        const upsertTargets = [];
-
-        for (const accountId of accountIdList) {
-          const account = accountMap.get(accountId);
-          if (!account) continue;
-
-          const pin = (account.pincode || '').trim();
-          if (!pin) continue;
-
-          const existing = existingMap.get(accountId);
-          const existingDays = parseAssignedDays(existing?.assignedDays || []);
-          const mergedDays = isSingleDayMode
-            ? [singleDay]
-            : [...new Set([...existingDays, ...days])];
-
-          const isAddingNewDay = mergedDays.length > existingDays.length;
-          if (!isSingleDayMode && existing && isAddingNewDay && !overrideSet.has(accountId)) {
-            blockedAccountIds.push(accountId);
-            continue;
-          }
-
-          if (!existing) {
-            nextSequenceByPin[pin] = (nextSequenceByPin[pin] || 0) + 1;
-          }
-
-          upsertTargets.push({
-            accountId,
-            pincode: pin,
-            mergedDays,
-            existing,
-            isManualOverride: overrideSet.has(accountId),
-            sequenceNo: existing ? existing.sequenceNo : nextSequenceByPin[pin],
-          });
-        }
-
-        if (blockedAccountIds.length > 0) {
-          return {
-            blockedAccountIds,
-            upsertedCount: 0,
-          };
-        }
-
-        const createTargets = upsertTargets.filter((t) => !t.existing);
-        const updateTargets = upsertTargets.filter((t) => t.existing);
-
-        if (createTargets.length > 0) {
-          await txWeeklyDelegate.createMany({
-            data: createTargets.map((target) => ({
-              accountId: target.accountId,
-              salesmanId: effectiveSalesmanId,
-              pincode: target.pincode,
-              weekStartDate: weekStart,
-              assignedDays: target.mergedDays,
-              visitFrequency: normalizedFrequency,
-              recurrenceAfterDays: normalizedAfterDays,
-              recurrenceStartDate,
-              recurrenceNextDate,
-              plannedBy: actorUserId,
-              plannedAt: new Date(),
-              isManualOverride: target.isManualOverride,
-              overrideBy: target.isManualOverride ? actorUserId : null,
-              overrideReason: target.isManualOverride ? overrideReason : null,
-              overriddenAt: target.isManualOverride ? new Date() : null,
-              sequenceNo: target.sequenceNo,
-            })),
-            skipDuplicates: true,
-          });
-        }
-
-        for (const target of updateTargets) {
-          await txWeeklyDelegate.update({
-            where: {
-              accountId_weekStartDate: {
-                accountId: target.accountId,
-                weekStartDate: weekStart,
-              },
-            },
-            data: {
-              salesmanId: effectiveSalesmanId,
-              pincode: target.pincode,
-              assignedDays: target.mergedDays,
-              visitFrequency: normalizedFrequency,
-              recurrenceAfterDays: normalizedAfterDays,
-              recurrenceStartDate,
-              recurrenceNextDate,
-              plannedBy: actorUserId,
-              plannedAt: new Date(),
-              isManualOverride:
-                (target.existing?.isManualOverride || false) || target.isManualOverride,
-              overrideBy: ((target.existing?.isManualOverride || false) || target.isManualOverride)
-                ? actorUserId
-                : target.existing?.overrideBy,
-              overrideReason: target.isManualOverride ? overrideReason : target.existing?.overrideReason,
-              overriddenAt: target.isManualOverride ? new Date() : target.existing?.overriddenAt,
-            },
-          });
-        }
-
-        return {
-          blockedAccountIds: [],
-          upsertedCount: upsertTargets.length,
-        };
-      }, { timeout: 30000, maxWait: 30000 });
-
-      if (result.blockedAccountIds.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: 'Some accounts are already assigned in this week. Use manual override for multi-day assignment.',
-          blockedAccountIds: result.blockedAccountIds,
+      for (const account of nextAccounts) {
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            assignedToId: effectiveSalesmanId,
+            assignedDays: [dayInt],
+          },
         });
       }
 
       return res.json({
         success: true,
-        message: `${result.upsertedCount} account(s) assigned with recurrence`,
-        count: result.upsertedCount,
-        visitFrequency: normalizedFrequency,
-        recurrenceAfterDays: normalizedAfterDays,
-        recurrenceStartDate: recurrenceStartDate ? recurrenceStartDate.toISOString() : null,
-        recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,
+        data: {
+          assignedCount: nextAccounts.length,
+          assignedAccountIds: nextAccounts.map((a) => a.id),
+          remainingRequested: Math.max(0, count - nextAccounts.length),
+          usesLegacyFallback: true,
+        },
       });
-    } catch (error) {
-      console.error('Manual assign weekly accounts error:', error);
-      return res.status(500).json({ success: false, message: error.message });
     }
-  };
+
+    const result = await prisma.$transaction(async (tx) => {
+      const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
+      const [existingRowsForSalesman, existingRowsForWeekAndPin] = await Promise.all([
+        txWeeklyDelegate.findMany({
+          where: {
+            salesmanId: effectiveSalesmanId,
+            weekStartDate: weekStart,
+            pincode: normalizedPin,
+          },
+          select: { accountId: true, sequenceNo: true },
+        }),
+        txWeeklyDelegate.findMany({
+          where: {
+            weekStartDate: weekStart,
+            pincode: normalizedPin,
+          },
+          select: { accountId: true },
+        }),
+      ]);
+
+      const weekTakenIds = existingRowsForWeekAndPin.map((r) => r.accountId);
+      const currentSequence = existingRowsForSalesman.reduce(
+        (m, r) => Math.max(m, r.sequenceNo || 0),
+        0,
+      );
+
+      const nextAccounts = await tx.account.findMany({
+        where: {
+          pincode: normalizedPin,
+          ...(weekTakenIds.length > 0 ? { id: { notIn: weekTakenIds } } : {}),
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: count,
+      });
+
+      let insertedCount = 0;
+
+      if (nextAccounts.length > 0) {
+        const createResult = await txWeeklyDelegate.createMany({
+          data: nextAccounts.map((account, idx) => ({
+            accountId: account.id,
+            salesmanId: effectiveSalesmanId,
+            pincode: normalizedPin,
+            weekStartDate: weekStart,
+            assignedDays: [dayInt],
+            visitFrequency: VISIT_FREQUENCY.ONCE,
+            plannedBy: effectiveSalesmanId,
+            plannedAt: new Date(),
+            sequenceNo: currentSequence + idx + 1,
+            isManualOverride: false,
+          })),
+          skipDuplicates: true,
+        });
+        insertedCount = (createResult?.count || 0);
+
+        if (insertedCount > 0) {
+          await tx.account.updateMany({
+            where: { id: { in: nextAccounts.map((a) => a.id) } },
+            data: {
+              assignedToId: effectiveSalesmanId,
+              assignedDays: [dayInt],
+            },
+          });
+        }
+      }
+
+      return {
+        assignedCount: insertedCount,
+        assignedAccountIds: nextAccounts.map((a) => a.id),
+        remainingRequested: Math.max(0, count - insertedCount),
+      };
+    }, { timeout: 20000, maxWait: 20000 });
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Auto assign next unassigned accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const manualAssignWeeklyAccounts = async (req, res) => {
+  try {
+    const {
+      salesmanId,
+      weekStartDate,
+      accountIds,
+      assignedDays,
+      visitFrequency,
+      afterDays,
+      monthlyAnchorDate,
+      manualOverrideAccountIds = [],
+      overrideReason = null,
+    } = req.body;
+
+    const scope = resolveScopedAssigneeId(req, salesmanId);
+    if (scope.forbidden) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only assign weekly accounts for your own user',
+      });
+    }
+
+    const effectiveSalesmanId = scope.assigneeId;
+    const actorUserId = req.user?.id || effectiveSalesmanId || null;
+    const weekStart = normalizeWeekStartDate(weekStartDate);
+    const accountIdList = Array.isArray(accountIds) ? [...new Set(accountIds)] : [];
+    const days = parseAssignedDays(assignedDays);
+    const incomingFrequency = normalizeVisitFrequency(visitFrequency, days);
+    const normalizedAfterDays = parseAfterDays(afterDays);
+    const normalizedMonthlyAnchorDate = toStartOfDay(monthlyAnchorDate);
+    const normalizedFrequency = normalizedAfterDays
+      ? VISIT_FREQUENCY.AFTER_DAYS
+      : (incomingFrequency === VISIT_FREQUENCY.MONTHLY
+        ? VISIT_FREQUENCY.MONTHLY
+        : VISIT_FREQUENCY.WEEKLY);
+    const frequencyError = validateDaysForFrequency(days, normalizedFrequency);
+    const isSingleDayMode = days.length === 1;
+    const isMonthlyMode = normalizedFrequency === VISIT_FREQUENCY.MONTHLY;
+    const singleDay = isSingleDayMode ? days[0] : null;
+    const recurrenceStartDate = isMonthlyMode
+      ? (normalizedMonthlyAnchorDate || getDateForWeekday(weekStart, singleDay))
+      : (normalizedAfterDays
+        ? getDateForWeekday(weekStart, singleDay)
+        : weekStart);
+    const recurrenceNextDate = normalizedAfterDays
+      ? computeFirstRecurrenceDate(recurrenceStartDate, normalizedAfterDays)
+      : null;
+    const overrideSet = new Set(Array.isArray(manualOverrideAccountIds) ? manualOverrideAccountIds : []);
+
+    if (!effectiveSalesmanId || !weekStart || accountIdList.length === 0 || days.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'salesmanId, valid weekStartDate, accountIds, and assignedDays are required',
+      });
+    }
+
+    if (frequencyError) {
+      return res.status(400).json({ success: false, message: frequencyError });
+    }
+
+    if (afterDays !== undefined && normalizedAfterDays === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'afterDays must be a positive integer',
+      });
+    }
+
+    if (isMonthlyMode && monthlyAnchorDate !== undefined && monthlyAnchorDate !== null && !normalizedMonthlyAnchorDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'monthlyAnchorDate must be a valid date',
+      });
+    }
+
+    if (normalizedAfterDays && !isSingleDayMode) {
+      return res.status(400).json({
+        success: false,
+        message: 'After Days requires exactly one selected day',
+      });
+    }
+
+    const weeklyDelegate = getWeeklyAssignmentDelegate(prisma);
+    if (!weeklyDelegate) {
+      const accounts = await prisma.account.findMany({
+        where: { id: { in: accountIdList } },
+        select: { id: true, assignedDays: true },
+      });
+
+      const blockedAccountIds = [];
+      for (const account of accounts) {
+        const existingDays = parseAssignedDays(account.assignedDays || []);
+        const mergedDays = isSingleDayMode
+          ? [singleDay]
+          : [...new Set([...existingDays, ...days])];
+        const isAddingNewDay = mergedDays.length > existingDays.length;
+        if (!isSingleDayMode && isAddingNewDay && !overrideSet.has(account.id)) {
+          blockedAccountIds.push(account.id);
+        }
+      }
+
+      if (blockedAccountIds.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'Some accounts are already assigned. Use manual override for multi-day assignment.',
+          blockedAccountIds,
+        });
+      }
+
+      for (const account of accounts) {
+        const existingDays = parseAssignedDays(account.assignedDays || []);
+        const mergedDays = isSingleDayMode
+          ? [singleDay]
+          : [...new Set([...existingDays, ...days])];
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            assignedToId: effectiveSalesmanId,
+            assignedDays: mergedDays,
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `${accounts.length} account(s) assigned (legacy mode)`,
+        count: accounts.length,
+        usesLegacyFallback: true,
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const txWeeklyDelegate = getWeeklyAssignmentDelegate(tx);
+      const [accounts, existingRows, existingSequenceRows] = await Promise.all([
+        tx.account.findMany({
+          where: { id: { in: accountIdList } },
+          select: { id: true, pincode: true, createdAt: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+        txWeeklyDelegate.findMany({
+          where: {
+            accountId: { in: accountIdList },
+            weekStartDate: weekStart,
+          },
+        }),
+        txWeeklyDelegate.findMany({
+          where: {
+            salesmanId: effectiveSalesmanId,
+            weekStartDate: weekStart,
+          },
+          select: { pincode: true, sequenceNo: true },
+        }),
+      ]);
+
+      const accountMap = new Map(accounts.map((a) => [a.id, a]));
+      const existingMap = new Map(existingRows.map((r) => [r.accountId, r]));
+      const nextSequenceByPin = {};
+
+      for (const row of existingSequenceRows) {
+        const pin = (row.pincode || '').trim();
+        nextSequenceByPin[pin] = Math.max(nextSequenceByPin[pin] || 0, row.sequenceNo || 0);
+      }
+
+      const blockedAccountIds = [];
+      const upsertTargets = [];
+
+      for (const accountId of accountIdList) {
+        const account = accountMap.get(accountId);
+        if (!account) continue;
+
+        const pin = (account.pincode || '').trim();
+        if (!pin) continue;
+
+        const existing = existingMap.get(accountId);
+        const existingDays = parseAssignedDays(existing?.assignedDays || []);
+        const mergedDays = isSingleDayMode
+          ? [singleDay]
+          : [...new Set([...existingDays, ...days])];
+
+        const isAddingNewDay = mergedDays.length > existingDays.length;
+        if (!isSingleDayMode && existing && isAddingNewDay && !overrideSet.has(accountId)) {
+          blockedAccountIds.push(accountId);
+          continue;
+        }
+
+        if (!existing) {
+          nextSequenceByPin[pin] = (nextSequenceByPin[pin] || 0) + 1;
+        }
+
+        upsertTargets.push({
+          accountId,
+          pincode: pin,
+          mergedDays,
+          existing,
+          isManualOverride: overrideSet.has(accountId),
+          sequenceNo: existing ? existing.sequenceNo : nextSequenceByPin[pin],
+        });
+      }
+
+      if (blockedAccountIds.length > 0) {
+        return {
+          blockedAccountIds,
+          upsertedCount: 0,
+        };
+      }
+
+      const createTargets = upsertTargets.filter((t) => !t.existing);
+      const updateTargets = upsertTargets.filter((t) => t.existing);
+
+      if (createTargets.length > 0) {
+        await txWeeklyDelegate.createMany({
+          data: createTargets.map((target) => ({
+            accountId: target.accountId,
+            salesmanId: effectiveSalesmanId,
+            pincode: target.pincode,
+            weekStartDate: weekStart,
+            assignedDays: target.mergedDays,
+            visitFrequency: normalizedFrequency,
+            recurrenceAfterDays: normalizedAfterDays,
+            recurrenceStartDate,
+            recurrenceNextDate,
+            plannedBy: actorUserId,
+            plannedAt: new Date(),
+            isManualOverride: target.isManualOverride,
+            overrideBy: target.isManualOverride ? actorUserId : null,
+            overrideReason: target.isManualOverride ? overrideReason : null,
+            overriddenAt: target.isManualOverride ? new Date() : null,
+            sequenceNo: target.sequenceNo,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      for (const target of updateTargets) {
+        await txWeeklyDelegate.update({
+          where: {
+            accountId_weekStartDate: {
+              accountId: target.accountId,
+              weekStartDate: weekStart,
+            },
+          },
+          data: {
+            salesmanId: effectiveSalesmanId,
+            pincode: target.pincode,
+            assignedDays: target.mergedDays,
+            visitFrequency: normalizedFrequency,
+            recurrenceAfterDays: normalizedAfterDays,
+            recurrenceStartDate,
+            recurrenceNextDate,
+            plannedBy: actorUserId,
+            plannedAt: new Date(),
+            isManualOverride:
+              (target.existing?.isManualOverride || false) || target.isManualOverride,
+            overrideBy: ((target.existing?.isManualOverride || false) || target.isManualOverride)
+              ? actorUserId
+              : target.existing?.overrideBy,
+            overrideReason: target.isManualOverride ? overrideReason : target.existing?.overrideReason,
+            overriddenAt: target.isManualOverride ? new Date() : target.existing?.overriddenAt,
+          },
+        });
+      }
+
+      return {
+        blockedAccountIds: [],
+        upsertedCount: upsertTargets.length,
+      };
+    }, { timeout: 30000, maxWait: 30000 });
+
+    if (result.blockedAccountIds.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Some accounts are already assigned in this week. Use manual override for multi-day assignment.',
+        blockedAccountIds: result.blockedAccountIds,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `${result.upsertedCount} account(s) assigned with recurrence`,
+      count: result.upsertedCount,
+      visitFrequency: normalizedFrequency,
+      recurrenceAfterDays: normalizedAfterDays,
+      recurrenceStartDate: recurrenceStartDate ? recurrenceStartDate.toISOString() : null,
+      recurrenceNextDate: recurrenceNextDate ? recurrenceNextDate.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('Manual assign weekly accounts error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 export const unassignWeeklyAccountsGlobal = async (req, res) => {
   try {

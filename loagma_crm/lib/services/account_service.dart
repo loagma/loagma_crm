@@ -121,6 +121,7 @@ class AccountService {
     int limit = 50,
     String? areaId,
     String? assignedToId,
+
     /// Day filter for salesman allotment: 1=Mon .. 7=Sun. Backend filters by assignedDays.
     int? assignedDay,
     String? customerStage,
@@ -132,7 +133,8 @@ class AccountService {
     String? pincode,
     DateTime? startDate,
     DateTime? endDate,
-    String? salesmanId, // Helper: filters by createdById (for salesman accounts)
+    String?
+    salesmanId, // Helper: filters by createdById (for salesman accounts)
   }) async {
     try {
       // Check connectivity first
@@ -146,20 +148,22 @@ class AccountService {
       final headers = await _getHeaders();
       // If salesmanId is provided, use it as createdById (accounts are linked to salesmen via createdById)
       final effectiveCreatedById = salesmanId ?? createdById;
-      
+
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
         if (areaId != null) 'areaId': areaId,
         if (assignedToId != null) 'assignedToId': assignedToId,
-        if (assignedDay != null && assignedDay >= 1 && assignedDay <= 7) 'assignedDay': assignedDay.toString(),
+        if (assignedDay != null && assignedDay >= 1 && assignedDay <= 7)
+          'assignedDay': assignedDay.toString(),
         if (customerStage != null) 'customerStage': customerStage,
         if (funnelStage != null) 'funnelStage': funnelStage,
         if (isApproved != null) 'isApproved': isApproved.toString(),
         if (effectiveCreatedById != null) 'createdById': effectiveCreatedById,
         if (approvedById != null) 'approvedById': approvedById,
         if (search != null) 'search': search,
-        if (pincode != null && pincode.trim().isNotEmpty) 'pincode': pincode.trim(),
+        if (pincode != null && pincode.trim().isNotEmpty)
+          'pincode': pincode.trim(),
         if (startDate != null)
           'startDate': startDate
               .toIso8601String(), // Send full ISO string with time
@@ -276,7 +280,8 @@ class AccountService {
         headers: headers,
         body: json.encode({
           if (userId != null) 'approvedById': userId,
-          if (notes != null && notes.trim().isNotEmpty) 'verificationNotes': notes.trim(),
+          if (notes != null && notes.trim().isNotEmpty)
+            'verificationNotes': notes.trim(),
         }),
       );
 
@@ -293,6 +298,39 @@ class AccountService {
     }
   }
 
+  static Future<Map<String, dynamic>> teleadminVerifyAccount(
+    String id, {
+    String? notes,
+  }) async {
+    try {
+      final userId = await _getUserId();
+      final headers = await _getHeaders();
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.accountsUrl}/$id/teleadmin-verify'),
+        headers: headers,
+        body: json.encode({
+          if (userId != null) 'approvedById': userId,
+          if (notes != null && notes.trim().isNotEmpty)
+            'verificationNotes': notes.trim(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['data']; // Returns both account and user data
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(
+          error['message'] ?? 'Failed to verify account and create user',
+        );
+      }
+    } catch (e) {
+      print('Error in teleadmin verify account: $e');
+      rethrow;
+    }
+  }
+
   static Future<Account> rejectAccount(String id, {String? notes}) async {
     try {
       final headers = await _getHeaders();
@@ -300,7 +338,8 @@ class AccountService {
         Uri.parse('${ApiConfig.accountsUrl}/$id/reject'),
         headers: headers,
         body: json.encode({
-          if (notes != null && notes.trim().isNotEmpty) 'rejectionNotes': notes.trim(),
+          if (notes != null && notes.trim().isNotEmpty)
+            'rejectionNotes': notes.trim(),
         }),
       );
 
@@ -357,6 +396,7 @@ class AccountService {
   static Future<int> bulkAssignAccounts({
     required List<String> accountIds,
     required String assignedToId,
+
     /// Beat days: 1=Mon .. 7=Sun. Sent to backend for day-wise salesman list.
     List<int>? assignedDays,
     DateTime? weekStartDate,
@@ -496,8 +536,7 @@ class AccountService {
           'assignedDays': assignedDays,
           if (visitFrequency != null && visitFrequency.trim().isNotEmpty)
             'visitFrequency': visitFrequency.trim().toUpperCase(),
-          if (afterDays != null && afterDays > 0)
-            'afterDays': afterDays,
+          if (afterDays != null && afterDays > 0) 'afterDays': afterDays,
           if (monthlyAnchorDate != null)
             'monthlyAnchorDate': monthlyAnchorDate.toIso8601String(),
           'manualOverrideAccountIds': manualOverrideAccountIds,
@@ -524,15 +563,13 @@ class AccountService {
       final response = await http.post(
         Uri.parse('${ApiConfig.accountsUrl}/weekly/unassign-global'),
         headers: headers,
-        body: json.encode({
-          'salesmanId': salesmanId,
-          'accountIds': accountIds,
-        }),
+        body: json.encode({'salesmanId': salesmanId, 'accountIds': accountIds}),
       );
 
       final data = json.decode(response.body);
       if (response.statusCode == 200) {
-        return (data['data'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+        return (data['data'] as Map?)?.cast<String, dynamic>() ??
+            <String, dynamic>{};
       }
       throw Exception(data['message'] ?? 'Failed to unassign weekly accounts');
     } catch (e) {
@@ -598,7 +635,9 @@ class AccountService {
       if (response.statusCode == 200) {
         return data['data'] as Map<String, dynamic>;
       }
-      throw Exception(data['message'] ?? 'Failed to assign planning week accounts');
+      throw Exception(
+        data['message'] ?? 'Failed to assign planning week accounts',
+      );
     } catch (e) {
       print('Error assigning planning week accounts: $e');
       rethrow;
@@ -633,7 +672,9 @@ class AccountService {
       if (response.statusCode == 200) {
         return data['data'] as Map<String, dynamic>;
       }
-      throw Exception(data['message'] ?? 'Failed to update planning week account');
+      throw Exception(
+        data['message'] ?? 'Failed to update planning week account',
+      );
     } catch (e) {
       print('Error updating planning week account: $e');
       rethrow;
@@ -649,22 +690,27 @@ class AccountService {
     try {
       final headers = await _getHeaders();
       final weekStart = toWeekStart(weekStartDate);
-      final uri = Uri.parse('${ApiConfig.accountsUrl}/planning/week/multi-visit').replace(
-        queryParameters: {
-          'salesmanId': salesmanId,
-          'weekStartDate': weekStart.toIso8601String(),
-          if (frequency != null && frequency.trim().isNotEmpty)
-            'frequency': frequency.trim().toUpperCase(),
-          if (day != null) 'day': day.toString(),
-        },
-      );
+      final uri =
+          Uri.parse(
+            '${ApiConfig.accountsUrl}/planning/week/multi-visit',
+          ).replace(
+            queryParameters: {
+              'salesmanId': salesmanId,
+              'weekStartDate': weekStart.toIso8601String(),
+              if (frequency != null && frequency.trim().isNotEmpty)
+                'frequency': frequency.trim().toUpperCase(),
+              if (day != null) 'day': day.toString(),
+            },
+          );
 
       final response = await http.get(uri, headers: headers);
       final data = json.decode(response.body);
       if (response.statusCode == 200) {
         return data['data'] as Map<String, dynamic>;
       }
-      throw Exception(data['message'] ?? 'Failed to load multi-visit week accounts');
+      throw Exception(
+        data['message'] ?? 'Failed to load multi-visit week accounts',
+      );
     } catch (e) {
       print('Error fetching multi-visit week accounts: $e');
       rethrow;
@@ -689,7 +735,9 @@ class AccountService {
       if (response.statusCode == 200) {
         return data['data'] as Map<String, dynamic>;
       }
-      throw Exception(data['message'] ?? 'Failed to load today planned accounts');
+      throw Exception(
+        data['message'] ?? 'Failed to load today planned accounts',
+      );
     } catch (e) {
       print('Error fetching today planned accounts: $e');
       rethrow;
